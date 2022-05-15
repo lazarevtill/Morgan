@@ -1,0 +1,36 @@
+# core deps
+numpy==1.19.5
+cython
+scipy>=1.4.0
+torch>=1.7
+torchaudio
+soundfile
+librosa==0.8.0
+numba==0.53
+inflect
+tqdm
+anyascii
+pyyaml
+fsspec>=2021.04.0
+# deps for examples
+flask
+# deps for inference
+pysbd
+# deps for notebooks
+umap-learn==0.5.1
+pandas
+# deps for training
+matplotlib
+tensorboardX
+pyworld
+# coqui stack
+trainer
+coqpit # config management
+# chinese g2p deps
+jieba
+pypinyin
+# japanese g2p deps
+mecab-python3==1.0.3
+unidic-lite==1.0.8
+# gruut+supported langs
+gruut[cs,de,es,fr,it,nl,pt,ru,sv]==2.2.3
