@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morgan AI Assistant</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .chat-container {
+            height: calc(100vh - 180px);
+        }
+        .message-user {
+            background-color: #e2f5ff;
+            border-radius: 18px 18px 0 18px;
+        }
+        .message-assistant {
+            background-color: #f0f0f0;
+            border-radius: 18px 18px 18px 0;
+        }
+        .typing-indicator::after {
+            content: '...';
+            animation: typing 1.5s infinite;
+        }
+        @keyframes typing {
+            0% { content: '.'; }
+            33% { content: '..'; }
+            66% { content: '...'; }
+        }
+        .audio-wave {
+            display: flex;
+            align-items: center;
+            height: 30px;
+        }
+        .audio-wave .bar {
+            background: #3B82F6;
+            height: 100%;
+            width: 3px;
+            margin: 0 1px;
+            border-radius: 3px;
+            animation: sound 0ms -800ms linear infinite alternate;
+        }
+        @keyframes sound {
+            0% { height: 3px; }
+            100% { height: 30px; }
+        }
+        .audio-wave .bar:nth-child(1) { animation-duration: 474ms; }
+        .audio-wave .bar:nth-child(2) { animation-duration: 433ms; }
+        .audio-wave .bar:nth-child(3) { animation-duration: 407ms; }
+        .audio-wave .bar:nth-child(4) { animation-duration: 458ms; }
+        .audio-wave .bar:nth-child(5) { animation-duration: 400ms; }
+        .audio-wave .bar:nth-child(6) { animation-duration: 427ms; }
+        .audio-wave .bar:nth-child(7) { animation-duration: 441ms; }
+        .audio-wave .bar:nth-child(8) { animation-duration: 419ms; }
+        .audio-wave .bar:nth-child(9) { animation-duration: 487ms; }
+        .audio-wave .bar:nth-child(10) { animation-duration: 442ms; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto p-4">
+        <!-- Header -->
+        <header class="bg-blue-600 text-white p-4 rounded-lg shadow-md mb-4 flex justify-between items-center">
+            <div class="flex items-center">
+                <i class="fas fa-robot text-2xl mr-3"></i>
+                <h1 class="text-xl font-bold">Morgan AI Assistant</h1>
+            </div>
+            <div class="flex space-x-2">
+                <button id="settingsBtn" class="bg-blue-700 hover:bg-blue-800 text-white px-3 py-1 rounded-md flex items-center">
+                    <i class="fas fa-cog mr-1"></i> Settings
+                </button>
+                <button id="resetBtn" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md flex items-center">
+                    <i class="fas fa-redo-alt mr-1"></i> Reset
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="bg-white rounded-lg shadow-md p-4 mb-4">
+            <!-- Chat Window -->
+            <div id="chatWindow" class="chat-container overflow-y-auto mb-4 p-2">
+                <div id="welcome" class="message-assistant p-3 mb-4 max-w-3xl mx-auto">
+                    <p>Hello! I'm Morgan, your helpful AI assistant. I can help you control your smart home, answer questions, and more. How can I assist you today?</p>
+                </div>
+                <!-- Messages will be added here dynamically -->
+            </div>
+
+            <!-- Input Area -->
+            <div class="flex items-center space-x-2">
+                <button id="micBtn" class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-full">
+                    <i class="fas fa-microphone"></i>
+                </button>
+                <input id="messageInput" type="text" placeholder="Type your message here..."
+                       class="flex-1 border border-gray-300 rounded-md py-2 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button id="sendBtn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md">
+                    <i class="fas fa-paper-plane mr-1"></i> Send
+                </button>
+            </div>
+        </main>
+
+        <!-- Status Footer -->
+        <footer class="bg-white rounded-lg shadow-md p-2 text-sm text-gray-600 flex justify-between items-center">
+            <div>
+                <span id="statusIndicator" class="inline-block w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+                <span id="statusText">Connected</span>
+            </div>
+            <div>
+                <span id="voiceStatus"><i class="fas fa-volume-up text-blue-500 mr-1"></i> Voice: Default</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold">Settings</h2>
+                <button id="closeSettings" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="mb-4">
+                <h3 class="font-semibold mb-2">Voice Settings</h3>
+                <label class="block mb-2">Voice</label>
+                <select id="voiceSelect" class="w-full border border-gray-300 rounded-md py-2 px-3 mb-2">
+                    <option value="morgan_default">Default</option>
+                    <!-- More voices will be added dynamically -->
+                </select>
+
+                <div class="flex items-center mb-2">
+                    <input type="checkbox" id="ttsEnabled" class="mr-2" checked>
+                    <label for="ttsEnabled">Enable Text-to-Speech</label>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <h3 class="font-semibold mb-2">System Status</h3>
+                <div id="systemStatus" class="text-sm bg-gray-100 p-3 rounded">
+                    <p><strong>Version:</strong> <span id="versionInfo">-</span></p>
+                    <p><strong>Uptime:</strong> <span id="uptimeInfo">-</span></p>
+                    <p><strong>Services:</strong></p>
+                    <ul class="ml-4">
+                        <li><span id="llmStatus" class="inline-block w-2 h-2 bg-gray-400 rounded-full mr-1"></span> LLM Service</li>
+                        <li><span id="ttsStatus" class="inline-block w-2 h-2 bg-gray-400 rounded-full mr-1"></span> TTS Service</li>
+                        <li><span id="sttStatus" class="inline-block w-2 h-2 bg-gray-400 rounded-full mr-1"></span> STT Service</li>
+                        <li><span id="haStatus" class="inline-block w-2 h-2 bg-gray-400 rounded-full mr-1"></span> Home Assistant</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="flex justify-end mt-4">
+                <button id="saveSettings" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md">
+                    Save Settings
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Visualization Modal -->
+    <div id="audioModal" class="hidden fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-lg p-6 flex flex-col items-center">
+            <div class="audio-wave mb-4">
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+            </div>
+            <p class="mb-4">Listening...</p>
+            <button id="stopAudioBtn" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-full">
+                <i class="fas fa-stop"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        // App State
+        const state = {
+            userId: 'default-' + Math.random().toString(36).substring(2, 10),
+            ttsEnabled: true,
+            selectedVoice: 'morgan_default',
+            recording: false,
+            mediaRecorder: null,
+            audioChunks: [],
+            voices: {},
+            systemInfo: {}
+        };
+
+        // DOM Elements
+        const elements = {
+            chatWindow: document.getElementById('chatWindow'),
+            messageInput: document.getElementById('messageInput'),
+            sendBtn: document.getElementById('sendBtn'),
+            micBtn: document.getElementById('micBtn'),
+            resetBtn: document.getElementById('resetBtn'),
+            settingsBtn: document.getElementById('settingsBtn'),
+            closeSettings: document.getElementById('closeSettings'),
+            saveSettings: document.getElementById('saveSettings'),
+            settingsModal: document.getElementById('settingsModal'),
+            audioModal: document.getElementById('audioModal'),
+            stopAudioBtn: document.getElementById('stopAudioBtn'),
+            voiceSelect: document.getElementById('voiceSelect'),
+            ttsEnabled: document.getElementById('ttsEnabled'),
+            statusIndicator: document.getElementById('statusIndicator'),
+            statusText: document.getElementById('statusText'),
+            voiceStatus: document.getElementById('voiceStatus'),
+            versionInfo: document.getElementById('versionInfo'),
+            uptimeInfo: document.getElementById('uptimeInfo'),
+            llmStatus: document.getElementById('llmStatus'),
+            ttsStatus: document.getElementById('ttsStatus'),
+            sttStatus: document.getElementById('sttStatus'),
+            haStatus: document.getElementById('haStatus')
+        };
+
+        // API Endpoints
+        const API = {
+            text: '/api/text',
+            audio: '/api/audio',
+            reset: '/api/conversation/reset',
+            status: '/api/status',
+            voices: '/api/voices',
+            setVoice: '/api/voices',
+            health: '/api/health'
+        };
+
+        // Initialize the application
+        function init() {
+            setupEventListeners();
+            checkServerStatus();
+            loadVoices();
+            loadSystemStatus();
+        }
+
+        // Set up event listeners
+        function setupEventListeners() {
+            // Send message on button click or Enter key
+            elements.sendBtn.addEventListener('click', sendMessage);
+            elements.messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+
+            // Microphone handling
+            elements.micBtn.addEventListener('click', toggleAudioRecording);
+            elements.stopAudioBtn.addEventListener('click', stopAudioRecording);
+
+            // Reset conversation
+            elements.resetBtn.addEventListener('click', resetConversation);
+
+            // Settings modal
+            elements.settingsBtn.addEventListener('click', () => {
+                elements.settingsModal.classList.remove('hidden');
+                loadSystemStatus(); // Refresh status when opening settings
+            });
+            elements.closeSettings.addEventListener('click', () => {
+                elements.settingsModal.classList.add('hidden');
+            });
+            elements.saveSettings.addEventListener('click', saveSettings);
+
+            // Close modals when clicking outside
+            window.addEventListener('click', (e) => {
+                if (e.target === elements.settingsModal) {
+                    elements.settingsModal.classList.add('hidden');
+                }
+            });
+        }
+
+        // Check server status periodically
+        function checkServerStatus() {
+            fetch(API.health)
+                .then(response => {
+                    if (response.ok) {
+                        setStatus(true, 'Connected');
+                    } else {
+                        setStatus(false, 'Error connecting to server');
+                    }
+                })
+                .catch(error => {
+                    console.error('Server health check failed:', error);
+                    setStatus(false, 'Disconnected');
+                });
+
+            // Check every 30 seconds
+            setTimeout(checkServerStatus, 30000);
+        }
+
+        // Set connection status indicator
+        function setStatus(connected, message) {
+            elements.statusIndicator.className = 'inline-block w-3 h-3 rounded-full mr-2';
+            elements.statusIndicator.classList.add(connected ? 'bg-green-500' : 'bg-red-500');
+            elements.statusText.textContent = message;
+        }
+
+        // Load available voices
+        function loadVoices() {
+            fetch(API.voices)
+                .then(response => response.json())
+                .then(data => {
+                    state.voices = data.voices || {};
+                    updateVoiceSelect();
+                })
+                .catch(error => {
+                    console.error('Error loading voices:', error);
+                });
+        }
+
+        // Update voice selection dropdown
+        function updateVoiceSelect() {
+            // Clear existing options
+            elements.voiceSelect.innerHTML = '';
+
+            // Add default option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = 'morgan_default';
+            defaultOption.textContent = 'Default';
+            elements.voiceSelect.appendChild(defaultOption);
+
+            // Add available voices
+            for (const [id, info] of Object.entries(state.voices)) {
+                if (id === 'morgan_default') continue; // Skip default as it's already added
+
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = info.description || id;
+                elements.voiceSelect.appendChild(option);
+            }
+
+            // Set current selection
+            elements.voiceSelect.value = state.selectedVoice;
+        }
+
+        // Load system status
+        function loadSystemStatus() {
+            fetch(API.status)
+                .then(response => response.json())
+                .then(data => {
+                    state.systemInfo = data;
+                    updateSystemStatus();
+                })
+                .catch(error => {
+                    console.error('Error loading system status:', error);
+                });
+        }
+
+        // Update system status display
+        function updateSystemStatus() {
+            const info = state.systemInfo;
+            elements.versionInfo.textContent = info.version || '-';
+            elements.uptimeInfo.textContent = info.uptime || '-';
+
+            // Update service status indicators
+            const services = info.service_status || {};
+            updateStatusIndicator(elements.llmStatus, services.llm);
+            updateStatusIndicator(elements.ttsStatus, services.tts);
+            updateStatusIndicator(elements.sttStatus, services.stt);
+            updateStatusIndicator(elements.haStatus, services.home_assistant);
+        }
+
+        // Update a status indicator element
+        function updateStatusIndicator(element, status) {
+            element.className = 'inline-block w-2 h-2 rounded-full mr-1';
+            element.classList.add(status ? 'bg-green-500' : 'bg-red-500');
+        }
+
+        // Save settings
+        function saveSettings() {
+            state.ttsEnabled = elements.ttsEnabled.checked;
+            state.selectedVoice = elements.voiceSelect.value;
+
+            // Update voice status display
+            const voiceName = state.voices[state.selectedVoice]?.description || 'Default';
+            elements.voiceStatus.innerHTML = `<i class="fas fa-volume-${state.ttsEnabled ? 'up' : 'mute'} text-blue-500 mr-1"></i> Voice: ${voiceName}`;
+
+            // Save voice preference
+            fetch(API.setVoice, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_id: state.userId,
+                    voice_id: state.selectedVoice
+                })
+            }).catch(error => {
+                console.error('Error saving voice preference:', error);
+            });
+
+            // Close settings modal
+            elements.settingsModal.classList.add('hidden');
+        }
+
+        // Send a text message
+        function sendMessage() {
+            const message = elements.messageInput.value.trim();
+            if (!message) return;
+
+            // Add user message to chat
+            addMessage('user', message);
+            elements.messageInput.value = '';
+
+            // Add typing indicator
+            const typingId = 'typing-' + Date.now();
+            addTypingIndicator(typingId);
+
+            // Send to API
+            fetch(API.text, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    text: message,
+                    user_id: state.userId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove typing indicator
+                removeTypingIndicator(typingId);
+
+                // Add assistant response
+                addMessage('assistant', data.text);
+
+                // Play audio if available and enabled
+                if (state.ttsEnabled && data.audio) {
+                    playAudio(data.audio);
+                }
+            })
+            .catch(error => {
+                console.error('Error sending message:', error);
+                removeTypingIndicator(typingId);
+                addMessage('assistant', 'Sorry, I encountered an error while processing your request.');
+            });
+        }
+
+        // Toggle audio recording
+        function toggleAudioRecording() {
+            if (state.recording) {
+                stopAudioRecording();
+            } else {
+                startAudioRecording();
+            }
+        }
+
+        // Start audio recording
+        function startAudioRecording() {
+            // Check if browser supports audio recording
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert('Your browser does not support audio recording.');
+                return;
+            }
+
+            // Request audio stream
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    state.recording = true;
+                    elements.micBtn.classList.add('bg-red-500');
+                    elements.micBtn.classList.remove('bg-blue-500');
+                    elements.audioModal.classList.remove('hidden');
+
+                    // Create media recorder
+                    state.mediaRecorder = new MediaRecorder(stream);
+                    state.audioChunks = [];
+
+                    // Collect audio chunks
+                    state.mediaRecorder.addEventListener('dataavailable', event => {
+                        state.audioChunks.push(event.data);
+                    });
+
+                    // Start recording
+                    state.mediaRecorder.start();
+                })
+                .catch(error => {
+                    console.error('Error accessing microphone:', error);
+                    alert('Could not access the microphone. Please check your device settings.');
+                });
+        }
+
+        // Stop audio recording and send to server
+        function stopAudioRecording() {
+            if (!state.recording || !state.mediaRecorder) return;
+
+            // Hide audio modal
+            elements.audioModal.classList.add('hidden');
+
+            // Reset microphone button
+            elements.micBtn.classList.remove('bg-red-500');
+            elements.micBtn.classList.add('bg-blue-500');
+
+            // Stop recording
+            state.mediaRecorder.addEventListener('stop', () => {
+                // Create audio blob
+                const audioBlob = new Blob(state.audioChunks, { type: 'audio/wav' });
+
+                // Add typing indicator
+                const typingId = 'typing-' + Date.now();
+                addTypingIndicator(typingId);
+
+                // Create form data
+                const formData = new FormData();
+                formData.append('audio', audioBlob);
+                formData.append('user_id', state.userId);
+
+                // Send to API
+                fetch(API.audio, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Remove typing indicator
+                    removeTypingIndicator(typingId);
+
+                    // Add user message if transcribed text is available
+                    if (data.transcribed_text) {
+                        addMessage('user', data.transcribed_text);
+                    }
+
+                    // Add assistant response
+                    addMessage('assistant', data.text);
+
+                    // Play audio if available and enabled
+                    if (state.ttsEnabled && data.audio) {
+                        playAudio(data.audio);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error sending audio:', error);
+                    removeTypingIndicator(typingId);
+                    addMessage('assistant', 'Sorry, I encountered an error while processing your audio.');
+                });
+
+                // Clean up
+                state.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                state.mediaRecorder = null;
+                state.audioChunks = [];
+            });
+
+            state.mediaRecorder.stop();
+            state.recording = false;
+        }
+
+        // Reset conversation
+        function resetConversation() {
+            if (!confirm('Are you sure you want to reset the conversation? This will clear all messages.')) {
+                return;
+            }
+
+            // Clear chat window
+            elements.chatWindow.innerHTML = '';
+            addMessage('assistant', 'Hello! I\'m Morgan, your helpful AI assistant. I can help you control your smart home, answer questions, and more. How can I assist you today?');
+
+            // Reset conversation on server
+            fetch(API.reset, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_id: state.userId
+                })
+            })
+            .catch(error => {
+                console.error('Error resetting conversation:', error);
+            });
+        }
+
+        // Add a message to the chat window
+        function addMessage(role, text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = role === 'user' ? 'message-user ml-auto' : 'message-assistant';
+            messageDiv.classList.add('p-3', 'mb-4', 'max-w-3xl');
+
+            const icon = document.createElement('span');
+            icon.className = 'font-bold mr-2';
+            icon.textContent = role === 'user' ? 'You: ' : 'Morgan: ';
+
+            const content = document.createElement('span');
+            content.textContent = text;
+
+            messageDiv.appendChild(icon);
+            messageDiv.appendChild(content);
+            elements.chatWindow.appendChild(messageDiv);
+
+            // Scroll to bottom
+            elements.chatWindow.scrollTop = elements.chatWindow.scrollHeight;
+        }
+
+        // Add typing indicator
+        function addTypingIndicator(id) {
+            const typingDiv = document.createElement('div');
+            typingDiv.id = id;
+            typingDiv.className = 'message-assistant p-3 mb-4 max-w-3xl typing-indicator';
+            typingDiv.textContent = 'Morgan is typing';
+
+            elements.chatWindow.appendChild(typingDiv);
+            elements.chatWindow.scrollTop = elements.chatWindow.scrollHeight;
+        }
+
+        // Remove typing indicator
+        function removeTypingIndicator(id) {
+            const typingDiv = document.getElementById(id);
+            if (typingDiv) {
+                typingDiv.remove();
+            }
+        }
+
+        // Play audio from base64 string
+        function playAudio(base64Audio) {
+            const audioData = base64Audio;
+            const audioBlob = base64ToBlob(audioData, 'audio/wav');
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+
+            audio.addEventListener('ended', () => {
+                URL.revokeObjectURL(audioUrl);
+            });
+
+            audio.play().catch(error => {
+                console.error('Error playing audio:', error);
+            });
+        }
+
+        // Convert base64 to Blob
+        function base64ToBlob(base64, mimeType) {
+            const byteString = atob(base64);
+            const arrayBuffer = new ArrayBuffer(byteString.length);
+            const int8Array = new Uint8Array(arrayBuffer);
+
+            for (let i = 0; i < byteString.length; i++) {
+                int8Array[i] = byteString.charCodeAt(i);
+            }
+
+            return new Blob([int8Array], { type: mimeType });
+        }
+
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
