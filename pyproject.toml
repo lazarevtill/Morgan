@@ -5,8 +5,10 @@ description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = [
     "aiohttp>=3.8.0",
+    "aiohttp-cors>=0.8.1",
     "asyncio>=3.4.3",
     "psutil>=5.9.0",
     "pyyaml>=6.0",
+    "redis>=5.0.0",
     "uvloop>=0.17.0",
 ]

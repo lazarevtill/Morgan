@@ -8,7 +8,7 @@ import re
 import time
 
 from conversation.context import ConversationContext
-from utils.intent_classifier import IntentClassifier
+from intent_classifier import IntentClassifier
 
 logger = logging.getLogger(__name__)
 
