@@ -38,16 +38,16 @@ Morgan follows a modular microservices architecture with these key components:
 │  └─────────────┘           │            └─────────────────────┘ │
 │                            │                                    │
 │         ┌─────────────────┐│┌────────────────┐ ┌──────────────┐ │
-│         │                 ││                 │ │              │ │
-│         │ Redis Message   ││   PostgreSQL    │ │ File Storage │ │
-│         │    Broker       ││     Database    │ │   (Models)   │ │
-│         │                 ││                 │ │              │ │
+│         │                 │││                │ │              │ │
+│         │  Redis Message  │││   PostgreSQL   │ │ File Storage │ │
+│         │    Broker       │││    Database    │ │   (Models)   │ │
+│         │                 │││                │ │              │ │
 │         └─────────────────┘│└────────────────┘ └──────────────┘ │
 │                            │                                    │
 │  ┌─────────────┐ ┌─────────┴───────┐ ┌─────────────┐            │
 │  │             │ │                 │ │             │            │
-│  │ LLM Service │ │  TTS Service    │ │ STT Service │            │
-│  │  (vLLM)     │ │    (Dia)        │ │  (Whisper)  │            │
+│  │ LLM Service │ │   TTS Service   │ │ STT Service │            │
+│  │    (vLLM)   │ │      (Dia)      │ │  (Whisper)  │            │
 │  │             │ │                 │ │             │            │
 │  └─────────────┘ └─────────────────┘ └─────────────┘            │
 │                                                                 │
