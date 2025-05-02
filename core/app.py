@@ -17,6 +17,9 @@ from services.tts_service import TTSService
 from services.stt_service import STTService
 from integrations.home_assistant import HomeAssistantIntegration
 from utils.logging import setup_logging
+from utils.intent_parser import IntentParser
+from utils.command_resolver import CommandResolver
+from api.server import APIServer
 
 
 class MorganCore:
@@ -42,7 +45,7 @@ class MorganCore:
 
         self.tts_service = TTSService(
             self.config['services']['tts']['url'],
-            self.config['services']['tts']['default_voice']
+            self.config['services']['tts'].get('default_voice', 'morgan_default')
         )
 
         self.stt_service = STTService(
@@ -62,6 +65,18 @@ class MorganCore:
         # Initialize command handlers
         self.handlers = get_handler_registry(self)
 
+        # Initialize intent parser and command resolver
+        self.intent_parser = IntentParser(self.llm_service)
+        self.command_resolver = CommandResolver(self.handlers)
+
+        # Initialize API server
+        api_config = self.config.get('api', {})
+        self.api_server = APIServer(
+            self,
+            host=api_config.get('host', '0.0.0.0'),
+            port=api_config.get('port', 8000)
+        )
+
         self.logger.info("Morgan Core Service initialized successfully")
 
     async def process_text_input(self, text: str, user_id: str = "default") -> Dict[str, Any]:
@@ -72,20 +87,23 @@ class MorganCore:
         context = self.state_manager.get_context(user_id)
         context.add_user_message(text)
 
-        # Generate LLM response to determine intent
-        llm_response = await self.llm_service.process_input(text, context.get_history())
+        try:
+            # Extract intent and parameters using the intent parser
+            intent, params = await self.intent_parser.extract_intent(text, context.get_history())
 
-        # Extract intent and parameters
-        intent, params = self.parse_intent(llm_response)
+            # Push the intent to the context
+            context.push_active_intent(intent)
 
-        # Execute appropriate handler
-        if intent in self.handlers:
-            handler = self.handlers[intent]
-            response = await handler.handle(params, context)
-        else:
-            # Default to direct LLM response if no specific handler
+            # Resolve and execute the command
+            response = await self.command_resolver.resolve_and_execute(intent, params, context)
+
+            # Pop the intent from the context when done
+            context.pop_active_intent()
+
+        except Exception as e:
+            self.logger.error(f"Error processing input: {e}")
             response = {
-                "text": llm_response,
+                "text": "I'm sorry, I'm having trouble understanding that request. Could you try again?",
                 "voice": True,
                 "actions": []
             }
@@ -94,8 +112,12 @@ class MorganCore:
         context.add_assistant_message(response["text"])
 
         # Generate voice response if requested
-        if response.get("voice", False):
-            response["audio"] = await self.tts_service.generate_speech(response["text"])
+        if response.get("voice", False) and not response.get("audio"):
+            try:
+                response["audio"] = await self.tts_service.generate_speech(response["text"])
+            except Exception as e:
+                self.logger.error(f"Error generating speech: {e}")
+                # Don't add the audio field if speech generation fails
 
         self.logger.info(f"Completed processing input, response: {response['text'][:50]}...")
         return response
@@ -104,27 +126,21 @@ class MorganCore:
         """Process audio input from user and return response"""
         self.logger.info("Processing audio input...")
 
-        # Convert speech to text
-        text = await self.stt_service.transcribe(audio_data)
+        try:
+            # Convert speech to text
+            text = await self.stt_service.transcribe(audio_data)
+            self.logger.info(f"Transcribed text: {text}")
 
-        # Process the resulting text
-        return await self.process_text_input(text, user_id)
+            # Process the resulting text
+            return await self.process_text_input(text, user_id)
 
-    def parse_intent(self, llm_response: str) -> tuple:
-        """Parse intent and parameters from LLM response"""
-        # This is a simplified implementation
-        # In a real system, we'd have more sophisticated intent parsing
-
-        # For now, assume the LLM returns a JSON or structured format
-        # that can be parsed to extract intent and parameters
-
-        # Simple example:
-        if "turn on" in llm_response.lower() and "light" in llm_response.lower():
-            return "home_assistant.light", {"action": "turn_on", "entity": "light"}
-        elif "weather" in llm_response.lower():
-            return "information.weather", {}
-        else:
-            return "general.conversation", {}
+        except Exception as e:
+            self.logger.error(f"Error processing audio input: {e}")
+            return {
+                "text": "I'm sorry, I couldn't understand the audio. Could you try again?",
+                "voice": True,
+                "actions": []
+            }
 
     async def start(self):
         """Start the Morgan Core Service"""
@@ -143,16 +159,32 @@ class MorganCore:
         except Exception as e:
             self.logger.error(f"Failed to connect to Home Assistant: {e}")
 
+        # Start API server
+        try:
+            await self.api_server.start()
+        except Exception as e:
+            self.logger.error(f"Failed to start API server: {e}")
+            self.running = False
+            return
+
         self.logger.info("Morgan Core Service started")
 
-        # Keep the service running
+        # Periodic tasks
         while self.running:
-            await asyncio.sleep(1)
+            # Clean up expired conversation contexts
+            self.state_manager.clear_expired_contexts()
+            await asyncio.sleep(60)  # Run cleanup every minute
 
     async def stop(self):
         """Stop the Morgan Core Service"""
         self.logger.info("Morgan Core Service stopping...")
         self.running = False
+
+        # Stop API server
+        try:
+            await self.api_server.stop()
+        except Exception as e:
+            self.logger.error(f"Error stopping API server: {e}")
 
         # Close connections to services
         await self.llm_service.disconnect()

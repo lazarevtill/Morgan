@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  core:
+    build:
+      context: ./core
+      dockerfile: Dockerfile
+    container_name: morgan-core
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config:/opt/morgan/config
+      - ./data:/opt/morgan/data
+    depends_on:
+      - llm-service
+      - tts-service
+      - stt-service
+    networks:
+      - morgan-net
+
+  llm-service:
+    image: morgan/llm-service:latest
+    container_name: morgan-llm
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data/models/llm:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - morgan-net
+
+  tts-service:
+    image: morgan/tts-service:latest
+    container_name: morgan-tts
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./data/models/tts:/models
+      - ./data/voices:/voices
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - morgan-net
+
+  stt-service:
+    image: morgan/stt-service:latest
+    container_name: morgan-stt
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./data/models/stt:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - morgan-net
+
+  web-ui:
+    image: morgan/web-ui:latest
+    container_name: morgan-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./config/web:/config
+    depends_on:
+      - core
+    networks:
+      - morgan-net
+
+networks:
+  morgan-net:
+    driver: bridge
