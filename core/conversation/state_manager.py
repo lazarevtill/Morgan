@@ -1,9 +1,9 @@
 """
 Conversation state management for Morgan Core
 """
-from typing import Dict, Optional
-import uuid
 import time
+import uuid
+from typing import Dict, Optional
 
 from .context import ConversationContext
 

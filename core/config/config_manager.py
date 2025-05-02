@@ -2,8 +2,9 @@
 Configuration management for Morgan Core
 """
 import os
-import yaml
 from typing import Dict, Any, Optional
+
+import yaml
 
 
 class ConfigManager:

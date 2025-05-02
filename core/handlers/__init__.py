@@ -1,7 +1,7 @@
 """
 Command handler registry for Morgan
 """
-from typing import Dict, Any
+from typing import Dict
 
 from .base_handler import BaseHandler
 from .home_assistant import HomeAssistantHandler

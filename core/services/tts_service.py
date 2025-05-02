@@ -1,9 +1,10 @@
 """
 TTS service interface for Morgan Core
 """
-import aiohttp
 import base64
 from typing import Dict, Any, Optional
+
+import aiohttp
 
 
 class TTSService:

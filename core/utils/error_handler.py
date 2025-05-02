@@ -3,7 +3,7 @@ Error handling utilities for Morgan Core
 """
 import logging
 import traceback
-from typing import Dict, Any, Callable, Coroutine, Optional
+from typing import Dict, Any, Callable, Coroutine
 
 logger = logging.getLogger(__name__)
 

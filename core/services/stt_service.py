@@ -1,9 +1,10 @@
 """
 STT service interface for Morgan Core
 """
-import aiohttp
 import base64
-from typing import Dict, Any, Optional
+from typing import Optional
+
+import aiohttp
 
 
 class STTService:
