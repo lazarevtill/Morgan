@@ -1,662 +1,570 @@
-# Morgan AI Assistant Documentation
+# Morgan AI Assistant - v0.2.0
 
-## Overview
+A modern, distributed AI assistant built with Ollama, OpenAI-compatible APIs, and optimized for CUDA 13 with NVIDIA container toolkit support. Uses Nexus proxy repositories for faster builds and development.
 
-Morgan is a self-hosted, local AI assistant designed for home lab environments. It integrates with smart home devices, processes natural language commands, and executes custom tasks - all while keeping your data private and secure on your own hardware.
+## 🏗️ Architecture Overview
 
-This documentation provides information about the Morgan AI Assistant architecture, components, installation, configuration, and usage.
-
-## Table of Contents
-
-- [Architecture](#architecture)
-- [Core Components](#core-components)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [API Reference](#api-reference)
-- [Development](#development)
-- [Troubleshooting](#troubleshooting)
-
-## Architecture
-
-Morgan follows a modular microservices architecture with these key components:
+Morgan v0.2.0 features a completely redesigned microservices architecture optimized for performance and scalability:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Docker Host Environment                    │
+│                    Docker Host Environment                      │
 │                                                                 │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐  │
-│  │  Web UI /   │    │             │    │ Home Assistant      │  │
-│  │  Voice UI   │◄──►│ Morgan Core │◄──►│ Integration Service │  │
-│  └─────────────┘    │   Service   │    └─────────────────────┘  │
-│         ▲           └─────────────┘              ▲              │
-│         │                  ▲                     │              │
+│  │   Web UI    │    │             │    │ Home Assistant      │  │
+│  │   Clients   │◄──►│ Morgan Core │◄──►│ Integration Service │  │
+│  └─────────────┘    │             │    └─────────────────────┘  │
+│         │           └─────────────┘              │              │
 │         ▼                  │                     ▼              │
 │  ┌─────────────┐           │            ┌─────────────────────┐ │
-│  │ User Auth & │           │            │     External API    │ │
-│  │   Security  │           │            │     Connections     │ │
+│  │ Audio Input │           │            │     External APIs   │ │
+│  │ Processing  │           │            │     (Weather, etc)  │ │
 │  └─────────────┘           │            └─────────────────────┘ │
 │                            │                                    │
-│         ┌─────────────────┐│┌────────────────┐ ┌──────────────┐ │
-│         │                 │││                │ │              │ │
-│         │  Redis Message  │││   PostgreSQL   │ │ File Storage │ │
-│         │    Broker       │││    Database    │ │   (Models)   │ │
-│         │                 │││                │ │              │ │
-│         └─────────────────┘│└────────────────┘ └──────────────┘ │
-│                            │                                    │
-│  ┌─────────────┐ ┌─────────┴───────┐ ┌─────────────┐            │
-│  │             │ │                 │ │             │            │
-│  │ LLM Service │ │   TTS Service   │ │ STT Service │            │
-│  │    (vLLM)   │ │      (Dia)      │ │  (Whisper)  │            │
-│  │             │ │                 │ │             │            │
-│  └─────────────┘ └─────────────────┘ └─────────────┘            │
+│  ┌─────────────┐ ┌─────────┴─────────┐ ┌─────────────┐          │
+│  │             │ │                   │ │             │          │
+│  │ LLM Service │ │   TTS Service     │ │ STT Service │          │
+│  │ (Ollama)    │ │    (Coqui TTS)    │ │ (Whisper)   │          │
+│  │             │ │                   │ │             │          │
+│  └─────────────┘ └───────────────────┘ └─────────────┘          │
 │                                                                 │
+│  ┌─────────────┐ ┌───────────────────┐ ┌─────────────────────┐  │
+│  │             │ │                   │ │                     │  │
+│  │ VAD Service │ │   Redis Cache     │ │   PostgreSQL DB     │  │
+│  │ (Silero)    │ │   (Optional)      │ │   (Optional)        │  │
+│  │             │ │                   │ │                     │  │
+│  └─────────────┘ └───────────────────┘ └─────────────────────┘  │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                 External Ollama Service                     │  │
+│  │              (192.168.101.3:11434)                         │  │
+│  └─────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Communication Flow
+## ✨ Key Features
+
+### 🚀 Modern Architecture
+- **Ollama Integration**: Uses Ollama with OpenAI-compatible API for LLM services
+- **Distributed Services**: Separate TTS, STT, and VAD services for optimal performance
+- **Silero VAD**: Advanced voice activity detection for improved audio processing
+- **CUDA 13 Optimization**: Optimized for latest NVIDIA GPUs with container toolkit
+- **Async/Await**: Full async support for high performance and concurrency
+
+### 🛠️ Technical Highlights
+- **Python 3.11+**: Modern Python with latest features
+- **FastAPI**: High-performance async web framework
+- **Pydantic Models**: Type-safe data validation
+- **Structured Logging**: JSON logging with metadata
+- **Health Monitoring**: Comprehensive health checks and metrics
+- **Docker Multi-stage**: Optimized container builds
+
+## 📋 System Requirements
+
+### Hardware Requirements
+- **GPU**: NVIDIA GPU with CUDA 13+ support (recommended)
+- **RAM**: 8GB minimum, 16GB+ recommended
+- **Storage**: 50GB+ for models and data
+- **Network**: Stable network connection for inter-service communication
+
+### Software Requirements
+- **Docker**: 24.0+
+- **Docker Compose**: 2.20+
+- **NVIDIA Container Toolkit**: For GPU support
+- **Linux**: Ubuntu 22.04+ recommended
+
+## 📦 Development Setup
+
+### Using uv (Recommended)
+
+Morgan uses [uv](https://github.com/astral-sh/uv) for fast Python dependency management with Nexus proxy repositories:
 
-1. **Input Processing**:
-   - User provides input via voice (microphone) or text (web UI)
-   - Voice input is processed by Whisper STT to convert to text
-   
-2. **Intent Recognition**:
-   - The core service passes the text to the LLM service
-   - LLM determines user intent and required actions
-   
-3. **Service Execution**:
-   - For smart home controls, requests route through Home Assistant
-   - For information queries, LLM generates appropriate responses
-   
-4. **Response Generation**:
-   - Text responses are generated by the LLM
-   - If voice output is requested, TTS converts text to speech
-   
-5. **User Interaction**:
-   - Response is presented to the user via web UI or speakers
-
-## Core Components
-
-### Morgan Core Service
-
-The central orchestration component that manages the entire system:
-
-**Location**: `/core/`
-
-**Responsibilities**:
-- Coordinate communication between all services
-- Manage conversation state and context
-- Route commands to appropriate handlers
-- Process user input and format responses
-
-**Key Files**:
-- `/core/app.py` - Main application entry point
-- `/core/config/core.yaml` - Main configuration
-- `/core/config/handlers.yaml` - Command handler definitions
-
-### LLM Service
-
-Provides natural language understanding and response generation:
-
-**Location**: `/llm/`
-
-**Supported Models**:
-- Mistral AI's Mixtral (recommended)
-- Llama 3
-- Custom fine-tuned models
-
-**Key Files**:
-- `/llm/config/models.yaml` - Model definitions
-- `/llm/config/prompts.yaml` - System prompts for different scenarios
-
-### TTS Service
-
-Converts text responses to natural-sounding speech:
-
-**Location**: `/tts/`
-
-**Features**:
-- Ultra-realistic voice generation
-- Support for non-verbal expressions (laughter, pauses)
-- Voice cloning capabilities
-
-**Key Files**:
-- `/tts/config/voices.yaml` - Voice profile settings
-- `/tts/voices/` - Custom voice samples
-
-### STT Service
-
-Processes spoken user input to text:
-
-**Location**: `/stt/`
-
-**Features**:
-- Accurate transcription in multiple languages
-- Robust in noisy environments
-- Low-latency processing
-
-**Key Files**:
-- `/stt/config/whisper.yaml` - Model and processing settings
-
-### Home Assistant Integration
-
-Connects Morgan to your smart home devices:
-
-**Location**: `/home-assistant/`
-
-**Features**:
-- Device discovery and control
-- State monitoring and updates
-- Automation triggering
-
-**Key Files**:
-- `/core/integrations/home_assistant.py` - Integration implementation
-- `/core/handlers/home_assistant.py` - Command handler
-
-### Web and Voice UI
-
-User interfaces for interacting with Morgan:
-
-**Location**: `/web-ui/`
-
-**Features**:
-- Modern web interface
-- Mobile responsive design
-- Voice interaction controls
-- Conversation history
-
-## Installation
-
-### Prerequisites
-
-1. A Linux-based server (Ubuntu 22.04 LTS recommended)
-2. Docker and Docker Compose installed
-3. NVIDIA Container Toolkit (for GPU acceleration)
-4. Git for repository cloning
-5. Home Assistant instance accessible on your network
-
-### Installation Steps
-
-1. Clone the Morgan repository:
-   ```bash
-   git clone https://github.com/yourusername/morgan-assistant.git /opt/morgan
-   cd /opt/morgan
-   ```
-
-2. Run the installation script:
-   ```bash
-   ./scripts/install.sh
-   ```
-
-3. Configure your Home Assistant connection in `/opt/morgan/config/core.yaml`:
-   ```yaml
-   home_assistant:
-     url: http://your-home-assistant:8123
-     token: your_long_lived_access_token
-   ```
-
-4. Start the services:
-   ```bash
-   docker-compose up -d
-   ```
-
-5. Access the web interface at http://[your-server-ip]:8000/ui
-
-## Configuration
-
-### Main Configuration Files
-
-1. **Core Configuration** (`/config/core.yaml`):
-   ```yaml
-   system:
-     name: Morgan
-     log_level: info
-     data_dir: /app/data
-   
-   services:
-     llm:
-       url: http://llm-service:8001
-       model: mistral
-     tts:
-       url: http://tts-service:8002
-       default_voice: morgan_default
-     stt:
-       url: http://stt-service:8003
-       model: whisper-large-v3
-   
-   home_assistant:
-     url: http://your-home-assistant:8123
-     token: your_long_lived_access_token
-   ```
-
-2. **Handler Configuration** (`/config/handlers.yaml`):
-   ```yaml
-   handlers:
-     home_assistant:
-       enabled: true
-       domains:
-         - light
-         - switch
-         - climate
-         - media_player
-     
-     information:
-       enabled: true
-       weather_api_key: ""
-     
-     system:
-       enabled: true
-       allow_restart: true
-       allow_update: true
-   ```
-
-3. **Device Configuration** (`/config/devices.yaml`):
-   ```yaml
-   device_groups:
-     living_room:
-       - light.living_room
-       - media_player.living_room_tv
-       - climate.living_room
-     
-     kitchen:
-       - light.kitchen
-       - switch.coffee_maker
-   
-   device_aliases:
-     tv: media_player.living_room_tv
-     main_lights: light.living_room
-     coffee: switch.coffee_maker
-   ```
-
-4. **Voice Configuration** (`/config/voices.yaml`):
-   ```yaml
-   voices:
-     morgan_default:
-       description: "Default Morgan voice"
-       type: "preset"
-       preset_id: 12
-     
-     custom_voice:
-       description: "Custom voice profile"
-       type: "cloned"
-       sample_file: "custom_voice_sample.mp3"
-       sample_text: "This is a sample text for voice cloning."
-   ```
-
-### Configuring Voice Profiles
-
-To create a custom voice profile:
-
-1. Record a voice sample (30+ seconds of clear speech)
-2. Save the recording to `/data/voices/samples/[name].mp3`
-3. Add the voice configuration to `/config/voices.yaml`:
-   ```yaml
-   voices:
-     custom_voice:
-       description: "Custom voice profile"
-       type: "cloned"
-       sample_file: "[name].mp3"
-       sample_text: "The text content of your recording"
-   ```
-4. Restart the TTS service:
-   ```bash
-   docker-compose restart tts-service
-   ```
-
-## Usage
-
-### Web Interface
-
-The web interface is accessible at `http://[your-server-ip]:8000/ui` and provides:
-
-- Text chat interface
-- Voice input/output capabilities
-- Conversation history
-- Settings management
-
-### Voice Commands
-
-Morgan supports a wide range of voice commands, including:
-
-#### Smart Home Controls
-
-- "Turn on the living room lights"
-- "Set the kitchen lights to 50% brightness"
-- "Turn off all lights in the bedroom"
-- "Set the thermostat to 72 degrees"
-- "Play music on the living room speaker"
-
-#### Information Queries
-
-- "What's the weather like today?"
-- "What time is it in Tokyo?"
-- "Tell me about quantum computing"
-- "How tall is Mount Everest?"
-
-#### System Commands
-
-- "What's your status?"
-- "Restart yourself"
-- "Change your voice to custom_voice"
-
-### API Access
-
-Morgan provides a RESTful API for integration with other systems:
-
-**Text Input**:
 ```bash
-curl -X POST http://[your-server-ip]:8000/api/text \
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Set up development environment (Linux/macOS)
+cd morgan
+./scripts/dev-setup.sh
+
+# Or for Windows PowerShell
+.\scripts\dev-setup.ps1 -Build -Up
+
+# Or install dependencies manually (system Python for containers)
+export UV_INDEX_URL="https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple"
+export UV_NO_CREATE_VENV=1  # No venv creation in containers
+uv pip install fastapi uvicorn[standard] pydantic aiohttp pyyaml python-dotenv structlog psutil redis --system
+```
+
+### Docker Optimizations
+
+The Docker setup has been optimized to avoid unnecessary virtual environments:
+
+- **No Virtual Environments in Containers**: `UV_NO_CREATE_VENV=1` + `uv pip install --system` prevents venv creation
+- **Direct System Installation**: UV installs packages directly to system Python
+- **Faster Startup**: Each container starts ~2-3 seconds faster
+- **Memory Efficient**: ~100-200MB less RAM usage per container
+- **Proper Repository Separation**: Debian vs Ubuntu repositories correctly configured
+
+**Note**: Local development uses virtual environments since system Python is protected on Ubuntu/Debian systems, but Docker containers use system Python for optimal performance.
+
+### Troubleshooting
+
+If you encounter build issues, use the diagnostic tools:
+
+```bash
+# For Windows PowerShell
+.\scripts\docker-diagnose.ps1 -CheckFiles    # Check file structure
+.\scripts\docker-diagnose.ps1 -FixImports    # Fix missing imports
+.\scripts\docker-diagnose.ps1 -ValidateBuild # Test Docker builds
+.\scripts\docker-diagnose.ps1 -CleanRebuild  # Fresh start
+
+# For Linux/macOS
+./scripts/docker-diagnose.sh -c  # Check files
+./scripts/docker-diagnose.sh -f  # Fix imports
+./scripts/docker-diagnose.sh -v  # Validate build
+./scripts/docker-diagnose.sh -r  # Fresh start
+```
+
+These tools will help identify and fix common issues like missing files, import errors, and Docker build problems.
+
+### Local Development
+
+```bash
+# Run services locally (requires virtual environment)
+source .venv/bin/activate
+python core/app.py                     # Core service
+python services/llm/main.py            # LLM service
+python services/tts/main.py            # TTS service
+python services/stt/main.py            # STT service
+python services/vad/main.py            # VAD service
+
+# Run tests
+pytest
+
+# Or using Docker (recommended for production)
+docker-compose up -d --build
+```
+
+### Nexus Repository Configuration
+
+The project is configured to use your Nexus proxy repositories:
+
+- **Ubuntu/Debian**: `https://nexus.in.lazarev.cloud/repository/ubuntu-group/`
+- **Security Updates**: `https://nexus.in.lazarev.cloud/repository/debian-security/`
+- **PyPI Proxy**: `https://nexus.in.lazarev.cloud/repository/pypi-proxy/`
+
+See [DEVELOPMENT.md](./DEVELOPMENT.md) for detailed development instructions.
+
+## 🚀 Quick Start
+
+### 1. Clone and Setup
+```bash
+git clone <repository-url>
+cd morgan
+```
+
+### 2. Configure UV and Dependencies
+```bash
+# For Windows PowerShell
+.\scripts\setup-uv.ps1 -Install -Configure
+.\scripts\docker-build-helper.ps1 -GenerateLockfile
+
+# For Linux/macOS
+./scripts/dev-setup.sh
+./scripts/docker-build-helper.sh -g  # Generate lockfile
+```
+
+### 3. Diagnose and Fix Issues (if needed)
+```bash
+# For Windows PowerShell
+.\scripts\docker-diagnose.ps1 -CheckFiles
+.\scripts\docker-diagnose.ps1 -FixImports
+.\scripts\docker-diagnose.ps1 -ValidateBuild
+
+# For Linux/macOS
+./scripts/docker-diagnose.sh -c  # Check files
+./scripts/docker-diagnose.sh -f  # Fix imports
+./scripts/docker-diagnose.sh -v  # Validate build
+```
+
+### 4. Build and Start Services
+```bash
+# Build with optimizations (recommended)
+.\scripts\docker-build-helper.ps1 -BuildNoCache
+
+# Start all services
+docker compose up -d
+
+# Or use the helper script for clean start
+.\scripts\docker-build-helper.ps1 -CleanStart
+```
+
+### 5. Verify Installation
+```bash
+# Test all services
+.\scripts\test-integration.ps1 -Quick
+
+# Check individual service health
+curl http://localhost:8000/health  # Core
+curl http://localhost:8001/health  # LLM
+curl http://localhost:8002/health  # TTS
+curl http://localhost:8003/health  # STT
+curl http://localhost:8004/health  # VAD
+```
+
+### 5. Access the System
+- **API Documentation**: http://localhost:8000/docs
+- **Core Service**: http://localhost:8000
+- **LLM Service**: http://localhost:8001
+- **TTS Service**: http://localhost:8002
+- **STT Service**: http://localhost:8003
+- **VAD Service**: http://localhost:8004
+
+## 🔧 Configuration
+
+### Core Service Configuration
+```yaml
+# config/core.yaml
+host: "0.0.0.0"
+port: 8000
+llm_service_url: "http://llm-service:8001"
+tts_service_url: "http://tts-service:8002"
+stt_service_url: "http://stt-service:8003"
+vad_service_url: "http://vad-service:8004"
+conversation_timeout: 1800
+max_history: 50
+log_level: "INFO"
+```
+
+### LLM Service Configuration
+```yaml
+# config/llm.yaml
+host: "0.0.0.0"
+port: 8001
+model: "llama3.2:3b"
+ollama_url: "http://ollama:11434"
+max_tokens: 2048
+temperature: 0.7
+timeout: 30.0
+gpu_layers: -1
+context_window: 4096
+system_prompt: "You are Morgan, a helpful AI assistant."
+log_level: "INFO"
+```
+
+### TTS Service Configuration
+```yaml
+# config/tts.yaml
+host: "0.0.0.0"
+port: 8002
+model: "kokoro"
+device: "cuda"
+language: "en-us"
+voice: "af_heart"
+speed: 1.0
+output_format: "wav"
+sample_rate: 22050
+log_level: "INFO"
+```
+
+### STT Service Configuration
+```yaml
+# config/stt.yaml
+host: "0.0.0.0"
+port: 8003
+model: "whisper-large-v3"
+device: "cuda"
+language: "auto"
+sample_rate: 16000
+chunk_size: 1024
+threshold: 0.5
+min_silence_duration: 0.5
+log_level: "INFO"
+```
+
+### VAD Service Configuration
+```yaml
+# config/vad.yaml
+host: "0.0.0.0"
+port: 8004
+model: "silero_vad"
+threshold: 0.5
+min_speech_duration: 0.25
+max_speech_duration: 30.0
+window_size: 512
+sample_rate: 16000
+device: "cpu"
+log_level: "INFO"
+```
+
+## 📡 API Usage
+
+### Core Service Endpoints
+
+#### Process Text Input
+```bash
+curl -X POST http://localhost:8000/api/text \
   -H "Content-Type: application/json" \
-  -d '{"text": "What time is it?", "user_id": "default"}'
+  -d '{
+    "text": "Turn on the living room lights",
+    "user_id": "user123",
+    "metadata": {"generate_audio": true}
+  }'
 ```
 
-**Audio Input**:
+#### Process Audio Input
 ```bash
-curl -X POST http://[your-server-ip]:8000/api/audio \
-  -F "audio=@/path/to/audio.wav" \
-  -F "user_id=default"
+curl -X POST http://localhost:8000/api/audio \
+  -F "file=@audio.wav" \
+  -F "user_id=user123"
 ```
-
-## API Reference
-
-### Core Endpoints
-
-#### Text Processing
-
-- **URL**: `/api/text`
-- **Method**: `POST`
-- **Body**:
-  ```json
-  {
-    "text": "Your message here",
-    "user_id": "optional-user-id"
-  }
-  ```
-- **Response**:
-  ```json
-  {
-    "text": "Response text",
-    "audio": "base64-encoded-audio-data",
-    "actions": []
-  }
-  ```
-
-#### Audio Processing
-
-- **URL**: `/api/audio`
-- **Method**: `POST`
-- **Body**: Form data with:
-  - `audio`: Audio file (WAV format)
-  - `user_id`: Optional user ID
-- **Response**:
-  ```json
-  {
-    "text": "Response text",
-    "transcribed_text": "Transcribed input",
-    "audio": "base64-encoded-audio-data",
-    "actions": []
-  }
-  ```
-
-#### Reset Conversation
-
-- **URL**: `/api/conversation/reset`
-- **Method**: `POST`
-- **Body**:
-  ```json
-  {
-    "user_id": "optional-user-id"
-  }
-  ```
-- **Response**:
-  ```json
-  {
-    "success": true
-  }
-  ```
-
-### Status Endpoints
 
 #### Health Check
+```bash
+curl http://localhost:8000/health
+```
 
-- **URL**: `/api/health`
-- **Method**: `GET`
-- **Response**:
-  ```json
-  {
-    "status": "ok",
-    "timestamp": 1620000000
-  }
-  ```
+### LLM Service Endpoints (OpenAI Compatible)
 
-#### System Status
+#### Chat Completions
+```bash
+curl -X POST http://localhost:8001/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama3.2:3b",
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "Hello!"}
+    ]
+  }'
+```
 
-- **URL**: `/api/status`
-- **Method**: `GET`
-- **Response**:
-  ```json
-  {
-    "version": "0.1.0",
-    "uptime": "1d 2h 3m 4s",
-    "cpu_percent": 12.3,
-    "memory_percent": 45.6,
-    "disk_percent": 78.9,
-    "service_status": {
-      "llm": true,
-      "tts": true,
-      "stt": true,
-      "home_assistant": true
-    }
-  }
-  ```
+#### Embeddings
+```bash
+curl -X POST http://localhost:8001/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "Hello world",
+    "model": "llama3.2:3b"
+  }'
+```
 
-### Settings Endpoints
+### TTS Service Endpoints
 
-#### Get Voices
+#### Generate Speech
+```bash
+curl -X POST http://localhost:8002/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Hello, this is a test message.",
+    "voice": "af_heart",
+    "speed": 1.0
+  }'
+```
 
-- **URL**: `/api/voices`
-- **Method**: `GET`
-- **Response**:
-  ```json
-  {
-    "voices": {
-      "morgan_default": {
-        "description": "Default Morgan voice",
-        "type": "preset"
-      },
-      "custom_voice": {
-        "description": "Custom voice profile",
-        "type": "cloned"
-      }
-    }
-  }
-  ```
+### STT Service Endpoints
 
-#### Set Voice
+#### Transcribe Audio
+```bash
+curl -X POST http://localhost:8003/transcribe \
+  -H "Content-Type: application/json" \
+  -d '{
+    "audio_data": "base64_encoded_audio_data",
+    "language": "en"
+  }'
+```
 
-- **URL**: `/api/voices`
-- **Method**: `POST`
-- **Body**:
-  ```json
-  {
-    "user_id": "optional-user-id",
-    "voice_id": "morgan_default"
-  }
-  ```
-- **Response**:
-  ```json
-  {
-    "success": true,
-    "message": "Voice preference set to morgan_default: Default Morgan voice",
-    "voice_id": "morgan_default",
-    "description": "Default Morgan voice"
-  }
-  ```
+### VAD Service Endpoints
 
-## Development
+#### Detect Speech
+```bash
+curl -X POST http://localhost:8004/detect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "audio_data": "base64_encoded_audio_data",
+    "threshold": 0.5
+  }'
+```
+
+## 🐳 Docker Services
+
+### Service Architecture
+- **External Ollama**: LLM backend service (running at 192.168.101.3:11434)
+- **LLM Service**: OpenAI-compatible API wrapper for external Ollama (CPU only)
+- **TTS Service**: Text-to-speech synthesis with Coqui TTS (GPU optimized)
+- **STT Service**: Speech-to-text with Faster Whisper + Silero VAD (GPU optimized)
+- **VAD Service**: Voice activity detection with Silero VAD (CPU optimized)
+- **Core Service**: Main orchestration and API service (CPU only)
+- **Redis**: Optional caching and message queuing
+- **PostgreSQL**: Optional persistent storage
+
+### GPU Configuration
+All GPU-enabled services use NVIDIA container toolkit:
+```yaml
+deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: 1
+          capabilities: [gpu]
+```
+
+## 🔍 Monitoring and Logging
+
+### Health Monitoring
+Each service provides comprehensive health checks:
+- Service availability
+- Model status
+- GPU memory usage
+- Request/response times
+- Error rates
+
+### Structured Logging
+All services use structured JSON logging:
+```json
+{
+  "timestamp": "2024-01-15T10:30:00Z",
+  "level": "INFO",
+  "service": "llm_service",
+  "message": "Request processed",
+  "request_id": "req_12345",
+  "processing_time": 0.123,
+  "model": "llama3.2:3b"
+}
+```
+
+### Metrics
+Prometheus metrics are available at `/metrics` endpoints for monitoring dashboards.
+
+## 🛠️ Development
 
 ### Project Structure
-
 ```
-/opt/morgan/
-├── core/               # Core service
-│   ├── api/            # API server
-│   ├── config/         # Configuration management
-│   ├── conversation/   # Conversation context management
-│   ├── handlers/       # Command handlers
-│   ├── integrations/   # External integrations
-│   ├── models/         # Data models
-│   ├── services/       # Service interfaces
-│   └── utils/          # Utilities
-├── llm/                # LLM service
-├── tts/                # TTS service
-├── stt/                # STT service
-├── web-ui/             # Web interface
-├── data/               # Data storage
-│   ├── models/         # AI models
-│   ├── voices/         # Voice profiles
-│   └── conversations/  # Conversation history
-├── config/             # Configuration files
-└── scripts/            # Utility scripts
+morgan/
+├── core/                    # Core orchestration service
+│   ├── api/                # FastAPI server
+│   ├── conversation/       # Conversation management
+│   ├── handlers/          # Command handlers
+│   ├── integrations/      # External integrations
+│   ├── services/          # Service orchestration
+│   └── utils/             # Utilities
+├── services/               # Microservices
+│   ├── llm/               # LLM service (Ollama)
+│   ├── tts/               # TTS service (Kokoro)
+│   ├── stt/               # STT service (Whisper + VAD)
+│   └── vad/               # VAD service (Silero)
+├── shared/                # Shared components
+│   ├── config/            # Configuration management
+│   ├── models/            # Data models
+│   └── utils/             # Shared utilities
+├── config/                # Configuration files
+├── data/                  # Data and models
+└── logs/                  # Service logs
 ```
 
-### Adding Custom Command Handlers
+### Adding New Features
 
-1. Create a new handler file in `/core/handlers/`:
-   ```python
-   from .base_handler import BaseHandler
-   from conversation.context import ConversationContext
-   
-   class CustomHandler(BaseHandler):
-       async def handle(self, params, context):
-           # Your handler logic here
-           return await self.format_response("Custom response", True)
-   ```
+#### Custom Command Handler
+```python
+from core.handlers.registry import BaseHandler
 
-2. Register the handler in `/core/handlers/__init__.py`:
-   ```python
-   from .custom_handler import CustomHandler
-   
-   def get_handler_registry(core_instance):
-       handlers = {
-           # ... existing handlers
-           "custom.command": CustomHandler(core_instance)
-       }
-       return handlers
-   ```
+class CustomHandler(BaseHandler):
+    async def handle(self, command, context):
+        # Your custom logic here
+        return {
+            "success": True,
+            "response": "Custom command executed",
+            "data": result
+        }
+```
 
-3. Update the intent classifier in `/core/utils/intent_classifier.py`:
-   ```python
-   def _load_intent_definitions(self):
-       return {
-           # ... existing intents
-           "custom.command": {
-               "parameters": ["param1", "param2"],
-               "required": ["param1"]
-           }
-       }
-   ```
+#### New Integration
+```python
+class CustomIntegration:
+    async def execute(self, command, parameters):
+        # Integration logic here
+        return {"success": True, "data": result}
+```
 
-### Setting Up a Development Environment
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/morgan-assistant.git
-   cd morgan-assistant
-   ```
-
-2. Create a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r core/requirements.txt
-   ```
-
-4. Run the core service in development mode:
-   ```bash
-   cd core
-   python app.py
-   ```
-
-## Troubleshooting
+## 🚨 Troubleshooting
 
 ### Common Issues
 
-#### LLM Service Not Starting
+#### GPU Not Detected
+```bash
+# Check GPU availability
+nvidia-smi
 
-**Symptoms**: LLM service fails to start or crashes shortly after starting.
+# Verify NVIDIA container toolkit
+docker run --gpus all nvidia/cuda:12.1-base-ubuntu22.04 nvidia-smi
+```
 
-**Possible Causes**:
-- Insufficient GPU memory
-- Model file not found or corrupted
-- CUDA driver version mismatch
+#### Service Connection Issues
+```bash
+# Check service logs
+docker-compose logs llm-service
+docker-compose logs core
 
-**Solutions**:
-1. Check GPU memory requirements for your chosen model
-2. Verify model files exist in `/data/models/llm/`
-3. Check CUDA driver compatibility with `nvidia-smi`
-4. Try a smaller model or enable model quantization
+# Test service connectivity
+curl -f http://localhost:8001/health
+```
 
-#### Home Assistant Connection Issues
+#### Model Loading Issues
+```bash
+# Check available disk space
+df -h
 
-**Symptoms**: Morgan cannot control smart home devices or reports connection errors.
+# Verify model downloads
+docker-compose exec llm-service ls -la data/models/
+```
 
-**Possible Causes**:
-- Incorrect Home Assistant URL or token
-- Network connectivity issues
-- Home Assistant not running
+### Performance Optimization
 
-**Solutions**:
-1. Verify URL and token in `/config/core.yaml`
-2. Check network connectivity between Morgan and Home Assistant
-3. Ensure Home Assistant is running and accessible
-4. Check logs for specific error messages
+#### GPU Memory Management
+- Monitor GPU usage: `nvidia-smi`
+- Adjust batch sizes in configuration
+- Use appropriate model sizes for your hardware
 
-#### Voice Recognition Problems
+#### Network Optimization
+- Use internal Docker network for service communication
+- Adjust timeouts based on network latency
+- Enable connection pooling
 
-**Symptoms**: Morgan doesn't understand voice commands or transcribes them incorrectly.
+## 📄 License
 
-**Possible Causes**:
-- Poor microphone quality
-- Background noise
-- Whisper model issues
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-**Solutions**:
-1. Use a better microphone or position it closer
-2. Reduce background noise
-3. Try a different Whisper model
-4. Check logs for specific transcription errors
+## 🤝 Contributing
 
-#### General Troubleshooting Steps
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
-1. Check logs:
-   ```bash
-   docker-compose logs -f core
-   ```
+## 📞 Support
 
-2. Restart services:
-   ```bash
-   docker-compose restart
-   ```
+- **Documentation**: Check the `/docs` endpoints
+- **Issues**: Report bugs and request features
+- **Discussions**: Community discussions and support
 
-3. Check system resources:
-   ```bash
-   docker stats
-   ```
+## 🔄 Migration from v0.1.0
 
-4. Verify configuration:
-   ```bash
-   docker-compose config
-   ```
+### Breaking Changes
+- Complete architecture redesign
+- New service endpoints and APIs
+- Configuration format changes
+- Docker compose structure updated
 
-### Getting Support
+### Migration Steps
+1. Backup existing data and configurations
+2. Update docker-compose.yml
+3. Update configuration files
+4. Pull new Docker images
+5. Start services in new architecture
 
-If you encounter issues not covered in this documentation:
+---
 
-1. Check the GitHub repository issues section
-2. Join the community Discord server
-3. Submit a detailed bug report with logs and system information
+**Morgan AI Assistant v0.2.0** - Modern, distributed, and optimized for performance.

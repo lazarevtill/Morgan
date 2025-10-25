@@ -1,0 +1,40 @@
+# Core dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+aiohttp>=3.9.0
+
+# STT and audio processing
+torch>=2.1.0+cu130
+torchaudio>=2.1.0+cu130
+whisper>=1.1.0
+faster-whisper>=1.0.0
+soundfile>=0.12.0
+librosa>=0.10.0
+pydub>=0.25.1
+
+# Voice Activity Detection
+silero-vad>=0.1.0
+
+# CUDA and GPU support
+nvidia-cuda-runtime-cu12>=12.1.0
+nvidia-cuda-nvrtc-cu12>=12.1.0
+nvidia-cublas-cu12>=12.1.0
+nvidia-cudnn-cu12>=8.9.0
+nvidia-cuda-cupti-cu12>=12.1.0
+
+# Audio processing libraries
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Configuration and utilities
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+
+# Logging and monitoring
+structlog>=23.2.0
+
+# Development and testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+httpx>=0.25.0

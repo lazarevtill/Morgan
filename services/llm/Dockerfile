@@ -1,7 +1,8 @@
-# Multi-stage Dockerfile for Core Service (Orchestrator)
+# Multi-stage Dockerfile for LLM Service (OpenAI-compatible Ollama client)
+# This service acts as a client to external Ollama, no CUDA needed
 
 # Stage 1: Base Python environment with uv
-FROM harbor.in.lazarev.cloud/proxy/python:3.12-slim AS base
+FROM harbor.in.lazarev.cloud/morgan/python:3.12-slim AS base
 
 # Configure apt to use Nexus proxy repositories (Debian-based)
 RUN echo 'deb https://nexus.in.lazarev.cloud/repository/debian-proxy/ trixie main' > /etc/apt/sources.list && \
@@ -11,7 +12,6 @@ RUN echo 'deb https://nexus.in.lazarev.cloud/repository/debian-proxy/ trixie mai
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
-    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv (ultra-fast Python package manager)
@@ -30,7 +30,7 @@ WORKDIR /app
 
 # Copy pyproject.toml and install dependencies directly to system Python
 COPY pyproject.toml .
-RUN uv pip install fastapi uvicorn[standard] pydantic aiohttp pyyaml python-dotenv structlog psutil redis --system
+RUN uv pip install openai --system
 
 # Stage 3: Application build
 FROM python-deps AS build
@@ -40,11 +40,11 @@ WORKDIR /app
 # Copy shared utilities first
 COPY shared/ ./shared/
 
-# Copy core service code
-COPY core/ ./
+# Copy LLM service code
+COPY services/llm/ ./
 
 # Create necessary directories
-RUN mkdir -p logs data/conversations
+RUN mkdir -p logs data/models
 
 # Stage 4: Runtime image
 FROM build AS runtime
@@ -57,11 +57,11 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 # Expose ports
-EXPOSE 8000
+EXPOSE 8001
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8001/health || exit 1
 
-# Run the application
+# Run the LLM API service
 CMD ["python", "main.py"]

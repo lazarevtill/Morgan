@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for Core Service (Orchestrator)
+# Multi-stage Dockerfile for VAD Service (CPU optimized with Silero VAD)
 
 # Stage 1: Base Python environment with uv
 FROM harbor.in.lazarev.cloud/proxy/python:3.12-slim AS base
@@ -10,6 +10,7 @@ RUN echo 'deb https://nexus.in.lazarev.cloud/repository/debian-proxy/ trixie mai
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    git \
     curl \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
@@ -30,7 +31,7 @@ WORKDIR /app
 
 # Copy pyproject.toml and install dependencies directly to system Python
 COPY pyproject.toml .
-RUN uv pip install fastapi uvicorn[standard] pydantic aiohttp pyyaml python-dotenv structlog psutil redis --system
+RUN uv pip install silero-vad numpy torch --system
 
 # Stage 3: Application build
 FROM python-deps AS build
@@ -40,11 +41,11 @@ WORKDIR /app
 # Copy shared utilities first
 COPY shared/ ./shared/
 
-# Copy core service code
-COPY core/ ./
+# Copy VAD service code
+COPY services/vad/ ./
 
 # Create necessary directories
-RUN mkdir -p logs data/conversations
+RUN mkdir -p logs
 
 # Stage 4: Runtime image
 FROM build AS runtime
@@ -57,11 +58,11 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 # Expose ports
-EXPOSE 8000
+EXPOSE 8004
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8004/health || exit 1
 
 # Run the application
 CMD ["python", "main.py"]

@@ -1,0 +1,22 @@
+# Morgan Core Service Configuration
+
+# Network configuration
+host: "0.0.0.0"
+port: 8000
+
+# Service URLs
+llm_service_url: "http://llm-service:8001"
+tts_service_url: "http://tts-service:8002"
+stt_service_url: "http://stt-service:8003"
+vad_service_url: "http://vad-service:8004"
+
+# Conversation settings
+conversation_timeout: 1800  # 30 minutes
+max_history: 50
+
+# Logging
+log_level: "INFO"
+
+# Feature flags
+enable_prometheus: true
+enable_caching: true

@@ -1,51 +1,44 @@
-version: '3.8'
-
 services:
-  core:
-    build:
-      context: ./core
-      dockerfile: Dockerfile
-    container_name: morgan-core
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./config:/opt/morgan/config
-      - ./data:/opt/morgan/data
-    depends_on:
-      - llm-service
-      - tts-service
-      - stt-service
-    networks:
-      - morgan-net
-
+  # LLM Service with OpenAI compatibility (Client to external Ollama)
   llm-service:
-    image: morgan/llm-service:latest
+    image: harbor.in.lazarev.cloud/morgan/llm-service:latest
     container_name: morgan-llm
     restart: unless-stopped
     ports:
       - "8001:8001"
     volumes:
-      - ./data/models/llm:/models
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      - ./config:/app/config:ro
+      - ./logs/llm:/app/logs
+    environment:
+      - MORGAN_CONFIG_DIR=/app/config
+      - PYTHONPATH=/app
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
     networks:
       - morgan-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
+  # TTS Service with CUDA support
   tts-service:
-    image: morgan/tts-service:latest
+    image: harbor.in.lazarev.cloud/morgan/tts-service:latest
     container_name: morgan-tts
     restart: unless-stopped
     ports:
       - "8002:8002"
     volumes:
-      - ./data/models/tts:/models
-      - ./data/voices:/voices
+      - ./config:/app/config:ro
+      - ./data/models/tts:/app/data/models
+      - ./data/voices:/app/data/voices
+      - ./logs/tts:/app/logs
+    environment:
+      - MORGAN_CONFIG_DIR=/app/config
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/app
+      - LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
     deploy:
       resources:
         reservations:
@@ -55,15 +48,30 @@ services:
               capabilities: [gpu]
     networks:
       - morgan-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
+  # STT Service with CUDA support and Silero VAD
   stt-service:
-    image: morgan/stt-service:latest
+    image: harbor.in.lazarev.cloud/morgan/stt-service:latest
     container_name: morgan-stt
     restart: unless-stopped
     ports:
       - "8003:8003"
     volumes:
-      - ./data/models/stt:/models
+      - ./config:/app/config:ro
+      - ./data/models/stt:/app/data/models
+      - ./logs/stt:/app/logs
+    environment:
+      - MORGAN_CONFIG_DIR=/app/config
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/app
+      - LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+      - RUST_BACKTRACE=1
     deploy:
       resources:
         reservations:
@@ -73,20 +81,118 @@ services:
               capabilities: [gpu]
     networks:
       - morgan-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
-  web-ui:
-    image: morgan/web-ui:latest
-    container_name: morgan-web
+  # VAD Service (CPU optimized with Silero VAD)
+  vad-service:
+    image: harbor.in.lazarev.cloud/morgan/vad-service:latest
+    container_name: morgan-vad
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8004:8004"
     volumes:
-      - ./config/web:/config
-    depends_on:
-      - core
+      - ./config:/app/config:ro
+      - ./logs/vad:/app/logs
+    environment:
+      - MORGAN_CONFIG_DIR=/app/config
+      - PYTHONPATH=/app
     networks:
       - morgan-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Core orchestration service
+  core:
+    image: harbor.in.lazarev.cloud/morgan/core:latest
+    container_name: morgan-core
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs/core:/app/logs
+    environment:
+      - MORGAN_CONFIG_DIR=/app/config
+      - PYTHONPATH=/app
+    depends_on:
+      llm-service:
+        condition: service_healthy
+      tts-service:
+        condition: service_healthy
+      stt-service:
+        condition: service_healthy
+      vad-service:
+        condition: service_healthy
+    networks:
+      - morgan-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  # Redis for caching and message queuing (optional)
+  redis:
+    image: harbor.in.lazarev.cloud/proxy/redis:7-alpine
+    container_name: morgan-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - morgan-net
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL for persistent storage (optional)
+  postgres:
+    image: harbor.in.lazarev.cloud/proxy/postgres:17-alpine
+    container_name: morgan-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=morgan
+      - POSTGRES_USER=morgan
+      - POSTGRES_PASSWORD=morgan_password
+    networks:
+      - morgan-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U morgan"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 networks:
   morgan-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+  home_assistant_data:
+    driver: local

@@ -1,0 +1,28 @@
+# LLM Service Configuration (OpenAI-compatible Ollama client)
+
+# Network configuration
+host: "0.0.0.0"
+port: 8001
+
+# Ollama configuration (external service)
+ollama_url: "http://192.168.101.3:11434"
+model: "llama3.2:3b"
+
+# Generation parameters
+max_tokens: 2048
+temperature: 0.7
+timeout: 30.0
+
+# Context management
+context_window: 4096
+max_context_messages: 10
+
+# System prompt
+system_prompt: "You are Morgan, a helpful and friendly AI assistant. You assist with smart home controls, answer questions, and perform various tasks."
+
+# Logging
+log_level: "INFO"
+
+# OpenAI compatibility settings
+openai_api_base: "http://192.168.101.3:11434/v1"
+openai_api_key: "ollama"
