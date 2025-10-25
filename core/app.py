@@ -1,492 +1,408 @@
-#!/usr/bin/env python3
 """
-Morgan: A Self-Hosted Home Lab AI Assistant
-Enhanced main application entry point
+Morgan AI Assistant - Core Service
+Modern orchestration service with async/await support
 """
 import asyncio
 import signal
 import sys
 import logging
-import os
-from typing import Dict, Any, List, Optional
-import json
 import time
+from typing import Dict, Any, List, Optional
 from pathlib import Path
+from contextlib import asynccontextmanager
 
-from config.config_manager import ConfigManager
-from conversation.state_manager import ConversationStateManager
-from handlers import get_handler_registry
-from services.llm_service import LLMService
-from services.tts_service import TTSService
-from services.stt_service import STTService
-from integrations.home_assistant import HomeAssistantIntegration
-from utils.logging import setup_logging
-from utils.intent_parser import IntentParser
-from utils.command_resolver import CommandResolver
-from utils.error_handler import ErrorHandler
-from api.server import APIServer
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+import uvicorn
+
+from shared.config.base import ServiceConfig
+from shared.models.base import Message, ConversationContext, Response, Command, ProcessingResult
+from shared.utils.logging import setup_logging, Timer
+from shared.utils.errors import ErrorHandler, ErrorCode
+from shared.utils.http_client import service_registry
+
+# Import core components
+from .api.server import APIServer
+from .conversation.manager import ConversationManager
+from .handlers.registry import HandlerRegistry
+from .integrations.manager import IntegrationManager
+from .services.orchestrator import ServiceOrchestrator
+
+
+class CoreConfig(BaseModel):
+    """Core service configuration"""
+    host: str = "0.0.0.0"
+    port: int = 8000
+    llm_service_url: str = "http://llm-service:8001"
+    tts_service_url: str = "http://tts-service:8002"
+    stt_service_url: str = "http://stt-service:8003"
+    vad_service_url: str = "http://vad-service:8004"
+    conversation_timeout: int = 1800
+    max_history: int = 50
+    log_level: str = "INFO"
+    enable_prometheus: bool = True
 
 
 class MorganCore:
-    """Main application class for Morgan Core Service"""
+    """Modern Morgan Core Service"""
 
-    def __init__(self, config_dir: Optional[str] = None):
+    def __init__(self, config: Optional[ServiceConfig] = None):
+        self.config = config or ServiceConfig("core")
+        self.error_handler = ErrorHandler()
+        self.logger = setup_logging(
+            "morgan_core",
+            self.config.get("log_level", "INFO"),
+            "logs/core.log"
+        )
+
+        # Load configuration
+        self.core_config = CoreConfig(**self.config.all())
+
+        # Service components
+        self.conversation_manager = None
+        self.handler_registry = None
+        self.integration_manager = None
+        self.service_orchestrator = None
+        self.api_server = None
+
+        # Runtime state
         self.running = False
         self.start_time = time.time()
+        self.request_count = 0
 
-        # Set up configuration
-        self.config_dir = config_dir or "/opt/morgan/config"
-        self.config_manager = ConfigManager(self.config_dir)
-
-        try:
-            self.config = self.config_manager.load_core_config()
-        except Exception as e:
-            print(f"Failed to load configuration: {e}")
-            print("Creating default configuration...")
-            self._create_default_config()
-            self.config = self.config_manager.load_core_config()
-
-        # Set up data directory
-        self.data_dir = self.config['system'].get('data_dir', '/opt/morgan/data')
-        os.makedirs(self.data_dir, exist_ok=True)
-
-        # Set up logging
-        log_level_str = self.config['system'].get('log_level', 'info').upper()
-        log_level = getattr(logging, log_level_str, logging.INFO)
-        log_file = os.path.join(self.data_dir, "logs/core.log")
-        self.logger = setup_logging("morgan_core", log_level, log_file)
-
-        # Initialize components
-        self.logger.info("Initializing Morgan Core Service...")
-
-        # Set up error handler
-        self.error_handler = ErrorHandler()
-
-        # Initialize services
-        llm_config = self.config['services']['llm']
-        self.llm_service = LLMService(
-            service_url=llm_config['url'],
-            model_name=llm_config['model'],
-            system_prompt=llm_config.get('system_prompt'),
-            max_tokens=llm_config.get('max_tokens', 1000),
-            temperature=llm_config.get('temperature', 0.7)
-        )
-
-        tts_config = self.config['services']['tts']
-        self.tts_service = TTSService(
-            service_url=tts_config['url'],
-            default_voice=tts_config.get('default_voice', 'morgan_default')
-        )
-
-        stt_config = self.config['services']['stt']
-        self.stt_service = STTService(
-            service_url=stt_config['url'],
-            model_name=stt_config['model']
-        )
-
-        # Initialize integrations
-        ha_config = self.config.get('home_assistant', {})
-        if ha_config and 'url' in ha_config and 'token' in ha_config:
-            self.home_assistant = HomeAssistantIntegration(
-                url=ha_config['url'],
-                token=ha_config['token']
-            )
-            self.home_assistant.reconnect_interval = ha_config.get('reconnect_interval', 10)
-        else:
-            self.logger.warning("Home Assistant configuration is missing or incomplete")
-            self.home_assistant = None
-
-        # Initialize state management
-        self.state_manager = ConversationStateManager(
-            data_dir=self.data_dir,
-            max_history=self.config['system'].get('max_history', 20),
-            context_timeout=self.config['system'].get('context_timeout', 1800),
-            save_interval=self.config['system'].get('save_interval', 60)
-        )
-
-        # Initialize command handlers
-        self.handlers = get_handler_registry(self)
-
-        # Initialize intent parser and command resolver
-        self.intent_parser = IntentParser(self.llm_service)
-        self.command_resolver = CommandResolver(self.handlers)
-
-        # Initialize API server
-        api_config = self.config.get('api', {})
-        self.api_server = APIServer(
-            self,
-            host=api_config.get('host', '0.0.0.0'),
-            port=api_config.get('port', 8000)
-        )
-
-        self.logger.info("Morgan Core Service initialized successfully")
-
-    async def process_text_input(self, text: str, user_id: str = "default") -> Dict[str, Any]:
-        """Process text input from user and return response"""
-        self.logger.info(f"Processing text input: {text[:50]}...")
-
-        # Update conversation context
-        context = self.state_manager.get_context(user_id)
-        context.add_user_message(text)
-
-        try:
-            # Extract intent and parameters using the intent parser
-            intent, params = await self.intent_parser.extract_intent(text, context.get_history())
-            self.logger.debug(f"Extracted intent: {intent} with parameters: {params}")
-
-            # Push the intent to the context
-            context.push_active_intent(intent)
-
-            # Resolve and execute the command
-            response = await self.command_resolver.resolve_and_execute(intent, params, context)
-
-            # Pop the intent from the context when done
-            context.pop_active_intent()
-
-        except Exception as e:
-            self.logger.error(f"Error processing input: {e}", exc_info=True)
-            response = self.error_handler.create_error_response(
-                "I'm sorry, I'm having trouble understanding that request. Could you try again?"
-            )
-
-        # Update conversation context with response
-        context.add_assistant_message(response["text"])
-
-        # Generate voice response if requested
-        if response.get("voice", False) and not response.get("audio"):
-            try:
-                voice_id = context.get_variable("voice_preference", None)
-                response["audio"] = await self.tts_service.generate_speech(
-                    text=response["text"],
-                    voice_id=voice_id
-                )
-            except Exception as e:
-                self.logger.error(f"Error generating speech: {e}", exc_info=True)
-                # Don't add the audio field if speech generation fails
-
-        self.logger.info(f"Completed processing input, response: {response['text'][:50]}...")
-        return response
-
-    async def process_audio_input(self, audio_data: bytes, user_id: str = "default") -> Dict[str, Any]:
-        """Process audio input from user and return response"""
-        self.logger.info("Processing audio input...")
-
-        try:
-            # Get conversation context
-            context = self.state_manager.get_context(user_id)
-
-            # Get prompts from recent conversation to help with transcription
-            recent_messages = context.get_last_n_messages(3)
-            prompt = None
-            if recent_messages:
-                # Extract last assistant message as context for STT
-                for msg in reversed(recent_messages):
-                    if msg.get("role") == "assistant":
-                        prompt = msg.get("content", "")
-                        break
-
-            # Convert speech to text
-            text = await self.stt_service.transcribe(audio_data, prompt=prompt)
-            self.logger.info(f"Transcribed text: {text}")
-
-            # Process the resulting text
-            return await self.process_text_input(text, user_id)
-
-        except Exception as e:
-            self.logger.error(f"Error processing audio input: {e}", exc_info=True)
-            return self.error_handler.create_error_response(
-                "I'm sorry, I couldn't understand the audio. Could you try again?"
-            )
-
-    async def get_system_info(self) -> Dict[str, Any]:
-        """Get system information"""
-        import platform
-        import psutil
-
-        # Get system info
-        cpu_percent = psutil.cpu_percent()
-        memory = psutil.virtual_memory()
-        memory_percent = memory.percent
-        disk = psutil.disk_usage('/')
-        disk_percent = disk.percent
-
-        # Get uptime
-        uptime_seconds = time.time() - self.start_time
-        uptime_str = self._format_uptime(uptime_seconds)
-
-        # Get version from pyproject.toml if available
-        version = "0.1.0"  # Default version
-        try:
-            pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
-            if pyproject_path.exists():
-                with open(pyproject_path, 'r') as f:
-                    for line in f:
-                        if line.startswith("version = "):
-                            version = line.split("=")[1].strip().strip('"\'')
-                            break
-        except Exception as e:
-            self.logger.error(f"Error reading version from pyproject.toml: {e}")
-
-        return {
-            "version": version,
-            "uptime": uptime_str,
-            "uptime_seconds": uptime_seconds,
-            "cpu_percent": cpu_percent,
-            "memory_percent": memory_percent,
-            "disk_percent": disk_percent,
-            "platform": platform.platform(),
-            "python_version": platform.python_version(),
-            "hostname": platform.node(),
-            "service_status": {
-                "llm": self.llm_service.session is not None,
-                "tts": self.tts_service.session is not None,
-                "stt": self.stt_service.session is not None,
-                "home_assistant": self.home_assistant.connected if self.home_assistant else False
-            }
-        }
+        self.logger.info("Morgan Core Service initialized")
 
     async def start(self):
         """Start the Morgan Core Service"""
         self.running = True
         self.logger.info("Morgan Core Service starting...")
 
-        # Initialize connections to services
-        await self.llm_service.connect()
-        await self.tts_service.connect()
-        await self.stt_service.connect()
-
-        # Connect to Home Assistant if configured
-        if self.home_assistant:
-            try:
-                await self.home_assistant.connect()
-                self.logger.info("Connected to Home Assistant successfully")
-            except Exception as e:
-                self.logger.error(f"Failed to connect to Home Assistant: {e}")
-
-        # Start conversation context save task
-        self.state_manager.start_save_task()
-
-        # Start API server
         try:
+            # Initialize service components
+            await self._initialize_components()
+
+            # Start API server
+            self.api_server = APIServer(self)
             await self.api_server.start()
+
+            # Start background tasks
+            asyncio.create_task(self._periodic_cleanup())
+            asyncio.create_task(self._health_monitoring())
+
+            self.logger.info("Morgan Core Service started successfully")
+
         except Exception as e:
-            self.logger.error(f"Failed to start API server: {e}")
+            self.logger.error(f"Failed to start Morgan Core Service: {e}")
             self.running = False
-            return
-
-        self.logger.info("Morgan Core Service started")
-
-        # Periodic tasks
-        while self.running:
-            try:
-                # Clean up expired conversation contexts
-                self.state_manager.clear_expired_contexts()
-
-                # Check Home Assistant connection
-                if self.home_assistant and not self.home_assistant.connected:
-                    try:
-                        await self.home_assistant.connect()
-                    except Exception as e:
-                        self.logger.error(f"Failed to reconnect to Home Assistant: {e}")
-
-                await asyncio.sleep(60)  # Run cleanup every minute
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                self.logger.error(f"Error in periodic tasks: {e}")
-                await asyncio.sleep(60)  # Continue with the loop even if there's an error
+            raise
 
     async def stop(self):
         """Stop the Morgan Core Service"""
         self.logger.info("Morgan Core Service stopping...")
         self.running = False
 
-        # Stop conversation context save task
-        self.state_manager.stop_save_task()
-
-        # Stop API server
         try:
-            await self.api_server.stop()
+            # Stop API server
+            if self.api_server:
+                await self.api_server.stop()
+
+            # Stop service orchestrator
+            if self.service_orchestrator:
+                await self.service_orchestrator.stop()
+
+            # Disconnect from service registry
+            await service_registry.disconnect_all()
+
+            self.logger.info("Morgan Core Service stopped")
+
         except Exception as e:
-            self.logger.error(f"Error stopping API server: {e}")
+            self.logger.error(f"Error during shutdown: {e}")
 
-        # Close connections to services
-        await self.llm_service.disconnect()
-        await self.tts_service.disconnect()
-        await self.stt_service.disconnect()
-
-        if self.home_assistant:
-            await self.home_assistant.disconnect()
-
-        self.logger.info("Morgan Core Service stopped")
-
-    def _create_default_config(self):
-        """Create default configuration files"""
+    async def _initialize_components(self):
+        """Initialize core components"""
         try:
-            # Ensure config directory exists
-            os.makedirs(self.config_dir, exist_ok=True)
+            # Register services
+            await self._register_services()
 
-            # Create core.yaml if it doesn't exist
-            core_config_path = os.path.join(self.config_dir, "core.yaml")
-            if not os.path.exists(core_config_path):
-                default_core_config = {
-                    "system": {
-                        "name": "Morgan",
-                        "log_level": "info",
-                        "data_dir": "/opt/morgan/data",
-                        "max_history": 20,
-                        "context_timeout": 1800,
-                        "save_interval": 60
-                    },
-                    "services": {
-                        "llm": {
-                            "url": "http://llm-service:8001",
-                            "model": "mistral",
-                            "system_prompt": "You are Morgan, a helpful and friendly home assistant AI. You assist with smart home controls, answer questions, and perform various tasks.",
-                            "max_tokens": 1000,
-                            "temperature": 0.7
-                        },
-                        "tts": {
-                            "url": "http://tts-service:8002",
-                            "default_voice": "morgan_default"
-                        },
-                        "stt": {
-                            "url": "http://stt-service:8003",
-                            "model": "whisper-large-v3"
-                        }
-                    },
-                    "home_assistant": {
-                        "url": "http://homeassistant:8123",
-                        "token": "your_long_lived_access_token",
-                        "reconnect_interval": 10
-                    },
-                    "api": {
-                        "host": "0.0.0.0",
-                        "port": 8000,
-                        "cors_origins": ["*"],
-                        "auth_enabled": False
-                    }
-                }
+            # Initialize conversation manager
+            self.conversation_manager = ConversationManager(
+                config=self.config,
+                max_history=self.core_config.max_history,
+                timeout=self.core_config.conversation_timeout
+            )
 
-                with open(core_config_path, 'w') as f:
-                    import yaml
-                    yaml.dump(default_core_config, f, default_flow_style=False)
+            # Initialize handler registry
+            self.handler_registry = HandlerRegistry(self)
 
-            # Create handlers.yaml if it doesn't exist
-            handlers_config_path = os.path.join(self.config_dir, "handlers.yaml")
-            if not os.path.exists(handlers_config_path):
-                default_handlers_config = {
-                    "handlers": {
-                        "home_assistant": {
-                            "enabled": True,
-                            "domains": ["light", "switch", "climate", "media_player"]
-                        },
-                        "information": {
-                            "enabled": True,
-                            "weather_api_key": ""
-                        },
-                        "system": {
-                            "enabled": True,
-                            "allow_restart": True,
-                            "allow_update": True
-                        }
-                    }
-                }
+            # Initialize integration manager
+            self.integration_manager = IntegrationManager(self.config)
 
-                with open(handlers_config_path, 'w') as f:
-                    import yaml
-                    yaml.dump(default_handlers_config, f, default_flow_style=False)
+            # Initialize service orchestrator
+            self.service_orchestrator = ServiceOrchestrator(
+                config=self.config,
+                conversation_manager=self.conversation_manager,
+                handler_registry=self.handler_registry,
+                integration_manager=self.integration_manager
+            )
 
-            # Create devices.yaml if it doesn't exist
-            devices_config_path = os.path.join(self.config_dir, "devices.yaml")
-            if not os.path.exists(devices_config_path):
-                default_devices_config = {
-                    "device_groups": {
-                        "living_room": [
-                            "light.living_room",
-                            "media_player.living_room_tv",
-                            "climate.living_room"
-                        ],
-                        "kitchen": [
-                            "light.kitchen",
-                            "switch.coffee_maker"
-                        ]
-                    },
-                    "device_aliases": {
-                        "tv": "media_player.living_room_tv",
-                        "main_lights": "light.living_room",
-                        "coffee": "switch.coffee_maker"
-                    }
-                }
+            await self.service_orchestrator.start()
 
-                with open(devices_config_path, 'w') as f:
-                    import yaml
-                    yaml.dump(default_devices_config, f, default_flow_style=False)
+            self.logger.info("All components initialized successfully")
 
-            # Create voices.yaml if it doesn't exist
-            voices_config_path = os.path.join(self.config_dir, "voices.yaml")
-            if not os.path.exists(voices_config_path):
-                default_voices_config = {
-                    "voices": {
-                        "morgan_default": {
-                            "description": "Default Morgan voice",
-                            "type": "preset",
-                            "preset_id": 12
-                        }
-                    }
-                }
-
-                with open(voices_config_path, 'w') as f:
-                    import yaml
-                    yaml.dump(default_voices_config, f, default_flow_style=False)
-
-            print("Default configuration files created successfully")
         except Exception as e:
-            print(f"Error creating default configuration: {e}")
+            self.logger.error(f"Failed to initialize components: {e}")
             raise
 
+    async def _register_services(self):
+        """Register external services"""
+        try:
+            # Register LLM service
+            service_registry.register_service(
+                "llm",
+                self.core_config.llm_service_url,
+                timeout=30.0,
+                max_retries=3
+            )
+
+            # Register TTS service
+            service_registry.register_service(
+                "tts",
+                self.core_config.tts_service_url,
+                timeout=30.0,
+                max_retries=3
+            )
+
+            # Register STT service
+            service_registry.register_service(
+                "stt",
+                self.core_config.stt_service_url,
+                timeout=30.0,
+                max_retries=3
+            )
+
+            # Register VAD service
+            service_registry.register_service(
+                "vad",
+                self.core_config.vad_service_url,
+                timeout=10.0,
+                max_retries=3
+            )
+
+            self.logger.info("Services registered successfully")
+
+        except Exception as e:
+            self.logger.error(f"Failed to register services: {e}")
+            raise
+
+    async def process_text_request(self, text: str, user_id: str = "default",
+                                 metadata: Optional[Dict[str, Any]] = None) -> Response:
+        """Process text input request"""
+        with Timer(self.logger, f"Text processing for user {user_id}"):
+            try:
+                self.request_count += 1
+
+                # Get or create conversation context
+                context = self.conversation_manager.get_context(user_id)
+
+                # Add user message
+                user_message = Message(
+                    role="user",
+                    content=text,
+                    metadata=metadata
+                )
+                context.add_message(user_message)
+
+                # Process through orchestrator
+                response = await self.service_orchestrator.process_request(context, metadata)
+
+                # Add assistant response to context
+                assistant_message = Message(
+                    role="assistant",
+                    content=response.text,
+                    metadata={"actions": len(response.actions) if response.actions else 0}
+                )
+                context.add_message(assistant_message)
+
+                return response
+
+            except Exception as e:
+                self.logger.error(f"Error processing text request: {e}")
+                error_response = self.error_handler.create_error_response(
+                    "I'm sorry, I'm having trouble processing your request. Please try again.",
+                    ErrorCode.INTERNAL_ERROR
+                )
+                return Response(
+                    text=error_response["error"]["message"],
+                    metadata={"error": True}
+                )
+
+    async def process_audio_request(self, audio_data: bytes, user_id: str = "default",
+                                  metadata: Optional[Dict[str, Any]] = None) -> Response:
+        """Process audio input request"""
+        with Timer(self.logger, f"Audio processing for user {user_id}"):
+            try:
+                self.request_count += 1
+
+                # Get or create conversation context
+                context = self.conversation_manager.get_context(user_id)
+
+                # Process through orchestrator with audio
+                response = await self.service_orchestrator.process_audio_request(
+                    audio_data, context, metadata
+                )
+
+                # Add assistant response to context
+                assistant_message = Message(
+                    role="assistant",
+                    content=response.text,
+                    metadata={"audio_processed": True}
+                )
+                context.add_message(assistant_message)
+
+                return response
+
+            except Exception as e:
+                self.logger.error(f"Error processing audio request: {e}")
+                error_response = self.error_handler.create_error_response(
+                    "I'm sorry, I couldn't process the audio. Please try again.",
+                    ErrorCode.AUDIO_PROCESSING_ERROR
+                )
+                return Response(
+                    text=error_response["error"]["message"],
+                    metadata={"error": True}
+                )
+
+    async def get_system_status(self) -> Dict[str, Any]:
+        """Get comprehensive system status"""
+        try:
+            # Get service health
+            service_health = await service_registry.health_check_all()
+
+            # Get component status
+            orchestrator_status = await self.service_orchestrator.health_check()
+            conversation_status = self.conversation_manager.get_status()
+
+            # Calculate uptime
+            uptime_seconds = time.time() - self.start_time
+            uptime_str = self._format_uptime(uptime_seconds)
+
+            # Get version from pyproject.toml if available
+            version = "0.2.0"  # Default version
+
+            return {
+                "version": version,
+                "status": "healthy" if all(service_health.values()) else "degraded",
+                "uptime": uptime_str,
+                "uptime_seconds": uptime_seconds,
+                "request_count": self.request_count,
+                "services": service_health,
+                "orchestrator": orchestrator_status,
+                "conversations": conversation_status,
+                "timestamp": time.time()
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error getting system status: {e}")
+            return {
+                "version": "0.2.0",
+                "status": "unhealthy",
+                "error": str(e),
+                "timestamp": time.time()
+            }
+
+    async def _periodic_cleanup(self):
+        """Periodic cleanup tasks"""
+        while self.running:
+            try:
+                # Clean up expired conversations
+                self.conversation_manager.cleanup_expired()
+
+                # Health check services
+                await service_registry.health_check_all()
+
+                await asyncio.sleep(60)  # Run every minute
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error(f"Error in periodic cleanup: {e}")
+                await asyncio.sleep(60)
+
+    async def _health_monitoring(self):
+        """Health monitoring and metrics"""
+        while self.running:
+            try:
+                # Log current status periodically
+                if self.request_count > 0 and self.request_count % 100 == 0:
+                    status = await self.get_system_status()
+                    self.logger.info(f"System status: {status['status']}, requests: {status['request_count']}")
+
+                await asyncio.sleep(30)  # Check every 30 seconds
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error(f"Error in health monitoring: {e}")
+                await asyncio.sleep(30)
+
     def _format_uptime(self, seconds: float) -> str:
-        """Format uptime in a human-readable string"""
+        """Format uptime in human-readable format"""
         days, remainder = divmod(int(seconds), 86400)
         hours, remainder = divmod(remainder, 3600)
         minutes, seconds = divmod(remainder, 60)
 
         parts = []
         if days > 0:
-            parts.append(f"{days} day{'s' if days != 1 else ''}")
+            parts.append(f"{days}d")
         if hours > 0:
-            parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+            parts.append(f"{hours}h")
         if minutes > 0:
-            parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+            parts.append(f"{minutes}m")
         if seconds > 0 or not parts:
-            parts.append(f"{seconds} second{'s' if seconds != 1 else ''}")
+            parts.append(f"{seconds}s")
 
-        return ", ".join(parts)
+        return " ".join(parts)
 
 
 async def main():
     """Main entry point"""
-    # Get config directory from environment or use default
-    config_dir = os.environ.get("MORGAN_CONFIG_DIR", "/opt/morgan/config")
+    # Setup configuration
+    config = ServiceConfig("core")
+    core_config = CoreConfig(**config.all())
 
-    morgan = MorganCore(config_dir)
+    # Setup logging
+    logger = setup_logging(
+        "morgan_core_main",
+        core_config.log_level
+    )
 
-    # Setup signal handling for graceful shutdown
+    logger.info("Starting Morgan Core Service...")
+    logger.info(f"Configuration: {core_config.dict()}")
+
+    # Create and start core service
+    morgan_core = MorganCore(config)
+
+    # Setup signal handling
     def signal_handler():
-        print("Shutting down...")
-        asyncio.create_task(morgan.stop())
+        logger.info("Shutting down Morgan Core Service...")
+        asyncio.create_task(morgan_core.stop())
 
     for sig in (signal.SIGINT, signal.SIGTERM):
-        asyncio.get_event_loop().add_signal_handler(sig, signal_handler)
+        signal.signal(sig, lambda s, f: signal_handler())
 
-    # Start the core service
     try:
-        await morgan.start()
+        await morgan_core.start()
+
+        # Keep the service running
+        while morgan_core.running:
+            await asyncio.sleep(1)
+
     except KeyboardInterrupt:
-        await morgan.stop()
+        await morgan_core.stop()
     except Exception as e:
-        print(f"Error: {e}")
-        await morgan.stop()
+        logger.error(f"Morgan Core Service failed: {e}")
+        await morgan_core.stop()
         sys.exit(1)
 
 

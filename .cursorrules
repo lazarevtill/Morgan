@@ -1,0 +1,232 @@
+# Morgan AI Assistant - Project Rules and Guidelines
+
+## 🏗️ Architecture Overview
+
+```
+External Services:
+├── Ollama (192.168.101.3:11434) ← LLM Backend
+├── Redis (optional) ← Caching
+└── PostgreSQL (optional) ← Persistence
+
+Docker Services:
+├── Core Service (8000) ← Main API & Orchestration
+├── LLM Service (8001) ← OpenAI-compatible Ollama client
+├── TTS Service (8002) ← Coqui TTS with CUDA
+├── STT Service (8003) ← Faster Whisper + Silero VAD
+└── VAD Service (8004) ← Silero VAD (CPU optimized)
+```
+
+## 📁 Project Structure Rules
+
+### Core Components
+- `core/` - Main orchestration service with FastAPI
+- `services/` - Individual microservices (LLM, TTS, STT, VAD)
+- `shared/` - Common utilities, models, and configurations
+- `config/` - YAML configuration files for each service
+- `scripts/` - Development and deployment automation
+
+### Service Architecture
+Each service follows this pattern:
+```
+service_name/
+├── __init__.py
+├── main.py          # Application entry point
+├── service.py       # Core service logic
+├── api/server.py    # FastAPI routes
+├── Dockerfile       # Multi-stage container build
+└── requirements.txt # Service-specific dependencies
+```
+
+## 🐳 Docker Strategy
+
+### Base Images
+- **Debian Services**: `harbor.in.lazarev.cloud/proxy/python:3.12-slim`
+- **CUDA Services**: `harbor.in.lazarev.cloud/proxy/nvidia/cuda:13.0.1-devel-ubuntu22.04`
+
+### Private Registry
+```bash
+# Build and push to private registry
+docker login harbor.in.lazarev.cloud
+./scripts/registry-build.sh -b -p
+
+# Pull from registry
+docker-compose pull
+docker-compose up -d
+```
+
+## 📦 Dependency Management
+
+### UV Configuration
+```bash
+# Local development
+export UV_INDEX_URL="https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple"
+uv venv; source .venv/bin/activate
+uv pip install -e .
+
+# Docker containers
+export UV_NO_CREATE_VENV=1
+uv pip install <packages> --system
+```
+
+### Service Dependencies
+- **LLM**: `openai` (OpenAI-compatible Ollama client)
+- **TTS**: `TTS`, `torch`, `torchaudio`, `torchvision`
+- **STT**: `faster-whisper`, `torch`, `torchaudio`, `silero-vad`
+- **VAD**: `silero-vad`, `numpy`, `torch`
+- **Core**: `fastapi`, `uvicorn`, `pydantic`, `aiohttp`, `pyyaml`
+
+## 🎯 Code Standards
+
+### Python Rules
+- **Async/await**: All I/O operations must use async/await
+- **Pydantic models**: All data structures must use Pydantic BaseModel
+- **Structured logging**: All log messages must include relevant metadata
+- **Type hints**: All functions must have proper type annotations
+- **Error handling**: Custom exceptions with proper HTTP status codes
+
+### Testing Rules
+- **Unit tests**: Required for all new functions and classes
+- **Integration tests**: Required for service interactions
+- **Coverage**: Minimum 80% test coverage with real world scenarios
+- **Async tests**: All async functions must be tested with pytest-asyncio
+
+### Configuration Rules
+- **YAML format**: All configuration files must use YAML
+- **Environment override**: All config values must support environment variable override
+- **Validation**: All configuration must be validated on startup
+- **Documentation**: All configuration options must be documented
+
+## 🔧 Development Rules
+
+### Local Development
+```bash
+# Virtual environment (required)
+uv venv; source .venv/bin/activate
+uv pip install -e .
+
+# Testing
+pytest --cov=core --cov=services
+
+# Docker development
+docker-compose up -d --build
+```
+
+### Production Deployment
+```bash
+# Build and push to registry
+./scripts/registry-build.sh -b -p
+
+# Deploy from registry
+docker-compose pull && docker-compose up -d
+```
+
+## 📋 Service Rules
+
+### Entry Points
+- Each service must have `main.py` as the entry point
+- Each service must implement health check endpoint (`GET /health`)
+- Each service must provide OpenAPI documentation (`GET /docs`)
+
+### API Standards
+- **RESTful endpoints**: All APIs must follow REST principles
+- **JSON responses**: All responses must be JSON formatted
+- **Error codes**: Standard HTTP status codes must be used
+- **Rate limiting**: All endpoints must implement rate limiting
+
+### Communication Rules
+- **Internal networking**: Services communicate via internal Docker network or local network
+- **HTTP only**: No direct database access between services
+- **Connection pooling**: All HTTP clients must use connection pooling
+- **Timeouts**: All requests must have appropriate timeouts
+
+## 📋 Service Implementation Rules
+
+### Core Service Rules
+- **Request routing**: All external requests go through core service
+- **Context management**: Maintain conversation history and metadata
+- **Service orchestration**: Coordinate between AI services
+- **Error aggregation**: Collect and report errors from all services
+
+### LLM Service Rules
+- **OpenAI compatibility**: Must implement OpenAI API specification
+- **External Ollama**: Connect to external Ollama service only
+- **Streaming support**: Implement both streaming and non-streaming responses
+- **Model management**: Handle model loading and switching
+
+### TTS Service Rules
+- **Multi-voice support**: Support multiple voice models
+- **GPU optimization**: Use CUDA for inference cos for that system requires it
+- **Audio format flexibility**: Support multiple output formats
+- **Real-time processing**: Minimize latency for voice synthesis
+
+### STT Service Rules
+- **Whisper integration**: Use Faster Whisper for transcription
+- **VAD integration**: Use Silero VAD for speech detection
+- **Multi-language**: Support automatic language detection
+- **Batch processing**: Handle multiple audio streams efficiently
+
+### VAD Service Rules
+- **Low latency**: Ultra-low latency voice detection
+- **CPU optimization**: Optimized for CPU-only deployment
+- **Configurable thresholds**: Adjustable sensitivity settings
+- **Real-time processing**: Process audio streams in real-time
+
+## 🚀 Performance Rules
+
+### GPU Optimization
+- **CUDA required**: All ML services must use CUDA when available
+- **Memory management**: Implement proper GPU memory cleanup
+- **Batch processing**: Use batching for improved throughput
+- **Model quantization**: Use quantized models for memory efficiency
+
+### Network Optimization
+- **Connection pooling**: All HTTP clients must use connection pooling
+- **Timeout handling**: All requests must have appropriate timeouts
+- **Retry logic**: Implement exponential backoff for failed requests
+- **Load balancing**: Support horizontal scaling
+
+## 📊 Monitoring Rules
+
+### Health Checks
+- **Service health**: Each service must implement `/health` endpoint
+- **Dependency checks**: Verify all external dependencies
+- **Resource monitoring**: Monitor CPU, GPU, and memory usage
+- **Performance metrics**: Track response times and error rates
+
+### Logging Standards
+- **Structured logging**: All logs must be JSON formatted
+- **Request tracing**: Include request IDs in all log entries
+- **Error context**: Include relevant context for debugging
+- **Performance data**: Log timing and resource usage
+
+## 🧪 Testing Rules
+
+### Test Coverage
+- **Unit tests**: 100% coverage for business logic
+- **Integration tests**: Test service interactions
+- **Performance tests**: Validate performance requirements
+- **Error tests**: Test error handling and edge cases
+
+### Test Implementation
+- **Async testing**: Use pytest-asyncio for async functions
+- **Mock external services**: Mock Ollama and other external dependencies
+- **Test data**: Use realistic test data
+- **Continuous testing**: Run tests on every commit locally - not in CI/CD
+
+## 📦 Deployment Rules
+
+### Docker Best Practices
+- **Multi-stage builds**: Use multi-stage builds for smaller images
+- **Non-root user**: Run containers as non-root when possible
+- **Minimal base images**: Use smallest possible base images based on harbor.in.lazarev.cloud/proxy/
+- **Security scanning**: Regular vulnerability scanning
+
+### Registry Management
+- **Private registry**: Use `harbor.in.lazarev.cloud/morgan/` for all final builded images with correct names and tags that contain code 
+- **Version tagging**: Use semantic versioning for releases
+- **Build automation**: Automated builds and deployment
+- **Rollback strategy**: Ability to rollback to previous versions
+
+---
+
+**Morgan AI Assistant Rules** - Essential guidelines for architecture, development, and deployment.

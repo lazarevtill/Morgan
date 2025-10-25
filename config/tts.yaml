@@ -1,0 +1,19 @@
+# TTS Service Configuration
+
+# Network configuration
+host: "0.0.0.0"
+port: 8002
+
+# Model configuration
+model: "kokoro"
+device: "cuda"
+language: "en-us"
+voice: "af_heart"
+
+# Audio parameters
+speed: 1.0
+output_format: "wav"
+sample_rate: 22050
+
+# Logging
+log_level: "INFO"
