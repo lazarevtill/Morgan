@@ -26,13 +26,14 @@ class STTConfig(BaseModel):
     """STT service configuration"""
     host: str = "0.0.0.0"
     port: int = 8003
-    model: str = "whisper-large-v3"
+    model: str = "large-v3"
     device: str = "cuda"
     language: str = "auto"
     sample_rate: int = 16000
     chunk_size: int = 1024
-    threshold: float = 0.5
-    min_silence_duration: float = 0.5
+    vad_enabled: bool = True
+    vad_threshold: float = 0.5
+    vad_min_silence_duration: float = 0.5
     log_level: str = "INFO"
 
 
@@ -62,7 +63,7 @@ class STTService:
         # VAD state
         self.vad_state = None
         self.speech_buffer = []
-        self.silence_threshold = self.stt_config.min_silence_duration * self.stt_config.sample_rate
+        self.silence_threshold = self.stt_config.vad_min_silence_duration * self.stt_config.sample_rate
 
         self.logger.info(f"STT Service initialized with device: {self.device}")
 
@@ -70,7 +71,8 @@ class STTService:
         """Start the STT service"""
         try:
             await self._load_whisper_model()
-            await self._load_vad_model()
+            if self.stt_config.vad_enabled:
+                await self._load_vad_model()
             self.logger.info("STT Service started successfully")
         except Exception as e:
             self.logger.error(f"Failed to start STT service: {e}")
@@ -151,11 +153,14 @@ class STTService:
                 force_reload=False
             )
 
+            # Unpack utilities
+            # utils tuple order: (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks)
+            self.get_speech_timestamps = utils[0]
+            self.collect_chunks = utils[4]
+
             self.vad_model = model
             self.vad_utils = utils
-
-            # Initialize VAD state
-            self.vad_state = self.vad_utils[0](reload=False)
+            self.vad_state = None  # not needed for batch API
 
             self.logger.info("Silero VAD model loaded successfully")
 
@@ -174,8 +179,8 @@ class STTService:
                     sample_rate=self.stt_config.sample_rate
                 )
 
-                # Apply VAD if available
-                if self.vad_model:
+                # Apply VAD if enabled and available
+                if self.stt_config.vad_enabled and self.vad_model:
                     audio_array = await self._apply_vad(audio_array)
 
                 # Transcribe with Whisper
@@ -188,39 +193,24 @@ class STTService:
     async def _apply_vad(self, audio_array: np.ndarray) -> np.ndarray:
         """Apply Voice Activity Detection to audio"""
         try:
-            # Reset VAD state if needed
-            if not hasattr(self, '_vad_state_initialized') or not self._vad_state_initialized:
-                self.vad_state = self.vad_utils[0](reload=False)
-                self._vad_state_initialized = True
+            # Convert numpy array to torch tensor as expected by silero-vad
+            audio_tensor = torch.from_numpy(audio_array).float()
 
-            # Process audio in chunks for VAD
-            chunk_size = int(self.stt_config.sample_rate * 0.5)  # 0.5 second chunks
-            speech_segments = []
+            # Detect speech timestamps
+            speech_timestamps = self.get_speech_timestamps(
+                audio_tensor,
+                self.vad_model,
+                sampling_rate=self.stt_config.sample_rate,
+                threshold=self.stt_config.vad_threshold
+            )
 
-            for i in range(0, len(audio_array), chunk_size):
-                chunk = audio_array[i:i + chunk_size]
-
-                if len(chunk) < chunk_size:
-                    # Pad last chunk
-                    padding = np.zeros(chunk_size - len(chunk))
-                    chunk = np.concatenate([chunk, padding])
-
-                # Run VAD
-                confidence = self.vad_model(chunk, self.stt_config.sample_rate, state=self.vad_state)
-
-                if confidence > self.stt_config.threshold:
-                    speech_segments.append(chunk)
-                else:
-                    # Keep some silence for context
-                    if speech_segments:
-                        speech_segments.append(chunk[:int(chunk_size * 0.1)])
-
-            if speech_segments:
-                return np.concatenate(speech_segments)
-            else:
-                # If no speech detected, return original with warning
+            if not speech_timestamps:
                 self.logger.warning("No speech detected by VAD")
                 return audio_array
+
+            # Collect only speech chunks and return as numpy
+            speech_audio = self.collect_chunks(speech_timestamps, audio_tensor)
+            return speech_audio.numpy()
 
         except Exception as e:
             self.logger.error(f"VAD processing failed: {e}")
@@ -362,22 +352,26 @@ class STTService:
     async def health_check(self) -> Dict[str, Any]:
         """Health check for the service"""
         try:
-            # Test basic transcription
-            test_audio = np.random.randn(self.stt_config.sample_rate).astype(np.float32)
-            test_request = STTRequest(
-                audio_data=self.audio_utils.numpy_to_bytes(test_audio, self.stt_config.sample_rate),
-                language="en"
-            )
+            # Lightweight checks only to avoid heavy GPU inference here
+            whisper_loaded = self.whisper_model is not None
 
-            result = await self.transcribe(test_request)
+            # Optional: quick VAD run on small silent buffer (CPU-friendly)
+            if self.vad_model is not None and hasattr(self, 'get_speech_timestamps'):
+                silent = np.zeros(int(self.stt_config.sample_rate * 0.25), dtype=np.float32)
+                _ = self.get_speech_timestamps(
+                    torch.from_numpy(silent).float(),
+                    self.vad_model,
+                    sampling_rate=self.stt_config.sample_rate,
+                    threshold=self.stt_config.vad_threshold
+                )
 
             return {
-                "status": "healthy",
+                "status": "healthy" if whisper_loaded else "degraded",
                 "model": self.stt_config.model,
                 "device": str(self.device),
                 "vad_enabled": self.vad_model is not None,
                 "sample_rate": self.stt_config.sample_rate,
-                "test_transcription": len(result.text) > 0
+                "test_transcription": False
             }
         except Exception as e:
             self.logger.error(f"Health check failed: {e}")

@@ -25,12 +25,6 @@ class ServiceOrchestrator:
         self.error_handler = ErrorHandler()
         self.logger = setup_logging("service_orchestrator", "INFO", "logs/orchestrator.log")
 
-        # Service endpoints
-        self.llm_service_url = config.get("llm_service_url", "http://llm-service:8001")
-        self.tts_service_url = config.get("tts_service_url", "http://tts-service:8002")
-        self.stt_service_url = config.get("stt_service_url", "http://stt-service:8003")
-        self.vad_service_url = config.get("vad_service_url", "http://vad-service:8004")
-
         self.logger.info("Service orchestrator initialized")
 
     async def start(self):
@@ -53,14 +47,9 @@ class ServiceOrchestrator:
 
     async def _verify_services(self):
         """Verify all required services are available"""
-        services_to_check = [
-            ("llm", self.llm_service_url),
-            ("tts", self.tts_service_url),
-            ("stt", self.stt_service_url),
-            ("vad", self.vad_service_url)
-        ]
+        services_to_check = ["llm", "tts", "stt"]
 
-        for service_name, service_url in services_to_check:
+        for service_name in services_to_check:
             try:
                 # Use service registry for health checks
                 client = service_registry.clients.get(service_name)
@@ -121,15 +110,7 @@ class ServiceOrchestrator:
         """Process an audio request through the service pipeline"""
         with Timer(self.logger, f"Audio request processing for user {context.user_id}"):
             try:
-                # Step 1: Apply VAD if available
-                vad_result = await self._apply_vad(audio_data)
-                if not vad_result.get("speech_detected", True):
-                    return Response(
-                        text="I didn't detect any speech in the audio. Please try again.",
-                        metadata={"vad_result": vad_result}
-                    )
-
-                # Step 2: Transcribe audio to text
+                # Transcribe audio to text (STT service has VAD integrated)
                 transcription = await self._transcribe_audio(audio_data)
                 transcribed_text = transcription.get("text", "")
 
@@ -236,32 +217,6 @@ class ServiceOrchestrator:
         except Exception as e:
             self.logger.error(f"Audio transcription failed: {e}")
             raise
-
-    async def _apply_vad(self, audio_data: bytes) -> Dict[str, Any]:
-        """Apply Voice Activity Detection"""
-        try:
-            # Prepare VAD request
-            vad_request = {
-                "audio_data": audio_data.hex(),  # Convert to hex for JSON
-                "threshold": 0.5,
-                "sample_rate": 16000
-            }
-
-            # Call VAD service
-            client = await service_registry.get_service("vad")
-            result = await client.post("/detect", json_data=vad_request)
-
-            if result.success:
-                return result.data
-            else:
-                # VAD is optional, so don't fail if it doesn't work
-                self.logger.warning(f"VAD service error: {result.error}")
-                return {"speech_detected": True, "confidence": 1.0}
-
-        except Exception as e:
-            # VAD is optional, so don't fail if it doesn't work
-            self.logger.warning(f"VAD processing failed: {e}")
-            return {"speech_detected": True, "confidence": 1.0}
 
     async def health_check(self) -> Dict[str, Any]:
         """Health check for the orchestrator"""

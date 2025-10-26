@@ -1,0 +1,91 @@
+# Multi-stage CUDA base Dockerfile for Morgan GPU services
+# This base image contains common Python dependencies for GPU-enabled services
+
+# Stage 1: Base CUDA development environment
+FROM harbor.in.lazarev.cloud/proxy/nvidia/cuda:13.0.1-runtime-ubuntu22.04 AS cuda-base
+
+# Configure apt to use Nexus proxy repositories (Ubuntu 22.04 - Jammy)
+RUN echo 'deb https://nexus.in.lazarev.cloud/repository/ubuntu-group/ jammy main restricted universe multiverse' > /etc/apt/sources.list && \
+    echo 'deb https://nexus.in.lazarev.cloud/repository/ubuntu-group/ jammy-updates main restricted universe multiverse' >> /etc/apt/sources.list && \
+    echo 'deb https://nexus.in.lazarev.cloud/repository/ubuntu-group/ jammy-backports main restricted universe multiverse' >> /etc/apt/sources.list && \
+    echo 'deb https://nexus.in.lazarev.cloud/repository/ubuntu-group/ jammy-security main restricted universe multiverse' >> /etc/apt/sources.list
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3.11-venv \
+    python3-pip \
+    git \
+    curl \
+    build-essential \
+    ffmpeg \
+    libsndfile1 \
+    libasound2-dev \
+    espeak \
+    espeak-ng \
+    pkg-config \
+    libgomp1 \
+    alsa-utils \
+    libasound2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.11 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Install uv (ultra-fast Python package manager)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Configure UV to use system Python and Nexus PyPI proxy
+ENV UV_INDEX_URL=https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_NO_CREATE_VENV=1
+
+# Install Rust (required for faster-whisper)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Stage 2: Common Python dependencies
+FROM cuda-base AS python-deps
+
+WORKDIR /app
+
+# Copy pyproject.toml and install common dependencies
+COPY pyproject.toml .
+RUN uv pip install --system \
+    fastapi \
+    uvicorn[standard] \
+    pydantic \
+    aiohttp \
+    pyyaml \
+    python-dotenv \
+    structlog \
+    psutil \
+    redis \
+    torch \
+    torchaudio \
+    python-multipart
+
+# Stage 3: Application build (shared utilities)
+FROM python-deps AS build
+
+WORKDIR /app
+
+# Copy shared utilities
+COPY shared/ ./shared/
+
+# Stage 4: Runtime base
+FROM build AS runtime
+
+WORKDIR /app
+
+# Set environment variables for CUDA and audio
+ENV PYTHONPATH=/app
+ENV CUDA_VISIBLE_DEVICES=0
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+# Audio environment variables
+ENV AUDIODEV=null
+ENV ESPEAK_DATA_PATH=/usr/share/espeak-ng-data

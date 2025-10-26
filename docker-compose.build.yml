@@ -1,0 +1,17 @@
+services:
+  # Base images (build-only, not run as containers)
+  morgan-base:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+      target: runtime
+      tags:
+        - morgan-base:latest
+
+  morgan-cuda-base:
+    build:
+      context: .
+      dockerfile: Dockerfile.cuda-base
+      target: runtime
+      tags:
+        - morgan-cuda-base:latest
