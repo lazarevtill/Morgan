@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Debug Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        .section {
+            background: #252526;
+            border: 1px solid #3e3e42;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #569cd6;
+        }
+        .log {
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            padding: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #3e3e42;
+        }
+        .log-info { color: #4ec9b0; }
+        .log-warn { color: #dcdcaa; }
+        .log-error { color: #f48771; }
+        .log-success { color: #4fc1ff; }
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1177bb;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .data-section {
+            background: #1e1e1e;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 3px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Morgan Audio System Debug</h1>
+
+    <div class="section">
+        <h3>Test Controls</h3>
+        <button id="testBtn" onclick="runCompleteTest()">Run Complete Audio Test</button>
+        <button onclick="clearLogs()">Clear Logs</button>
+        <button onclick="testAudioPlayback()">Test Audio Playback Only</button>
+    </div>
+
+    <div class="section">
+        <h3>System Info</h3>
+        <div id="systemInfo" class="data-section"></div>
+    </div>
+
+    <div class="section">
+        <h3>Test Logs</h3>
+        <div id="logs" class="log"></div>
+    </div>
+
+    <div class="section">
+        <h3>Response Data</h3>
+        <div id="responseData" class="data-section"></div>
+    </div>
+
+    <script>
+        let testLog = [];
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toISOString().substr(11, 12);
+            const entry = { timestamp, message, type };
+            testLog.push(entry);
+
+            const logsDiv = document.getElementById('logs');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.textContent = `[${timestamp}] [${type.toUpperCase()}] ${message}`;
+            logsDiv.appendChild(logEntry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+
+            console.log(`[${type}]`, message);
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+            document.getElementById('responseData').innerHTML = '';
+            testLog = [];
+            log('Logs cleared', 'info');
+        }
+
+        function showResponseData(data) {
+            const div = document.getElementById('responseData');
+            div.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        }
+
+        async function displaySystemInfo() {
+            const info = {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                language: navigator.language,
+                cookiesEnabled: navigator.cookieEnabled,
+                mediaDevicesSupported: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+                audioContextSupported: !!(window.AudioContext || window.webkitAudioContext),
+                mediaRecorderSupported: !!window.MediaRecorder,
+                supportedMimeTypes: []
+            };
+
+            if (window.MediaRecorder) {
+                const types = [
+                    'audio/webm',
+                    'audio/webm;codecs=opus',
+                    'audio/ogg;codecs=opus',
+                    'audio/mp4',
+                    'audio/wav'
+                ];
+                types.forEach(type => {
+                    if (MediaRecorder.isTypeSupported(type)) {
+                        info.supportedMimeTypes.push(type);
+                    }
+                });
+            }
+
+            document.getElementById('systemInfo').innerHTML = '<pre>' + JSON.stringify(info, null, 2) + '</pre>';
+            return info;
+        }
+
+        async function runCompleteTest() {
+            document.getElementById('testBtn').disabled = true;
+            clearLogs();
+
+            try {
+                log('=== STARTING COMPLETE AUDIO TEST ===', 'success');
+
+                // 1. System Info
+                log('Collecting system information...', 'info');
+                const sysInfo = await displaySystemInfo();
+                log(`Media devices supported: ${sysInfo.mediaDevicesSupported}`, 'info');
+                log(`MediaRecorder supported: ${sysInfo.mediaRecorderSupported}`, 'info');
+                log(`Supported MIME types: ${sysInfo.supportedMimeTypes.join(', ')}`, 'info');
+
+                // 2. Test Morgan API connectivity
+                log('Testing Morgan API connectivity...', 'info');
+                const healthResponse = await fetch('http://localhost:8000/health');
+                const healthData = await healthResponse.json();
+                log(`Morgan health: ${healthData.status}`, healthData.status === 'healthy' ? 'success' : 'error');
+                log(`Services: LLM=${healthData.services.llm}, TTS=${healthData.services.tts}, STT=${healthData.services.stt}`, 'info');
+
+                // 3. Generate test audio on server
+                log('Generating test TTS audio...', 'info');
+                const ttsResponse = await fetch('http://localhost:8002/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: 'Test', voice: 'af_heart' })
+                });
+
+                if (!ttsResponse.ok) {
+                    throw new Error(`TTS failed: ${ttsResponse.status}`);
+                }
+
+                const ttsData = await ttsResponse.json();
+                log(`TTS generated: ${ttsData.audio_data.length} hex chars (${ttsData.audio_data.length / 2} bytes)`, 'success');
+                log(`Sample rate: ${ttsData.sample_rate}, Format: ${ttsData.format}`, 'info');
+
+                // 4. Test hex-to-audio conversion
+                log('Testing hex-to-audio conversion...', 'info');
+                const hexString = ttsData.audio_data;
+                log(`Hex string length: ${hexString.length}`, 'info');
+
+                const hexMatches = hexString.match(/.{1,2}/g);
+                if (!hexMatches) {
+                    throw new Error('Failed to parse hex string');
+                }
+                log(`Hex pairs: ${hexMatches.length}`, 'info');
+
+                const audioBytes = new Uint8Array(hexMatches.map(byte => parseInt(byte, 16)));
+                log(`Audio bytes created: ${audioBytes.length} bytes`, 'success');
+
+                // Check WAV header
+                if (audioBytes.length >= 4) {
+                    const header = new TextDecoder().decode(audioBytes.slice(0, 4));
+                    log(`Audio header: '${header}' (expected 'RIFF')`, header === 'RIFF' ? 'success' : 'warn');
+
+                    if (audioBytes.length >= 44) {
+                        const fmtChunk = new TextDecoder().decode(audioBytes.slice(8, 12));
+                        const waveFmt = new TextDecoder().decode(audioBytes.slice(12, 16));
+                        log(`Format chunks: '${fmtChunk}', '${waveFmt}'`, 'info');
+
+                        // Parse WAV metadata
+                        const dataView = new DataView(audioBytes.buffer);
+                        const audioFormat = dataView.getUint16(20, true);
+                        const numChannels = dataView.getUint16(22, true);
+                        const sampleRate = dataView.getUint32(24, true);
+                        const bitsPerSample = dataView.getUint16(34, true);
+
+                        log(`WAV Details: Format=${audioFormat}, Channels=${numChannels}, Rate=${sampleRate}Hz, Bits=${bitsPerSample}`, 'info');
+                    }
+                }
+
+                // 5. Test audio playback
+                log('Creating audio blob and testing playback...', 'info');
+                const audioBlob = new Blob([audioBytes], { type: 'audio/wav' });
+                log(`Blob created: ${audioBlob.size} bytes, type='${audioBlob.type}'`, 'success');
+
+                const audioUrl = URL.createObjectURL(audioBlob);
+                log(`Object URL created: ${audioUrl}`, 'info');
+
+                const audioElement = new Audio(audioUrl);
+
+                audioElement.onloadedmetadata = () => {
+                    log(`Audio loaded! Duration: ${audioElement.duration.toFixed(2)}s`, 'success');
+                };
+
+                audioElement.oncanplay = () => {
+                    log('Audio can play!', 'success');
+                };
+
+                audioElement.onerror = (e) => {
+                    log(`Audio element error: ${audioElement.error.code} - ${audioElement.error.message}`, 'error');
+                };
+
+                // Wait for audio to load
+                await new Promise((resolve, reject) => {
+                    audioElement.addEventListener('loadeddata', resolve);
+                    audioElement.addEventListener('error', reject);
+                    setTimeout(() => reject(new Error('Audio load timeout')), 5000);
+                });
+
+                log('Attempting to play audio...', 'info');
+                try {
+                    await audioElement.play();
+                    log('Audio playback started successfully!', 'success');
+
+                    await new Promise(resolve => {
+                        audioElement.addEventListener('ended', () => {
+                            log('Audio playback completed!', 'success');
+                            resolve();
+                        });
+                    });
+                } catch (playError) {
+                    log(`Playback error: ${playError.message}`, 'error');
+                    log('Note: Browser may block auto-play without user interaction', 'warn');
+                }
+
+                URL.revokeObjectURL(audioUrl);
+
+                log('=== TEST COMPLETED SUCCESSFULLY ===', 'success');
+
+            } catch (error) {
+                log(`TEST FAILED: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            } finally {
+                document.getElementById('testBtn').disabled = false;
+            }
+        }
+
+        async function testAudioPlayback() {
+            log('Testing simple audio playback...', 'info');
+
+            try {
+                // Fetch test audio from TTS
+                const response = await fetch('http://localhost:8002/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: 'This is a test of audio playback', voice: 'af_heart' })
+                });
+
+                const data = await response.json();
+                const hexString = data.audio_data;
+                const audioBytes = new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                const audioBlob = new Blob([audioBytes], { type: 'audio/wav' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+
+                const audio = new Audio(audioUrl);
+                await audio.play();
+
+                audio.onended = () => {
+                    log('Playback completed!', 'success');
+                    URL.revokeObjectURL(audioUrl);
+                };
+
+            } catch (error) {
+                log(`Playback test failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Initialize on load
+        displaySystemInfo();
+    </script>
+</body>
+</html>

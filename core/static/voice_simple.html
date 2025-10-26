@@ -646,28 +646,69 @@
 
         async function playAudioResponse(audioHex) {
             try {
+                debugLog('Starting audio playback', { hexLength: audioHex ? audioHex.length : 0 });
+
+                if (!audioHex || typeof audioHex !== 'string') {
+                    throw new Error('Invalid audio data format');
+                }
+
                 updateStatus('🔊 Playing response...', 'playing');
                 document.getElementById('voiceButton').classList.remove('processing');
                 document.getElementById('voiceButton').classList.add('playing');
                 document.getElementById('voiceButton').innerHTML = '🔊';
 
                 // Convert hex to bytes
-                const audioBytes = new Uint8Array(audioHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                debugLog('Converting hex to bytes');
+                const hexMatches = audioHex.match(/.{1,2}/g);
+                if (!hexMatches) {
+                    throw new Error('Failed to parse hex string');
+                }
+
+                const audioBytes = new Uint8Array(hexMatches.map(byte => parseInt(byte, 16)));
+                debugLog('Audio bytes created', { byteLength: audioBytes.length });
+
+                // Validate it's a proper WAV file
+                if (audioBytes.length < 44) {
+                    throw new Error('Audio data too short to be valid WAV');
+                }
+
+                // Check WAV header
+                const header = new TextDecoder().decode(audioBytes.slice(0, 4));
+                debugLog('Audio header', { header: header });
+                if (header !== 'RIFF') {
+                    debugLog('Warning: Not a standard WAV file');
+                }
 
                 // Create blob and play
                 const audioBlob = new Blob([audioBytes], { type: 'audio/wav' });
                 const audioUrl = URL.createObjectURL(audioBlob);
+                debugLog('Audio URL created', { url: audioUrl, blobSize: audioBlob.size });
 
                 const audioElement = document.getElementById('responseAudio');
                 audioElement.src = audioUrl;
 
+                // Add detailed error handling
+                audioElement.onerror = (e) => {
+                    debugLog('Audio element error', { error: e, readyState: audioElement.readyState });
+                    URL.revokeObjectURL(audioUrl);
+                    throw new Error('Audio playback failed - invalid audio format');
+                };
+
+                audioElement.onloadedmetadata = () => {
+                    debugLog('Audio loaded', { duration: audioElement.duration });
+                };
+
                 // Wait for audio to finish playing
                 await new Promise((resolve, reject) => {
-                    audioElement.onended = resolve;
-                    audioElement.onerror = reject;
+                    audioElement.onended = () => {
+                        debugLog('Audio playback completed');
+                        resolve();
+                    };
+
                     audioElement.play().catch(e => {
+                        debugLog('Play error', { error: e.message });
                         console.warn('Auto-play failed, user interaction may be required:', e);
-                        reject(e);
+                        reject(new Error('Auto-play blocked or playback failed: ' + e.message));
                     });
                 });
 
@@ -678,8 +719,9 @@
                 resetButton();
 
             } catch (error) {
+                debugLog('Audio playback error', { error: error.message, stack: error.stack });
                 console.error('Error playing audio:', error);
-                updateStatus('⚠️ Response ready (audio playback failed)', 'idle');
+                updateStatus(`⚠️ ${error.message || 'Audio playback failed'}`, 'idle');
                 resetButton();
             }
         }
