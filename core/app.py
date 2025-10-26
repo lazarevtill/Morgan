@@ -23,17 +23,18 @@ from shared.utils.errors import ErrorHandler, ErrorCode
 from shared.utils.http_client import service_registry
 
 # Import core components (relative imports)
-from .api.server import APIServer
-from .conversation.manager import ConversationManager
-from .handlers.registry import HandlerRegistry
-from .integrations.manager import IntegrationManager
-from .services.orchestrator import ServiceOrchestrator
+from api.server import APIServer
+from conversation.manager import ConversationManager
+from handlers.registry import HandlerRegistry
+from integrations.manager import IntegrationManager
+from services.orchestrator import ServiceOrchestrator
 
 
 class CoreConfig(BaseModel):
     """Core service configuration"""
     host: str = "0.0.0.0"
     port: int = 8000
+    https_port: int = 8443
     llm_service_url: str = "http://llm-service:8001"
     tts_service_url: str = "http://tts-service:8002"
     stt_service_url: str = "http://stt-service:8003"
@@ -41,6 +42,9 @@ class CoreConfig(BaseModel):
     max_history: int = 50
     log_level: str = "INFO"
     enable_prometheus: bool = True
+    use_https: bool = False
+    ssl_cert_path: str = "/app/cert.pem"
+    ssl_key_path: str = "/app/cert.pfx"
 
 
 class MorganCore:
@@ -82,7 +86,15 @@ class MorganCore:
             await self._initialize_components()
 
             # Start API server
-            self.api_server = APIServer(self)
+            self.api_server = APIServer(
+                self,
+                host=self.core_config.host,
+                port=self.core_config.port,
+                https_port=self.core_config.https_port,
+                use_https=self.core_config.use_https,
+                ssl_cert_path=self.core_config.ssl_cert_path,
+                ssl_key_path=self.core_config.ssl_key_path
+            )
             await self.api_server.start()
 
             # Start background tasks

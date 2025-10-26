@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Morgan AI - Voice Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            width: 100%;
+            backdrop-filter: blur(10px);
+            text-align: center;
+        }
+
+        .header {
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .voice-button {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            font-size: 4em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 0 auto 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .voice-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .voice-button:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.3);
+        }
+
+        .voice-button:active:not(:disabled) {
+            transform: translateY(-1px);
+        }
+
+        .voice-button.recording {
+            background: linear-gradient(45deg, #dc3545, #c82333);
+            animation: pulse 1s infinite;
+        }
+
+        .voice-button.processing {
+            background: linear-gradient(45deg, #ffc107, #e0a800);
+            animation: spin 1s linear infinite;
+        }
+
+        .voice-button.playing {
+            background: linear-gradient(45deg, #28a745, #218838);
+            animation: pulse-green 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 8px 25px rgba(220, 53, 69, 0.4); }
+            50% { box-shadow: 0 8px 45px rgba(220, 53, 69, 0.8); }
+        }
+
+        @keyframes pulse-green {
+            0%, 100% { box-shadow: 0 8px 25px rgba(40, 167, 69, 0.4); }
+            50% { box-shadow: 0 8px 45px rgba(40, 167, 69, 0.8); }
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: 500;
+            font-size: 1.1em;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .status.idle {
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .status.recording {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.processing {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .status.playing {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .content {
+            margin: 30px 0;
+            min-height: 100px;
+        }
+
+        .transcription {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+            font-size: 1.1em;
+            color: #333;
+        }
+
+        .transcription .label {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .response {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            font-size: 1.2em;
+            line-height: 1.6;
+            text-align: left;
+        }
+
+        .response .label {
+            font-weight: 600;
+            margin-bottom: 10px;
+            opacity: 0.9;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .footer {
+            margin-top: 30px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .instruction {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #004085;
+            font-size: 0.95em;
+        }
+
+        /* Mobile/Sensor Display Optimizations */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                padding: 20px;
+                max-width: 100%;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .header p {
+                font-size: 1em;
+            }
+
+            .voice-button {
+                width: 130px;
+                height: 130px;
+                font-size: 3.5em;
+            }
+
+            .status {
+                font-size: 1em;
+                padding: 12px;
+                min-height: 40px;
+            }
+
+            .instruction {
+                font-size: 0.85em;
+                padding: 12px;
+            }
+
+            .transcription, .response {
+                font-size: 1em;
+                padding: 15px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 15px;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .voice-button {
+                width: 110px;
+                height: 110px;
+                font-size: 3em;
+            }
+
+            .status {
+                font-size: 0.9em;
+            }
+
+            .instruction {
+                font-size: 0.8em;
+                padding: 10px;
+            }
+        }
+
+        /* Landscape orientation for tablets/small screens */
+        @media (max-height: 600px) and (orientation: landscape) {
+            .container {
+                padding: 15px;
+            }
+
+            .header {
+                margin-bottom: 15px;
+            }
+
+            .header h1 {
+                font-size: 1.5em;
+            }
+
+            .voice-button {
+                width: 90px;
+                height: 90px;
+                font-size: 2.5em;
+                margin-bottom: 15px;
+            }
+
+            .status {
+                margin: 10px 0;
+                padding: 10px;
+                font-size: 0.9em;
+            }
+
+            .instruction {
+                margin: 10px 0;
+                padding: 8px;
+                font-size: 0.75em;
+            }
+
+            .content {
+                margin: 15px 0;
+                min-height: 60px;
+            }
+        }
+
+        /* Touch-friendly button sizing */
+        @media (hover: none) and (pointer: coarse) {
+            .voice-button {
+                /* Ensure minimum 48x48px touch target */
+                min-width: 110px;
+                min-height: 110px;
+            }
+        }
+
+        /* Prevent text selection on mobile */
+        .voice-button {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎤 Morgan</h1>
+            <p>Simple Voice Assistant</p>
+        </div>
+
+        <button class="voice-button" id="voiceButton" onclick="toggleRecording()" ontouchend="handleTouchEnd(event)">
+            🎤
+        </button>
+
+        <div class="status idle" id="status">
+            Click to start speaking
+        </div>
+
+        <div class="instruction">
+            <strong>How to use:</strong><br>
+            1. Click the button to start recording<br>
+            2. Speak your question or command<br>
+            3. Click again to stop and process<br>
+            4. Morgan will respond automatically
+        </div>
+
+        <div class="content">
+            <div class="transcription hidden" id="transcription">
+                <div class="label">🎤 You said:</div>
+                <div id="transcriptionText"></div>
+            </div>
+
+            <div class="response hidden" id="response">
+                <div class="label">🤖 Morgan says:</div>
+                <div id="responseText"></div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Powered by Morgan AI v0.2.0</p>
+        </div>
+    </div>
+
+    <audio id="responseAudio" style="display: none;"></audio>
+
+    <script>
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+        let isProcessing = false;
+
+        // Enhanced logging for debugging
+        function debugLog(message, data = null) {
+            console.log(`[Morgan Debug] ${message}`, data || '');
+            // Show debug info in status for mobile users
+            if (data && data.error) {
+                updateStatus(`Debug: ${message} - ${data.error}`, 'error');
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if MediaDevices is available
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                updateStatus('Microphone not supported in this browser', 'error');
+                document.getElementById('voiceButton').disabled = true;
+                return;
+            }
+
+            // Check for HTTPS (required for microphone access on non-localhost)
+            if (window.location.protocol !== 'https:' &&
+                window.location.hostname !== 'localhost' &&
+                window.location.hostname !== '127.0.0.1') {
+                updateStatus('⚠️ Microphone requires HTTPS or localhost', 'error');
+            }
+
+            updateStatus('Click to start speaking');
+            setupProtocol();
+        });
+
+        function setupProtocol() {
+            // Detect protocol and port based on current location
+            const isHttps = window.location.protocol === 'https:';
+            const hostname = window.location.hostname;
+
+            let port, protocol;
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                port = isHttps ? '8443' : '8000';
+                protocol = isHttps ? 'https:' : 'http:';
+            } else {
+                // Domain access - use standard ports
+                port = isHttps ? '443' : '80';
+                protocol = isHttps ? 'https:' : 'http:';
+            }
+
+            // Update API endpoints
+            window.MORGAN_API_BASE = `${protocol}//${hostname}${port !== '443' && port !== '80' ? ':' + port : ''}`;
+            console.log('Using API base:', window.MORGAN_API_BASE);
+        }
+
+        function handleTouchEnd(event) {
+            // Prevent default touch behavior and click event
+            event.preventDefault();
+            toggleRecording();
+        }
+
+        async function toggleRecording() {
+            if (isProcessing) {
+                return; // Don't allow interaction while processing
+            }
+
+            if (isRecording) {
+                await stopRecording();
+            } else {
+                await startRecording();
+            }
+        }
+
+        async function startRecording() {
+            try {
+                // Request microphone access
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        sampleRate: 16000
+                    }
+                });
+
+                // Setup MediaRecorder
+                let mimeType = 'audio/webm;codecs=opus';
+                if (!MediaRecorder.isTypeSupported(mimeType)) {
+                    mimeType = 'audio/webm';
+                    if (!MediaRecorder.isTypeSupported(mimeType)) {
+                        mimeType = ''; // Let browser choose
+                    }
+                }
+
+                mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType || undefined });
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = async () => {
+                    await processAudio();
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.onerror = (error) => {
+                    console.error('MediaRecorder error:', error);
+                    updateStatus('Recording error occurred', 'error');
+                    resetButton();
+                };
+
+                // Start recording
+                mediaRecorder.start(1000);
+                isRecording = true;
+
+                // Update UI
+                document.getElementById('voiceButton').classList.add('recording');
+                document.getElementById('voiceButton').innerHTML = '🔴';
+                updateStatus('🎤 Recording... Click to stop', 'recording');
+
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                let errorMessage = 'Error accessing microphone';
+
+                if (error.name === 'NotAllowedError') {
+                    errorMessage = 'Microphone access denied. Please allow microphone access.';
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage = 'No microphone found. Please connect a microphone.';
+                } else if (error.name === 'NotReadableError') {
+                    errorMessage = 'Microphone is already in use by another application.';
+                } else if (error.name === 'NotSupportedError') {
+                    errorMessage = 'Microphone access requires HTTPS or localhost.';
+                } else {
+                    errorMessage = error.message || 'Unknown microphone error';
+                }
+
+                updateStatus(errorMessage, 'error');
+            }
+        }
+
+        async function stopRecording() {
+            if (!isRecording || !mediaRecorder) return;
+
+            // Stop recording
+            mediaRecorder.stop();
+            isRecording = false;
+
+            // Update UI
+            document.getElementById('voiceButton').classList.remove('recording');
+            document.getElementById('voiceButton').classList.add('processing');
+            document.getElementById('voiceButton').innerHTML = '⏳';
+            updateStatus('⏳ Processing...', 'processing');
+            isProcessing = true;
+        }
+
+        async function processAudio() {
+            if (audioChunks.length === 0) {
+                debugLog('No audio chunks recorded');
+                updateStatus('No audio recorded', 'error');
+                resetButton();
+                return;
+            }
+
+            try {
+                debugLog('Starting audio processing', { chunks: audioChunks.length });
+
+                // Create audio blob
+                const mimeType = mediaRecorder.mimeType || 'audio/webm';
+                const audioBlob = new Blob(audioChunks, { type: mimeType });
+
+                debugLog('Audio blob created', {
+                    size: audioBlob.size,
+                    type: audioBlob.type,
+                    chunks: audioChunks.length
+                });
+
+                // Validate audio size
+                if (audioBlob.size < 1000) {
+                    throw new Error('Audio too short. Please speak longer.');
+                }
+
+                // Create form data
+                const formData = new FormData();
+                formData.append('file', audioBlob, `recording.${mimeType.split('/')[1].split(';')[0]}`);
+                formData.append('user_id', 'voice_user');
+                formData.append('device_type', 'microphone');
+                formData.append('language', 'auto');
+
+                debugLog('Sending request to API', { url: window.MORGAN_API_BASE });
+                updateStatus('📤 Sending audio...', 'processing');
+
+                // Send to processing endpoint with timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+
+                const response = await fetch(`${window.MORGAN_API_BASE}/api/audio`, {
+                    method: 'POST',
+                    body: formData,
+                    signal: controller.signal
+                }).catch(error => {
+                    if (error.name === 'AbortError') {
+                        throw new Error('Request timeout. Please try again.');
+                    }
+                    throw error;
+                }).finally(() => {
+                    clearTimeout(timeoutId);
+                });
+
+                debugLog('Response received', { status: response.status });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    debugLog('Error response', { status: response.status, error: errorText });
+                    throw new Error(`Server error (${response.status}): ${errorText.substring(0, 100)}`);
+                }
+
+                updateStatus('📝 Processing response...', 'processing');
+                const result = await response.json();
+                debugLog('Processing result received', { hasTranscription: !!result.transcription, hasResponse: !!result.ai_response });
+
+                // Show transcription
+                const transcriptionDiv = document.getElementById('transcription');
+                const transcriptionText = document.getElementById('transcriptionText');
+                transcriptionText.textContent = result.transcription || 'No speech detected';
+                transcriptionDiv.classList.remove('hidden');
+
+                // Show AI response
+                const responseDiv = document.getElementById('response');
+                const responseText = document.getElementById('responseText');
+                responseText.textContent = result.ai_response || 'No response generated';
+                responseDiv.classList.remove('hidden');
+
+                // Play audio response if available
+                if (result.audio) {
+                    await playAudioResponse(result.audio);
+                } else {
+                    updateStatus('✅ Complete', 'idle');
+                    resetButton();
+                }
+
+            } catch (error) {
+                debugLog('Error processing audio', { error: error.message });
+                console.error('Error processing audio:', error);
+
+                // Show user-friendly error message
+                let errorMsg = 'Processing failed';
+                if (error.message.includes('timeout')) {
+                    errorMsg = '⏱️ Timeout - Server is slow. Try again.';
+                } else if (error.message.includes('network') || error.message.includes('fetch')) {
+                    errorMsg = '📡 Network error. Check connection.';
+                } else if (error.message.includes('500')) {
+                    errorMsg = '⚠️ Server error. Try again in a moment.';
+                } else {
+                    errorMsg = `❌ ${error.message}`;
+                }
+
+                updateStatus(errorMsg, 'error');
+                resetButton();
+            }
+        }
+
+        async function playAudioResponse(audioHex) {
+            try {
+                updateStatus('🔊 Playing response...', 'playing');
+                document.getElementById('voiceButton').classList.remove('processing');
+                document.getElementById('voiceButton').classList.add('playing');
+                document.getElementById('voiceButton').innerHTML = '🔊';
+
+                // Convert hex to bytes
+                const audioBytes = new Uint8Array(audioHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+
+                // Create blob and play
+                const audioBlob = new Blob([audioBytes], { type: 'audio/wav' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+
+                const audioElement = document.getElementById('responseAudio');
+                audioElement.src = audioUrl;
+
+                // Wait for audio to finish playing
+                await new Promise((resolve, reject) => {
+                    audioElement.onended = resolve;
+                    audioElement.onerror = reject;
+                    audioElement.play().catch(e => {
+                        console.warn('Auto-play failed, user interaction may be required:', e);
+                        reject(e);
+                    });
+                });
+
+                // Clean up
+                URL.revokeObjectURL(audioUrl);
+
+                updateStatus('✅ Complete - Click to speak again', 'idle');
+                resetButton();
+
+            } catch (error) {
+                console.error('Error playing audio:', error);
+                updateStatus('⚠️ Response ready (audio playback failed)', 'idle');
+                resetButton();
+            }
+        }
+
+        function resetButton() {
+            isProcessing = false;
+            document.getElementById('voiceButton').classList.remove('recording', 'processing', 'playing');
+            document.getElementById('voiceButton').innerHTML = '🎤';
+        }
+
+        function updateStatus(message, type = 'idle') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            if (isRecording && mediaRecorder) {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+        });
+    </script>
+</body>
+</html>

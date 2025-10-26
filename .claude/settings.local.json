@@ -14,7 +14,8 @@
       "Bash(docker run:*)",
       "Bash(timeout 600 tail:*)",
       "Bash(pkill:*)",
-      "Bash(tee:*)"
+      "Bash(tee:*)",
+      "Bash(docker-compose build:*)"
     ],
     "deny": [],
     "ask": []

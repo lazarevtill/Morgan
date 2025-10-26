@@ -69,6 +69,8 @@ class MorganHTTPClient:
                         )
 
                     content = await response.json()
+                    logger.debug(f"HTTP response content type: {type(content)}")
+                    logger.debug(f"HTTP response content: {content}")
                     return ProcessingResult(
                         success=True,
                         data=content,

@@ -304,7 +304,7 @@ async def end_stream(session_id: str) -> Dict[str, Any]:
     """End streaming session and get final transcription"""
     try:
         result = await app.state.stt_service.end_audio_stream(session_id)
-        return {
+        response_dict = {
             "text": result.text,
             "language": result.language,
             "confidence": result.confidence,
@@ -312,6 +312,8 @@ async def end_stream(session_id: str) -> Dict[str, Any]:
             "segments": result.segments,
             "metadata": result.metadata
         }
+        print(f"STT end_stream response: {response_dict}")
+        return response_dict
     except Exception as e:
         error_handler = ErrorHandler()
         error_handler.logger.error(f"End stream error: {e}")

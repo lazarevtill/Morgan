@@ -7,7 +7,7 @@ import logging
 
 from shared.config.base import ServiceConfig
 from shared.utils.logging import setup_logging
-from core.app import main as core_main
+from app import main as core_main
 
 
 async def main():
