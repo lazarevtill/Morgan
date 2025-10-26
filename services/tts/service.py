@@ -212,12 +212,84 @@ class TTSService:
                 self.logger.error(f"Error generating speech: {e}")
                 raise AudioError(f"Speech generation failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
 
+    def _preprocess_text_for_tts(self, text: str) -> str:
+        """
+        Preprocess text for TTS to handle special characters that cause silence or issues.
+
+        Kokoro and other TTS engines often have trouble with certain punctuation:
+        - Hyphens/dashes can cause silence
+        - Colons can cause pauses or silence
+        - Ellipsis can cause long pauses
+        - Multiple punctuation marks can confuse the model
+        """
+        import re
+
+        # Replace hyphens/dashes with natural pauses (commas)
+        text = text.replace(' - ', ', ')     # Spaced hyphen
+        text = text.replace(' – ', ', ')     # En dash
+        text = text.replace(' — ', ', ')     # Em dash
+        text = text.replace('—', ', ')       # Em dash without spaces
+
+        # Replace standalone dashes at start/end of phrases
+        text = text.replace('- ', '').replace(' -', '')
+
+        # Handle colons - replace with comma for natural pause
+        # But keep colons in time formats (e.g., "3:00")
+        text = re.sub(r'(?<!\d):(?!\d)', ',', text)
+
+        # Handle ellipsis and multiple periods
+        text = text.replace('...', '. ')
+        text = text.replace('..', '. ')
+
+        # Handle multiple exclamation/question marks
+        text = re.sub(r'!+', '!', text)  # Multiple ! to single !
+        text = re.sub(r'\?+', '?', text)  # Multiple ? to single ?
+
+        # Handle semicolons (replace with comma)
+        text = text.replace(';', ',')
+
+        # Remove quotes that might cause issues
+        text = text.replace('"', '').replace("'", '')
+
+        # Handle parentheses - remove them but keep content
+        text = text.replace('(', ', ').replace(')', ', ')
+        text = text.replace('[', ', ').replace(']', ', ')
+        text = text.replace('{', ', ').replace('}', ', ')
+
+        # Remove multiple commas
+        text = re.sub(r',+', ',', text)
+
+        # Remove comma before period
+        text = re.sub(r',\s*\.', '.', text)
+
+        # Remove multiple spaces
+        text = re.sub(r'\s+', ' ', text)
+
+        # Clean up spaces around punctuation
+        text = re.sub(r'\s+([,.!?])', r'\1', text)  # Remove space before punctuation
+        text = re.sub(r'([,.!?])\s*([,.!?])', r'\1 ', text)  # Ensure single space after punctuation
+
+        # Trim leading/trailing whitespace and punctuation
+        text = text.strip(' ,.!?')
+
+        return text
+
     async def _generate_kokoro_speech(self, request: TTSRequest, voice: str) -> TTSResponse:
         """Generate speech using Kokoro"""
         try:
+            # Preprocess text to handle special characters
+            processed_text = self._preprocess_text_for_tts(request.text)
+
+            if not processed_text:
+                # If preprocessing resulted in empty text, use a default message
+                processed_text = "No text to speak"
+
+            self.logger.debug(f"Original text: {request.text[:100]}...")
+            self.logger.debug(f"Processed text: {processed_text[:100]}...")
+
             # Generate audio using KPipeline
             results = list(self.kokoro_pipeline(
-                text=request.text,
+                text=processed_text,
                 voice=voice,
                 speed=request.speed or self.tts_config.speed
             ))
@@ -239,13 +311,13 @@ class TTSService:
                     format=self.tts_config.output_format,
                     sample_rate=sample_rate,
                     duration=len(audio_np) / sample_rate,
-                    metadata={"model": "kokoro", "voice": voice}
+                    metadata={"model": "kokoro", "voice": voice, "original_text": request.text, "processed_text": processed_text}
                 )
             else:
                 raise AudioError("No audio generated from Kokoro", ErrorCode.AUDIO_PROCESSING_ERROR)
 
         except Exception as e:
-            self.logger.error(f"Kokoro generation failed: {e}")
+            self.logger.error(f"Kokoro generation failed: {e}", exc_info=True)
             raise
 
     async def _generate_tts_speech(self, request: TTSRequest, voice: str) -> TTSResponse:

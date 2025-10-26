@@ -298,7 +298,7 @@ class APIServer:
     async def _generate_speech(self, text: str, voice: str = "af_heart") -> Optional[str]:
         """Generate speech using TTS service"""
         try:
-            self.logger.info(f"Generating TTS for: {text[:50]}...")
+            self.logger.info(f"Generating TTS for text: {text[:50]}... (length={len(text)})")
 
             # Get TTS service client (await the async method!)
             tts_client = await service_registry.get_service("tts")
@@ -309,31 +309,48 @@ class APIServer:
                 json={"text": text, "voice": voice}
             ) as response:
                 if response.status != 200:
-                    self.logger.warning(f"TTS failed with status {response.status}")
+                    error_text = await response.text()
+                    self.logger.error(f"TTS failed with status {response.status}: {error_text}")
                     return None
 
                 result = await response.json()
+                self.logger.info(f"TTS response keys: {list(result.keys())}")
+
                 audio_bytes = result.get("audio_data")
 
                 if not audio_bytes:
+                    self.logger.warning("No audio_data in TTS response")
                     return None
 
-                # Convert to hex format for client
+                # TTS service returns hex string already
                 if isinstance(audio_bytes, str):
-                    # Likely base64 encoded
-                    import base64
+                    self.logger.info(f"Got hex string from TTS: {len(audio_bytes)} chars")
+                    # Validate it's hex
                     try:
-                        decoded = base64.b64decode(audio_bytes)
-                        return decoded.hex()
-                    except:
+                        # Test if it's valid hex by converting first few bytes
+                        test_bytes = bytes.fromhex(audio_bytes[:100] if len(audio_bytes) > 100 else audio_bytes)
+                        self.logger.info(f"Hex validated, first 4 bytes: {test_bytes[:4].hex()}")
                         return audio_bytes
+                    except ValueError as ve:
+                        self.logger.error(f"Invalid hex string from TTS: {ve}")
+                        # Maybe it's base64?
+                        import base64
+                        try:
+                            decoded = base64.b64decode(audio_bytes)
+                            self.logger.info(f"Decoded from base64: {len(decoded)} bytes")
+                            return decoded.hex()
+                        except Exception as be:
+                            self.logger.error(f"Failed to decode as base64: {be}")
+                            return None
                 elif isinstance(audio_bytes, bytes):
+                    self.logger.info(f"Got raw bytes from TTS: {len(audio_bytes)} bytes")
                     return audio_bytes.hex()
 
+                self.logger.warning(f"Unexpected audio_data type: {type(audio_bytes)}")
                 return None
 
         except Exception as e:
-            self.logger.error(f"TTS generation error: {e}")
+            self.logger.error(f"TTS generation error: {e}", exc_info=True)
             return None
 
     def _setup_routes(self):
@@ -417,8 +434,12 @@ class APIServer:
                 tts_audio = None
                 if llm_response.text:
                     tts_audio = await self._generate_speech(llm_response.text)
+                    if tts_audio:
+                        self.logger.info(f"TTS audio generated: {len(tts_audio)} hex chars ({len(tts_audio)//2} bytes)")
+                    else:
+                        self.logger.warning("TTS generation returned None")
 
-                return {
+                response_data = {
                     "transcription": transcription,
                     "ai_response": llm_response.text,
                     "audio": tts_audio,
@@ -426,9 +447,14 @@ class APIServer:
                         "user_id": user_id,
                         "device_type": device_type,
                         "language": language,
-                        "processing_time": llm_response.metadata.get("processing_time") if llm_response.metadata else None
+                        "processing_time": llm_response.metadata.get("processing_time") if llm_response.metadata else None,
+                        "has_audio": tts_audio is not None,
+                        "audio_size": len(tts_audio)//2 if tts_audio else 0
                     }
                 }
+
+                self.logger.info(f"Returning audio response: has_audio={tts_audio is not None}, transcription_len={len(transcription)}, response_len={len(llm_response.text)}")
+                return response_data
 
             except Exception as e:
                 error_handler = ErrorHandler()

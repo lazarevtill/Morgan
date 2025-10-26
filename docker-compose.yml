@@ -103,6 +103,51 @@ services:
       retries: 3
       start_period: 30s
 
+  # PostgreSQL database for structured memory and persistence
+  postgres:
+    image: postgres:16-alpine
+    container_name: morgan-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    environment:
+      - POSTGRES_DB=morgan
+      - POSTGRES_USER=morgan
+      - POSTGRES_PASSWORD=morgan_secure_password
+    networks:
+      - morgan-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U morgan -d morgan"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Qdrant vector database for semantic memory search
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: morgan-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"  # HTTP API
+      - "6334:6334"  # gRPC API
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    networks:
+      - morgan-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   # Core orchestration service
   core:
     build:
@@ -123,7 +168,14 @@ services:
       - MORGAN_CONFIG_DIR=/app/config
       - PYTHONPATH=/app
       - BEHIND_PROXY=true
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=morgan
+      - POSTGRES_USER=morgan
+      - POSTGRES_PASSWORD=morgan_secure_password
     depends_on:
+      postgres:
+        condition: service_healthy
       llm-service:
         condition: service_healthy
       tts-service:
@@ -145,4 +197,8 @@ networks:
     ipam:
       config:
         - subnet: 172.20.0.0/16
+
+volumes:
+  postgres-data:
+    driver: local
 
