@@ -22,12 +22,12 @@ from shared.utils.logging import setup_logging, Timer
 from shared.utils.errors import ErrorHandler, ErrorCode
 from shared.utils.http_client import service_registry
 
-# Import core components (absolute imports; core is run as a module)
-from api.server import APIServer
-from conversation.manager import ConversationManager
-from handlers.registry import HandlerRegistry
-from integrations.manager import IntegrationManager
-from services.orchestrator import ServiceOrchestrator
+# Import core components (relative imports)
+from .api.server import APIServer
+from .conversation.manager import ConversationManager
+from .handlers.registry import HandlerRegistry
+from .integrations.manager import IntegrationManager
+from .services.orchestrator import ServiceOrchestrator
 
 
 class CoreConfig(BaseModel):

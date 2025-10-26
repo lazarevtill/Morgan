@@ -22,7 +22,7 @@ class LLMConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8001
     model: str = "llama3.2:3b"
-    ollama_url: str = "http://localhost:11434"
+    ollama_url: str = "http://192.168.101.3:11434"
     max_tokens: int = 2048
     temperature: float = 0.7
     timeout: float = 30.0
