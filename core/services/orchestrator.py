@@ -75,7 +75,7 @@ class ServiceOrchestrator:
 
                 # Step 2: Execute any commands/actions
                 executed_commands = []
-                if llm_response.get("actions"):
+                if isinstance(llm_response, dict) and llm_response.get("actions"):
                     for action in llm_response["actions"]:
                         command = Command(action=action["action"], parameters=action.get("parameters", {}))
                         result = await self.handler_registry.process_command(command, context)
@@ -84,16 +84,18 @@ class ServiceOrchestrator:
                 # Step 3: Generate TTS response if requested
                 audio_data = None
                 if metadata and metadata.get("generate_audio", False):
-                    audio_data = await self._generate_tts_response(llm_response["text"])
+                    text = llm_response.get("text", "") if isinstance(llm_response, dict) else getattr(llm_response, "text", "")
+                    audio_data = await self._generate_tts_response(text)
 
                 # Step 4: Create final response
+                text = llm_response.get("text", "") if isinstance(llm_response, dict) else getattr(llm_response, "text", "")
                 return Response(
-                    text=llm_response["text"],
+                    text=text,
                     audio_data=audio_data,
                     actions=executed_commands,
                     metadata={
-                        "llm_model": llm_response.get("model"),
-                        "llm_usage": llm_response.get("usage"),
+                        "llm_model": llm_response.get("model") if isinstance(llm_response, dict) else getattr(llm_response, "model", None),
+                        "llm_usage": llm_response.get("usage") if isinstance(llm_response, dict) else getattr(llm_response, "usage", None),
                         "processing_time": metadata.get("processing_time") if metadata else None
                     }
                 )
@@ -112,7 +114,7 @@ class ServiceOrchestrator:
             try:
                 # Transcribe audio to text (STT service has VAD integrated)
                 transcription = await self._transcribe_audio(audio_data)
-                transcribed_text = transcription.get("text", "")
+                transcribed_text = transcription.get("text", "") if isinstance(transcription, dict) else getattr(transcription, "text", "")
 
                 if not transcribed_text:
                     return Response(
@@ -161,7 +163,16 @@ class ServiceOrchestrator:
             result = await client.post("/generate", json_data=llm_request)
 
             if result.success:
-                return result.data
+                # Handle response data - could be dict or ProcessingResult
+                response_data = result.data
+                if hasattr(response_data, 'get'):
+                    return response_data
+                else:
+                    # Convert ProcessingResult or other object to dict
+                    if hasattr(response_data, '__dict__'):
+                        return response_data.__dict__
+                    else:
+                        raise Exception("Invalid LLM response format")
             else:
                 raise Exception(f"LLM service error: {result.error}")
 
@@ -184,11 +195,22 @@ class ServiceOrchestrator:
             client = await service_registry.get_service("tts")
             result = await client.post("/generate", json_data=tts_request)
 
-            if result.success and result.data.get("audio_data"):
-                # Convert hex back to bytes
-                return bytes.fromhex(result.data["audio_data"])
-            else:
+            if result.success:
+                # Handle response data - could be dict or ProcessingResult
+                response_data = result.data
+                if hasattr(response_data, 'get'):
+                    if response_data.get("audio_data"):
+                        # Convert hex back to bytes
+                        return bytes.fromhex(response_data["audio_data"])
+                else:
+                    # Check if it's a ProcessingResult with audio_data
+                    if hasattr(response_data, 'audio_data'):
+                        return bytes.fromhex(response_data.audio_data)
+
                 self.logger.warning(f"TTS generation failed or returned no audio: {result.error}")
+                return None
+            else:
+                self.logger.warning(f"TTS generation failed: {result.error}")
                 return None
 
         except Exception as e:
@@ -210,7 +232,16 @@ class ServiceOrchestrator:
             result = await client.post("/transcribe", json_data=stt_request)
 
             if result.success:
-                return result.data
+                # Handle response data - could be dict or ProcessingResult
+                response_data = result.data
+                if hasattr(response_data, 'get'):
+                    return response_data
+                else:
+                    # Convert ProcessingResult or other object to dict
+                    if hasattr(response_data, '__dict__'):
+                        return response_data.__dict__
+                    else:
+                        raise Exception("Invalid STT response format")
             else:
                 raise Exception(f"STT service error: {result.error}")
 
@@ -232,12 +263,29 @@ class ServiceOrchestrator:
             result = await client.post("/transcribe/realtime", json_data=stt_request)
 
             if result.success:
-                return result.data
+                # Handle response data - could be dict or ProcessingResult
+                response_data = result.data
+                if hasattr(response_data, 'get'):
+                    return response_data
+                else:
+                    # Convert ProcessingResult or other object to dict
+                    if hasattr(response_data, '__dict__'):
+                        return response_data.__dict__
+                    else:
+                        # Fallback response
+                        return {"text": "", "confidence": 0.0, "error": "Invalid response format"}
             else:
                 # Fallback to chunk endpoint if real-time fails
                 result = await client.post("/transcribe/chunk", json_data=stt_request)
                 if result.success:
-                    return result.data
+                    response_data = result.data
+                    if hasattr(response_data, 'get'):
+                        return response_data
+                    else:
+                        if hasattr(response_data, '__dict__'):
+                            return response_data.__dict__
+                        else:
+                            return {"text": "", "confidence": 0.0, "error": "Invalid response format"}
                 else:
                     raise Exception(f"STT service error: {result.error}")
 

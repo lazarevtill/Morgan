@@ -122,6 +122,7 @@ services:
     environment:
       - MORGAN_CONFIG_DIR=/app/config
       - PYTHONPATH=/app
+      - BEHIND_PROXY=true
     depends_on:
       llm-service:
         condition: service_healthy

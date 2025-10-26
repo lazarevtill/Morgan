@@ -3,6 +3,12 @@
 # Network configuration
 host: "0.0.0.0"
 port: 8000
+https_port: 8443
+
+# SSL Configuration (disabled since using reverse proxy)
+use_https: false
+ssl_cert_path: "/app/cert.pem"
+ssl_key_path: "/app/cert.pfx"
 
 # Service URLs
 llm_service_url: "http://llm-service:8001"

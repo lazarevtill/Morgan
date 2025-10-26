@@ -169,6 +169,46 @@ class AudioCapture:
         self.chunk_size = chunk_size
         self.is_recording = False
 
+    @staticmethod
+    def validate_audio_format(audio_bytes: bytes) -> Dict[str, Any]:
+        """Validate audio format and return metadata"""
+        # Try WAV first
+        try:
+            with wave.open(io.BytesIO(audio_bytes), 'rb') as wav_file:
+                return {
+                    "valid": True,
+                    "format": "wav",
+                    "channels": wav_file.getnchannels(),
+                    "sample_rate": wav_file.getframerate(),
+                    "sample_width": wav_file.getsampwidth(),
+                    "frames": wav_file.getnframes(),
+                    "duration": wav_file.getnframes() / wav_file.getframerate()
+                }
+        except Exception as e:
+            # Check if it's WebM format
+            try:
+                # WebM files start with specific bytes
+                if len(audio_bytes) > 4 and audio_bytes[:4] == b'\x1a\x45\xdf\xa3':
+                    return {
+                        "valid": True,
+                        "format": "webm",
+                        "channels": 1,  # Assume mono for WebM
+                        "sample_rate": 16000,  # Assume 16kHz
+                        "sample_width": 2,  # Assume 16-bit
+                        "frames": len(audio_bytes) // 2,  # Rough estimate
+                        "duration": (len(audio_bytes) // 2) / 16000  # Rough estimate
+                    }
+                else:
+                    return {
+                        "valid": False,
+                        "error": f"Unknown audio format. Expected WAV or WebM. Error: {str(e)}"
+                    }
+            except Exception as webm_error:
+                return {
+                    "valid": False,
+                    "error": f"Invalid audio format: {str(e)}"
+                }
+
     def encode_audio_chunk(self, audio_data: bytes) -> str:
         """Encode audio bytes to base64 string"""
         return base64.b64encode(audio_data).decode('utf-8')
@@ -242,25 +282,6 @@ class AudioCapture:
         except Exception:
             # Fallback estimation assuming 16kHz 16-bit mono
             return len(audio_bytes) / (16000 * 2)
-
-    @staticmethod
-    def validate_audio_format(audio_bytes: bytes) -> Dict[str, Any]:
-        """Validate audio format and return metadata"""
-        try:
-            with wave.open(io.BytesIO(audio_bytes), 'rb') as wav_file:
-                return {
-                    "valid": True,
-                    "channels": wav_file.getnchannels(),
-                    "sample_rate": wav_file.getframerate(),
-                    "sample_width": wav_file.getsampwidth(),
-                    "frames": wav_file.getnframes(),
-                    "duration": wav_file.getnframes() / wav_file.getframerate()
-                }
-        except Exception as e:
-            return {
-                "valid": False,
-                "error": str(e)
-            }
 
 
 class DeviceAudioCapture:
