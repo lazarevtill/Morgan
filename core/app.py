@@ -28,6 +28,8 @@ from conversation.manager import ConversationManager
 from handlers.registry import HandlerRegistry
 from integrations.manager import IntegrationManager
 from services.orchestrator import ServiceOrchestrator
+from memory.manager import MemoryManager
+from tools.mcp_manager import MCPToolsManager
 
 
 class CoreConfig(BaseModel):
@@ -42,6 +44,8 @@ class CoreConfig(BaseModel):
     max_history: int = 50
     log_level: str = "INFO"
     enable_prometheus: bool = True
+    enable_memory: bool = True
+    enable_tools: bool = True
     use_https: bool = False
     ssl_cert_path: str = "/app/cert.pem"
     ssl_key_path: str = "/app/cert.pfx"
@@ -68,6 +72,8 @@ class MorganCore:
         self.integration_manager = None
         self.service_orchestrator = None
         self.api_server = None
+        self.memory_manager = None
+        self.tools_manager = None
 
         # Runtime state
         self.running = False
@@ -122,6 +128,12 @@ class MorganCore:
             if self.service_orchestrator:
                 await self.service_orchestrator.stop()
 
+            # Stop database managers
+            if self.memory_manager:
+                await self.memory_manager.stop()
+            if self.tools_manager:
+                await self.tools_manager.stop()
+
             # Disconnect from service registry
             await service_registry.disconnect_all()
 
@@ -135,6 +147,9 @@ class MorganCore:
         try:
             # Register services
             await self._register_services()
+
+            # Initialize database managers
+            await self._initialize_databases()
 
             # Initialize conversation manager
             self.conversation_manager = ConversationManager(
@@ -154,7 +169,9 @@ class MorganCore:
                 config=self.config,
                 conversation_manager=self.conversation_manager,
                 handler_registry=self.handler_registry,
-                integration_manager=self.integration_manager
+                integration_manager=self.integration_manager,
+                memory_manager=self.memory_manager,
+                tools_manager=self.tools_manager
             )
 
             await self.service_orchestrator.start()
@@ -163,6 +180,52 @@ class MorganCore:
 
         except Exception as e:
             self.logger.error(f"Failed to initialize components: {e}")
+            raise
+
+    async def _initialize_databases(self):
+        """Initialize database connections"""
+        # Check if memory and tools are enabled
+        enable_memory = self.config.get("enable_memory", True)
+        enable_tools = self.config.get("enable_tools", True)
+
+        if not enable_memory and not enable_tools:
+            self.logger.info("Memory and tools disabled - skipping database initialization")
+            return
+
+        try:
+            # Get database configuration from YAML/env
+            postgres_host = self.config.get("postgres_host", "postgres")
+            postgres_port = self.config.get("postgres_port", 5432)
+            postgres_db = self.config.get("postgres_db", "morgan")
+            postgres_user = self.config.get("postgres_user", "morgan")
+            postgres_password = self.config.get("postgres_password", "morgan_secure_password")
+
+            # Build PostgreSQL DSN
+            postgres_dsn = f"postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_db}"
+
+            # Initialize Memory Manager if enabled
+            if enable_memory:
+                qdrant_host = self.config.get("qdrant_host", "qdrant")
+                qdrant_port = self.config.get("qdrant_port", 6333)
+                embedding_dim = self.config.get("embedding_dimension", 384)
+
+                self.memory_manager = MemoryManager(
+                    postgres_dsn=postgres_dsn,
+                    qdrant_host=qdrant_host,
+                    qdrant_port=qdrant_port,
+                    embedding_dimension=embedding_dim
+                )
+                await self.memory_manager.start()
+                self.logger.info("Memory Manager initialized")
+
+            # Initialize MCP Tools Manager if enabled
+            if enable_tools:
+                self.tools_manager = MCPToolsManager(postgres_dsn=postgres_dsn)
+                await self.tools_manager.start()
+                self.logger.info("MCP Tools Manager initialized")
+
+        except Exception as e:
+            self.logger.error(f"Failed to initialize databases: {e}", exc_info=True)
             raise
 
     async def _register_services(self):

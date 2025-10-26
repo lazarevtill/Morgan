@@ -105,7 +105,7 @@ services:
 
   # PostgreSQL database for structured memory and persistence
   postgres:
-    image: postgres:16-alpine
+    image: harbor.in.lazarev.cloud/proxy/postgres:17-alpine
     container_name: morgan-postgres
     restart: unless-stopped
     ports:
@@ -128,7 +128,7 @@ services:
 
   # Qdrant vector database for semantic memory search
   qdrant:
-    image: qdrant/qdrant:latest
+    image: harbor.in.lazarev.cloud/proxy/qdrant/qdrant:latest
     container_name: morgan-qdrant
     restart: unless-stopped
     ports:
@@ -173,8 +173,13 @@ services:
       - POSTGRES_DB=morgan
       - POSTGRES_USER=morgan
       - POSTGRES_PASSWORD=morgan_secure_password
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - QDRANT_GRPC_PORT=6334
     depends_on:
       postgres:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
       llm-service:
         condition: service_healthy
@@ -200,5 +205,7 @@ networks:
 
 volumes:
   postgres-data:
+    driver: local
+  qdrant-data:
     driver: local
 

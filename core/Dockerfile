@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv (ultra-fast Python package manager)
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=harbor.in.lazarev.cloud/gh-proxy/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Configure UV to use system Python and Nexus PyPI proxy
 ENV UV_INDEX_URL=https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple \
@@ -30,7 +30,23 @@ WORKDIR /app
 
 # Copy pyproject.toml and install dependencies directly to system Python
 COPY pyproject.toml .
-RUN uv pip install fastapi uvicorn[standard] pydantic aiohttp pyyaml python-dotenv structlog psutil redis python-multipart websockets numpy --system
+RUN uv pip install --system \
+    fastapi \
+    uvicorn[standard] \
+    pydantic \
+    aiohttp \
+    pyyaml \
+    python-dotenv \
+    structlog \
+    psutil \
+    redis \
+    python-multipart \
+    websockets \
+    numpy \
+    asyncpg \
+    qdrant-client \
+    pytz \
+    sentence-transformers
 
 # Stage 3: Application build
 FROM python-deps AS build

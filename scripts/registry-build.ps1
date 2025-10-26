@@ -270,7 +270,7 @@ function Show-RegistryInfo {
     Write-Host "Base Images Used:" -ForegroundColor $Blue
     Write-Host "  Python: $REGISTRY_PROXY/python:3.12-slim" -ForegroundColor $Yellow
     Write-Host "  CUDA: $REGISTRY_PROXY/nvidia/cuda:13.0.1-devel-ubuntu22.04" -ForegroundColor $Yellow
-    Write-Host "  UV: ghcr.io/astral-sh/uv:latest" -ForegroundColor $Yellow
+    Write-Host "  UV: harbor.in.lazarev.cloud/gh-proxy/astral-sh/uv:latest" -ForegroundColor $Yellow
     Write-Host "  Redis: $REGISTRY_PROXY/redis:7-alpine" -ForegroundColor $Yellow
     Write-Host "  PostgreSQL: $REGISTRY_PROXY/postgres:17-alpine" -ForegroundColor $Yellow
     Write-Host ""
@@ -328,7 +328,7 @@ Image Naming Convention:
 Base Images:
     - Python services: harbor.in.lazarev.cloud/proxy/python:3.12-slim
     - CUDA services: harbor.in.lazarev.cloud/proxy/nvidia/cuda:13.0.1-devel-ubuntu22.04
-    - UV: ghcr.io/astral-sh/uv:latest (public)
+    - UV: harbor.in.lazarev.cloud/gh-proxy/astral-sh/uv:latest (public)
     - Redis: harbor.in.lazarev.cloud/proxy/redis:7-alpine
     - PostgreSQL: harbor.in.lazarev.cloud/proxy/postgres:17-alpine
 
