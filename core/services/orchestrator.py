@@ -218,6 +218,33 @@ class ServiceOrchestrator:
             self.logger.error(f"Audio transcription failed: {e}")
             raise
 
+    async def transcribe_chunk(self, audio_data: bytes, language: str = "auto") -> Dict[str, Any]:
+        """Transcribe a single audio chunk for real-time streaming"""
+        try:
+            # Prepare STT request for real-time endpoint (with VAD)
+            stt_request = {
+                "audio_data": audio_data.hex(),  # Convert to hex for JSON
+                "language": language
+            }
+
+            # Call STT service real-time endpoint for better VAD integration
+            client = await service_registry.get_service("stt")
+            result = await client.post("/transcribe/realtime", json_data=stt_request)
+
+            if result.success:
+                return result.data
+            else:
+                # Fallback to chunk endpoint if real-time fails
+                result = await client.post("/transcribe/chunk", json_data=stt_request)
+                if result.success:
+                    return result.data
+                else:
+                    raise Exception(f"STT service error: {result.error}")
+
+        except Exception as e:
+            self.logger.error(f"Audio chunk transcription failed: {e}")
+            raise
+
     async def health_check(self) -> Dict[str, Any]:
         """Health check for the orchestrator"""
         try:

@@ -12,7 +12,13 @@ RUN uv pip install --system \
     soundfile \
     librosa \
     pydub \
-    silero-vad
+    silero-vad \
+    websockets \
+    aiofiles \
+    python-multipart \
+    numpy \
+    torch \
+    torchaudio
 
 # Application build
 FROM python-deps AS build

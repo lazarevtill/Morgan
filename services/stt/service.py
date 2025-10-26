@@ -7,6 +7,7 @@ from typing import Dict, Any, List, Optional, Tuple
 import io
 import wave
 import numpy as np
+import time
 from pathlib import Path
 
 import torch
@@ -64,6 +65,9 @@ class STTService:
         self.vad_state = None
         self.speech_buffer = []
         self.silence_threshold = self.stt_config.vad_min_silence_duration * self.stt_config.sample_rate
+
+        # Streaming sessions
+        self.streaming_sessions: Dict[str, Dict[str, Any]] = {}
 
         self.logger.info(f"STT Service initialized with device: {self.device}")
 
@@ -316,6 +320,261 @@ class STTService:
             self.logger.error(f"Stream transcription failed: {e}")
             raise AudioError(f"Stream transcription failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
 
+    async def transcribe_chunk(self, audio_bytes: bytes, language: Optional[str] = None) -> STTResponse:
+        """Transcribe a single audio chunk (for streaming)"""
+        try:
+            # Create STT request
+            request = STTRequest(
+                audio_data=audio_bytes,
+                language=language or self.stt_config.language
+            )
+
+            # Transcribe without VAD for real-time processing
+            return await self._transcribe_with_whisper_direct(audio_bytes, request)
+
+        except Exception as e:
+            self.logger.error(f"Chunk transcription failed: {e}")
+            raise AudioError(f"Chunk transcription failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+
+    async def transcribe_streaming(self, audio_chunks: List[bytes],
+                                 language: Optional[str] = None) -> STTResponse:
+        """Transcribe streaming audio chunks in real-time"""
+        try:
+            # Combine all audio chunks
+            combined_audio = []
+
+            for chunk in audio_chunks:
+                audio_array = self.audio_utils.bytes_to_numpy(
+                    chunk,
+                    sample_rate=self.stt_config.sample_rate
+                )
+                combined_audio.append(audio_array)
+
+            if not combined_audio:
+                return STTResponse(
+                    text="",
+                    language=language or self.stt_config.language,
+                    confidence=0.0,
+                    duration=0.0,
+                    metadata={"error": "No audio data", "streaming": True}
+                )
+
+            # Concatenate all chunks
+            final_audio = np.concatenate(combined_audio)
+
+            # Create request and transcribe
+            request = STTRequest(
+                audio_data=self.audio_utils.numpy_to_bytes(final_audio, self.stt_config.sample_rate),
+                language=language or self.stt_config.language
+            )
+
+            return await self.transcribe(request)
+
+        except Exception as e:
+            self.logger.error(f"Streaming transcription failed: {e}")
+            raise AudioError(f"Streaming transcription failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+
+    async def start_audio_stream(self, session_id: str, language: str = "auto") -> Dict[str, Any]:
+        """Start a new audio streaming session"""
+        try:
+            # Initialize streaming session
+            self.streaming_sessions[session_id] = {
+                "chunks": [],
+                "start_time": time.time(),
+                "language": language,
+                "is_active": True
+            }
+
+            self.logger.info(f"Started audio streaming session: {session_id}")
+            return {
+                "session_id": session_id,
+                "status": "active",
+                "language": language,
+                "sample_rate": self.stt_config.sample_rate,
+                "chunk_size": self.stt_config.chunk_size
+            }
+
+        except Exception as e:
+            self.logger.error(f"Failed to start audio stream: {e}")
+            raise AudioError(f"Failed to start audio stream: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+
+    async def add_audio_chunk(self, session_id: str, audio_bytes: bytes) -> Dict[str, Any]:
+        """Add audio chunk to streaming session"""
+        try:
+            if session_id not in self.streaming_sessions:
+                raise AudioError(f"Session {session_id} not found", ErrorCode.AUDIO_PROCESSING_ERROR)
+
+            session = self.streaming_sessions[session_id]
+            if not session["is_active"]:
+                raise AudioError(f"Session {session_id} is not active", ErrorCode.AUDIO_PROCESSING_ERROR)
+
+            # Add chunk to session
+            session["chunks"].append(audio_bytes)
+
+            # Check if we have enough audio for transcription (at least 1 second)
+            total_samples = sum(len(self.audio_utils.bytes_to_numpy(chunk, self.stt_config.sample_rate))
+                               for chunk in session["chunks"])
+
+            if total_samples >= self.stt_config.sample_rate:  # At least 1 second
+                # Transcribe current buffer
+                result = await self.transcribe_streaming(session["chunks"], session["language"])
+
+                # Clear processed chunks (keep last 0.5 seconds for context)
+                if len(session["chunks"]) > 2:
+                    session["chunks"] = session["chunks"][-1:]
+
+                return {
+                    "session_id": session_id,
+                    "transcription": result.text,
+                    "confidence": result.confidence,
+                    "is_final": False,
+                    "duration": result.duration,
+                    "metadata": result.metadata
+                }
+            else:
+                return {
+                    "session_id": session_id,
+                    "transcription": "",
+                    "confidence": 0.0,
+                    "is_final": False,
+                    "duration": total_samples / self.stt_config.sample_rate,
+                    "metadata": {"buffering": True}
+                }
+
+        except Exception as e:
+            self.logger.error(f"Failed to add audio chunk: {e}")
+            raise AudioError(f"Failed to add audio chunk: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+
+    async def end_audio_stream(self, session_id: str) -> STTResponse:
+        """End audio streaming session and return final transcription"""
+        try:
+            if session_id not in self.streaming_sessions:
+                raise AudioError(f"Session {session_id} not found", ErrorCode.AUDIO_PROCESSING_ERROR)
+
+            session = self.streaming_sessions[session_id]
+            session["is_active"] = False
+
+            # Transcribe all remaining chunks
+            if session["chunks"]:
+                result = await self.transcribe_streaming(session["chunks"], session["language"])
+            else:
+                result = STTResponse(
+                    text="",
+                    language=session["language"],
+                    confidence=0.0,
+                    duration=0.0,
+                    metadata={"error": "No audio received"}
+                )
+
+            # Clean up session
+            del self.streaming_sessions[session_id]
+
+            self.logger.info(f"Ended audio streaming session: {session_id}")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to end audio stream: {e}")
+            raise AudioError(f"Failed to end audio stream: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+
+    async def process_realtime_audio(self, audio_bytes: bytes, language: Optional[str] = None) -> Dict[str, Any]:
+        """Process audio in real-time with VAD"""
+        try:
+            # Convert to numpy array
+            audio_array = self.audio_utils.bytes_to_numpy(audio_bytes, self.stt_config.sample_rate)
+
+            # Apply VAD if enabled
+            if self.vad_model is not None:
+                audio_array = await self._apply_vad(audio_array)
+
+            # Transcribe
+            request = STTRequest(
+                audio_data=self.audio_utils.numpy_to_bytes(audio_array, self.stt_config.sample_rate),
+                language=language or self.stt_config.language
+            )
+
+            result = await self.transcribe(request)
+
+            return {
+                "text": result.text,
+                "language": result.language,
+                "confidence": result.confidence,
+                "duration": result.duration,
+                "segments": result.segments,
+                "metadata": result.metadata,
+                "vad_applied": self.vad_model is not None
+            }
+
+        except Exception as e:
+            self.logger.error(f"Real-time processing failed: {e}")
+            raise AudioError(f"Real-time processing failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+
+    async def _transcribe_with_whisper_direct(self, audio_bytes: bytes, request: STTRequest) -> STTResponse:
+        """Direct transcription without VAD for streaming"""
+        try:
+            # Convert audio bytes to numpy array
+            audio_array = self.audio_utils.bytes_to_numpy(
+                audio_bytes,
+                sample_rate=self.stt_config.sample_rate
+            )
+
+            # Prepare transcription options
+            trans_options = {
+                "language": request.language or self.stt_config.language,
+                "temperature": request.temperature or 0.0,
+                "initial_prompt": request.prompt,
+                "suppress_tokens": [-1],  # Suppress timestamps
+                "without_timestamps": True
+            }
+
+            if self.whisper_model.__class__.__module__.startswith('faster_whisper'):
+                # Faster Whisper API
+                segments, info = self.whisper_model.transcribe(
+                    audio_array,
+                    **trans_options
+                )
+
+                # Extract text from segments
+                text = " ".join([segment.text.strip() for segment in segments])
+
+                # Calculate confidence (average of all segments)
+                confidence = sum(segment.avg_logprob for segment in segments) / len(segments) if segments else 0.0
+
+                # Extract detailed segments
+                detailed_segments = [{
+                    "text": segment.text.strip(),
+                    "start": segment.start,
+                    "end": segment.end,
+                    "confidence": segment.avg_logprob
+                } for segment in segments]
+
+            else:
+                # OpenAI Whisper API
+                audio_tensor = torch.from_numpy(audio_array).float()
+                if self.device.type == "cuda":
+                    audio_tensor = audio_tensor.cuda()
+
+                result = self.whisper_model.transcribe(audio_tensor, **trans_options)
+                text = result["text"].strip()
+                confidence = 0.0  # OpenAI Whisper doesn't provide confidence scores
+                detailed_segments = result.get("segments", [])
+
+            return STTResponse(
+                text=text,
+                language=request.language or self.stt_config.language,
+                confidence=confidence,
+                duration=len(audio_array) / self.stt_config.sample_rate,
+                segments=detailed_segments,
+                metadata={
+                    "model": self.stt_config.model,
+                    "vad_enabled": False,  # Direct transcription
+                    "device": str(self.device)
+                }
+            )
+
+        except Exception as e:
+            self.logger.error(f"Direct Whisper transcription failed: {e}")
+            raise
+
     async def detect_language(self, audio_bytes: bytes) -> str:
         """Detect language of audio"""
         try:
@@ -340,6 +599,107 @@ class STTService:
         except Exception as e:
             self.logger.error(f"Language detection failed: {e}")
             return "unknown"
+
+    async def process_realtime_audio(self, audio_bytes: bytes, language: str = "auto") -> Dict[str, Any]:
+        """Process audio with real-time VAD and transcription"""
+        try:
+            # Convert to numpy array
+            audio_array = self.audio_utils.bytes_to_numpy(audio_bytes, self.stt_config.sample_rate)
+
+            # Apply real-time VAD if enabled
+            if self.stt_config.vad_enabled and self.vad_model:
+                processed_audio = await self._apply_realtime_vad(audio_array)
+
+                # If no speech detected, return empty result
+                if len(processed_audio) == 0:
+                    return {
+                        "text": "",
+                        "confidence": 0.0,
+                        "vad_result": "no_speech",
+                        "segments": []
+                    }
+                audio_array = processed_audio
+
+            # Transcribe the processed audio
+            request = STTRequest(audio_data=audio_bytes, language=language)
+            response = await self._transcribe_with_whisper_direct(audio_bytes, request)
+
+            return {
+                "text": response.text,
+                "confidence": response.confidence,
+                "language": response.language,
+                "duration": response.duration,
+                "segments": response.segments,
+                "vad_result": "speech_detected" if self.vad_model else "vad_disabled"
+            }
+
+        except Exception as e:
+            self.logger.error(f"Real-time audio processing failed: {e}")
+            return {
+                "text": "",
+                "confidence": 0.0,
+                "error": str(e),
+                "segments": []
+            }
+
+    async def _apply_realtime_vad(self, audio_array: np.ndarray) -> np.ndarray:
+        """Apply real-time VAD processing to audio stream"""
+        try:
+            # Convert to tensor for VAD
+            audio_tensor = torch.from_numpy(audio_array).float()
+
+            # Use collect_chunks for real-time processing
+            if hasattr(self, 'get_speech_timestamps') and hasattr(self, 'collect_chunks'):
+                # Detect speech segments
+                speech_timestamps = self.get_speech_timestamps(
+                    audio_tensor,
+                    self.vad_model,
+                    sampling_rate=self.stt_config.sample_rate,
+                    threshold=self.stt_config.vad_threshold
+                )
+
+                if speech_timestamps:
+                    # Collect only speech chunks
+                    speech_audio = self.collect_chunks(speech_timestamps, audio_tensor)
+                    return speech_audio.numpy()
+                else:
+                    # No speech detected
+                    return np.array([], dtype=np.float32)
+
+            # Fallback to simple VAD model call
+            elif self.vad_model:
+                # Process in smaller chunks for real-time
+                chunk_size = int(self.stt_config.sample_rate * 0.5)  # 0.5 second chunks
+                speech_chunks = []
+
+                for i in range(0, len(audio_array), chunk_size):
+                    chunk = audio_array[i:i + chunk_size]
+
+                    if len(chunk) < chunk_size:
+                        # Pad last chunk
+                        padding = np.zeros(chunk_size - len(chunk))
+                        chunk = np.concatenate([chunk, padding])
+
+                    # Convert chunk to tensor
+                    chunk_tensor = torch.from_numpy(chunk).float()
+
+                    # Run VAD on chunk
+                    confidence = self.vad_model(chunk_tensor, self.stt_config.sample_rate)
+
+                    if confidence > self.stt_config.vad_threshold:
+                        speech_chunks.append(chunk)
+
+                if speech_chunks:
+                    return np.concatenate(speech_chunks)
+                else:
+                    return np.array([], dtype=np.float32)
+
+        except Exception as e:
+            self.logger.error(f"Real-time VAD processing failed: {e}")
+            # Return original audio if VAD fails
+            return audio_array
+
+        return audio_array
 
     async def list_models(self) -> List[str]:
         """List available Whisper models"""
