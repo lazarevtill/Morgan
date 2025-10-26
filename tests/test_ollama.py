@@ -4,9 +4,11 @@ Test script for external Ollama service
 """
 import asyncio
 import json
+import pytest
 from openai import AsyncOpenAI
 
 
+@pytest.mark.asyncio
 async def test_ollama():
     """Test external Ollama service"""
     print("Testing external Ollama service...")

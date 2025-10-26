@@ -10,11 +10,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import uvicorn
 
-from ..service import TTSService, TTSConfig
+from service import TTSService, TTSConfig
 from shared.config.base import ServiceConfig
 from shared.models.base import TTSRequest, TTSResponse
 from shared.utils.logging import setup_logging
 from shared.utils.errors import ErrorHandler, ErrorCode
+from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware
 
 
 class GenerateSpeechRequest(BaseModel):
@@ -80,6 +81,10 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan
 )
+
+# Add middleware
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(TimingMiddleware)
 
 
 @app.get("/health", response_model=HealthResponse)

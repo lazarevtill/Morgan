@@ -1,7 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(./scripts/registry-build.sh:*)",
+      "Bash(docker build:*)",
+      "Bash(chmod:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker tag:*)",
+      "Bash(export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker run:*)",
+      "Bash(timeout 600 tail:*)",
+      "Bash(pkill:*)",
+      "Bash(tee:*)"
     ],
     "deny": [],
     "ask": []

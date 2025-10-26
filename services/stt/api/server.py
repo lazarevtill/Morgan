@@ -11,11 +11,12 @@ from pydantic import BaseModel, Field
 import uvicorn
 import numpy as np
 
-from ..service import STTService, STTConfig
+from service import STTService, STTConfig
 from shared.config.base import ServiceConfig
 from shared.models.base import STTRequest, STTResponse
 from shared.utils.logging import setup_logging
 from shared.utils.errors import ErrorHandler, ErrorCode
+from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware
 from shared.utils.audio import AudioUtils
 
 
@@ -78,6 +79,10 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan
 )
+
+# Add middleware
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(TimingMiddleware)
 
 
 @app.get("/health", response_model=HealthResponse)

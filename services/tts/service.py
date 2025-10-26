@@ -105,9 +105,11 @@ class TTSService:
         """Load Kokoro TTS model"""
         try:
             # Import here to avoid dependency issues if not available
-            from kokoro import generate
+            from kokoro import KModel, KPipeline
 
-            self.model = generate
+            # Create Kokoro model and pipeline
+            self.kokoro_model = KModel()
+            self.kokoro_pipeline = KPipeline(lang_code='a', model=self.kokoro_model)  # 'a' for American English
             self.logger.info("Kokoro model loaded successfully")
 
         except ImportError:
@@ -213,26 +215,34 @@ class TTSService:
     async def _generate_kokoro_speech(self, request: TTSRequest, voice: str) -> TTSResponse:
         """Generate speech using Kokoro"""
         try:
-            from kokoro import generate
-
-            # Generate audio
-            audio_data, sample_rate = generate(
+            # Generate audio using KPipeline
+            results = list(self.kokoro_pipeline(
                 text=request.text,
                 voice=voice,
-                speed=request.speed or self.tts_config.speed,
-                lang=self.voice_presets.get(voice, {}).get('lang', self.tts_config.language)
-            )
+                speed=request.speed or self.tts_config.speed
+            ))
 
-            # Convert to bytes
-            audio_bytes = self._numpy_to_wav_bytes(audio_data, sample_rate)
+            # Get the first result (should be only one for single text input)
+            if results:
+                result = results[0]
+                audio_data = result.output.audio  # Get audio tensor
+                sample_rate = 24000  # Kokoro typically uses 24kHz
 
-            return TTSResponse(
-                audio_data=audio_bytes,
-                format=self.tts_config.output_format,
-                sample_rate=sample_rate,
-                duration=len(audio_data) / sample_rate,
-                metadata={"model": "kokoro", "voice": voice}
-            )
+                # Convert tensor to numpy array
+                audio_np = audio_data.cpu().numpy() if hasattr(audio_data, 'cpu') else audio_data
+
+                # Convert to bytes
+                audio_bytes = self._numpy_to_wav_bytes(audio_np, sample_rate)
+
+                return TTSResponse(
+                    audio_data=audio_bytes,
+                    format=self.tts_config.output_format,
+                    sample_rate=sample_rate,
+                    duration=len(audio_np) / sample_rate,
+                    metadata={"model": "kokoro", "voice": voice}
+                )
+            else:
+                raise AudioError("No audio generated from Kokoro", ErrorCode.AUDIO_PROCESSING_ERROR)
 
         except Exception as e:
             self.logger.error(f"Kokoro generation failed: {e}")
@@ -331,8 +341,8 @@ class TTSService:
     async def health_check(self) -> Dict[str, Any]:
         """Health check for the service"""
         try:
-            # Test basic functionality
-            test_response = await self.generate_speech(TTSRequest(text="test", voice="test"))
+            # Test basic functionality with a valid voice
+            test_response = await self.generate_speech(TTSRequest(text="test", voice=self.tts_config.voice))
 
             return {
                 "status": "healthy",

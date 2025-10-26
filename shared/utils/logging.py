@@ -121,7 +121,7 @@ class Timer:
         duration = (self.end_time - self.start_time).total_seconds()
 
         if self.logger:
-            self.logger.info(f"{self.operation} completed in {duration".3f"}s")
+            self.logger.info(f"{self.operation} completed in {duration:.3f}s")
 
         return False
 

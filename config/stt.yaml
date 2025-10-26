@@ -5,15 +5,18 @@ host: "0.0.0.0"
 port: 8003
 
 # Model configuration
-model: "distil-large-v3"
+model: "large-v3"
 device: "cuda"
 language: "auto"
 
 # Audio parameters
 sample_rate: 16000
 chunk_size: 1024
-threshold: 0.5
-min_silence_duration: 0.5
+
+# VAD (Voice Activity Detection) parameters
+vad_enabled: true
+vad_threshold: 0.5
+vad_min_silence_duration: 0.5
 
 # Logging
 log_level: "INFO"

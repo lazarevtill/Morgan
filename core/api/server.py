@@ -16,6 +16,7 @@ from shared.config.base import ServiceConfig
 from shared.models.base import Response, ProcessingResult
 from shared.utils.logging import setup_logging
 from shared.utils.errors import ErrorHandler, ErrorCode
+from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware
 
 
 class TextRequest(BaseModel):
@@ -82,6 +83,10 @@ class APIServer:
             docs_url="/docs",
             redoc_url="/redoc"
         )
+
+        # Add middleware
+        self.app.add_middleware(RequestIDMiddleware)
+        self.app.add_middleware(TimingMiddleware)
 
         # Add CORS middleware
         self.app.add_middleware(
@@ -236,7 +241,7 @@ class APIServer:
 
                 # Log request details
                 self.logger.info(
-                    f"{request.method} {request.url.path} - {response.status_code} - {process_time".3f"}s"
+                    f"{request.method} {request.url.path} - {response.status_code} - {process_time:.3f}s"
                 )
 
                 # Add processing time header
@@ -246,5 +251,7 @@ class APIServer:
 
             except Exception as e:
                 process_time = asyncio.get_event_loop().time() - start_time
-                self.logger.error(f"Request error: {request.method} {request.url.path} - {e} - {process_time".3f"}s")
+                self.logger.error(
+                    f"Request error: {request.method} {request.url.path} - {e} - {process_time:.3f}s"
+                )
                 raise

@@ -20,7 +20,6 @@ declare -A services=(
     ["llm"]="services/llm/Dockerfile"
     ["tts"]="services/tts/Dockerfile"
     ["stt"]="services/stt/Dockerfile"
-    ["vad"]="services/vad/Dockerfile"
 )
 
 declare -A service_names=(
@@ -28,7 +27,6 @@ declare -A service_names=(
     ["llm"]="llm-service"
     ["tts"]="tts-service"
     ["stt"]="stt-service"
-    ["vad"]="vad-service"
 )
 
 # Function to print headers
@@ -87,13 +85,16 @@ build_service_image() {
     print_header "Building $service_name Service"
 
     local image_name="$REGISTRY_BASE/${service_names[$service_name]}:$tag"
+    local local_image_name="morgan-${service_names[$service_name]}:$tag"
 
     echo -e "${BLUE}Building image: $image_name${NC}"
+    echo -e "${BLUE}Also tagging as: $local_image_name${NC}"
     echo -e "${BLUE}Dockerfile: ${services[$service_name]}${NC}"
     echo -e "${BLUE}Context: .${NC}"
 
-    if docker build -t "$image_name" -f "${services[$service_name]}" .; then
+    if docker build -t "$image_name" -t "$local_image_name" -f "${services[$service_name]}" .; then
         print_success "Successfully built $image_name"
+        print_success "Also tagged as $local_image_name"
         return 0
     else
         print_error "Build failed for $service_name"
@@ -232,7 +233,7 @@ Options:
     -p, --push          Push images to private registry
     -l, --pull          Pull images from private registry
     -c, --clean         Clean up local images after push
-    -s, --service NAME  Build/push specific service (core, llm, tts, stt, vad)
+    -s, --service NAME  Build/push specific service (core, llm, tts, stt)
     -t, --tag TAG       Image tag (default: latest)
     -h, --help          Show this help message
 
@@ -252,8 +253,7 @@ Available Services:
     - core     : Main orchestration service
     - llm      : OpenAI-compatible LLM client
     - tts      : Text-to-speech with CUDA
-    - stt      : Speech-to-text with CUDA + VAD
-    - vad      : Voice activity detection (CPU)
+    - stt      : Speech-to-text with CUDA + integrated VAD
 
 Image Naming Convention:
     harbor.in.lazarev.cloud/morgan/{service}:latest
@@ -261,14 +261,11 @@ Image Naming Convention:
     - harbor.in.lazarev.cloud/morgan/llm-service:latest
     - harbor.in.lazarev.cloud/morgan/tts-service:latest
     - harbor.in.lazarev.cloud/morgan/stt-service:latest
-    - harbor.in.lazarev.cloud/morgan/vad-service:latest
 
 Base Images:
     - Python services: harbor.in.lazarev.cloud/proxy/python:3.12-slim
-    - CUDA services: harbor.in.lazarev.cloud/proxy/nvidia/cuda:13.0.1-devel-ubuntu22.04
+    - CUDA services: harbor.in.lazarev.cloud/proxy/nvidia/cuda:13.0.1-runtime-ubuntu22.04
     - UV: ghcr.io/astral-sh/uv:latest (public)
-    - Redis: harbor.in.lazarev.cloud/proxy/redis:7-alpine
-    - PostgreSQL: harbor.in.lazarev.cloud/proxy/postgres:17-alpine
 
 For troubleshooting, check:
     - Registry connectivity: docker login harbor.in.lazarev.cloud

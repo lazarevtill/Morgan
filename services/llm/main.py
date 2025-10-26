@@ -8,7 +8,7 @@ from pathlib import Path
 
 from shared.config.base import ServiceConfig
 from shared.utils.logging import setup_logging
-from .api.server import main as server_main
+from api.server import main as server_main
 
 
 async def main():

@@ -11,11 +11,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import uvicorn
 
-from ..service import LLMService, LLMConfig
+from service import LLMService, LLMConfig
 from shared.config.base import ServiceConfig
-from shared.models.base import LLMRequest, LLMResponse, ProcessingResult
+from shared.models.base import LLMRequest, LLMResponse, ProcessingResult, Message
 from shared.utils.logging import setup_logging
 from shared.utils.errors import ErrorHandler, ErrorCode
+from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware
 
 
 class GenerateRequest(BaseModel):
@@ -88,6 +89,10 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan
 )
+
+# Add middleware
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(TimingMiddleware)
 
 
 @app.get("/health", response_model=HealthResponse)

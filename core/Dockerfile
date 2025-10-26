@@ -30,7 +30,7 @@ WORKDIR /app
 
 # Copy pyproject.toml and install dependencies directly to system Python
 COPY pyproject.toml .
-RUN uv pip install fastapi uvicorn[standard] pydantic aiohttp pyyaml python-dotenv structlog psutil redis --system
+RUN uv pip install fastapi uvicorn[standard] pydantic aiohttp pyyaml python-dotenv structlog psutil redis python-multipart --system
 
 # Stage 3: Application build
 FROM python-deps AS build

@@ -22,12 +22,12 @@ from shared.utils.logging import setup_logging, Timer
 from shared.utils.errors import ErrorHandler, ErrorCode
 from shared.utils.http_client import service_registry
 
-# Import core components
-from .api.server import APIServer
-from .conversation.manager import ConversationManager
-from .handlers.registry import HandlerRegistry
-from .integrations.manager import IntegrationManager
-from .services.orchestrator import ServiceOrchestrator
+# Import core components (absolute imports; core is run as a module)
+from api.server import APIServer
+from conversation.manager import ConversationManager
+from handlers.registry import HandlerRegistry
+from integrations.manager import IntegrationManager
+from services.orchestrator import ServiceOrchestrator
 
 
 class CoreConfig(BaseModel):
@@ -37,7 +37,6 @@ class CoreConfig(BaseModel):
     llm_service_url: str = "http://llm-service:8001"
     tts_service_url: str = "http://tts-service:8002"
     stt_service_url: str = "http://stt-service:8003"
-    vad_service_url: str = "http://vad-service:8004"
     conversation_timeout: int = 1800
     max_history: int = 50
     log_level: str = "INFO"
@@ -178,14 +177,6 @@ class MorganCore:
                 "stt",
                 self.core_config.stt_service_url,
                 timeout=30.0,
-                max_retries=3
-            )
-
-            # Register VAD service
-            service_registry.register_service(
-                "vad",
-                self.core_config.vad_service_url,
-                timeout=10.0,
                 max_retries=3
             )
 
