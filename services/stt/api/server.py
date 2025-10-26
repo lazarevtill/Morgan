@@ -418,11 +418,8 @@ async def websocket_stream(websocket: WebSocket, session_id: str):
 async def list_sessions() -> Dict[str, Any]:
     """List active streaming sessions"""
     try:
-        sessions = list(app.state.stt_service.streaming_sessions.keys())
-        return {
-            "active_sessions": sessions,
-            "count": len(sessions)
-        }
+        sessions = await app.state.stt_service.list_active_sessions()
+        return sessions
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list sessions: {e}")
 

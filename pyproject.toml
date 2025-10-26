@@ -47,12 +47,6 @@ stt = [
     "silero-vad>=0.1.0",
 ]
 
-# VAD service dependencies (Silero VAD optimized)
-vad = [
-    "silero-vad>=0.1.0",
-    "numpy>=1.24.0",
-    "torch>=2.1.0",
-]
 
 # Development dependencies
 dev = [

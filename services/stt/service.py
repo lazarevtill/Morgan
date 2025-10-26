@@ -488,37 +488,6 @@ class STTService:
             self.logger.error(f"Failed to end audio stream: {e}")
             raise AudioError(f"Failed to end audio stream: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
 
-    async def process_realtime_audio(self, audio_bytes: bytes, language: Optional[str] = None) -> Dict[str, Any]:
-        """Process audio in real-time with VAD"""
-        try:
-            # Convert to numpy array
-            audio_array = self.audio_utils.bytes_to_numpy(audio_bytes, self.stt_config.sample_rate)
-
-            # Apply VAD if enabled
-            if self.vad_model is not None:
-                audio_array = await self._apply_vad(audio_array)
-
-            # Transcribe
-            request = STTRequest(
-                audio_data=self.audio_utils.numpy_to_bytes(audio_array, self.stt_config.sample_rate),
-                language=language or self.stt_config.language
-            )
-
-            result = await self.transcribe(request)
-
-            return {
-                "text": result.text,
-                "language": result.language,
-                "confidence": result.confidence,
-                "duration": result.duration,
-                "segments": result.segments,
-                "metadata": result.metadata,
-                "vad_applied": self.vad_model is not None
-            }
-
-        except Exception as e:
-            self.logger.error(f"Real-time processing failed: {e}")
-            raise AudioError(f"Real-time processing failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
 
     async def _transcribe_with_whisper_direct(self, audio_bytes: bytes, request: STTRequest) -> STTResponse:
         """Direct transcription without VAD for streaming"""
@@ -752,4 +721,20 @@ class STTService:
                 "error": str(e),
                 "device": str(self.device),
                 "vad_enabled": self.vad_model is not None
+            }
+
+    async def list_active_sessions(self) -> Dict[str, Any]:
+        """List active streaming sessions"""
+        try:
+            sessions = list(self.streaming_sessions.keys())
+            return {
+                "active_sessions": sessions,
+                "count": len(sessions)
+            }
+        except Exception as e:
+            self.logger.error(f"Failed to list sessions: {e}")
+            return {
+                "active_sessions": [],
+                "count": 0,
+                "error": str(e)
             }

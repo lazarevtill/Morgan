@@ -247,9 +247,9 @@ class ServiceOrchestrator:
             result = await client.post("/generate", json_data=llm_request)
 
             if result.success:
-                # Handle response data - could be dict or ProcessingResult
+                # Handle response data - LLM service returns dict
                 response_data = result.data
-                if hasattr(response_data, 'get'):
+                if isinstance(response_data, dict):
                     # Check for tool usage in response
                     response_text = response_data.get("text", "")
                     if "USE_TOOL:" in response_text and self.tools_manager:
@@ -260,11 +260,12 @@ class ServiceOrchestrator:
                         )
                     return response_data
                 else:
-                    # Convert ProcessingResult or other object to dict
+                    # Fallback: convert to dict if it's an object
                     if hasattr(response_data, '__dict__'):
                         return response_data.__dict__
                     else:
-                        raise Exception("Invalid LLM response format")
+                        # Last resort: create a basic response
+                        return {"text": str(response_data), "model": "unknown"}
             else:
                 raise Exception(f"LLM service error: {result.error}")
 
@@ -334,19 +335,14 @@ class ServiceOrchestrator:
             result = await client.post("/generate", json_data=tts_request)
 
             if result.success:
-                # Handle response data - could be dict or ProcessingResult
+                # Handle response data - TTS service returns dict with hex audio_data
                 response_data = result.data
-                if hasattr(response_data, 'get'):
-                    if response_data.get("audio_data"):
-                        # Convert hex back to bytes
-                        return bytes.fromhex(response_data["audio_data"])
+                if isinstance(response_data, dict) and response_data.get("audio_data"):
+                    # Convert hex back to bytes
+                    return bytes.fromhex(response_data["audio_data"])
                 else:
-                    # Check if it's a ProcessingResult with audio_data
-                    if hasattr(response_data, 'audio_data'):
-                        return bytes.fromhex(response_data.audio_data)
-
-                self.logger.warning(f"TTS generation failed or returned no audio: {result.error}")
-                return None
+                    self.logger.warning(f"TTS generation failed or returned no audio: {result.error}")
+                    return None
             else:
                 self.logger.warning(f"TTS generation failed: {result.error}")
                 return None
@@ -370,12 +366,12 @@ class ServiceOrchestrator:
             result = await client.post("/transcribe", json_data=stt_request)
 
             if result.success:
-                # Handle response data - could be dict or ProcessingResult
+                # Handle response data - STT service returns dict
                 response_data = result.data
-                if hasattr(response_data, 'get'):
+                if isinstance(response_data, dict):
                     return response_data
                 else:
-                    # Convert ProcessingResult or other object to dict
+                    # Fallback: convert to dict if it's an object
                     if hasattr(response_data, '__dict__'):
                         return response_data.__dict__
                     else:

@@ -48,9 +48,10 @@ class ModelInfo(BaseModel):
 class HealthResponse(BaseModel):
     """Health check response"""
     status: str
-    model: Optional[str]
-    available_models: int
-    ollama_url: str
+    model: Optional[str] = None
+    available_models: Optional[int] = None
+    api_base: str
+    message: Optional[str] = None
 
 
 @asynccontextmanager
@@ -85,7 +86,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="Morgan LLM Service",
-    description="LLM service using Ollama with OpenAI compatibility",
+    description="LLM service using OpenAI-compatible API",
     version="0.2.0",
     lifespan=lifespan
 )
@@ -100,6 +101,9 @@ async def health_check() -> HealthResponse:
     """Health check endpoint"""
     try:
         health = await app.state.llm_service.health_check()
+        # Update the health response to use the configured API base
+        health["api_base"] = app.state.llm_service.llm_config.openai_api_base
+        health["model"] = app.state.llm_service.llm_config.model
         return HealthResponse(**health)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Service unhealthy: {e}")
@@ -254,10 +258,13 @@ async def openai_chat_completions(request: Dict[str, Any]) -> Dict[str, Any]:
             async def openai_stream():
                 try:
                     async for chunk in app.state.llm_service.generate_stream(llm_request):
+                        import uuid
+                        from datetime import datetime
+
                         response_chunk = {
-                            "id": "chatcmpl-123",
+                            "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
                             "object": "chat.completion.chunk",
-                            "created": 1234567890,
+                            "created": int(datetime.now().timestamp()),
                             "model": model,
                             "choices": [{
                                 "index": 0,
@@ -281,10 +288,13 @@ async def openai_chat_completions(request: Dict[str, Any]) -> Dict[str, Any]:
         else:
             response = await app.state.llm_service.generate(llm_request)
 
+            import uuid
+            from datetime import datetime
+
             return {
-                "id": "chatcmpl-123",
+                "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
                 "object": "chat.completion",
-                "created": 1234567890,
+                "created": int(datetime.now().timestamp()),
                 "model": model,
                 "choices": [{
                     "index": 0,
@@ -346,12 +356,15 @@ async def openai_models() -> Dict[str, Any]:
         models_info = await app.state.llm_service.list_models()
 
         models = []
+        import uuid
+        from datetime import datetime
+
         for model in models_info.get("models", []):
             models.append({
                 "id": model.get("name"),
                 "object": "model",
-                "created": 1234567890,
-                "owned_by": "ollama"
+                "created": int(datetime.now().timestamp()),
+                "owned_by": "openai_compatible"
             })
 
         return {

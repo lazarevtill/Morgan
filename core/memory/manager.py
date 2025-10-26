@@ -7,6 +7,7 @@ import logging
 import uuid
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
 import asyncpg
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
@@ -78,6 +79,8 @@ class MemoryManager:
 
         self.pg_pool: Optional[asyncpg.Pool] = None
         self.qdrant_client: Optional[QdrantClient] = None
+        self.executor: Optional[ThreadPoolExecutor] = None
+        self.embedding_model = None
 
         self.collection_name = "morgan_memories"
 
@@ -114,6 +117,13 @@ class MemoryManager:
             else:
                 self.logger.info(f"Qdrant collection exists: {self.collection_name}")
 
+            # Initialize thread pool for CPU-bound operations
+            self.executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="embedding")
+
+            # Initialize embedding service connection (no longer need thread pool for embeddings)
+            # Embedding generation now happens via HTTP calls to LLM service
+            self.embedding_service_ready = True
+
             self.logger.info("Memory Manager started successfully")
 
         except Exception as e:
@@ -129,6 +139,10 @@ class MemoryManager:
         if self.qdrant_client:
             self.qdrant_client.close()
             self.logger.info("Qdrant client closed")
+
+        if self.executor:
+            self.executor.shutdown(wait=True)
+            self.logger.info("Embedding executor shutdown")
 
     async def create_memory(
         self,
@@ -190,6 +204,7 @@ class MemoryManager:
             # Store embedding in Qdrant
             if embedding is None:
                 embedding = await self._generate_embedding(content)
+                self.logger.debug(f"Generated embedding with dimension: {len(embedding) if hasattr(embedding, '__len__') else 'unknown'}")
 
             self.qdrant_client.upsert(
                 collection_name=self.collection_name,
@@ -251,6 +266,7 @@ class MemoryManager:
         try:
             # Generate query embedding
             query_embedding = await self._generate_embedding(query)
+            self.logger.debug(f"Generated query embedding with dimension: {len(query_embedding) if hasattr(query_embedding, '__len__') else 'unknown'}")
 
             # Build filter
             must_conditions = [
@@ -373,18 +389,48 @@ class MemoryManager:
 
     async def _generate_embedding(self, text: str) -> np.ndarray:
         """
-        Generate embedding vector for text
+        Generate embedding vector for text using LLM service
 
-        TODO: Integrate with embedding model (sentence-transformers, OpenAI, etc.)
-        For now, returns a random vector for demonstration
+        Args:
+            text: Text to generate embedding for
+
+        Returns:
+            Numpy array of embedding vector
         """
-        # Placeholder - replace with actual embedding generation
-        # Example: from sentence_transformers import SentenceTransformer
-        # model = SentenceTransformer('all-MiniLM-L6-v2')
-        # embedding = model.encode(text)
+        try:
+            # Import here to avoid circular imports
+            from shared.utils.http_client import service_registry
 
-        # For now, return random vector
-        return np.random.rand(self.embedding_dimension).astype(np.float32)
+            # Get LLM service client
+            llm_client = await service_registry.get_service("llm")
+
+            # Generate embedding using LLM service
+            result = await llm_client.post("/embed", json_data={"text": text})
+
+            if result.success and result.data.get("embeddings"):
+                embedding = result.data["embeddings"]
+
+                # Convert to numpy array and ensure correct dimension
+                embedding_array = np.array(embedding, dtype=np.float32)
+
+                # Truncate or pad to match expected dimension
+                if len(embedding_array) > self.embedding_dimension:
+                    embedding_array = embedding_array[:self.embedding_dimension]
+                elif len(embedding_array) < self.embedding_dimension:
+                    # Pad with zeros
+                    padding = np.zeros(self.embedding_dimension - len(embedding_array), dtype=np.float32)
+                    embedding_array = np.concatenate([embedding_array, padding])
+
+                return embedding_array
+            else:
+                # Fallback to random vector if embedding fails
+                self.logger.warning(f"Embedding generation failed: {result.error if result else 'Unknown error'}")
+                return np.random.rand(self.embedding_dimension).astype(np.float32)
+
+        except Exception as e:
+            self.logger.error(f"Error generating embedding: {e}", exc_info=True)
+            # Fallback to random vector
+            return np.random.rand(self.embedding_dimension).astype(np.float32)
 
     async def update_memory_access(self, memory_id: str):
         """Update memory access statistics"""
