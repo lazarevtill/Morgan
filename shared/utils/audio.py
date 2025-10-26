@@ -286,15 +286,19 @@ class AudioCapture:
                         "duration": (len(audio_bytes) // 2) / 16000  # Rough estimate
                     }
                 else:
+                    # Optionally, log the error for internal diagnostics
+                    logger.error(f"Unknown audio format validation error: {e}")
                     return {
                         "valid": False,
-                        "error": f"Unknown audio format. Expected WAV or WebM. Error: {str(e)}"
+                        "error": "Unknown audio format. Expected WAV or WebM."
                     }
             except Exception as webm_error:
                 return {
                     "valid": False,
-                    "error": f"Invalid audio format: {str(e)}"
+                    "error": "Invalid audio format."
                 }
+                # Optionally, log webm_error for diagnostics
+                logger.error(f"Exception while validating WebM audio format: {webm_error}")
 
     def encode_audio_chunk(self, audio_data: bytes) -> str:
         """Encode audio bytes to base64 string"""
