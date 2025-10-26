@@ -22,7 +22,8 @@ class LLMConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8001
     model: str = "llama3.2:latest"
-    ollama_url: str = "http://192.168.101.3:11434"
+    openai_api_base: str = "https://gpt.lazarev.cloud/ollama/v1"
+    api_key: str = ""
     max_tokens: int = 2048
     temperature: float = 0.7
     timeout: float = 30.0
@@ -30,10 +31,13 @@ class LLMConfig(BaseModel):
     context_window: int = 4096
     system_prompt: str = "You are Morgan, a helpful AI assistant."
     log_level: str = "INFO"
+    embedding_model: str = "qwen3-embedding:latest"
+    max_context_messages: int = 10
+    enable_streaming: bool = True
 
 
 class LLMService:
-    """LLM Service using Ollama with OpenAI compatibility"""
+    """LLM Service using OpenAI-compatible API"""
 
     def __init__(self, config: Optional[ServiceConfig] = None):
         self.config = config or ServiceConfig("llm")
@@ -41,7 +45,7 @@ class LLMService:
         self.logger = setup_logging(
             "llm_service",
             self.config.get("log_level", "INFO"),
-            f"logs/llm_service.log"
+            "logs/llm_service.log"
         )
 
         # Load configuration
@@ -53,22 +57,25 @@ class LLMService:
         self.conversation_cache = {}
 
         self.logger.info(f"LLM Service initialized with model: {self.llm_config.model}")
-        self.logger.info(f"Using external Ollama at: {self.llm_config.ollama_url}")
+        self.logger.info(f"Using OpenAI-compatible API at: {self.llm_config.openai_api_base}")
 
     async def start(self):
         """Start the LLM service"""
         try:
-            # Initialize OpenAI client for Ollama
+            # Initialize OpenAI client
             self.openai_client = AsyncOpenAI(
-                base_url=f"{self.llm_config.ollama_url}/v1",
-                api_key="ollama"  # Ollama doesn't require a real API key
+                base_url=self.llm_config.openai_api_base,
+                api_key=self.llm_config.api_key
             )
 
-            # Test connection to external Ollama
-            await self._test_ollama_connection()
-
-            self.current_model = self.llm_config.model
-            self.logger.info("LLM Service started successfully")
+            # Test connection to OpenAI-compatible API only if API key is provided
+            if self.llm_config.api_key:
+                await self._test_api_connection()
+                self.current_model = self.llm_config.model
+                self.logger.info("LLM Service started successfully")
+            else:
+                self.logger.warning("No API key provided - LLM service started in offline mode")
+                self.current_model = self.llm_config.model
 
         except Exception as e:
             self.logger.error(f"Failed to start LLM service: {e}")
@@ -84,34 +91,48 @@ class LLMService:
 
         self.logger.info("LLM Service stopped")
 
-    async def _test_ollama_connection(self):
-        """Test connection to external Ollama service"""
+    async def _test_api_connection(self):
+        """Test connection to OpenAI-compatible API service"""
+        if not self.llm_config.api_key:
+            self.logger.warning("No API key provided - skipping connection test")
+            return
+
         try:
             # Test basic connectivity by listing models
             response = await self.openai_client.models.list()
             available_models = [model.id for model in response.data]
 
+            self.logger.info(f"Available models from external API: {available_models}")
+
             if self.llm_config.model not in available_models:
-                self.logger.warning(f"Model {self.llm_config.model} not found. Available models: {available_models}")
+                self.logger.warning(f"Configured model {self.llm_config.model} not found. Available models: {available_models}")
                 if available_models:
                     # Use the first available model as fallback
                     self.llm_config.model = available_models[0]
                     self.current_model = self.llm_config.model
                     self.logger.info(f"Using fallback model: {self.llm_config.model}")
                 else:
-                    raise ModelError(f"No models available in Ollama service", ErrorCode.MODEL_LOAD_ERROR)
+                    raise ModelError("No models available in OpenAI-compatible API service", ErrorCode.MODEL_LOAD_ERROR)
             else:
                 self.current_model = self.llm_config.model
                 self.logger.info(f"Model {self.llm_config.model} is available")
 
         except Exception as e:
-            self.logger.error(f"Error testing Ollama connection: {e}")
-            raise ModelError(f"Failed to connect to Ollama: {e}", ErrorCode.MODEL_LOAD_ERROR)
+            self.logger.error(f"Error testing OpenAI-compatible API connection: {e}")
+            raise ModelError(f"Failed to connect to OpenAI-compatible API: {e}", ErrorCode.MODEL_LOAD_ERROR)
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         """Generate text response using LLM"""
         with Timer(self.logger, f"LLM generation for prompt length {len(request.prompt)}"):
             try:
+                # Check if API key is available
+                if not self.llm_config.api_key:
+                    return LLMResponse(
+                        text="I'm currently offline and cannot process your request. Please provide an API key to enable LLM functionality.",
+                        model=self.llm_config.model,
+                        metadata={"offline": True, "error": "No API key provided"}
+                    )
+
                 # Prepare messages for OpenAI format
                 messages = []
 
@@ -123,7 +144,9 @@ class LLMService:
 
                 # Add conversation context if provided
                 if request.context:
-                    for msg in request.context[-10:]:  # Keep last 10 messages for context
+                    # Use configured max context messages or default to 10
+                    max_context = getattr(self.llm_config, 'max_context_messages', 10)
+                    for msg in request.context[-max_context:]:  # Keep last N messages for context
                         messages.append({
                             "role": msg.role,
                             "content": msg.content
@@ -167,6 +190,11 @@ class LLMService:
     async def generate_stream(self, request: LLMRequest) -> AsyncGenerator[str, None]:
         """Generate streaming text response"""
         try:
+            # Check if API key is available
+            if not self.llm_config.api_key:
+                yield "I'm currently offline and cannot process your request. Please provide an API key to enable LLM functionality."
+                return
+
             # Prepare messages
             messages = []
 
@@ -176,7 +204,9 @@ class LLMService:
                 messages.append({"role": "system", "content": self.llm_config.system_prompt})
 
             if request.context:
-                for msg in request.context[-10:]:
+                # Use configured max context messages or default to 10
+                max_context = getattr(self.llm_config, 'max_context_messages', 10)
+                for msg in request.context[-max_context:]:
                     messages.append({"role": msg.role, "content": msg.content})
 
             messages.append({"role": "user", "content": request.prompt})
@@ -199,12 +229,36 @@ class LLMService:
             raise ModelError(f"Streaming generation failed: {e}", ErrorCode.MODEL_INFERENCE_ERROR)
 
     async def embed_text(self, text: str, model: Optional[str] = None) -> List[float]:
-        """Generate embeddings for text"""
+        """Generate embeddings for text using OpenAI-compatible API"""
         try:
-            response = await self.openai_client.embeddings.create(
-                input=text,
-                model=model or self.llm_config.model
+            # Check if API key is available
+            if not self.llm_config.api_key:
+                # Return a dummy embedding vector when offline
+                import hashlib
+                hash_obj = hashlib.sha256(text.encode())
+                hash_bytes = hash_obj.digest()
+                # Create a 384-dimensional embedding from hash (common embedding size)
+                embedding = []
+                for i in range(384):
+                    embedding.append((hash_bytes[i % len(hash_bytes)] / 255.0 - 0.5) * 2)
+                return embedding
+
+            # Use configured embedding model or fallback to specified model
+            embedding_model = model or self.llm_config.embedding_model
+
+            # Create a separate client for embeddings to avoid connection issues
+            embedding_client = AsyncOpenAI(
+                base_url=self.llm_config.openai_api_base,
+                api_key=self.llm_config.api_key
             )
+
+            response = await embedding_client.embeddings.create(
+                input=text,
+                model=embedding_model
+            )
+
+            # Close the embedding client to avoid connection leaks
+            await embedding_client.close()
 
             return response.data[0].embedding
 
@@ -215,6 +269,17 @@ class LLMService:
     async def list_models(self) -> Dict[str, Any]:
         """List available models"""
         try:
+            if not self.llm_config.api_key:
+                # Return offline model list
+                return {
+                    "models": [
+                        {"name": self.llm_config.model, "size": 0, "modified": "offline"},
+                        {"name": self.llm_config.embedding_model, "size": 0, "modified": "offline"}
+                    ],
+                    "total": 2,
+                    "offline": True
+                }
+
             response = await self.openai_client.models.list()
             models = [{"name": model.id, "size": 0, "modified": ""} for model in response.data]
 
@@ -240,7 +305,8 @@ class LLMService:
                 "details": {
                     "family": "llama",
                     "parameter_size": "unknown",
-                    "quantization_level": "unknown"
+                    "quantization_level": "unknown",
+                    "provider": "openai_compatible"
                 }
             }
         except Exception as e:
@@ -248,20 +314,29 @@ class LLMService:
             raise ModelError(f"Failed to get model info: {e}", ErrorCode.MODEL_LOAD_ERROR)
 
     async def pull_model(self, model: str) -> AsyncGenerator[str, None]:
-        """Pull a model from Ollama registry"""
-        # Since we're using an external Ollama service, model management should be done there
+        """Pull a model from OpenAI-compatible API"""
+        # Since we're using an external OpenAI-compatible service, model management should be done there
         yield json.dumps({
             "status": "info",
-            "message": f"Model management should be done on the external Ollama service at {self.llm_config.ollama_url}"
+            "message": f"Model management should be done on the external OpenAI-compatible API service at {self.llm_config.openai_api_base}"
         })
         yield json.dumps({
             "status": "info",
-            "message": f"Please run 'ollama pull {model}' on the external Ollama service"
+            "message": "Please manage models through the OpenAI-compatible API service"
         })
 
     async def health_check(self) -> Dict[str, Any]:
         """Health check for the service"""
         try:
+            if not self.llm_config.api_key:
+                return {
+                    "status": "offline",
+                    "model": self.current_model,
+                    "available_models": 0,
+                    "message": "No API key provided - running in offline mode",
+                    "api_base": self.llm_config.openai_api_base
+                }
+
             # Test basic connectivity by listing models
             response = await self.openai_client.models.list()
             available_models = len(response.data)
@@ -270,12 +345,12 @@ class LLMService:
                 "status": "healthy",
                 "model": self.current_model,
                 "available_models": available_models,
-                "ollama_url": self.llm_config.ollama_url
+                "api_base": self.llm_config.openai_api_base
             }
         except Exception as e:
             self.logger.error(f"Health check failed: {e}")
             return {
                 "status": "unhealthy",
                 "error": str(e),
-                "ollama_url": self.llm_config.ollama_url
+                "api_base": self.llm_config.openai_api_base
             }

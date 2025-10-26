@@ -2,22 +2,21 @@
 Base models and data structures for Morgan AI Assistant
 """
 from typing import Dict, Any, List, Optional, Union
-from dataclasses import dataclass, asdict
 from datetime import datetime
+from pydantic import BaseModel as PydanticBaseModel, Field
 import json
 
 
-@dataclass
-class BaseModel:
-    """Base class for all data models"""
+class BaseModel(PydanticBaseModel):
+    """Base class for all data models using Pydantic"""
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert model to dictionary"""
-        return asdict(self)
+        return self.model_dump()
 
     def to_json(self) -> str:
         """Convert model to JSON string"""
-        return json.dumps(self.to_dict(), default=str)
+        return self.model_dump_json()
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]):
@@ -27,37 +26,25 @@ class BaseModel:
     @classmethod
     def from_json(cls, json_str: str):
         """Create model from JSON string"""
-        return cls.from_dict(json.loads(json_str))
+        return cls.model_validate_json(json_str)
 
 
-@dataclass
 class Message(BaseModel):
     """Chat message model"""
-    role: str  # "user", "assistant", "system"
-    content: str
-    timestamp: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-    def __post_init__(self):
-        if self.timestamp is None:
-            self.timestamp = datetime.now()
+    role: str = Field(..., description="Message role: user, assistant, system")
+    content: str = Field(..., description="Message content")
+    timestamp: Optional[datetime] = Field(default_factory=datetime.now, description="Message timestamp")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
 
 
-@dataclass
 class ConversationContext(BaseModel):
     """Conversation context model"""
-    conversation_id: str
-    user_id: str
-    messages: List[Message]
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-    def __post_init__(self):
-        if self.created_at is None:
-            self.created_at = datetime.now()
-        if self.updated_at is None:
-            self.updated_at = datetime.now()
+    conversation_id: str = Field(..., description="Unique conversation identifier")
+    user_id: str = Field(..., description="User identifier")
+    messages: List[Message] = Field(default_factory=list, description="List of conversation messages")
+    created_at: Optional[datetime] = Field(default_factory=datetime.now, description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(default_factory=datetime.now, description="Last update timestamp")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
 
     def add_message(self, message: Message):
         """Add a message to the conversation"""
@@ -73,145 +60,127 @@ class ConversationContext(BaseModel):
         return [msg for msg in self.messages if msg.role == role]
 
 
-@dataclass
 class AudioChunk(BaseModel):
     """Audio data chunk model"""
-    data: bytes
-    sample_rate: int = 16000
-    channels: int = 1
-    format: str = "wav"
-    timestamp: Optional[datetime] = None
-
-    def __post_init__(self):
-        if self.timestamp is None:
-            self.timestamp = datetime.now()
+    data: bytes = Field(..., description="Audio data bytes")
+    sample_rate: int = Field(default=16000, description="Audio sample rate")
+    channels: int = Field(default=1, description="Number of audio channels")
+    format: str = Field(default="wav", description="Audio format")
+    timestamp: Optional[datetime] = Field(default_factory=datetime.now, description="Audio timestamp")
 
 
-@dataclass
 class ProcessingResult(BaseModel):
     """Generic processing result model"""
-    success: bool
-    data: Any
-    error: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-    processing_time: Optional[float] = None
+    success: bool = Field(..., description="Processing success status")
+    data: Any = Field(..., description="Processing result data")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
+    processing_time: Optional[float] = Field(default=None, description="Processing time in seconds")
 
 
-@dataclass
 class ServiceStatus(BaseModel):
     """Service health status model"""
-    service_name: str
-    status: str  # "healthy", "degraded", "unhealthy"
-    version: Optional[str] = None
-    uptime: Optional[float] = None
-    last_check: Optional[datetime] = None
-    metrics: Optional[Dict[str, Any]] = None
+    service_name: str = Field(..., description="Name of the service")
+    status: str = Field(..., description="Service status: healthy, degraded, unhealthy")
+    version: Optional[str] = Field(default=None, description="Service version")
+    uptime: Optional[float] = Field(default=None, description="Service uptime in seconds")
+    last_check: Optional[datetime] = Field(default_factory=datetime.now, description="Last health check timestamp")
+    metrics: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Service metrics")
 
 
-@dataclass
 class LLMRequest(BaseModel):
     """LLM service request model"""
-    prompt: str
-    model: Optional[str] = None
-    system_prompt: Optional[str] = None
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
-    context: Optional[List[Message]] = None
-    stream: bool = False
+    prompt: str = Field(..., description="Text prompt for generation")
+    model: Optional[str] = Field(default=None, description="Model to use")
+    system_prompt: Optional[str] = Field(default=None, description="System prompt")
+    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0, description="Sampling temperature")
+    max_tokens: Optional[int] = Field(default=None, gt=0, le=8192, description="Maximum tokens to generate")
+    context: Optional[List[Message]] = Field(default=None, description="Conversation context")
+    stream: bool = Field(default=False, description="Enable streaming response")
 
 
-@dataclass
 class LLMResponse(BaseModel):
     """LLM service response model"""
-    text: str
-    model: Optional[str] = None
-    usage: Optional[Dict[str, int]] = None
-    finish_reason: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    text: str = Field(..., description="Generated text")
+    model: Optional[str] = Field(default=None, description="Model used")
+    usage: Optional[Dict[str, int]] = Field(default=None, description="Token usage statistics")
+    finish_reason: Optional[str] = Field(default=None, description="Reason for completion")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
 
 
-@dataclass
 class TTSRequest(BaseModel):
     """TTS service request model"""
-    text: str
-    voice: Optional[str] = None
-    speed: Optional[float] = None
-    language: Optional[str] = None
-    format: Optional[str] = None
-    sample_rate: Optional[int] = None
+    text: str = Field(..., description="Text to synthesize")
+    voice: Optional[str] = Field(default=None, description="Voice to use")
+    speed: Optional[float] = Field(default=None, ge=0.1, le=3.0, description="Speech speed")
+    language: Optional[str] = Field(default=None, description="Language code")
+    format: Optional[str] = Field(default=None, description="Output format")
+    sample_rate: Optional[int] = Field(default=None, gt=0, description="Sample rate")
 
 
-@dataclass
 class TTSResponse(BaseModel):
     """TTS service response model"""
-    audio_data: bytes
-    format: str = "wav"
-    sample_rate: int = 22050
-    duration: Optional[float] = None
-    metadata: Optional[Dict[str, Any]] = None
+    audio_data: bytes = Field(..., description="Generated audio data")
+    format: str = Field(default="wav", description="Audio format")
+    sample_rate: int = Field(default=22050, description="Audio sample rate")
+    duration: Optional[float] = Field(default=None, description="Audio duration in seconds")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
 
 
-@dataclass
 class STTRequest(BaseModel):
     """STT service request model"""
-    audio_data: bytes
-    language: Optional[str] = None
-    model: Optional[str] = None
-    prompt: Optional[str] = None
-    temperature: Optional[float] = None
+    audio_data: bytes = Field(..., description="Audio data to transcribe")
+    language: Optional[str] = Field(default=None, description="Language code")
+    model: Optional[str] = Field(default=None, description="Model to use")
+    prompt: Optional[str] = Field(default=None, description="Transcription prompt")
+    temperature: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Sampling temperature")
 
 
-@dataclass
 class STTResponse(BaseModel):
     """STT service response model"""
-    text: str
-    language: Optional[str] = None
-    confidence: Optional[float] = None
-    duration: Optional[float] = None
-    segments: Optional[List[Dict[str, Any]]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    text: str = Field(..., description="Transcribed text")
+    language: Optional[str] = Field(default=None, description="Detected language")
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Transcription confidence")
+    duration: Optional[float] = Field(default=None, description="Audio duration in seconds")
+    segments: Optional[List[Dict[str, Any]]] = Field(default=None, description="Detailed transcription segments")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
 
 
-@dataclass
 class VADRequest(BaseModel):
     """Voice Activity Detection request model"""
-    audio_data: bytes
-    threshold: Optional[float] = None
-    sample_rate: Optional[int] = None
+    audio_data: bytes = Field(..., description="Audio data for VAD")
+    threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Detection threshold")
+    sample_rate: Optional[int] = Field(default=None, gt=0, description="Audio sample rate")
 
 
-@dataclass
 class VADResponse(BaseModel):
     """Voice Activity Detection response model"""
-    speech_detected: bool
-    confidence: Optional[float] = None
-    speech_segments: Optional[List[Dict[str, Any]]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    speech_detected: bool = Field(..., description="Whether speech was detected")
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Detection confidence")
+    speech_segments: Optional[List[Dict[str, Any]]] = Field(default=None, description="Speech segments")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
 
 
-@dataclass
 class Intent(BaseModel):
     """Intent recognition model"""
-    intent: str
-    confidence: Optional[float] = None
-    parameters: Optional[Dict[str, Any]] = None
-    entities: Optional[List[Dict[str, Any]]] = None
+    intent: str = Field(..., description="Detected intent")
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Intent confidence")
+    parameters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Intent parameters")
+    entities: Optional[List[Dict[str, Any]]] = Field(default=None, description="Named entities")
 
 
-@dataclass
 class Command(BaseModel):
     """Command execution model"""
-    action: str
-    parameters: Optional[Dict[str, Any]] = None
-    context: Optional[Dict[str, Any]] = None
-    priority: int = 1
+    action: str = Field(..., description="Action to execute")
+    parameters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Command parameters")
+    context: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Command context")
+    priority: int = Field(default=1, ge=1, le=10, description="Command priority")
 
 
-@dataclass
 class Response(BaseModel):
     """Assistant response model"""
-    text: str
-    audio_data: Optional[bytes] = None
-    actions: Optional[List[Command]] = None
-    metadata: Optional[Dict[str, Any]] = None
-    confidence: Optional[float] = None
+    text: str = Field(..., description="Response text")
+    audio_data: Optional[bytes] = Field(default=None, description="Response audio data")
+    actions: Optional[List[Command]] = Field(default=None, description="Actions to execute")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Response confidence")

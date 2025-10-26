@@ -17,7 +17,8 @@ services:
     environment:
       - MORGAN_CONFIG_DIR=/app/config
       - PYTHONPATH=/app
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_BASE_URL=https://gpt.lazarev.cloud/ollama/v1
+      - MORGAN_LLM_API_KEY=${MORGAN_LLM_API_KEY:-}
     networks:
       - morgan-net
     healthcheck:
@@ -176,6 +177,9 @@ services:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - QDRANT_GRPC_PORT=6334
+      - MORGAN_EXTERNAL_LLM_API_BASE=https://gpt.lazarev.cloud/ollama/v1
+      - MORGAN_EXTERNAL_LLM_API_KEY=${MORGAN_LLM_API_KEY:-}
+      - MORGAN_EMBEDDING_MODEL=qwen3-embedding:latest
     depends_on:
       postgres:
         condition: service_healthy

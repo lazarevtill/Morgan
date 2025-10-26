@@ -1,12 +1,13 @@
-# LLM Service Configuration (OpenAI-compatible Ollama client)
+# LLM Service Configuration (OpenAI-compatible API client)
 
 # Network configuration
 host: "0.0.0.0"
 port: 8001
 
-# Ollama configuration (external service)
-ollama_url: "http://192.168.101.3:11434"
-model: "llama3.2:latest"
+# OpenAI-compatible API configuration (external service)
+openai_api_base: "https://gpt.lazarev.cloud/ollama/v1"
+api_key: ""  # Set via MORGAN_LLM_API_KEY environment variable
+model: "llama3.2:latest"  # Default model, can be overridden by external API
 
 # Generation parameters
 max_tokens: 2048
@@ -18,11 +19,13 @@ context_window: 4096
 max_context_messages: 10
 
 # System prompt
-system_prompt: "You are Morgan, a helpful and friendly AI assistant. You assist with smart home controls, answer questions, and perform various tasks."
+system_prompt: "You are Morgan, a helpful and friendly AI assistant. You assist with answering questions, and perform various tasks."
 
 # Logging
 log_level: "INFO"
 
-# OpenAI compatibility settings
-openai_api_base: "http://192.168.101.3:11434/v1"
-openai_api_key: "ollama"
+# Embedding configuration
+embedding_model: "qwen3-embedding:latest"
+
+# Feature flags
+enable_streaming: true

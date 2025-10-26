@@ -10,10 +10,15 @@ use_https: false
 ssl_cert_path: "/app/cert.pem"
 ssl_key_path: "/app/cert.pfx"
 
-# Service URLs
+# Service URLs (using OpenAI-compatible API for external services)
 llm_service_url: "http://llm-service:8001"
 tts_service_url: "http://tts-service:8002"
 stt_service_url: "http://stt-service:8003"
+
+# External API configuration
+external_llm_api_base: "https://gpt.lazarev.cloud/ollama/v1"
+external_llm_api_key: ""  # Set via MORGAN_EXTERNAL_LLM_API_KEY environment variable
+embedding_model: "qwen3-embedding:latest"
 
 # Conversation settings
 conversation_timeout: 1800  # 30 minutes
