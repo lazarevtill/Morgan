@@ -210,7 +210,7 @@ show_registry_info() {
     echo -e "${BLUE}Base Images Used:${NC}"
     echo -e "${YELLOW}  Python: $REGISTRY_PROXY/python:3.12-slim${NC}"
     echo -e "${YELLOW}  CUDA: $REGISTRY_PROXY/nvidia/cuda:13.0.1-devel-ubuntu22.04${NC}"
-    echo -e "${YELLOW}  UV: ghcr.io/astral-sh/uv:latest${NC}"
+    echo -e "${YELLOW}  UV: harbor.in.lazarev.cloud/gh-proxy/astral-sh/uv:latest${NC}"
     echo -e "${YELLOW}  Redis: $REGISTRY_PROXY/redis:7-alpine${NC}"
     echo -e "${YELLOW}  PostgreSQL: $REGISTRY_PROXY/postgres:17-alpine${NC}"
     echo ""
@@ -265,7 +265,7 @@ Image Naming Convention:
 Base Images:
     - Python services: harbor.in.lazarev.cloud/proxy/python:3.12-slim
     - CUDA services: harbor.in.lazarev.cloud/proxy/nvidia/cuda:13.0.1-runtime-ubuntu22.04
-    - UV: ghcr.io/astral-sh/uv:latest (public)
+    - UV: harbor.in.lazarev.cloud/gh-proxy/astral-sh/uv:latest (public)
 
 For troubleshooting, check:
     - Registry connectivity: docker login harbor.in.lazarev.cloud

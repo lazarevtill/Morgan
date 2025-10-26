@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 
 from shared.models.base import Command, ConversationContext
 from shared.utils.logging import setup_logging
+from handlers.remember_handler import RememberHandler
 
 
 class BaseHandler:
@@ -106,6 +107,13 @@ class HandlerRegistry:
             "system": SystemHandler(core_service),
             "general": GeneralHandler(core_service)
         }
+
+        # Initialize remember handler if memory manager is available
+        if hasattr(core_service, 'memory_manager') and core_service.memory_manager:
+            self.remember_handler = RememberHandler(core_service.memory_manager)
+            self.logger.info("Remember handler initialized")
+        else:
+            self.remember_handler = None
 
         self.logger.info(f"Handler registry initialized with {len(self.handlers)} handlers")
 

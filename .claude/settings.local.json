@@ -19,7 +19,8 @@
       "Bash(docker-compose ps:*)",
       "Bash(docker exec:*)",
       "Bash(curl:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(git mv:*)"
     ],
     "deny": [],
     "ask": []

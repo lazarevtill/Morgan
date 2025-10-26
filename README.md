@@ -1,53 +1,50 @@
 # Morgan AI Assistant - v0.2.0
 
-A modern, distributed AI assistant built with Ollama, OpenAI-compatible APIs, and optimized for CUDA 13 with NVIDIA container toolkit support. Uses Nexus proxy repositories for faster builds and development.
+A modern, distributed AI assistant built with Ollama, featuring persistent memory with PostgreSQL and Qdrant, MCP (Model Context Protocol) tools integration, and optimized for CUDA 13 with NVIDIA container toolkit support.
 
 ## 🏗️ Architecture Overview
 
 Morgan v0.2.0 features a completely redesigned microservices architecture optimized for performance and scalability:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Docker Host Environment                      │
-│                                                                 │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐  │
-│  │   Web UI    │    │             │    │ Home Assistant      │  │
-│  │   Clients   │◄──►│ Morgan Core │◄──►│ Integration Service │  │
-│  └─────────────┘    │             │    └─────────────────────┘  │
-│         │           └─────────────┘              │              │
-│         ▼                  │                     ▼              │
-│  ┌─────────────┐           │            ┌─────────────────────┐ │
-│  │ Audio Input │           │            │     External APIs   │ │
-│  │ Processing  │           │            │     (Weather, etc)  │ │
-│  └─────────────┘           │            └─────────────────────┘ │
-│                            │                                    │
-│  ┌─────────────┐ ┌─────────┴─────────┐ ┌─────────────┐          │
-│  │             │ │                   │ │             │          │
-│  │ LLM Service │ │   TTS Service     │ │ STT Service │          │
-│  │ (Ollama)    │ │    (Coqui TTS)    │ │ (Whisper)   │          │
-│  │             │ │                   │ │             │          │
-│  └─────────────┘ └───────────────────┘ └─────────────┘          │
-│                                                                 │
-│  ┌─────────────┐ ┌───────────────────┐ ┌─────────────────────┐  │
-│  │             │ │                   │ │                     │  │
-│  │ VAD Service │ │   Redis Cache     │ │   PostgreSQL DB     │  │
-│  │ (Silero)    │ │   (Optional)      │ │   (Optional)        │  │
-│  │             │ │                   │ │                     │  │
-│  └─────────────┘ └───────────────────┘ └─────────────────────┘  │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────────┐  │
-│  │                 External Ollama Service                     │  │
-│  │              (192.168.101.3:11434)                         │  │
-│  └─────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│                    Docker Host Environment                     │
+│                                                                │
+│  ┌─────────────┐    ┌──────────────────┐    ┌────────────────┐ │
+│  │   Web UI    │    │                  │    │ External APIs  │ │
+│  │   Voice UI  │◄──►│   Morgan Core    │◄──►│ MCP Tools      │ │
+│  │   Clients   │    │  (Orchestrator)  │    │ Integrations   │ │
+│  └─────────────┘    └──────────────────┘    └────────────────┘ │
+│                              │                                 │
+│         ┌────────────────────┼────────────────────┐            │
+│         ▼                    ▼                    ▼            │
+│  ┌─────────────┐    ┌──────────────┐    ┌──────────────┐       │
+│  │ LLM Service │    │ TTS Service  │    │ STT Service  │       │
+│  │  (Ollama)   │    │   (Kokoro)   │    │  (Whisper)   │       │
+│  │   (CPU/GPU) │    │  CUDA 13     │    │  CUDA 13     │       │
+│  └─────────────┘    └──────────────┘    └──────────────┘       │
+│                                                                │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
+│  │   PostgreSQL     │  │     Qdrant       │  │    Redis     │  │
+│  │ (Structured DB)  │  │  (Vector Store)  │  │  (Optional)  │  │
+│  │   Memories       │  │   Embeddings     │  │              │  │
+│  │   Tools Logs     │  │   Semantic       │  │              │  │
+│  └──────────────────┘  └──────────────────┘  └──────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │            External Ollama Service                       │  │
+│  │            (192.168.101.3:11434)                         │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ## ✨ Key Features
 
 ### 🚀 Modern Architecture
 - **Ollama Integration**: Uses Ollama with OpenAI-compatible API for LLM services
-- **Distributed Services**: Separate TTS, STT, and VAD services for optimal performance
-- **Silero VAD**: Advanced voice activity detection for improved audio processing
+- **Persistent Memory**: PostgreSQL for structured data + Qdrant for semantic search
+- **MCP Tools**: Model Context Protocol tools integration (calculator, datetime, remember, custom APIs)
+- **Distributed Services**: Separate TTS and STT services with integrated VAD for optimal performance
 - **CUDA 13 Optimization**: Optimized for latest NVIDIA GPUs with container toolkit
 - **Async/Await**: Full async support for high performance and concurrency
 
@@ -133,11 +130,10 @@ These tools will help identify and fix common issues like missing files, import 
 ```bash
 # Run services locally (requires virtual environment)
 source .venv/bin/activate
-python core/app.py                     # Core service
+python core/main.py                    # Core service
 python services/llm/main.py            # LLM service
 python services/tts/main.py            # TTS service
 python services/stt/main.py            # STT service
-python services/vad/main.py            # VAD service
 
 # Run tests
 pytest
@@ -210,16 +206,15 @@ curl http://localhost:8000/health  # Core
 curl http://localhost:8001/health  # LLM
 curl http://localhost:8002/health  # TTS
 curl http://localhost:8003/health  # STT
-curl http://localhost:8004/health  # VAD
 ```
 
 ### 5. Access the System
 - **API Documentation**: http://localhost:8000/docs
+- **Voice Interface**: http://localhost:8000/voice
 - **Core Service**: http://localhost:8000
 - **LLM Service**: http://localhost:8001
 - **TTS Service**: http://localhost:8002
 - **STT Service**: http://localhost:8003
-- **VAD Service**: http://localhost:8004
 
 ## 🔧 Configuration
 
@@ -231,10 +226,13 @@ port: 8000
 llm_service_url: "http://llm-service:8001"
 tts_service_url: "http://tts-service:8002"
 stt_service_url: "http://stt-service:8003"
-vad_service_url: "http://vad-service:8004"
 conversation_timeout: 1800
 max_history: 50
 log_level: "INFO"
+enable_memory: true
+enable_tools: true
+postgres_host: "postgres"
+qdrant_host: "qdrant"
 ```
 
 ### LLM Service Configuration
@@ -283,20 +281,14 @@ min_silence_duration: 0.5
 log_level: "INFO"
 ```
 
-### VAD Service Configuration
-```yaml
-# config/vad.yaml
-host: "0.0.0.0"
-port: 8004
-model: "silero_vad"
-threshold: 0.5
-min_speech_duration: 0.25
-max_speech_duration: 30.0
-window_size: 512
-sample_rate: 16000
-device: "cpu"
-log_level: "INFO"
-```
+### Memory & Tools Configuration
+Memory and tools are configured in core.yaml (shown above). Additional database settings:
+- `postgres_port`: 5432
+- `postgres_db`: "morgan"
+- `qdrant_port`: 6333
+- `embedding_dimension`: 384 (for semantic search)
+- `memory_search_limit`: 5 (memories per query)
+- `memory_min_importance`: 3 (importance filter)
 
 ## 📡 API Usage
 
@@ -375,29 +367,35 @@ curl -X POST http://localhost:8003/transcribe \
   }'
 ```
 
-### VAD Service Endpoints
+### Memory Commands
 
-#### Detect Speech
+#### Remember Command
 ```bash
-curl -X POST http://localhost:8004/detect \
+# Store information in memory
+curl -X POST http://localhost:8000/api/text \
   -H "Content-Type: application/json" \
   -d '{
-    "audio_data": "base64_encoded_audio_data",
-    "threshold": 0.5
+    "text": "Remember that I like coffee",
+    "user_id": "user123"
   }'
 ```
+
+Supported remember patterns:
+- "Remember that I like coffee"
+- "Remember: my birthday is June 15th"
+- "Please remember my favorite color is blue"
 
 ## 🐳 Docker Services
 
 ### Service Architecture
 - **External Ollama**: LLM backend service (running at 192.168.101.3:11434)
 - **LLM Service**: OpenAI-compatible API wrapper for external Ollama (CPU only)
-- **TTS Service**: Text-to-speech synthesis with Coqui TTS (GPU optimized)
-- **STT Service**: Speech-to-text with Faster Whisper + Silero VAD (GPU optimized)
-- **VAD Service**: Voice activity detection with Silero VAD (CPU optimized)
-- **Core Service**: Main orchestration and API service (CPU only)
+- **TTS Service**: Text-to-speech synthesis with Kokoro (GPU optimized, CUDA 13)
+- **STT Service**: Speech-to-text with Faster Whisper + integrated Silero VAD (GPU optimized, CUDA 13)
+- **Core Service**: Main orchestration, memory management, and API service (CPU only)
+- **PostgreSQL**: Structured memory storage and tools execution logging
+- **Qdrant**: Vector database for semantic memory search
 - **Redis**: Optional caching and message queuing
-- **PostgreSQL**: Optional persistent storage
 
 ### GPU Configuration
 All GPU-enabled services use NVIDIA container toolkit:
@@ -446,22 +444,32 @@ morgan/
 ├── core/                    # Core orchestration service
 │   ├── api/                # FastAPI server
 │   ├── conversation/       # Conversation management
-│   ├── handlers/          # Command handlers
+│   ├── handlers/          # Command handlers (including remember)
 │   ├── integrations/      # External integrations
+│   ├── memory/            # Memory manager (PostgreSQL + Qdrant)
 │   ├── services/          # Service orchestration
-│   └── utils/             # Utilities
+│   ├── tools/             # MCP tools manager
+│   └── static/            # Voice UI (voice_simple.html)
 ├── services/               # Microservices
-│   ├── llm/               # LLM service (Ollama)
+│   ├── llm/               # LLM service (Ollama wrapper)
+│   │   └── api/           # FastAPI endpoints
 │   ├── tts/               # TTS service (Kokoro)
-│   ├── stt/               # STT service (Whisper + VAD)
-│   └── vad/               # VAD service (Silero)
+│   │   └── api/           # FastAPI endpoints
+│   └── stt/               # STT service (Whisper + integrated VAD)
+│       └── api/           # FastAPI endpoints
 ├── shared/                # Shared components
 │   ├── config/            # Configuration management
 │   ├── models/            # Data models
-│   └── utils/             # Shared utilities
-├── config/                # Configuration files
-├── data/                  # Data and models
-└── logs/                  # Service logs
+│   └── utils/             # Shared utilities (HTTP client, logging, errors)
+├── database/              # Database initialization
+│   └── init/              # SQL schema files
+├── config/                # YAML configuration files
+├── data/                  # Data and models (gitignored)
+├── logs/                  # Service logs (gitignored)
+├── docs/                  # Documentation
+│   └── archive/           # Old documentation
+└── tests/                 # Test suite
+    └── manual/            # Manual test files
 ```
 
 ### Adding New Features
@@ -548,22 +556,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - **Documentation**: Check the `/docs` endpoints
 - **Issues**: Report bugs and request features
-- **Discussions**: Community discussions and support
-
-## 🔄 Migration from v0.1.0
-
-### Breaking Changes
-- Complete architecture redesign
-- New service endpoints and APIs
-- Configuration format changes
-- Docker compose structure updated
-
-### Migration Steps
-1. Backup existing data and configurations
-2. Update docker-compose.yml
-3. Update configuration files
-4. Pull new Docker images
-5. Start services in new architecture
 
 ---
 

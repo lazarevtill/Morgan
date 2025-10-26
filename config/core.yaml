@@ -22,6 +22,24 @@ max_history: 50
 # Logging
 log_level: "INFO"
 
+# Database configuration
+postgres_host: "postgres"
+postgres_port: 5432
+postgres_db: "morgan"
+postgres_user: "morgan"
+postgres_password: "morgan_secure_password"
+
+qdrant_host: "qdrant"
+qdrant_port: 6333
+qdrant_grpc_port: 6334
+
+# Memory configuration
+embedding_dimension: 384
+memory_search_limit: 5
+memory_min_importance: 3
+
 # Feature flags
 enable_prometheus: true
 enable_caching: true
+enable_memory: true
+enable_tools: true
