@@ -1,25 +1,4 @@
 services:
-  # Base images (build-only, not run as containers)
-  morgan-base:
-    build:
-      context: .
-      dockerfile: Dockerfile.base
-      target: runtime
-      tags:
-        - morgan-base:latest
-    profiles:
-      - build  # Only build when explicitly requested
-
-  morgan-cuda-base:
-    build:
-      context: .
-      dockerfile: Dockerfile.cuda-base
-      target: runtime
-      tags:
-        - morgan-cuda-base:latest
-    profiles:
-      - build  # Only build when explicitly requested
-
   # LLM Service with OpenAI compatibility (Client to external Ollama)
   llm-service:
     build:

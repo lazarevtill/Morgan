@@ -381,14 +381,16 @@ class APIServer:
                 })
 
                 if not stt_result.success:
-                    raise HTTPException(status_code=500, detail="Failed to start stream")
+                    raise HTTPException(status_code=500, detail=stt_result.error or "Failed to start stream")
 
-                stt_response = stt_result.data
-
-                session_id = stt_response.get("session_id")
+                session_id = stt_result.data.get("session_id")
 
                 # Generate device configuration
                 device_config = DeviceAudioCapture.get_recommended_settings(request.device_type)
+
+                # Get the host for WebSocket connection
+                # For external access, use the host that can access the exposed ports
+                host = os.getenv("MORGAN_HOST", "0.0.0.0")
 
                 return {
                     "session_id": session_id,
@@ -396,7 +398,7 @@ class APIServer:
                     "device_config": device_config,
                     "sample_rate": device_config["sample_rate"],
                     "chunk_size": device_config["chunk_size"],
-                    "websocket_url": f"ws://localhost:8003/ws/stream/{session_id}"
+                    "websocket_url": f"ws://{host}:8003/ws/stream/{session_id}"
                 }
 
             except Exception as e:
@@ -410,15 +412,18 @@ class APIServer:
             """Send audio chunk to streaming session"""
             try:
                 # Forward to STT service
-                stt_client = service_registry.get_service("stt")
+                stt_client = await service_registry.get_service("stt")
                 stt_response = await stt_client.post(f"/stream/{session_id}/chunk", json={
                     "audio_data": request.audio_data
                 })
 
-                if stt_response.get("status") == "error":
-                    raise HTTPException(status_code=500, detail=stt_response.get("message", "Chunk processing failed"))
+                if not stt_response.success:
+                    raise HTTPException(status_code=500, detail=stt_response.error or "Chunk processing failed")
 
-                return stt_response
+                if stt_response.data.get("status") == "error":
+                    raise HTTPException(status_code=500, detail=stt_response.data.get("message", "Chunk processing failed"))
+
+                return stt_response.data
 
             except Exception as e:
                 error_handler = ErrorHandler()
@@ -431,14 +436,17 @@ class APIServer:
             """End audio streaming session"""
             try:
                 # End STT streaming session
-                stt_client = service_registry.get_service("stt")
+                stt_client = await service_registry.get_service("stt")
                 stt_response = await stt_client.post(f"/stream/{session_id}/end")
 
-                if stt_response.get("status") == "error":
-                    raise HTTPException(status_code=500, detail=stt_response.get("message", "Failed to end stream"))
+                if not stt_response.success:
+                    raise HTTPException(status_code=500, detail=stt_response.error or "Failed to end stream")
+
+                if stt_response.data.get("status") == "error":
+                    raise HTTPException(status_code=500, detail=stt_response.data.get("message", "Failed to end stream"))
 
                 # Process the final transcription through the core orchestrator
-                transcription = stt_response.get("text", "")
+                transcription = stt_response.data.get("text", "")
                 if transcription:
                     # Create a text request from the transcription
                     text_request = TextRequest(text=transcription, user_id="streaming_user")
@@ -488,7 +496,7 @@ class APIServer:
                     raise HTTPException(status_code=400, detail=f"Invalid audio format: {validation.get('error')}")
 
                 # Get STT service client
-                stt_client = service_registry.get_service("stt")
+                stt_client = await service_registry.get_service("stt")
 
                 if real_time:
                     # Use real-time processing
@@ -502,7 +510,10 @@ class APIServer:
                         "language": language
                     })
 
-                transcription = stt_response.get("text", "")
+                if not stt_response.success:
+                    raise HTTPException(status_code=500, detail=stt_response.error or "Transcription failed")
+
+                transcription = stt_response.data.get("text", "")
 
                 # Process through core orchestrator
                 response = await self.core_service.process_text_request(
@@ -670,10 +681,10 @@ class APIServer:
             )
 
             # Check if we got a valid response with text
-            if stt_response and stt_response.get('text', '').strip():
-                current_text = stt_response['text'].strip()
-                confidence = stt_response.get('confidence', 0.0)
-                vad_result = stt_response.get('vad_result', 'unknown')
+            if stt_response and stt_response.data.get('text', '').strip():
+                current_text = stt_response.data['text'].strip()
+                confidence = stt_response.data.get('confidence', 0.0)
+                vad_result = stt_response.data.get('vad_result', 'unknown')
 
                 # Only process if we have meaningful text or if VAD detected speech
                 if confidence > 0.1 or vad_result == 'speech_detected':

@@ -169,6 +169,7 @@ class STTResponse(BaseModel):
     confidence: Optional[float] = None
     duration: Optional[float] = None
     segments: Optional[List[Dict[str, Any]]] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 @dataclass
