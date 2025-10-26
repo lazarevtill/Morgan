@@ -4,3 +4,4 @@ data/models/stt/whisper/.locks/*
 *.bin
 *.log
 data/models/stt/whisper/models--Systran--faster-whisper-large-v3/snapshots/*
+*.pyc

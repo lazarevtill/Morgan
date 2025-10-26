@@ -4,8 +4,10 @@ Audio processing utilities for Morgan AI Assistant
 import numpy as np
 import wave
 import io
-from typing import Tuple, Optional, Union
+import asyncio
 import logging
+from typing import Tuple, Optional, Union, AsyncGenerator, List, Dict, Any
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -157,3 +159,184 @@ def validate_audio_data(audio_bytes: bytes, max_size: int = 50 * 1024 * 1024) ->
         return False
 
     return True
+
+
+class AudioCapture:
+    """Audio capture utilities for device input"""
+
+    def __init__(self, sample_rate: int = 16000, chunk_size: int = 1024):
+        self.sample_rate = sample_rate
+        self.chunk_size = chunk_size
+        self.is_recording = False
+
+    def encode_audio_chunk(self, audio_data: bytes) -> str:
+        """Encode audio bytes to base64 string"""
+        return base64.b64encode(audio_data).decode('utf-8')
+
+    def decode_audio_chunk(self, encoded_data: str) -> bytes:
+        """Decode base64 string to audio bytes"""
+        return base64.b64decode(encoded_data)
+
+    def create_wav_header(self, data_size: int, sample_rate: int = 16000,
+                         channels: int = 1, bits_per_sample: int = 16) -> bytes:
+        """Create WAV file header"""
+        header = bytearray()
+
+        # RIFF chunk
+        header.extend(b'RIFF')
+        header.extend((data_size + 36).to_bytes(4, 'little'))  # File size - 8
+        header.extend(b'WAVE')
+
+        # Format chunk
+        header.extend(b'fmt ')
+        header.extend((16).to_bytes(4, 'little'))  # Chunk size
+        header.extend((1).to_bytes(2, 'little'))   # PCM format
+        header.extend((channels).to_bytes(2, 'little'))
+        header.extend((sample_rate).to_bytes(4, 'little'))
+        header.extend((sample_rate * channels * bits_per_sample // 8).to_bytes(4, 'little'))
+        header.extend((channels * bits_per_sample // 8).to_bytes(2, 'little'))
+        header.extend((bits_per_sample).to_bytes(2, 'little'))
+
+        # Data chunk
+        header.extend(b'data')
+        header.extend((data_size).to_bytes(4, 'little'))
+
+        return bytes(header)
+
+    def audio_bytes_to_chunks(self, audio_bytes: bytes, chunk_duration_ms: int = 100) -> List[bytes]:
+        """Split audio bytes into chunks for streaming"""
+        # Calculate chunk size in bytes (16-bit mono)
+        chunk_size_bytes = int(self.sample_rate * (chunk_duration_ms / 1000) * 2)
+
+        chunks = []
+        for i in range(0, len(audio_bytes), chunk_size_bytes):
+            chunk = audio_bytes[i:i + chunk_size_bytes]
+            if chunk:  # Only add non-empty chunks
+                chunks.append(chunk)
+
+        return chunks
+
+    async def stream_audio_chunks(self, audio_generator: AsyncGenerator[bytes, None],
+                                 chunk_duration_ms: int = 100) -> AsyncGenerator[Dict[str, Any], None]:
+        """Stream audio chunks with metadata"""
+        async for audio_bytes in audio_generator:
+            chunks = self.audio_bytes_to_chunks(audio_bytes, chunk_duration_ms)
+
+            for i, chunk in enumerate(chunks):
+                yield {
+                    "audio_data": self.encode_audio_chunk(chunk),
+                    "chunk_index": i,
+                    "timestamp": asyncio.get_event_loop().time(),
+                    "sample_rate": self.sample_rate,
+                    "format": "wav"
+                }
+
+    @staticmethod
+    def estimate_audio_duration(audio_bytes: bytes) -> float:
+        """Estimate duration of audio in seconds"""
+        try:
+            with wave.open(io.BytesIO(audio_bytes), 'rb') as wav_file:
+                frames = wav_file.getnframes()
+                rate = wav_file.getframerate()
+                return frames / rate
+        except Exception:
+            # Fallback estimation assuming 16kHz 16-bit mono
+            return len(audio_bytes) / (16000 * 2)
+
+    @staticmethod
+    def validate_audio_format(audio_bytes: bytes) -> Dict[str, Any]:
+        """Validate audio format and return metadata"""
+        try:
+            with wave.open(io.BytesIO(audio_bytes), 'rb') as wav_file:
+                return {
+                    "valid": True,
+                    "channels": wav_file.getnchannels(),
+                    "sample_rate": wav_file.getframerate(),
+                    "sample_width": wav_file.getsampwidth(),
+                    "frames": wav_file.getnframes(),
+                    "duration": wav_file.getnframes() / wav_file.getframerate()
+                }
+        except Exception as e:
+            return {
+                "valid": False,
+                "error": str(e)
+            }
+
+
+class DeviceAudioCapture:
+    """Device-specific audio capture utilities"""
+
+    @staticmethod
+    def get_supported_audio_formats() -> List[str]:
+        """Get list of supported audio formats"""
+        return [
+            "wav", "mp3", "ogg", "flac", "aac",
+            "webm", "m4a", "wma", "aiff"
+        ]
+
+    @staticmethod
+    def get_recommended_settings(device_type: str = "microphone") -> Dict[str, Any]:
+        """Get recommended audio settings for different device types"""
+        settings = {
+            "microphone": {
+                "sample_rate": 16000,
+                "channels": 1,
+                "chunk_size": 1024,
+                "format": "wav",
+                "echo_cancellation": True,
+                "noise_suppression": True
+            },
+            "line_in": {
+                "sample_rate": 44100,
+                "channels": 2,
+                "chunk_size": 2048,
+                "format": "wav"
+            },
+            "bluetooth": {
+                "sample_rate": 16000,
+                "channels": 1,
+                "chunk_size": 1024,
+                "format": "wav",
+                "codec": "SBC"
+            },
+            "webcam": {
+                "sample_rate": 48000,
+                "channels": 2,
+                "chunk_size": 2048,
+                "format": "wav"
+            }
+        }
+
+        return settings.get(device_type, settings["microphone"])
+
+    @staticmethod
+    def generate_device_config(device_info: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate configuration for a specific audio device"""
+        device_type = device_info.get("type", "microphone")
+        base_settings = DeviceAudioCapture.get_recommended_settings(device_type)
+
+        return {
+            **base_settings,
+            "device_id": device_info.get("id"),
+            "device_name": device_info.get("name"),
+            "device_type": device_type,
+            "is_default": device_info.get("is_default", False)
+        }
+
+    @staticmethod
+    def format_device_list(devices: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Format device list for API response"""
+        formatted_devices = []
+
+        for device in devices:
+            config = DeviceAudioCapture.generate_device_config(device)
+            formatted_devices.append({
+                "id": device.get("id"),
+                "name": device.get("name"),
+                "type": device.get("type", "microphone"),
+                "is_default": device.get("is_default", False),
+                "is_available": device.get("is_available", True),
+                "config": config
+            })
+
+        return formatted_devices
