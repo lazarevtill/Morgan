@@ -87,7 +87,7 @@ function Test-LLMService {
         # Test chat completions
         Write-Host "Testing chat completions..." -NoNewline
         $body = @{
-            model = "llama3.2:3b"
+            model = "llama3.2:latest"
             messages = @(
                 @{
                     role = "user"

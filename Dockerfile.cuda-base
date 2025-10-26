@@ -2,7 +2,7 @@
 # This base image contains common Python dependencies for GPU-enabled services
 
 # Stage 1: Base CUDA development environment
-FROM harbor.in.lazarev.cloud/proxy/nvidia/cuda:13.0.1-runtime-ubuntu22.04 AS cuda-base
+FROM harbor.in.lazarev.cloud/proxy/nvidia/cuda:13.0.1-devel-ubuntu22.04 AS cuda-base
 
 # Configure apt to use Nexus proxy repositories (Ubuntu 22.04 - Jammy)
 RUN echo 'deb https://nexus.in.lazarev.cloud/repository/ubuntu-group/ jammy main restricted universe multiverse' > /etc/apt/sources.list && \
@@ -14,7 +14,6 @@ RUN echo 'deb https://nexus.in.lazarev.cloud/repository/ubuntu-group/ jammy main
 RUN apt-get update && apt-get install -y \
     python3.11 \
     python3.11-dev \
-    python3.11-venv \
     python3-pip \
     git \
     curl \
@@ -28,11 +27,24 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     alsa-utils \
     libasound2 \
+    software-properties-common \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Python 3.11 as default
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Install cuDNN (required for PyTorch CUDA operations)
+# Using the CUDA 13 devel image which includes cuDNN
+RUN apt-get update && apt-get install -y \
+    libcudnn9-dev-cuda-13 \
+    libcudnn9-cuda-13 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Verify CUDA installation
+RUN nvidia-smi && \
+    python3 -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" || echo "PyTorch CUDA check failed, but continuing build"
 
 # Install uv (ultra-fast Python package manager)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -84,8 +96,15 @@ WORKDIR /app
 # Set environment variables for CUDA and audio
 ENV PYTHONPATH=/app
 ENV CUDA_VISIBLE_DEVICES=0
-ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
 
 # Audio environment variables
 ENV AUDIODEV=null
 ENV ESPEAK_DATA_PATH=/usr/share/espeak-ng-data
+
+# Export as reusable base image
+FROM runtime AS morgan-cuda-base
+
+# Health check for CUDA functionality
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python3 -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); exit(0 if torch.cuda.is_available() else 1)" || exit 1

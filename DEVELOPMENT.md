@@ -284,7 +284,7 @@ class ServiceOrchestrator:
     async def process_text(self, text: str, user_id: str) -> str:
         # Generate LLM response
         llm_response = await self.llm_client.post("/chat/completions", {
-            "model": "llama3.2:3b",
+            "model": "llama3.2:latest",
             "messages": [{"role": "user", "content": text}]
         })
 
@@ -318,7 +318,7 @@ async def test_llm_generation(llm_service):
     response = await llm_service.generate(request)
 
     assert response.text is not None
-    assert response.model == "llama3.2:3b"
+    assert response.model == "llama3.2:latest"
     assert response.usage is not None
 ```
 
@@ -340,7 +340,7 @@ async def test_end_to_end_conversation():
 
         # 2. Verify LLM service response
         async with session.post("http://localhost:8001/v1/chat/completions",
-                              json={"model": "llama3.2:3b", "messages": [{"role": "user", "content": "Hello"}]}) as response:
+                              json={"model": "llama3.2:latest", "messages": [{"role": "user", "content": "Hello"}]}) as response:
             assert response.status == 200
 ```
 
@@ -357,7 +357,7 @@ async def test_llm_response_time():
     # Make request to LLM service
     async with aiohttp.ClientSession() as session:
         async with session.post("http://localhost:8001/v1/chat/completions",
-                              json={"model": "llama3.2:3b", "messages": [{"role": "user", "content": "Test"}]}) as response:
+                              json={"model": "llama3.2:latest", "messages": [{"role": "user", "content": "Test"}]}) as response:
             await response.json()
 
     response_time = time.time() - start_time
@@ -596,7 +596,7 @@ user_id: user123
 # Chat completions
 POST /v1/chat/completions
 {
-  "model": "llama3.2:3b",
+  "model": "llama3.2:latest",
   "messages": [
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user", "content": "Hello!"}
@@ -607,7 +607,7 @@ POST /v1/chat/completions
 POST /v1/embeddings
 {
   "input": "Hello world",
-  "model": "llama3.2:3b"
+  "model": "llama3.2:latest"
 }
 ```
 

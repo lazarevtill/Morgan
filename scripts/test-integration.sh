@@ -72,7 +72,7 @@ test_llm_service() {
     local response=$(timeout "$TIMEOUT" curl -s -X POST "$BASE_URL:8001/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -d '{
-            "model": "llama3.2:3b",
+            "model": "llama3.2:latest",
             "messages": [
                 {"role": "user", "content": "Hello! Please respond with just \"Hello from Morgan!\""}
             ],

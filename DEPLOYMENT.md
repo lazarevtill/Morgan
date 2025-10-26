@@ -48,7 +48,7 @@ CUDA_VISIBLE_DEVICES=0
 
 **config/llm.yaml**:
 ```yaml
-model: "llama3.2:3b"  # Or your preferred model
+model: "llama3.2:latest"  # Or your preferred model
 ollama_url: "http://host.docker.internal:11434"
 max_tokens: 2048
 temperature: 0.7
@@ -174,7 +174,7 @@ curl -X POST http://localhost:8001/generate \
 curl -X POST http://localhost:8001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "llama3.2:3b",
+    "model": "llama3.2:latest",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 ```

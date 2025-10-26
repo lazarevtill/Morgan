@@ -224,9 +224,14 @@ class STTService:
     async def _transcribe_with_whisper(self, audio_array: np.ndarray, request: STTRequest) -> STTResponse:
         """Transcribe audio using Whisper"""
         try:
+            # Determine language (None means auto-detect)
+            language = request.language or self.stt_config.language
+            if language == "auto":
+                language = None  # Whisper uses None for auto-detection
+
             # Prepare transcription options
             trans_options = {
-                "language": request.language or self.stt_config.language,
+                "language": language,
                 "temperature": request.temperature or 0.0,
                 "initial_prompt": request.prompt,
                 "suppress_tokens": [-1],  # Suppress timestamps
@@ -240,11 +245,17 @@ class STTService:
                     **trans_options
                 )
 
+                # Convert segments generator to list
+                segments_list = list(segments)
+
                 # Extract text from segments
-                text = " ".join([segment.text.strip() for segment in segments])
+                text = " ".join([segment.text.strip() for segment in segments_list])
+
+                # Get detected language from info
+                detected_language = info.language if hasattr(info, 'language') else (language or "en")
 
                 # Calculate confidence (average of all segments)
-                confidence = sum(segment.avg_logprob for segment in segments) / len(segments) if segments else 0.0
+                confidence = sum(segment.avg_logprob for segment in segments_list) / len(segments_list) if segments_list else 0.0
 
                 # Extract detailed segments
                 detailed_segments = [{
@@ -252,7 +263,7 @@ class STTService:
                     "start": segment.start,
                     "end": segment.end,
                     "confidence": segment.avg_logprob
-                } for segment in segments]
+                } for segment in segments_list]
 
             else:
                 # OpenAI Whisper API
@@ -262,12 +273,13 @@ class STTService:
 
                 result = self.whisper_model.transcribe(audio_tensor, **trans_options)
                 text = result["text"].strip()
+                detected_language = result.get("language", language or "en")
                 confidence = 0.0  # OpenAI Whisper doesn't provide confidence scores
                 detailed_segments = result.get("segments", [])
 
             return STTResponse(
                 text=text,
-                language=request.language or self.stt_config.language,
+                language=detected_language,
                 confidence=confidence,
                 duration=len(audio_array) / self.stt_config.sample_rate,
                 segments=detailed_segments,

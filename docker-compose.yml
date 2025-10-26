@@ -48,7 +48,7 @@ services:
       - MORGAN_CONFIG_DIR=/app/config
       - CUDA_VISIBLE_DEVICES=0
       - PYTHONPATH=/app
-      - LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+      - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
     deploy:
       resources:
         reservations:
@@ -85,7 +85,7 @@ services:
       - MORGAN_CONFIG_DIR=/app/config
       - CUDA_VISIBLE_DEVICES=0
       - PYTHONPATH=/app
-      - LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+      - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
       - RUST_BACKTRACE=1
     deploy:
       resources:

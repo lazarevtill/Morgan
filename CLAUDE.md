@@ -286,7 +286,7 @@ def _register_services(self):
 
 **Configuration** ([config/llm.yaml](config/llm.yaml)):
 ```yaml
-model: "llama3.2:3b"
+model: "llama3.2:latest"
 ollama_url: "http://192.168.101.3:11434"
 max_tokens: 2048
 temperature: 0.7
@@ -533,7 +533,7 @@ postgres_url: "postgresql://morgan:morgan_password@postgres:5432/morgan"
 #### llm.yaml
 
 ```yaml
-model: "llama3.2:3b"
+model: "llama3.2:latest"
 ollama_url: "http://192.168.101.3:11434"
 max_tokens: 2048
 temperature: 0.7
@@ -636,7 +636,7 @@ All external requests go through the Core Service (Port 8000).
     "metadata": {
         "conversation_id": "conv_abc123",
         "processing_time": 0.5,
-        "llm_model": "llama3.2:3b"
+        "llm_model": "llama3.2:latest"
     }
 }
 ```
