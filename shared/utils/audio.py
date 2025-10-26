@@ -18,25 +18,93 @@ class AudioUtils:
     @staticmethod
     def bytes_to_numpy(audio_bytes: bytes, sample_rate: int = 16000,
                       channels: int = 1) -> np.ndarray:
-        """Convert audio bytes to numpy array"""
+        """Convert audio bytes to numpy array - supports WAV, WebM, MP3, OGG, FLAC"""
+        import tempfile
+        import os
+
         try:
-            # Try to read as WAV first
-            with wave.open(io.BytesIO(audio_bytes), 'rb') as wav_file:
-                frames = wav_file.readframes(wav_file.getnframes())
-                audio_data = np.frombuffer(frames, dtype=np.int16)
+            # Try WAV first (fastest, no conversion needed)
+            if len(audio_bytes) >= 12 and audio_bytes[:4] == b'RIFF' and audio_bytes[8:12] == b'WAVE':
+                try:
+                    with wave.open(io.BytesIO(audio_bytes), 'rb') as wav_file:
+                        frames = wav_file.readframes(wav_file.getnframes())
+                        audio_data = np.frombuffer(frames, dtype=np.int16)
 
-                # Convert to float32 and normalize
-                audio_float = audio_data.astype(np.float32) / 32768.0
+                        # Convert to float32 and normalize
+                        audio_float = audio_data.astype(np.float32) / 32768.0
 
-                # Convert to mono if stereo
-                if wav_file.getnchannels() == 2:
-                    audio_float = audio_float.reshape((-1, 2)).mean(axis=1)
+                        # Convert to mono if stereo
+                        if wav_file.getnchannels() == 2:
+                            audio_float = audio_float.reshape((-1, 2)).mean(axis=1)
 
-                # Resample if necessary
-                if wav_file.getframerate() != sample_rate:
-                    audio_float = AudioUtils._resample(audio_float, wav_file.getframerate(), sample_rate)
+                        # Resample if necessary
+                        if wav_file.getframerate() != sample_rate:
+                            audio_float = AudioUtils._resample(audio_float, wav_file.getframerate(), sample_rate)
 
-                return audio_float
+                        return audio_float
+                except Exception as wav_error:
+                    logger.warning(f"WAV parsing failed, trying other formats: {wav_error}")
+
+            # For other formats, use soundfile + ffmpeg conversion
+            try:
+                import soundfile as sf
+                import subprocess
+
+                # Create temp file for input
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.input') as tmp_in:
+                    tmp_in.write(audio_bytes)
+                    tmp_in_path = tmp_in.name
+
+                # Create temp file for output WAV
+                tmp_out_path = tempfile.mktemp(suffix='.wav')
+
+                try:
+                    # Use ffmpeg to convert to WAV
+                    cmd = [
+                        'ffmpeg', '-i', tmp_in_path,
+                        '-ar', str(sample_rate),
+                        '-ac', '1',  # mono
+                        '-f', 'wav',
+                        '-y',  # overwrite
+                        tmp_out_path
+                    ]
+
+                    result = subprocess.run(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        timeout=30
+                    )
+
+                    if result.returncode != 0:
+                        raise ValueError(f"ffmpeg conversion failed: {result.stderr.decode()[:200]}")
+
+                    # Read converted WAV with soundfile
+                    audio_data, sr = sf.read(tmp_out_path, dtype='float32')
+
+                    # Ensure mono
+                    if len(audio_data.shape) > 1:
+                        audio_data = audio_data.mean(axis=1)
+
+                    # Resample if needed
+                    if sr != sample_rate:
+                        audio_data = AudioUtils._resample(audio_data, sr, sample_rate)
+
+                    return audio_data
+
+                finally:
+                    # Clean up temp files
+                    for path in [tmp_in_path, tmp_out_path]:
+                        if os.path.exists(path):
+                            try:
+                                os.unlink(path)
+                            except:
+                                pass
+
+            except ImportError as ie:
+                raise ValueError(f"soundfile is required: {ie}")
+            except Exception as conv_error:
+                raise ValueError(f"Audio conversion failed: {conv_error}")
 
         except Exception as e:
             logger.error(f"Failed to convert audio bytes to numpy: {e}")
@@ -140,25 +208,44 @@ class AudioUtils:
 
         return features
 
+    @staticmethod
+    def validate_audio_data(audio_bytes: bytes, max_size: int = 50 * 1024 * 1024) -> bool:
+        """Validate audio data - accepts WAV, WebM, and other formats"""
+        if not audio_bytes:
+            return False
 
-def validate_audio_data(audio_bytes: bytes, max_size: int = 50 * 1024 * 1024) -> bool:
-    """Validate audio data"""
-    if not audio_bytes:
-        return False
+        if len(audio_bytes) > max_size:
+            logger.warning(f"Audio data too large: {len(audio_bytes)} bytes")
+            return False
 
-    if len(audio_bytes) > max_size:
-        logger.warning(f"Audio data too large: {len(audio_bytes)} bytes")
-        return False
+        # Minimum size check (at least some header data)
+        if len(audio_bytes) < 12:
+            return False
 
-    # Basic WAV header validation
-    if len(audio_bytes) < 44:  # Minimum WAV header size
-        return False
+        # Check for common audio formats
+        # WAV: RIFF....WAVE
+        if len(audio_bytes) >= 12 and audio_bytes[:4] == b'RIFF' and audio_bytes[8:12] == b'WAVE':
+            return True
 
-    # Check for WAV signature
-    if audio_bytes[:4] != b'RIFF' or audio_bytes[8:12] != b'WAVE':
-        return False
+        # WebM: starts with 0x1A 0x45 0xDF 0xA3
+        if len(audio_bytes) >= 4 and audio_bytes[:4] == b'\x1a\x45\xdf\xa3':
+            return True
 
-    return True
+        # MP3: starts with ID3 or 0xFF 0xFB
+        if len(audio_bytes) >= 3 and (audio_bytes[:3] == b'ID3' or (audio_bytes[0] == 0xFF and audio_bytes[1] & 0xE0 == 0xE0)):
+            return True
+
+        # OGG: starts with OggS
+        if len(audio_bytes) >= 4 and audio_bytes[:4] == b'OggS':
+            return True
+
+        # FLAC: starts with fLaC
+        if len(audio_bytes) >= 4 and audio_bytes[:4] == b'fLaC':
+            return True
+
+        # If we can't identify the format, still allow it (might be raw PCM or other format)
+        # The actual processing will validate it properly
+        return True
 
 
 class AudioCapture:

@@ -15,7 +15,11 @@
       "Bash(timeout 600 tail:*)",
       "Bash(pkill:*)",
       "Bash(tee:*)",
-      "Bash(docker-compose build:*)"
+      "Bash(docker-compose build:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker exec:*)",
+      "Bash(curl:*)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []

@@ -250,34 +250,50 @@ class APIServer:
 
     async def _transcribe_audio(self, audio_data: bytes, filename: str, content_type: str) -> str:
         """Transcribe audio using STT service"""
+        import aiohttp
+
         try:
-            # Get STT service client (await the async method!)
+            # Get STT service client
             stt_client = await service_registry.get_service("stt")
 
+            self.logger.info(f"Sending {len(audio_data)} bytes to STT service")
+
             # Create multipart form data
-            from aiohttp import FormData
-            form_data = FormData()
+            form_data = aiohttp.FormData()
             form_data.add_field('file',
                                audio_data,
                                filename=filename or 'audio.webm',
                                content_type=content_type or 'audio/webm')
 
-            # Send to STT service
+            # Send to STT service with timeout
+            timeout = aiohttp.ClientTimeout(total=120)  # 2 minutes
+
             async with stt_client.session.post(
                 f"{stt_client.base_url}/transcribe/file",
-                data=form_data
+                data=form_data,
+                timeout=timeout
             ) as response:
+                self.logger.info(f"STT response status: {response.status}")
+
                 if response.status != 200:
                     error_text = await response.text()
-                    self.logger.error(f"STT service error: {error_text}")
-                    raise HTTPException(status_code=500, detail=f"STT service error: {error_text}")
+                    self.logger.error(f"STT service error ({response.status}): {error_text}")
+                    raise HTTPException(status_code=500, detail=f"STT error: {error_text}")
 
                 result = await response.json()
-                return result.get("text", "")
+                transcription = result.get("text", "")
+                self.logger.info(f"Got transcription: {transcription[:100]}")
+                return transcription
 
+        except aiohttp.ClientError as e:
+            self.logger.error(f"STT connection error: {e}")
+            raise HTTPException(status_code=503, detail=f"STT service unavailable: {e}")
+        except asyncio.TimeoutError:
+            self.logger.error("STT request timeout")
+            raise HTTPException(status_code=504, detail="STT service timeout")
         except Exception as e:
-            self.logger.error(f"Transcription error: {e}")
-            raise
+            self.logger.error(f"Transcription error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
 
     async def _generate_speech(self, text: str, voice: str = "af_heart") -> Optional[str]:
         """Generate speech using TTS service"""

@@ -242,7 +242,7 @@ log_level: "INFO"
 # config/llm.yaml
 host: "0.0.0.0"
 port: 8001
-model: "llama3.2:3b"
+model: "llama3.2:latest"
 ollama_url: "http://ollama:11434"
 max_tokens: 2048
 temperature: 0.7
@@ -332,7 +332,7 @@ curl http://localhost:8000/health
 curl -X POST http://localhost:8001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "llama3.2:3b",
+    "model": "llama3.2:latest",
     "messages": [
       {"role": "system", "content": "You are a helpful assistant."},
       {"role": "user", "content": "Hello!"}
@@ -346,7 +346,7 @@ curl -X POST http://localhost:8001/v1/embeddings \
   -H "Content-Type: application/json" \
   -d '{
     "input": "Hello world",
-    "model": "llama3.2:3b"
+    "model": "llama3.2:latest"
   }'
 ```
 
@@ -431,7 +431,7 @@ All services use structured JSON logging:
   "message": "Request processed",
   "request_id": "req_12345",
   "processing_time": 0.123,
-  "model": "llama3.2:3b"
+  "model": "llama3.2:latest"
 }
 ```
 

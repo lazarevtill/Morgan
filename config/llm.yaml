@@ -6,7 +6,7 @@ port: 8001
 
 # Ollama configuration (external service)
 ollama_url: "http://192.168.101.3:11434"
-model: "llama3.2:3b"
+model: "llama3.2:latest"
 
 # Generation parameters
 max_tokens: 2048

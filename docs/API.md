@@ -71,7 +71,7 @@ Content-Type: application/json
   "metadata": {
     "processing_time": 1.23,
     "services_used": ["llm", "tts"],
-    "model": "llama3.2:3b"
+    "model": "llama3.2:latest"
   }
 }
 ```
@@ -151,7 +151,7 @@ Authorization: Bearer ollama
   "object": "list",
   "data": [
     {
-      "id": "llama3.2:3b",
+      "id": "llama3.2:latest",
       "object": "model",
       "created": 1705312800,
       "owned_by": "ollama"
@@ -173,7 +173,7 @@ Content-Type: application/json
 Authorization: Bearer ollama
 
 {
-  "model": "llama3.2:3b",
+  "model": "llama3.2:latest",
   "messages": [
     {
       "role": "system",
@@ -196,7 +196,7 @@ Authorization: Bearer ollama
   "id": "chatcmpl-12345",
   "object": "chat.completion",
   "created": 1705312800,
-  "model": "llama3.2:3b",
+  "model": "llama3.2:latest",
   "choices": [
     {
       "index": 0,
@@ -221,7 +221,7 @@ POST /v1/chat/completions
 Content-Type: application/json
 
 {
-  "model": "llama3.2:3b",
+  "model": "llama3.2:latest",
   "messages": [{"role": "user", "content": "Tell me a story"}],
   "stream": true
 }
@@ -229,11 +229,11 @@ Content-Type: application/json
 
 **Streaming Response:**
 ```json
-data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1705312800,"model":"llama3.2:3b","choices":[{"index":0,"delta":{"role":"assistant","content":"Once"},"finish_reason":null}]}
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1705312800,"model":"llama3.2:latest","choices":[{"index":0,"delta":{"role":"assistant","content":"Once"},"finish_reason":null}]}
 
-data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1705312800,"model":"llama3.2:3b","choices":[{"index":0,"delta":{"content":" upon"},"finish_reason":null}]}
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1705312800,"model":"llama3.2:latest","choices":[{"index":0,"delta":{"content":" upon"},"finish_reason":null}]}
 
-data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1705312800,"model":"llama3.2:3b","choices":[{"index":0,"delta":{"content":" a time..."},"finish_reason":"stop"}]}
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1705312800,"model":"llama3.2:latest","choices":[{"index":0,"delta":{"content":" a time..."},"finish_reason":"stop"}]}
 ```
 
 ### Text Embeddings
@@ -243,7 +243,7 @@ Content-Type: application/json
 
 {
   "input": "Hello world",
-  "model": "llama3.2:3b"
+  "model": "llama3.2:latest"
 }
 ```
 
@@ -258,7 +258,7 @@ Content-Type: application/json
       "index": 0
     }
   ],
-  "model": "llama3.2:3b",
+  "model": "llama3.2:latest",
   "usage": {
     "prompt_tokens": 2,
     "total_tokens": 2
@@ -527,7 +527,7 @@ data: {"type": "speech_start", "timestamp": 5.1, "confidence": 0.85}
   "details": {
     "service": "llm_service",
     "timeout": 30,
-    "model": "llama3.2:3b"
+    "model": "llama3.2:latest"
   },
   "request_id": "req_12345"
 }
@@ -698,7 +698,7 @@ curl -X POST http://localhost:8000/api/text \
   "metadata": {
     "processing_time": 1.45,
     "services_used": ["llm", "tts"],
-    "model": "llama3.2:3b",
+    "model": "llama3.2:latest",
     "voice": "af_heart"
   }
 }
@@ -729,7 +729,7 @@ curl -X POST http://localhost:8000/api/audio \
 curl -X POST http://localhost:8001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "llama3.2:3b",
+    "model": "llama3.2:latest",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
@@ -739,7 +739,7 @@ curl -X POST http://localhost:8001/v1/chat/completions \
 curl -X POST http://localhost:8001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "llama3.2:3b",
+    "model": "llama3.2:latest",
     "messages": [
       {"role": "system", "content": "You are a helpful assistant."},
       {"role": "user", "content": "Explain quantum computing"}

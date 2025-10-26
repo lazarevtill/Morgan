@@ -21,7 +21,7 @@ class LLMConfig(BaseModel):
     """LLM service configuration"""
     host: str = "0.0.0.0"
     port: int = 8001
-    model: str = "llama3.2:3b"
+    model: str = "llama3.2:latest"
     ollama_url: str = "http://192.168.101.3:11434"
     max_tokens: int = 2048
     temperature: float = 0.7
