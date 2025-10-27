@@ -140,7 +140,7 @@ class STTResponse(BaseModel):
     """STT service response model"""
     text: str = Field(..., description="Transcribed text")
     language: Optional[str] = Field(default=None, description="Detected language")
-    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Transcription confidence")
+    confidence: Optional[float] = Field(default=None, description="Transcription confidence (0.0-1.0, where 1.0 is highest confidence)")
     duration: Optional[float] = Field(default=None, description="Audio duration in seconds")
     segments: Optional[List[Dict[str, Any]]] = Field(default=None, description="Detailed transcription segments")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")

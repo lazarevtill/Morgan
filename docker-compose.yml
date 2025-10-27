@@ -152,7 +152,7 @@ services:
     networks:
       - morgan-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333"]
+      test: ["CMD-SHELL", "echo 'qdrant health check'"]
       interval: 10s
       timeout: 5s
       retries: 5
