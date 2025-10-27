@@ -1,0 +1,8 @@
+# Common CUDA service requirements (TTS + STT)
+# CUDA 12.4 runtime - verified compatible with faster-whisper and csm-streaming
+# Using PyTorch cu124 builds (CUDA 12.4)
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.5.1
+torchaudio==2.5.1
+torchvision==0.20.1
+numpy==1.26.3

@@ -4,13 +4,14 @@
 
 Morgan AI Assistant provides a comprehensive REST API for AI-powered conversational interactions. The system is built with a microservices architecture, providing specialized endpoints for different AI capabilities.
 
+> **Note**: Voice Activity Detection (VAD) using Silero VAD is **integrated into the STT service** via faster-whisper, not a separate service.
+
 ## 🔗 Base URLs
 
 - **Core Service**: `http://localhost:8000` (Main orchestration)
 - **LLM Service**: `http://localhost:8001` (OpenAI-compatible)
 - **TTS Service**: `http://localhost:8002` (Text-to-speech)
-- **STT Service**: `http://localhost:8003` (Speech-to-text)
-- **VAD Service**: `http://localhost:8004` (Voice activity detection)
+- **STT Service**: `http://localhost:8003` (Speech-to-text with integrated VAD)
 
 ## 📚 API Documentation
 
@@ -19,7 +20,6 @@ All services provide interactive API documentation at:
 - LLM: `http://localhost:8001/docs`
 - TTS: `http://localhost:8002/docs`
 - STT: `http://localhost:8003/docs`
-- VAD: `http://localhost:8004/docs`
 
 ## 🏠 Core Service API
 
@@ -40,9 +40,9 @@ GET /health
   "dependencies": {
     "llm_service": "healthy",
     "tts_service": "healthy",
-    "stt_service": "healthy",
-    "vad_service": "healthy"
-  }
+    "stt_service": "healthy"
+  },
+  "note": "VAD (Silero) is integrated into STT service via faster-whisper"
 }
 ```
 
@@ -56,7 +56,7 @@ Content-Type: application/json
   "user_id": "user123",
   "metadata": {
     "generate_audio": true,
-    "voice": "af_heart",
+    "voice": "default",
     "language": "en"
   }
 }
@@ -277,7 +277,7 @@ Content-Type: application/json
 
 {
   "text": "Hello, this is a test message.",
-  "voice": "af_heart",
+  "voice": "default",
   "speed": 1.0,
   "language": "en",
   "format": "wav"
@@ -292,8 +292,8 @@ Content-Type: application/json
   "sample_rate": 22050,
   "duration": 2.5,
   "metadata": {
-    "model": "kokoro",
-    "voice": "af_heart",
+    "model": "csm-streaming",
+    "voice": "default",
     "processing_time": 0.8
   }
 }
@@ -309,13 +309,13 @@ GET /voices
 {
   "voices": [
     {
-      "name": "af_heart",
+      "name": "default",
       "language": "en",
       "gender": "female",
       "description": "American female voice"
     },
     {
-      "name": "am_michael",
+      "name": "default",
       "language": "en",
       "gender": "male",
       "description": "American male voice"
@@ -332,7 +332,7 @@ GET /voices/{voice_name}
 **Response:**
 ```json
 {
-  "name": "af_heart",
+  "name": "default",
   "language": "en",
   "gender": "female",
   "sample_rate": 22050,
@@ -441,70 +441,60 @@ GET /models
 }
 ```
 
-## 🎯 VAD Service API
+## 🎯 Voice Activity Detection (Integrated)
 
-The VAD service provides real-time voice activity detection for efficient audio processing.
+Voice Activity Detection (VAD) is **integrated directly into the STT service** using Silero VAD through faster-whisper. There is no separate VAD service.
 
-### Detect Speech
+### VAD Configuration in STT
+
+VAD parameters are configured in the STT transcription request:
+
 ```http
-POST /detect
+POST /transcribe
 Content-Type: application/json
 
 {
   "audio_data": "base64_encoded_audio_data",
-  "threshold": 0.5,
-  "sample_rate": 16000,
+  "language": "en",
+  "use_vad": true,
+  "vad_threshold": 0.5,
   "min_speech_duration": 0.25,
   "max_speech_duration": 30.0
 }
 ```
 
-**Response:**
+**Response includes VAD information:**
 ```json
 {
-  "speech_detected": true,
-  "confidence": 0.87,
-  "speech_segments": [
+  "text": "Turn on the living room lights",
+  "language": "en",
+  "confidence": 0.95,
+  "duration": 2.1,
+  "vad_segments": [
     {
       "start": 0.5,
       "end": 2.1,
       "duration": 1.6,
-      "confidence": 0.95
-    },
-    {
-      "start": 3.2,
-      "end": 4.8,
-      "duration": 1.6,
-      "confidence": 0.89
+      "speech_detected": true
     }
   ],
-  "metadata": {
-    "model": "silero_vad",
-    "processing_time": 0.05,
-    "total_audio_duration": 5.0
-  }
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 0.8,
+      "text": "Turn on",
+      "confidence": 0.98
+    }
+  ]
 }
 ```
 
-### Continuous Monitoring
-```http
-POST /monitor
-Content-Type: application/json
+### VAD Benefits
 
-{
-  "audio_stream": "base64_encoded_continuous_audio",
-  "threshold": 0.5,
-  "chunk_size": 1024,
-  "overlap": 0.5
-}
-```
-
-**Response (Server-Sent Events):**
-```json
-data: {"type": "speech_start", "timestamp": 1.2, "confidence": 0.9}
-data: {"type": "speech_end", "timestamp": 3.8, "duration": 2.6}
-data: {"type": "speech_start", "timestamp": 5.1, "confidence": 0.85}
-```
+- **Automatic noise filtering**: Silero VAD filters out non-speech audio
+- **Improved accuracy**: Focuses transcription on actual speech segments
+- **Reduced latency**: Skips silent portions
+- **Energy efficient**: Processes only relevant audio
 
 ## 🔧 Error Handling
 
@@ -684,7 +674,7 @@ curl -X POST http://localhost:8000/api/text \
     "user_id": "user123",
     "metadata": {
       "generate_audio": true,
-      "voice": "af_heart"
+      "voice": "default"
     }
   }'
 ```
@@ -699,7 +689,7 @@ curl -X POST http://localhost:8000/api/text \
     "processing_time": 1.45,
     "services_used": ["llm", "tts"],
     "model": "llama3.2:latest",
-    "voice": "af_heart"
+    "voice": "default"
   }
 }
 ```
@@ -758,7 +748,7 @@ curl -X POST http://localhost:8002/generate \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Hello, this is Morgan AI Assistant.",
-    "voice": "af_heart"
+    "voice": "default"
   }'
 ```
 
@@ -768,7 +758,7 @@ curl -X POST http://localhost:8002/generate \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Welcome to your smart home!",
-    "voice": "am_michael",
+    "voice": "default",
     "speed": 1.2,
     "language": "en",
     "format": "mp3",

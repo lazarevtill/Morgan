@@ -1,0 +1,13 @@
+# TTS service requirements
+-r requirements-cuda.txt
+# Pinned versions for fast resolution
+# PyTorch versions inherited from requirements-cuda.txt (2.5.1+cu124)
+# Using csm-streaming for real-time TTS (aligned with CUDA 12.4 / PyTorch 2.5.1)
+csm-streaming==0.1.0
+soundfile==0.12.1
+librosa==0.10.1
+pydub==0.25.1
+# Fallback TTS engines (optional)
+# TTS==0.22.0
+# pyttsx3==2.90
+

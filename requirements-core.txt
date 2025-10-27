@@ -1,0 +1,10 @@
+# Core service requirements
+-r requirements-base.txt
+websockets==12.0
+numpy==1.26.3
+asyncpg==0.29.0
+qdrant-client==1.7.3
+pytz==2024.1
+# sentence-transformers pulls in PyTorch - pinned for speed
+sentence-transformers==2.3.1
+

@@ -291,7 +291,7 @@ class ServiceOrchestrator:
         # Generate speech if requested
         audio_data = await self.tts_client.post("/generate", {
             "text": llm_response["choices"][0]["message"]["content"],
-            "voice": "af_heart"
+            "voice": "default"
         })
 
         return audio_data

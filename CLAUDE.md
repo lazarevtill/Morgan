@@ -133,8 +133,8 @@ Morgan/
 │   ├── tts/                       # TTS Service (Port 8002)
 │   │   ├── __init__.py
 │   │   ├── main.py               # Entry point
-│   │   ├── service.py            # TTSService (Kokoro/Coqui/pyttsx3)
-│   │   ├── Dockerfile            # CUDA 13 + PyTorch
+│   │   ├── service.py            # TTSService (csm-streaming/Coqui/pyttsx3)
+│   │   ├── Dockerfile            # CUDA 12.4 + PyTorch
 │   │   └── api/
 │   │       ├── __init__.py
 │   │       └── server.py
@@ -319,24 +319,27 @@ async def stream(self, messages: List[dict]) -> AsyncIterator[str]:
 **Main Class**: `TTSService`
 
 **Supported Models** (priority order):
-1. **Kokoro**: Fast neural TTS (preferred)
+1. **csm-streaming**: Facebook Research real-time TTS (preferred)
 2. **Coqui TTS**: Full TTS framework (Tacotron2, HiFiGAN)
 3. **pyttsx3**: System TTS fallback
 
-**Kokoro Voices**:
-- `af_heart`: Female voice (Heart)
-- `am_michael`: Male voice (Michael)
-- `bf_emma`: Female voice (Emma)
-- `bm_george`: Male voice (George)
+**csm-streaming Features**:
+- Real-time streaming synthesis
+- Low latency
+- GPU-accelerated (CUDA 12.4)
+- Aligned with PyTorch 2.5.1
+- 24kHz sample rate
+- Default voice optimized for clarity
 
 **Configuration** ([config/tts.yaml](config/tts.yaml)):
 ```yaml
-model: "kokoro"
+model: "csm"  # csm-streaming
 device: "cuda"
-voice: "af_heart"
+voice: "default"
 speed: 1.0
-sample_rate: 22050
+sample_rate: 24000  # csm-streaming default
 output_format: "wav"
+streaming_enabled: true
 ```
 
 **Key Methods**:
@@ -344,8 +347,11 @@ output_format: "wav"
 async def synthesize(self, text: str, voice: str = None) -> bytes:
     """Synthesize text to audio bytes"""
 
-async def _synthesize_kokoro(self, text: str, voice: str) -> bytes:
-    """Kokoro-specific synthesis"""
+async def _synthesize_csm(self, text: str, voice: str) -> bytes:
+    """csm-streaming synthesis"""
+
+async def synthesize_stream(self, text: str) -> AsyncGenerator[bytes, None]:
+    """Streaming synthesis for real-time"""
 
 async def _synthesize_coqui(self, text: str, voice: str) -> bytes:
     """Coqui TTS synthesis"""
@@ -544,12 +550,13 @@ system_prompt: "You are Morgan, a helpful AI assistant."
 #### tts.yaml
 
 ```yaml
-model: "kokoro"  # kokoro, tts-1, pyttsx3
+model: "csm"  # csm-streaming (real-time TTS)
 device: "cuda"
-voice: "af_heart"  # af_heart, am_michael, bf_emma, bm_george
+voice: "default"  # csm-streaming default voice
 speed: 1.0
-sample_rate: 22050
+sample_rate: 24000  # csm-streaming uses 24kHz
 output_format: "wav"
+streaming_enabled: true
 ```
 
 #### stt.yaml

@@ -319,7 +319,7 @@ docker-compose up -d
 Ensure you have sufficient disk space for model caching:
 
 - **Whisper large-v3**: ~3GB
-- **Kokoro TTS**: ~150MB
+- **csm-streaming TTS**: ~150MB
 - **Sentence Transformers**: ~500MB
 - **Total recommended**: 20GB free
 
