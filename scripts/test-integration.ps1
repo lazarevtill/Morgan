@@ -48,10 +48,10 @@ function Write-Info {
 function Test-ServiceHealth {
     param([string]$ServiceName, [int]$Port, [string]$Description)
 
-    Write-Host "Testing $Description ($ServiceName:$Port)..." -NoNewline
+    Write-Host "Testing $Description ($($ServiceName):$Port)..." -NoNewline
 
     try {
-        $response = Invoke-WebRequest -Uri "$BASE_URL`:$Port/health" -TimeoutSec $TIMEOUT -UseBasicParsing
+        $response = Invoke-WebRequest -Uri "$BASE_URL`:$($Port)/health" -TimeoutSec $TIMEOUT -UseBasicParsing
         if ($response.StatusCode -eq 200) {
             $healthData = $response.Content | ConvertFrom-Json
             Write-Success "OK - Status: $($healthData.status)"
@@ -74,7 +74,7 @@ function Test-LLMService {
     try {
         # Test models endpoint
         Write-Host "Testing models endpoint..." -NoNewline
-        $response = Invoke-WebRequest -Uri "$BASE_URL`:8001/v1/models" -TimeoutSec $TIMEOUT -UseBasicParsing
+        $response = Invoke-WebRequest -Uri "http://localhost:8001/v1/models" -TimeoutSec $TIMEOUT -UseBasicParsing
         if ($response.StatusCode -eq 200) {
             $models = $response.Content | ConvertFrom-Json
             Write-Success "OK - Found $($models.data.Count) models"
@@ -97,7 +97,7 @@ function Test-LLMService {
             max_tokens = 50
         } | ConvertTo-Json
 
-        $response = Invoke-WebRequest -Uri "$BASE_URL`:8001/v1/chat/completions" -Method POST -Body $body -ContentType "application/json" -TimeoutSec $TIMEOUT -UseBasicParsing
+        $response = Invoke-WebRequest -Uri "http://localhost:8001/v1/chat/completions" -Method POST -Body $body -ContentType "application/json" -TimeoutSec $TIMEOUT -UseBasicParsing
         if ($response.StatusCode -eq 200) {
             $result = $response.Content | ConvertFrom-Json
             Write-Success "OK - Generated response"
@@ -127,7 +127,7 @@ function Test-TTSService {
         } | ConvertTo-Json
 
         Write-Host "Testing text-to-speech generation..." -NoNewline
-        $response = Invoke-WebRequest -Uri "$BASE_URL`:8002/generate" -Method POST -Body $body -ContentType "application/json" -TimeoutSec $TIMEOUT -UseBasicParsing
+        $response = Invoke-WebRequest -Uri "http://localhost:8002/generate" -Method POST -Body $body -ContentType "application/json" -TimeoutSec $TIMEOUT -UseBasicParsing
 
         if ($response.StatusCode -eq 200) {
             Write-Success "OK - Generated audio data"
@@ -166,7 +166,7 @@ function Test-STTService {
         Write-Warning "STT test requires real audio data - skipping detailed test"
 
         # Test basic connectivity instead
-        $response = Invoke-WebRequest -Uri "$BASE_URL`:8003/health" -TimeoutSec $TIMEOUT -UseBasicParsing
+        $response = Invoke-WebRequest -Uri "http://localhost:8003/health" -TimeoutSec $TIMEOUT -UseBasicParsing
         if ($response.StatusCode -eq 200) {
             Write-Success "OK - Service is responsive"
             return $true
@@ -183,25 +183,29 @@ function Test-STTService {
 }
 
 function Test-VADService {
-    Write-Header "Testing VAD Service"
+    Write-Header "Testing VAD Service (Integrated with STT)"
 
     try {
-        # Test with empty audio data
-        $body = @{
-            audio_data = [Convert]::ToBase64String([byte[]]@(0) * 1024)
-            threshold = 0.5
-        } | ConvertTo-Json
+        # VAD is integrated into STT service, so test VAD through STT
+        Write-Host "Testing VAD through STT service..." -NoNewline
 
-        Write-Host "Testing voice activity detection..." -NoNewline
-        $response = Invoke-WebRequest -Uri "$BASE_URL`:8004/detect" -Method POST -Body $body -ContentType "application/json" -TimeoutSec $TIMEOUT -UseBasicParsing
+        # Test STT health which includes VAD status
+        $response = Invoke-WebRequest -Uri "http://localhost:8003/health" -TimeoutSec $TIMEOUT -UseBasicParsing
 
         if ($response.StatusCode -eq 200) {
-            $result = $response.Content | ConvertFrom-Json
-            Write-Success "OK - Detection completed"
-            Write-Info "Speech detected: $($result.speech_detected)"
+            $health = $response.Content | ConvertFrom-Json
+
+            if ($health.vad_enabled -eq $true) {
+                Write-Success "OK - VAD enabled in STT service"
+                Write-Info "VAD Status: $($health.vad_enabled), Device: $($health.device)"
+            }
+            else {
+                Write-Warning "VAD not enabled in STT service"
+                return $false
+            }
         }
         else {
-            Write-Error "VAD detection failed"
+            Write-Error "STT service health check failed"
             return $false
         }
 
@@ -219,7 +223,7 @@ function Test-CoreService {
     try {
         # Test health endpoint
         Write-Host "Testing core health..." -NoNewline
-        $response = Invoke-WebRequest -Uri "$BASE_URL`:8000/health" -TimeoutSec $TIMEOUT -UseBasicParsing
+        $response = Invoke-WebRequest -Uri "http://localhost:8000/health" -TimeoutSec $TIMEOUT -UseBasicParsing
         if ($response.StatusCode -eq 200) {
             $health = $response.Content | ConvertFrom-Json
             Write-Success "OK - Status: $($health.status)"
@@ -237,7 +241,7 @@ function Test-CoreService {
             metadata = @{ generate_audio = $false }
         } | ConvertTo-Json
 
-        $response = Invoke-WebRequest -Uri "$BASE_URL`:8000/api/text" -Method POST -Body $body -ContentType "application/json" -TimeoutSec $TIMEOUT -UseBasicParsing
+        $response = Invoke-WebRequest -Uri "http://localhost:8000/api/text" -Method POST -Body $body -ContentType "application/json" -TimeoutSec $TIMEOUT -UseBasicParsing
 
         if ($response.StatusCode -eq 200) {
             Write-Success "OK - Text processed"
@@ -262,8 +266,7 @@ function Test-QuickIntegration {
         @{Name="Core"; Port=8000; Description="Core Service"},
         @{Name="LLM"; Port=8001; Description="LLM Service"},
         @{Name="TTS"; Port=8002; Description="TTS Service"},
-        @{Name="STT"; Port=8003; Description="STT Service"},
-        @{Name="VAD"; Port=8004; Description="VAD Service"}
+        @{Name="STT"; Port=8003; Description="STT Service (with VAD)"}
     )
 
     $results = @()
@@ -304,7 +307,7 @@ function Test-FullIntegration {
         @{Name="LLM Service"; Test={Test-LLMService}},
         @{Name="TTS Service"; Test={Test-TTSService}},
         @{Name="STT Service"; Test={Test-STTService}},
-        @{Name="VAD Service"; Test={Test-VADService}},
+        @{Name="STT+VAD Service"; Test={Test-VADService}},  # VAD tested through STT
         @{Name="Core Service"; Test={Test-CoreService}}
     )
 
@@ -365,11 +368,11 @@ Prerequisites:
     - Network connectivity to localhost services
 
 Services Tested:
-    - Core Service (port 8000): Main orchestration
-    - LLM Service (port 8001): OpenAI-compatible API for Ollama
-    - TTS Service (port 8002): Text-to-speech synthesis
-    - STT Service (port 8003): Speech-to-text recognition
-    - VAD Service (port 8004): Voice activity detection
+    - Core Service (port 8000): Main orchestration and API gateway
+    - LLM Service (port 8001): OpenAI-compatible API for external Ollama
+    - TTS Service (port 8002): Text-to-speech synthesis with CUDA support
+    - STT Service (port 8003): Speech-to-text recognition with integrated VAD
+    - VAD Service: Voice activity detection (integrated with STT)
 
 Test Types:
     - Quick: Basic health checks for all services
@@ -418,10 +421,10 @@ function Main {
             "llm" { Test-LLMService }
             "tts" { Test-TTSService }
             "stt" { Test-STTService }
-            "vad" { Test-VADService }
+            "vad" { Test-VADService }  # VAD is integrated with STT
             default {
                 Write-Error "Unknown service: $Service"
-                Write-Info "Available services: core, llm, tts, stt, vad"
+                Write-Info "Available services: core, llm, tts, stt, vad (integrated with STT)"
             }
         }
     }
