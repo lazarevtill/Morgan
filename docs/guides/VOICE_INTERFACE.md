@@ -39,7 +39,7 @@ A streamlined voice assistant with a single-button interface for recording, proc
 1. **Audio Recording** → WebM format with MediaRecorder API
 2. **STT Processing** → Convert to text using Whisper models
 3. **LLM Generation** → Generate AI response using external Ollama
-4. **TTS Synthesis** → Convert response to speech using Kokoro voices
+4. **TTS Synthesis** → Convert response to speech using csm-streaming voices
 5. **Audio Playback** → Play response audio in browser
 
 ## 🎯 API Endpoints
@@ -76,7 +76,7 @@ Processes audio input through the complete pipeline.
 The voice interface uses the following default settings:
 - **STT Model**: Whisper large-v3 with VAD
 - **LLM Model**: Llama 3.2 via external Ollama
-- **TTS Voice**: "af_heart" (American female)
+- **TTS Voice**: "default" (American female)
 - **Sample Rate**: 16kHz for recording, 22kHz for playback
 
 ## 🎨 Customization
@@ -84,7 +84,7 @@ The voice interface uses the following default settings:
 ### Changing the Voice
 Modify the TTS voice in `core/api/server.py`:
 ```python
-"voice": "af_heart"  # Options: af_heart, am_michael, bf_emma, bm_george
+"voice": "default"  # Options: default, default, default, default
 ```
 
 ### Adjusting Language Detection

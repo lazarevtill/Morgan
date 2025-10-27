@@ -1,6 +1,22 @@
 # Morgan AI Assistant - v0.2.0
 
-A modern, distributed AI assistant built with Ollama, featuring persistent memory with PostgreSQL and Qdrant, MCP (Model Context Protocol) tools integration, and optimized for CUDA 13 with NVIDIA container toolkit support.
+A modern, distributed AI assistant with real-time voice interaction, persistent memory, and GPU-accelerated AI services.
+
+> **Quick Start**: Get Morgan running in 5 minutes → [docs/getting-started/QUICK_START.md](docs/getting-started/QUICK_START.md)  
+> **Documentation**: Complete docs → [docs/README.md](docs/README.md)
+
+---
+
+## ✨ Key Features
+
+- 🎙️ **Real-time Voice Interface** - WebSocket streaming for audio
+- 🤖 **Ollama Integration** - OpenAI-compatible API for LLMs
+- 💾 **Persistent Memory** - PostgreSQL + Qdrant vector database
+- ⚡ **GPU Accelerated** - CUDA 12.4 optimization
+- 🔧 **MCP Tools** - Calculator, datetime, custom integrations
+- 🚀 **Fast Builds** - 80%+ faster Docker builds with optimizations
+
+---
 
 ## 🏗️ Architecture Overview
 
@@ -20,13 +36,14 @@ Morgan v0.2.0 features a completely redesigned microservices architecture optimi
 │         ▼                    ▼                    ▼            │
 │  ┌─────────────┐    ┌──────────────┐    ┌──────────────┐       │
 │  │ LLM Service │    │ TTS Service  │    │ STT Service  │       │
-│  │  (Ollama)   │    │   (Kokoro)   │    │  (Whisper)   │       │
-│  │   (CPU/GPU) │    │  CUDA 13     │    │  CUDA 13     │       │
+│  │  (Ollama)   │    │(csm-streaming│    │  (Whisper +  │       │
+│  │   (CPU/GPU) │    │  Real-time)  │    │ Silero VAD)  │       │
+│  │             │    │  CUDA 12.4   │    │  CUDA 12.4   │       │
 │  └─────────────┘    └──────────────┘    └──────────────┘       │
 │                                                                │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
 │  │   PostgreSQL     │  │     Qdrant       │  │    Redis     │  │
-│  │ (Structured DB)  │  │  (Vector Store)  │  │  (Optional)  │  │
+│  │ (Structured DB)  │  │  (Vector Store)  │  │   (Cache)    │  │
 │  │   Memories       │  │   Embeddings     │  │              │  │
 │  │   Tools Logs     │  │   Semantic       │  │              │  │
 │  └──────────────────┘  └──────────────────┘  └──────────────┘  │
@@ -45,7 +62,7 @@ Morgan v0.2.0 features a completely redesigned microservices architecture optimi
 - **Persistent Memory**: PostgreSQL for structured data + Qdrant for semantic search
 - **MCP Tools**: Model Context Protocol tools integration (calculator, datetime, remember, custom APIs)
 - **Distributed Services**: Separate TTS and STT services with integrated VAD for optimal performance
-- **CUDA 13 Optimization**: Optimized for latest NVIDIA GPUs with container toolkit
+- **CUDA 12.4 Optimization**: Aligned with csm-streaming and latest PyTorch
 - **Async/Await**: Full async support for high performance and concurrency
 
 ### 🛠️ Technical Highlights
@@ -59,7 +76,7 @@ Morgan v0.2.0 features a completely redesigned microservices architecture optimi
 ## 📋 System Requirements
 
 ### Hardware Requirements
-- **GPU**: NVIDIA GPU with CUDA 13+ support (recommended)
+- **GPU**: NVIDIA GPU with CUDA Compute 7.0+ (Tesla V100, RTX 20xx+, recommended)
 - **RAM**: 8GB minimum, 16GB+ recommended
 - **Storage**: 50GB+ for models and data
 - **Network**: Stable network connection for inter-service communication
@@ -67,8 +84,9 @@ Morgan v0.2.0 features a completely redesigned microservices architecture optimi
 ### Software Requirements
 - **Docker**: 24.0+
 - **Docker Compose**: 2.20+
-- **NVIDIA Container Toolkit**: For GPU support
-- **Linux**: Ubuntu 22.04+ recommended
+- **NVIDIA Container Toolkit**: For GPU support (CUDA 12.4)
+- **NVIDIA Driver**: 525+ (550+ recommended)
+- **OS**: Linux (Ubuntu 22.04+ recommended), Windows 10/11, macOS
 
 ## 📦 Development Setup
 
@@ -256,14 +274,15 @@ log_level: "INFO"
 # config/tts.yaml
 host: "0.0.0.0"
 port: 8002
-model: "kokoro"
+model: "csm-streaming"  # Real-time TTS
 device: "cuda"
-language: "en-us"
-voice: "af_heart"
+language: "en"
+voice: "default"
 speed: 1.0
 output_format: "wav"
-sample_rate: 22050
+sample_rate: 24000  # csm-streaming default
 log_level: "INFO"
+streaming_enabled: true  # Enable real-time streaming
 ```
 
 ### STT Service Configuration
@@ -390,12 +409,14 @@ Supported remember patterns:
 ### Service Architecture
 - **External Ollama**: LLM backend service (running at 192.168.101.3:11434)
 - **LLM Service**: OpenAI-compatible API wrapper for external Ollama (CPU only)
-- **TTS Service**: Text-to-speech synthesis with Kokoro (GPU optimized, CUDA 13)
-- **STT Service**: Speech-to-text with Faster Whisper + integrated Silero VAD (GPU optimized, CUDA 13)
+- **TTS Service**: Real-time text-to-speech with **csm-streaming** (GPU optimized, CUDA 12.4)
+  - **Note**: Using Facebook Research's csm-streaming for real-time TTS
+- **STT Service**: Speech-to-text with Faster Whisper + **integrated** Silero VAD (GPU optimized, CUDA 12.4)
+  - **Note**: VAD is built into faster-whisper, not a separate service
 - **Core Service**: Main orchestration, memory management, and API service (CPU only)
 - **PostgreSQL**: Structured memory storage and tools execution logging
 - **Qdrant**: Vector database for semantic memory search
-- **Redis**: Optional caching and message queuing
+- **Redis**: Caching and session state
 
 ### GPU Configuration
 All GPU-enabled services use NVIDIA container toolkit:
@@ -540,23 +561,80 @@ docker-compose exec llm-service ls -la data/models/
 - Adjust timeouts based on network latency
 - Enable connection pooling
 
+## 📚 Documentation
+
+### Getting Started
+
+- **[Quick Start Guide](docs/getting-started/QUICK_START.md)** - Get running in 5 minutes
+- **[Development Guide](docs/getting-started/DEVELOPMENT.md)** - Local development setup
+
+### Architecture
+
+- **[System Architecture](docs/architecture/ARCHITECTURE.md)** - Overall design
+- **[Streaming Architecture](docs/architecture/STREAMING_ARCHITECTURE.md)** - Real-time streaming
+- **[API Reference](docs/architecture/API.md)** - Complete API docs
+
+### Deployment
+
+- **[Deployment Guide](docs/deployment/DEPLOYMENT.md)** - Production deployment
+- **[Docker Build Guide](docs/deployment/DOCKER_BUILD_GUIDE.md)** - Build optimization (80%+ faster!)
+- **[Version Alignment](docs/deployment/VERSION_ALIGNMENT.md)** - CUDA/PyTorch compatibility
+
+### Guides
+
+- **[Voice Interface](docs/guides/VOICE_INTERFACE.md)** - Voice setup
+- **[Troubleshooting](docs/guides/TROUBLESHOOTING.md)** - Common issues
+
+### Full Documentation
+
+📖 **[Complete Documentation Index](docs/README.md)** - All documentation in one place
+
+---
+
+## 🚨 Quick Troubleshooting
+
+### Services won't start?
+```bash
+docker compose logs -f core
+# Check for errors, verify Ollama URL in config
+```
+
+### GPU not detected?
+```bash
+nvidia-smi  # Check driver (need 525+)
+docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+```
+
+### Slow builds?
+```bash
+export DOCKER_BUILDKIT=1
+docker compose build
+# Should take 2-4 seconds per service (with cache)
+```
+
+**More solutions** → [Troubleshooting Guide](docs/guides/TROUBLESHOOTING.md)
+
+---
+
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
+1. Read [Development Guide](docs/getting-started/DEVELOPMENT.md)
+2. Fork the repository and create a feature branch
+3. Follow code standards in [CLAUDE.md](CLAUDE.md)
+4. Add tests and update documentation
 5. Submit a pull request
 
 ## 📞 Support
 
-- **Documentation**: Check the `/docs` endpoints
-- **Issues**: Report bugs and request features
+- **Documentation**: [docs/README.md](docs/README.md)
+- **API Docs**: http://localhost:8000/docs (when running)
+- **Issues**: Report bugs in issue tracker
 
 ---
 
-**Morgan AI Assistant v0.2.0** - Modern, distributed, and optimized for performance.
+**Morgan AI Assistant v0.2.0** - Your intelligent voice assistant  
+**Last Updated**: 2025-10-27

@@ -33,7 +33,7 @@
 ### 2. TTS Silence on Special Characters (-, :)
 
 **Root Cause**:
-- Kokoro TTS model has trouble processing certain punctuation marks
+- csm-streaming TTS model has trouble processing certain punctuation marks
 - Hyphens (-), colons (:), and other special characters cause silence or long pauses
 - No text preprocessing before sending to TTS engine
 
@@ -130,7 +130,7 @@ curl http://localhost:8000/health | python -m json.tool
 # Test TTS directly:
 curl -X POST http://localhost:8002/generate \
   -H "Content-Type: application/json" \
-  -d '{"text":"Test with - dashes: and colons", "voice":"af_heart"}' \
+  -d '{"text":"Test with - dashes: and colons", "voice":"default"}' \
   | python -m json.tool
 ```
 

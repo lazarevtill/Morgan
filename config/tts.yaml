@@ -1,19 +1,24 @@
-# TTS Service Configuration
+# TTS Service Configuration - Using csm-streaming for real-time TTS
 
 # Network configuration
 host: "0.0.0.0"
 port: 8002
 
-# Model configuration
-model: "kokoro"
+# Model configuration - csm-streaming
+model: "csm"  # csm-streaming model
 device: "cuda"
-language: "en-us"
-voice: "af_heart"
+language: "en"
+voice: "default"  # csm-streaming voice
 
 # Audio parameters
 speed: 1.0
 output_format: "wav"
-sample_rate: 22050
+sample_rate: 24000  # csm-streaming uses 24kHz
+
+# Streaming configuration
+streaming_enabled: true
+chunk_size: 512  # Audio chunk size for streaming
+buffer_size: 2048  # Buffer size for streaming
 
 # Logging
 log_level: "INFO"

@@ -1,107 +1,100 @@
-# Multi-stage Dockerfile for TTS Service with CUDA 13 support
-FROM harbor.in.lazarev.cloud/proxy/nvidia/cuda:13.0.1-devel-ubuntu22.04
+# Optimized Dockerfile for TTS Service with CUDA 12.4
+# Using CUDA 12.4.1 (verified compatible with csm-streaming and faster-whisper)
 
-# Configure apt to use Nexus proxy repositories (Ubuntu 22.04 - Jammy)
+# Stage 1: Base CUDA image with system dependencies
+FROM harbor.in.lazarev.cloud/proxy/nvidia/cuda:13.0.1-devel-ubuntu22.04 AS base
+
+# Configure apt repositories and install system dependencies
 RUN echo 'deb https://nexus.in.lazarev.cloud/repository/ubuntu-group/ jammy main restricted universe multiverse' > /etc/apt/sources.list && \
     echo 'deb https://nexus.in.lazarev.cloud/repository/ubuntu-group/ jammy-updates main restricted universe multiverse' >> /etc/apt/sources.list && \
     echo 'deb https://nexus.in.lazarev.cloud/repository/ubuntu-group/ jammy-backports main restricted universe multiverse' >> /etc/apt/sources.list && \
-    echo 'deb https://nexus.in.lazarev.cloud/repository/ubuntu-group/ jammy-security main restricted universe multiverse' >> /etc/apt/sources.list
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    python3.11 \
-    python3.11-dev \
-    python3-pip \
-    git \
-    curl \
-    build-essential \
-    ffmpeg \
-    libsndfile1 \
-    libasound2-dev \
-    espeak \
-    espeak-ng \
-    pkg-config \
-    libgomp1 \
-    alsa-utils \
-    libasound2 \
-    software-properties-common \
-    wget \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set Python 3.11 as default
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    echo 'deb https://nexus.in.lazarev.cloud/repository/ubuntu-group/ jammy-security main restricted universe multiverse' >> /etc/apt/sources.list && \
+    apt-get update && apt-get install -y --no-install-recommends \
+        python3.11 \
+        python3.11-dev \
+        python3-pip \
+        curl \
+        build-essential \
+        ffmpeg \
+        libsndfile1 \
+        libasound2-dev \
+        espeak-ng \
+        pkg-config \
+        libgomp1 \
+        libasound2 \
+        wget \
+        libcudnn9-cuda-12 \
+    && rm -rf /var/lib/apt/lists/* && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
 
-# Install cuDNN (required for PyTorch CUDA operations)
-RUN apt-get update && apt-get install -y \
-    libcudnn9-dev-cuda-13 \
-    libcudnn9-cuda-13 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install uv (ultra-fast Python package manager)
+# Install uv (cached)
 COPY --from=harbor.in.lazarev.cloud/gh-proxy/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Configure UV to use system Python and Nexus PyPI proxy
+# Configure UV and CUDA environment
 ENV UV_INDEX_URL=https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_NO_CREATE_VENV=1
+    UV_NO_CREATE_VENV=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    CUDA_VISIBLE_DEVICES=0 \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64:${LD_LIBRARY_PATH} \
+    AUDIODEV=null \
+    ESPEAK_DATA_PATH=/usr/share/espeak-ng-data
 
-# Copy pyproject.toml and install common dependencies
+# Stage 2: CUDA dependencies (PyTorch - heavily cached)
+FROM base AS cuda-deps
+
 WORKDIR /app
-COPY pyproject.toml .
-RUN uv pip install --system \
-    fastapi \
-    uvicorn[standard] \
-    pydantic \
-    aiohttp \
-    pyyaml \
-    python-dotenv \
-    structlog \
-    psutil \
-    redis \
-    torch \
-    torchaudio \
-    python-multipart
 
-# Copy shared utilities
+# Copy requirements for CUDA packages (include base for -r reference)
+COPY requirements-cuda.txt requirements-base.txt ./
+
+# Install PyTorch and CUDA packages with cache
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system -r requirements-cuda.txt
+
+# Stage 3: TTS-specific dependencies (moderately cached)
+FROM cuda-deps AS tts-deps
+
+# Copy TTS requirements (include all referenced files)
+COPY requirements-tts.txt requirements-cuda.txt requirements-base.txt ./
+
+# Install TTS packages with cache (excluding already installed)
+# Using csm-streaming for real-time TTS
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system --no-deps csm-streaming soundfile librosa pydub torchvision TTS pyttsx3
+
+# Stage 4: Application code
+FROM tts-deps AS app
+
+WORKDIR /app
+
+# Copy shared utilities first
 COPY shared/ ./shared/
 
-# Set environment variables for CUDA and audio
-ENV PYTHONPATH=/app
-ENV CUDA_VISIBLE_DEVICES=0
-ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
-ENV AUDIODEV=null
-ENV ESPEAK_DATA_PATH=/usr/share/espeak-ng-data
+# Copy service code
+COPY services/tts/ ./services/tts/
 
-# Set model cache directories
-ENV TORCH_HOME=/app/data/models/torch_hub
-ENV TTS_CACHE_DIR=/app/data/models/tts
-ENV TRANSFORMERS_CACHE=/app/data/models/transformers
-ENV HF_HOME=/app/data/models/huggingface
+# Set runtime environment
+ENV PYTHONPATH=/app \
+    TORCH_HOME=/app/data/models/torch_hub \
+    TTS_CACHE_DIR=/app/data/models/tts \
+    TRANSFORMERS_CACHE=/app/data/models/transformers \
+    HF_HOME=/app/data/models/huggingface
 
-# Install TTS-specific dependencies
-RUN uv pip install --system \
-    TTS \
-    soundfile \
-    librosa \
-    pydub \
-    torchvision \
-    kokoro \
-    pyttsx3
+# Create directories
+RUN mkdir -p logs data/models/{torch_hub,tts,transformers,huggingface} data/voices
 
-# Copy TTS service code
-COPY services/tts/ ./
+WORKDIR /app/services/tts
 
-# Create necessary directories
-RUN mkdir -p logs data/models data/models/torch_hub data/models/transformers data/models/huggingface data/voices
-
-# Expose ports
+# Expose port
 EXPOSE 8002
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8002/health || exit 1
 
-# Run the application
+# Run application
 CMD ["python", "main.py"]

@@ -1,78 +1,68 @@
-# Multi-stage Dockerfile for LLM Service (OpenAI-compatible Ollama client)
-# This service acts as a client to external Ollama, no CUDA needed
+# Optimized Dockerfile for LLM Service (No CUDA needed - API client only)
+# syntax=docker/dockerfile:1.4
 
-# Use shared base image
+# Stage 1: Base with system dependencies
 FROM harbor.in.lazarev.cloud/proxy/python:3.12-slim AS base
 
-# Configure apt to use Nexus proxy repositories (Debian-based)
+# Configure apt repositories and install system dependencies
 RUN echo 'deb https://nexus.in.lazarev.cloud/repository/debian-proxy/ trixie main' > /etc/apt/sources.list && \
     echo 'deb https://nexus.in.lazarev.cloud/repository/debian-proxy/ trixie-updates main' >> /etc/apt/sources.list && \
-    echo 'deb https://nexus.in.lazarev.cloud/repository/debian-security/ trixie-security main' >> /etc/apt/sources.list
-
-# Install common system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
+    echo 'deb https://nexus.in.lazarev.cloud/repository/debian-security/ trixie-security main' >> /etc/apt/sources.list && \
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv (ultra-fast Python package manager)
+# Install uv (single layer, cached)
 COPY --from=harbor.in.lazarev.cloud/gh-proxy/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Configure UV to use system Python and Nexus PyPI proxy
+# Configure UV
 ENV UV_INDEX_URL=https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_NO_CREATE_VENV=1
+    UV_NO_CREATE_VENV=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
-# Python dependencies stage
-FROM base AS python-deps
+# Stage 2: Dependencies only (heavily cached)
+FROM base AS deps
 
 WORKDIR /app
 
-# Copy pyproject.toml and install LLM-specific dependencies
-COPY pyproject.toml .
-RUN uv pip install --system \
-    fastapi \
-    uvicorn[standard] \
-    pydantic \
-    aiohttp \
-    pyyaml \
-    python-dotenv \
-    structlog \
-    psutil \
-    redis \
-    python-multipart \
-    openai
+# Copy requirements files (include base for -r reference)
+COPY requirements-base.txt requirements-llm.txt ./
 
-# Copy shared utilities
+# Install dependencies with cache mount
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system -r requirements-llm.txt
+
+# Stage 3: Application code
+FROM deps AS app
+
+WORKDIR /app
+
+# Copy shared utilities first
 COPY shared/ ./shared/
 
-# Application build
-FROM python-deps AS build
+# Copy service code
+COPY services/llm/ ./services/llm/
 
-WORKDIR /app
+# Set runtime environment
+ENV PYTHONPATH=/app \
+    TORCH_HOME=/app/data/models/torch_hub \
+    TRANSFORMERS_CACHE=/app/data/models/transformers \
+    HF_HOME=/app/data/models/huggingface
 
-# Copy LLM service code
-COPY services/llm/ ./
+# Create directories
+RUN mkdir -p logs data/models/{torch_hub,transformers,huggingface}
 
-# Create necessary directories
-RUN mkdir -p logs data/models data/models/torch_hub data/models/transformers data/models/huggingface
+WORKDIR /app/services/llm
 
-# Set common environment variables
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# Set model cache directories
-ENV TORCH_HOME=/app/data/models/torch_hub
-ENV TRANSFORMERS_CACHE=/app/data/models/transformers
-ENV HF_HOME=/app/data/models/huggingface
-
-# Expose ports
+# Expose port
 EXPOSE 8001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8001/health || exit 1
 
-# Run the LLM API service
+# Run application
 CMD ["python", "main.py"]

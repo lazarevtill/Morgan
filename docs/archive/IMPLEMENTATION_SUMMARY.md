@@ -85,7 +85,7 @@
 
 **Features**:
 - 16KB audio chunk streaming
-- Multiple voice support (Kokoro)
+- Multiple voice support (csm-streaming)
 - Cache integration
 - Format conversion support
 
@@ -259,7 +259,7 @@ curl -X POST http://localhost:8003/stream/$SESSION_ID/end
 ```bash
 curl -X POST http://localhost:8002/generate \
   -H "Content-Type: application/json" \
-  -d '{"text": "Hello world", "voice": "af_heart", "stream": true}' \
+  -d '{"text": "Hello world", "voice": "default", "stream": true}' \
   --output speech.wav
 ```
 

@@ -85,7 +85,7 @@ Morgan now supports full real-time streaming capabilities with PostgreSQL persis
 - **Format**: Chunked audio streaming
 - **Features**:
   - 16KB audio chunks
-  - Multi-voice support (Kokoro: af_heart, am_michael, bf_emma, bm_george)
+  - Multi-voice support (csm-streaming: default, default, default, default)
   - GPU-accelerated synthesis
 
 #### Standard Endpoints

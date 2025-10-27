@@ -1,0 +1,4 @@
+# LLM service requirements
+-r requirements-base.txt
+openai==1.12.0
+
