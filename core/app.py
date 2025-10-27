@@ -66,8 +66,12 @@ class MorganCore:
             "logs/core.log"
         )
 
-        # Load configuration
-        self.core_config = CoreConfig(**self.config.all())
+        # Debug: Log configuration keys
+        config_data = self.config.all()
+        self.logger.info(f"Loaded configuration keys: {list(config_data.keys())}")
+
+        # Load configuration with proper defaults
+        self.core_config = CoreConfig(**config_data)
 
         # Service components
         self.conversation_manager = None
@@ -438,16 +442,29 @@ async def main():
     """Main entry point"""
     # Setup configuration
     config = ServiceConfig("core")
-    core_config = CoreConfig(**config.all())
+    config_data = config.all()
+
+    # Debug: Log configuration keys and values
+    print(f"DEBUG: Configuration keys loaded: {list(config_data.keys())}")
+    print(f"DEBUG: Configuration data: {config_data}")
 
     # Setup logging
     logger = setup_logging(
         "morgan_core_main",
-        core_config.log_level
+        config.get("log_level", "INFO")
     )
 
     logger.info("Starting Morgan Core Service...")
-    logger.info(f"Configuration: {core_config.dict()}")
+    logger.info(f"Configuration keys: {list(config_data.keys())}")
+
+    try:
+        core_config = CoreConfig(**config_data)
+        logger.info(f"Configuration loaded successfully: {core_config.dict()}")
+    except Exception as e:
+        logger.error(f"Configuration error: {e}")
+        logger.error(f"Available config keys: {list(config_data.keys())}")
+        logger.error(f"Expected CoreConfig fields: {CoreConfig.model_fields.keys()}")
+        raise
 
     # Create and start core service
     morgan_core = MorganCore(config)

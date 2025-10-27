@@ -258,15 +258,21 @@ class STTService:
                 # Get detected language from info
                 detected_language = info.language if hasattr(info, 'language') else (language or "en")
 
-                # Calculate confidence (average of all segments)
-                confidence = sum(segment.avg_logprob for segment in segments_list) / len(segments_list) if segments_list else 0.0
+                # Calculate confidence (convert negative log probabilities to 0-1 range)
+                if segments_list:
+                    # Convert avg_logprob (negative) to confidence (0-1)
+                    # Using sigmoid-like transformation: confidence = 1 / (1 + exp(-avg_logprob))
+                    avg_logprob = sum(segment.avg_logprob for segment in segments_list) / len(segments_list)
+                    confidence = 1.0 / (1.0 + np.exp(-avg_logprob))  # Sigmoid transformation
+                else:
+                    confidence = 0.0
 
                 # Extract detailed segments
                 detailed_segments = [{
                     "text": segment.text.strip(),
                     "start": segment.start,
                     "end": segment.end,
-                    "confidence": segment.avg_logprob
+                    "confidence": 1.0 / (1.0 + np.exp(-segment.avg_logprob))  # Convert to 0-1 range
                 } for segment in segments_list]
 
             else:
@@ -521,15 +527,21 @@ class STTService:
                 # Extract text from segments
                 text = " ".join([segment.text.strip() for segment in segments])
 
-                # Calculate confidence (average of all segments)
-                confidence = sum(segment.avg_logprob for segment in segments) / len(segments) if segments else 0.0
+                # Calculate confidence (convert negative log probabilities to 0-1 range)
+                if segments:
+                    # Convert avg_logprob (negative) to confidence (0-1)
+                    # Using sigmoid-like transformation: confidence = 1 / (1 + exp(-avg_logprob))
+                    avg_logprob = sum(segment.avg_logprob for segment in segments) / len(segments)
+                    confidence = 1.0 / (1.0 + np.exp(-avg_logprob))  # Sigmoid transformation
+                else:
+                    confidence = 0.0
 
                 # Extract detailed segments
                 detailed_segments = [{
                     "text": segment.text.strip(),
                     "start": segment.start,
                     "end": segment.end,
-                    "confidence": segment.avg_logprob
+                    "confidence": 1.0 / (1.0 + np.exp(-segment.avg_logprob))  # Convert to 0-1 range
                 } for segment in segments]
 
             else:
