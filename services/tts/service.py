@@ -218,63 +218,23 @@ class TTSService:
 
     def _preprocess_text_for_tts(self, text: str) -> str:
         """
-        Preprocess text for TTS to handle special characters that cause silence or issues.
-
-        Kokoro and other TTS engines often have trouble with certain punctuation:
-        - Hyphens/dashes can cause silence
-        - Colons can cause pauses or silence
-        - Ellipsis can cause long pauses
-        - Multiple punctuation marks can confuse the model
+        Minimal preprocessing for TTS to handle only critical issues.
+        
+        The goal is to preserve the original text as much as possible while
+        fixing only characters that cause TTS synthesis errors.
         """
         import re
 
-        # Replace hyphens/dashes with natural pauses (commas)
-        text = text.replace(' - ', ', ')     # Spaced hyphen
-        text = text.replace(' – ', ', ')     # En dash
-        text = text.replace(' — ', ', ')     # Em dash
-        text = text.replace('—', ', ')       # Em dash without spaces
+        # Only handle multiple repeated punctuation that causes stuttering
+        text = re.sub(r'!{3,}', '!!', text)  # More than 2 ! to !!
+        text = re.sub(r'\?{3,}', '??', text)  # More than 2 ? to ??
+        text = re.sub(r'\.{4,}', '...', text)  # More than 3 . to ...
 
-        # Replace standalone dashes at start/end of phrases
-        text = text.replace('- ', '').replace(' -', '')
-
-        # Handle colons - replace with comma for natural pause
-        # But keep colons in time formats (e.g., "3:00")
-        text = re.sub(r'(?<!\d):(?!\d)', ',', text)
-
-        # Handle ellipsis and multiple periods
-        text = text.replace('...', '. ')
-        text = text.replace('..', '. ')
-
-        # Handle multiple exclamation/question marks
-        text = re.sub(r'!+', '!', text)  # Multiple ! to single !
-        text = re.sub(r'\?+', '?', text)  # Multiple ? to single ?
-
-        # Handle semicolons (replace with comma)
-        text = text.replace(';', ',')
-
-        # Remove quotes that might cause issues
-        text = text.replace('"', '').replace("'", '')
-
-        # Handle parentheses - remove them but keep content
-        text = text.replace('(', ', ').replace(')', ', ')
-        text = text.replace('[', ', ').replace(']', ', ')
-        text = text.replace('{', ', ').replace('}', ', ')
-
-        # Remove multiple commas
-        text = re.sub(r',+', ',', text)
-
-        # Remove comma before period
-        text = re.sub(r',\s*\.', '.', text)
-
-        # Remove multiple spaces
+        # Normalize whitespace only (preserve all punctuation and text)
         text = re.sub(r'\s+', ' ', text)
 
-        # Clean up spaces around punctuation
-        text = re.sub(r'\s+([,.!?])', r'\1', text)  # Remove space before punctuation
-        text = re.sub(r'([,.!?])\s*([,.!?])', r'\1 ', text)  # Ensure single space after punctuation
-
-        # Trim leading/trailing whitespace and punctuation
-        text = text.strip(' ,.!?')
+        # Trim only leading/trailing whitespace (not punctuation)
+        text = text.strip()
 
         return text
 

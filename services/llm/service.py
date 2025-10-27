@@ -1,5 +1,9 @@
 """
-LLM Service implementation using Ollama with OpenAI compatibility
+LLM Service implementation using Open WebUI / Ollama API
+
+Reference: https://docs.openwebui.com/getting-started/api-endpoints/
+- Chat completions via OpenAI-compatible endpoint
+- Embeddings via Ollama API proxy endpoint
 """
 import asyncio
 import logging
@@ -37,7 +41,11 @@ class LLMConfig(BaseModel):
 
 
 class LLMService:
-    """LLM Service using OpenAI-compatible API"""
+    """LLM Service using Open WebUI / Ollama API
+    
+    Supports both OpenAI-compatible chat completions and Ollama embeddings
+    via Open WebUI proxy endpoints.
+    """
 
     def __init__(self, config: Optional[ServiceConfig] = None):
         self.config = config or ServiceConfig("llm")
@@ -229,48 +237,67 @@ class LLMService:
             raise ModelError(f"Streaming generation failed: {e}", ErrorCode.MODEL_INFERENCE_ERROR)
 
     async def embed_text(self, text: str, model: Optional[str] = None) -> List[float]:
-        """Generate embeddings for text using OpenAI-compatible API"""
-        def _generate_dummy_embedding(text: str) -> List[float]:
-            """Generate a deterministic dummy embedding from text hash"""
-            import hashlib
-            hash_obj = hashlib.sha256(text.encode())
-            hash_bytes = hash_obj.digest()
-            # Create a 384-dimensional embedding from hash (common embedding size)
-            embedding = []
-            for i in range(384):
-                embedding.append((hash_bytes[i % len(hash_bytes)] / 255.0 - 0.5) * 2)
-            return embedding
-
-        # Check if API key is available
+        """Generate embeddings for text using Ollama API via Open WebUI proxy
+        
+        Reference: https://docs.openwebui.com/getting-started/api-endpoints/#-generate-embeddings
+        Endpoint: POST /ollama/api/embed
+        """
         if not self.llm_config.api_key:
-            self.logger.debug("No API key provided, using dummy embeddings")
-            return _generate_dummy_embedding(text)
+            raise ModelError("API key required for embeddings", ErrorCode.AUTHENTICATION_ERROR)
 
         try:
             # Use configured embedding model or fallback to specified model
             embedding_model = model or self.llm_config.embedding_model
 
-            # Create a separate client for embeddings to avoid connection issues
-            embedding_client = AsyncOpenAI(
-                base_url=self.llm_config.openai_api_base,
-                api_key=self.llm_config.api_key
-            )
+            # Construct Ollama API embed endpoint URL
+            # Base URL format: https://gpt.lazarev.cloud/ollama/v1
+            # Embed endpoint: https://gpt.lazarev.cloud/ollama/api/embed
+            base_parts = self.llm_config.openai_api_base.rstrip('/').split('/')
+            # Remove 'v1' if present and add 'api/embed'
+            if base_parts[-1] == 'v1':
+                base_parts = base_parts[:-1]
+            embed_url = '/'.join(base_parts) + '/api/embed'
 
-            response = await embedding_client.embeddings.create(
-                input=text,
-                model=embedding_model
-            )
+            self.logger.debug(f"Generating embeddings using {embed_url} with model {embedding_model}")
 
-            # Close the embedding client to avoid connection leaks
-            await embedding_client.close()
-
-            return response.data[0].embedding
+            # Use aiohttp for direct HTTP request to Ollama API
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                headers = {
+                    'Authorization': f'Bearer {self.llm_config.api_key}',
+                    'Content-Type': 'application/json'
+                }
+                
+                # Ollama embed API expects 'input' as array of strings
+                payload = {
+                    'model': embedding_model,
+                    'input': [text]  # Must be an array
+                }
+                
+                async with session.post(embed_url, json=payload, headers=headers, timeout=30) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise ModelError(
+                            f"Embeddings API returned {response.status}: {error_text}",
+                            ErrorCode.MODEL_INFERENCE_ERROR
+                        )
+                    
+                    result = await response.json()
+                    
+                    # Ollama returns embeddings in 'embeddings' array
+                    if 'embeddings' in result and len(result['embeddings']) > 0:
+                        return result['embeddings'][0]
+                    elif 'embedding' in result:
+                        return result['embedding']
+                    else:
+                        raise ModelError(
+                            f"Unexpected response format from embeddings API: {result}",
+                            ErrorCode.MODEL_INFERENCE_ERROR
+                        )
 
         except Exception as e:
-            # Log error but fall back to dummy embeddings instead of raising
-            # This handles cases where the API doesn't support embeddings (405 errors)
-            self.logger.warning(f"Embeddings API not available, falling back to dummy embeddings: {e}")
-            return _generate_dummy_embedding(text)
+            self.logger.error(f"Failed to generate embeddings: {e}")
+            raise ModelError(f"Embedding generation failed: {e}", ErrorCode.MODEL_INFERENCE_ERROR)
 
     async def list_models(self) -> Dict[str, Any]:
         """List available models"""
