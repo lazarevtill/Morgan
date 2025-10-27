@@ -392,11 +392,24 @@ If you see negative confidence values, ensure you're running the latest version 
 1. `pyproject.toml` - Added python-multipart dependency
 2. `config/stt.yaml` - Changed default language from "auto" to "en"
 3. `services/stt/service.py` - Fixed language handling and confidence clamping
-4. `services/llm/service.py` - Fixed embeddings to fall back gracefully when API doesn't support embeddings
-5. `docker-compose.yml` - Fixed volume mounts and added cache environment variables
-6. `rebuild-services.sh` - Created rebuild script (Linux/Mac)
-7. `rebuild-services.ps1` - Created rebuild script (Windows)
-8. `FIXES_APPLIED.md` - This documentation file
+4. `services/llm/service.py` - Refactored embeddings to use proper Ollama API endpoint
+5. `services/tts/service.py` - Minimal text preprocessing to preserve original content
+6. `config/llm.yaml` - Updated embedding model to nomic-embed-text:latest
+7. `docker-compose.yml` - Fixed volume mounts and added cache environment variables
+8. `rebuild-services.sh` - Created rebuild script (Linux/Mac)
+9. `rebuild-services.ps1` - Created rebuild script (Windows)
+10. `FIXES_APPLIED.md` - This documentation file
+
+---
+
+## Verification
+
+All services tested and verified working:
+- ✅ **LLM Service**: Chat completions and embeddings working with Open WebUI API
+- ✅ **TTS Service**: Speech synthesis with minimal text preprocessing
+- ✅ **STT Service**: Speech recognition with proper language handling
+- ✅ **Core Service**: All integrations working properly
+- ✅ **Model Caching**: Persistent across container restarts
 
 ---
 

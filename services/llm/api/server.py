@@ -1,404 +1,204 @@
 """
-FastAPI server for LLM service
+FastAPI server for LLM service with streaming support
 """
-import asyncio
+import logging
+from typing import Dict, Any, Optional
 import json
-from typing import Dict, Any, List, Optional
-from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import uvicorn
 
-from service import LLMService, LLMConfig
-from shared.config.base import ServiceConfig
-from shared.models.base import LLMRequest, LLMResponse, ProcessingResult, Message
+from shared.models.base import LLMRequest, LLMResponse
 from shared.utils.logging import setup_logging
-from shared.utils.errors import ErrorHandler, ErrorCode
-from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware
+
+logger = logging.getLogger(__name__)
 
 
 class GenerateRequest(BaseModel):
-    """Request model for text generation"""
-    prompt: str = Field(..., description="Text prompt for generation")
+    """Generation request"""
+    prompt: str = Field(..., description="Input prompt")
+    context: Optional[list] = Field(None, description="Conversation context")
     model: Optional[str] = Field(None, description="Model to use")
+    max_tokens: Optional[int] = Field(None, description="Maximum tokens to generate")
+    temperature: Optional[float] = Field(None, description="Temperature for sampling")
     system_prompt: Optional[str] = Field(None, description="System prompt")
-    temperature: Optional[float] = Field(None, ge=0.0, le=2.0, description="Sampling temperature")
-    max_tokens: Optional[int] = Field(None, gt=0, le=8192, description="Maximum tokens to generate")
-    context: Optional[List[Dict[str, str]]] = Field(None, description="Conversation context")
     stream: bool = Field(False, description="Enable streaming response")
 
 
-class EmbedRequest(BaseModel):
-    """Request model for text embedding"""
+class EmbeddingRequest(BaseModel):
+    """Embedding request"""
     text: str = Field(..., description="Text to embed")
-    model: Optional[str] = Field(None, description="Model to use")
+    model: Optional[str] = Field(None, description="Embedding model to use")
 
 
-class ModelInfo(BaseModel):
-    """Model information response"""
-    name: str
-    size: int
-    modified: str
-    template: str
-    details: Dict[str, Any]
+class ModelListResponse(BaseModel):
+    """Model list response"""
+    models: list
+    total: int
 
 
-class HealthResponse(BaseModel):
-    """Health check response"""
-    status: str
-    model: Optional[str] = None
-    available_models: Optional[int] = None
-    api_base: str
-    message: Optional[str] = None
+class LLMAPIServer:
+    """LLM API Server"""
 
+    def __init__(self, llm_service, host: str = "0.0.0.0", port: int = 8001):
+        self.llm_service = llm_service
+        self.host = host
+        self.port = port
+        self.logger = setup_logging("llm_api", "INFO", "logs/llm_api.log")
+        self.app = None
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan manager"""
-    # Startup
-    config = ServiceConfig("llm")
-    llm_config = LLMConfig(**config.all())
-
-    logger = setup_logging(
-        "llm_api",
-        llm_config.log_level,
-        "logs/llm_api.log"
-    )
-
-    logger.info("Starting LLM API server...")
-
-    # Initialize LLM service
-    app.state.llm_service = LLMService(config)
-    await app.state.llm_service.start()
-
-    logger.info("LLM API server started")
-
-    yield
-
-    # Shutdown
-    logger.info("Shutting down LLM API server...")
-    await app.state.llm_service.stop()
-    logger.info("LLM API server stopped")
-
-
-# Create FastAPI app
-app = FastAPI(
-    title="Morgan LLM Service",
-    description="LLM service using OpenAI-compatible API",
-    version="0.2.0",
-    lifespan=lifespan
-)
-
-# Add middleware
-app.add_middleware(RequestIDMiddleware)
-app.add_middleware(TimingMiddleware)
-
-
-@app.get("/health", response_model=HealthResponse)
-async def health_check() -> HealthResponse:
-    """Health check endpoint"""
-    try:
-        health = await app.state.llm_service.health_check()
-        # Update the health response to use the configured API base
-        health["api_base"] = app.state.llm_service.llm_config.openai_api_base
-        health["model"] = app.state.llm_service.llm_config.model
-        return HealthResponse(**health)
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Service unhealthy: {e}")
-
-
-@app.post("/generate")
-async def generate_text(request: GenerateRequest) -> Dict[str, Any]:
-    """Generate text using LLM"""
-    try:
-        # Convert request to internal format
-        llm_request = LLMRequest(
-            prompt=request.prompt,
-            model=request.model,
-            system_prompt=request.system_prompt,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-            context=[Message(role=msg["role"], content=msg["content"])
-                    for msg in request.context] if request.context else None,
-            stream=request.stream
+    def create_app(self) -> FastAPI:
+        """Create FastAPI application"""
+        app = FastAPI(
+            title="Morgan LLM Service",
+            description="LLM service with OpenAI-compatible API",
+            version="0.2.0"
         )
 
-        if request.stream:
-            # Return streaming response
-            async def generate_stream():
-                try:
-                    async for chunk in app.state.llm_service.generate_stream(llm_request):
-                        yield f"data: {chunk}\n\n"
-                except Exception as e:
-                    yield f"data: ERROR: {str(e)}\n\n"
-                yield "data: [DONE]\n\n"
+        @app.get("/health")
+        async def health_check():
+            """Health check endpoint"""
+            try:
+                health = await self.llm_service.health_check()
+                return health
+            except Exception as e:
+                raise HTTPException(status_code=503, detail=f"Service unhealthy: {e}")
 
-            return StreamingResponse(
-                generate_stream(),
-                media_type="text/plain",
-                headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
-            )
-        else:
-            # Return regular response
-            response = await app.state.llm_service.generate(llm_request)
-            return {
-                "text": response.text,
-                "model": response.model,
-                "usage": response.usage,
-                "finish_reason": response.finish_reason,
-                "metadata": response.metadata
-            }
+        @app.post("/generate", response_model=LLMResponse)
+        async def generate(request: GenerateRequest):
+            """Generate text completion"""
+            try:
+                # Convert to LLMRequest
+                llm_request = LLMRequest(
+                    prompt=request.prompt,
+                    context=request.context,
+                    model=request.model,
+                    max_tokens=request.max_tokens,
+                    temperature=request.temperature,
+                    system_prompt=request.system_prompt
+                )
 
-    except Exception as e:
-        error_handler = ErrorHandler()
-        error_handler.logger.error(f"Generation error: {e}")
-        raise HTTPException(status_code=500, detail=f"Generation failed: {e}")
+                # Check if streaming is requested
+                if request.stream:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Use /stream endpoint for streaming responses"
+                    )
 
+                response = await self.llm_service.generate(llm_request)
+                return response
 
-@app.post("/embed")
-async def embed_text(request: EmbedRequest) -> Dict[str, Any]:
-    """Generate text embeddings"""
-    try:
-        embeddings = await app.state.llm_service.embed_text(request.text, request.model)
-        return {
-            "embeddings": embeddings,
-            "model": request.model or app.state.llm_service.llm_config.model,
-            "dimensions": len(embeddings)
-        }
-    except Exception as e:
-        error_handler = ErrorHandler()
-        error_handler.logger.error(f"Embedding error: {e}")
-        raise HTTPException(status_code=500, detail=f"Embedding failed: {e}")
+            except Exception as e:
+                self.logger.error(f"Generation error: {e}")
+                raise HTTPException(status_code=500, detail=f"Generation failed: {e}")
 
+        @app.post("/stream")
+        async def stream_generate(request: GenerateRequest):
+            """Generate streaming text completion"""
+            try:
+                # Convert to LLMRequest
+                llm_request = LLMRequest(
+                    prompt=request.prompt,
+                    context=request.context,
+                    model=request.model,
+                    max_tokens=request.max_tokens,
+                    temperature=request.temperature,
+                    system_prompt=request.system_prompt
+                )
 
-@app.get("/models")
-async def list_models() -> Dict[str, Any]:
-    """List available models"""
-    try:
-        models = await app.state.llm_service.list_models()
-        return models
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list models: {e}")
+                async def generate_stream():
+                    """Generate streaming response"""
+                    try:
+                        async for chunk in self.llm_service.generate_stream(llm_request):
+                            # Send as SSE format
+                            yield f"data: {json.dumps({'text': chunk})}\n\n"
+                        
+                        # Send done signal
+                        yield f"data: {json.dumps({'done': True})}\n\n"
+                    except Exception as e:
+                        self.logger.error(f"Streaming error: {e}")
+                        yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
-
-@app.get("/models/{model_name}")
-async def get_model_info(model_name: str) -> ModelInfo:
-    """Get information about a specific model"""
-    try:
-        info = await app.state.llm_service.get_model_info(model_name)
-
-        return ModelInfo(
-            name=info.get("model", model_name),
-            size=info.get("size", 0),
-            modified=info.get("modified_at", ""),
-            template=info.get("template", ""),
-            details=info.get("details", {})
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get model info: {e}")
-
-
-@app.post("/models/{model_name}/pull")
-async def pull_model(model_name: str, background_tasks: BackgroundTasks) -> Dict[str, Any]:
-    """Pull a model from registry"""
-    try:
-        # Add to background tasks
-        background_tasks.add_task(app.state.llm_service.pull_model, model_name)
-
-        return {
-            "status": "pulling",
-            "model": model_name,
-            "message": "Model pull started in background"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to start model pull: {e}")
-
-
-# OpenAI compatible endpoints
-@app.post("/v1/chat/completions")
-async def openai_chat_completions(request: Dict[str, Any]) -> Dict[str, Any]:
-    """OpenAI compatible chat completions endpoint"""
-    try:
-        # Extract parameters
-        messages = request.get("messages", [])
-        model = request.get("model", app.state.llm_service.llm_config.model)
-        temperature = request.get("temperature", app.state.llm_service.llm_config.temperature)
-        max_tokens = request.get("max_tokens", app.state.llm_service.llm_config.max_tokens)
-        stream = request.get("stream", False)
-
-        # Convert OpenAI format to internal format
-        prompt = ""
-        system_prompt = None
-        context = []
-
-        for msg in messages:
-            role = msg.get("role")
-            content = msg.get("content", "")
-
-            if role == "system":
-                system_prompt = content
-            elif role in ["user", "assistant"]:
-                context.append(Message(role=role, content=content))
-                if role == "user":
-                    prompt = content  # Last user message is the prompt
-
-        llm_request = LLMRequest(
-            prompt=prompt,
-            model=model,
-            system_prompt=system_prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            context=context,
-            stream=stream
-        )
-
-        if stream:
-            async def openai_stream():
-                try:
-                    async for chunk in app.state.llm_service.generate_stream(llm_request):
-                        import uuid
-                        from datetime import datetime
-
-                        response_chunk = {
-                            "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
-                            "object": "chat.completion.chunk",
-                            "created": int(datetime.now().timestamp()),
-                            "model": model,
-                            "choices": [{
-                                "index": 0,
-                                "delta": {"content": chunk},
-                                "finish_reason": None
-                            }]
-                        }
-                        yield f"data: {json.dumps(response_chunk)}\n\n"
-                except Exception as e:
-                    error_chunk = {
-                        "error": {"message": str(e), "type": "internal_error"}
+                return StreamingResponse(
+                    generate_stream(),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive",
+                        "X-Accel-Buffering": "no"
                     }
-                    yield f"data: {json.dumps(error_chunk)}\n\n"
-                yield "data: [DONE]\n\n"
+                )
 
-            return StreamingResponse(
-                openai_stream(),
-                media_type="text/plain",
-                headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
-            )
-        else:
-            response = await app.state.llm_service.generate(llm_request)
+            except Exception as e:
+                self.logger.error(f"Stream setup error: {e}")
+                raise HTTPException(status_code=500, detail=f"Stream failed: {e}")
 
-            import uuid
-            from datetime import datetime
-
-            return {
-                "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
-                "object": "chat.completion",
-                "created": int(datetime.now().timestamp()),
-                "model": model,
-                "choices": [{
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": response.text
-                    },
-                    "finish_reason": response.finish_reason or "stop"
-                }],
-                "usage": response.usage or {
-                    "prompt_tokens": 0,
-                    "completion_tokens": len(response.text.split()),
-                    "total_tokens": 0
+        @app.post("/embed")
+        async def embed_text(request: EmbeddingRequest):
+            """Generate text embeddings"""
+            try:
+                embedding = await self.llm_service.embed_text(request.text, request.model)
+                return {
+                    "embedding": embedding,
+                    "model": request.model or self.llm_service.llm_config.embedding_model,
+                    "dimensions": len(embedding)
                 }
+            except Exception as e:
+                self.logger.error(f"Embedding error: {e}")
+                raise HTTPException(status_code=500, detail=f"Embedding failed: {e}")
+
+        @app.get("/models", response_model=ModelListResponse)
+        async def list_models():
+            """List available models"""
+            try:
+                models_data = await self.llm_service.list_models()
+                return ModelListResponse(**models_data)
+            except Exception as e:
+                self.logger.error(f"List models error: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to list models: {e}")
+
+        @app.get("/models/{model_name}")
+        async def get_model_info(model_name: str):
+            """Get model information"""
+            try:
+                model_info = await self.llm_service.get_model_info(model_name)
+                return model_info
+            except Exception as e:
+                self.logger.error(f"Get model info error: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to get model info: {e}")
+
+        @app.get("/")
+        async def root():
+            """Root endpoint"""
+            return {
+                "service": "Morgan LLM Service",
+                "version": "0.2.0",
+                "status": "running",
+                "docs": "/docs",
+                "health": "/health"
             }
 
-    except Exception as e:
-        error_handler = ErrorHandler()
-        error_handler.logger.error(f"OpenAI compatible endpoint error: {e}")
-        raise HTTPException(status_code=500, detail=f"Chat completion failed: {e}")
+        self.app = app
+        return app
+
+    async def start(self):
+        """Start the API server"""
+        self.create_app()
+        self.logger.info(f"Starting LLM API server on {self.host}:{self.port}")
+        
+        config = uvicorn.Config(
+            self.app,
+            host=self.host,
+            port=self.port,
+            log_level="info"
+        )
+        server = uvicorn.Server(config)
+        await server.serve()
 
 
-@app.post("/v1/embeddings")
-async def openai_embeddings(request: Dict[str, Any]) -> Dict[str, Any]:
-    """OpenAI compatible embeddings endpoint"""
-    try:
-        input_text = request.get("input", "")
-        model = request.get("model", app.state.llm_service.llm_config.model)
-
-        if isinstance(input_text, list):
-            input_text = input_text[0]  # Take first text if list
-
-        embeddings = await app.state.llm_service.embed_text(input_text, model)
-
-        return {
-            "object": "list",
-            "data": [{
-                "object": "embedding",
-                "embedding": embeddings,
-                "index": 0
-            }],
-            "model": model,
-            "usage": {
-                "prompt_tokens": len(input_text.split()),
-                "total_tokens": len(input_text.split())
-            }
-        }
-
-    except Exception as e:
-        error_handler = ErrorHandler()
-        error_handler.logger.error(f"OpenAI embeddings error: {e}")
-        raise HTTPException(status_code=500, detail=f"Embedding failed: {e}")
-
-
-@app.get("/v1/models")
-async def openai_models() -> Dict[str, Any]:
-    """OpenAI compatible models endpoint"""
-    try:
-        models_info = await app.state.llm_service.list_models()
-
-        models = []
-        import uuid
-        from datetime import datetime
-
-        for model in models_info.get("models", []):
-            models.append({
-                "id": model.get("name"),
-                "object": "model",
-                "created": int(datetime.now().timestamp()),
-                "owned_by": "openai_compatible"
-            })
-
-        return {
-            "object": "list",
-            "data": models
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list models: {e}")
-
-
-async def main():
-    """Main entry point"""
-    config = ServiceConfig("llm")
-    llm_config = LLMConfig(**config.all())
-
-    logger = setup_logging(
-        "llm_api_main",
-        llm_config.log_level
-    )
-
-    logger.info(f"Starting LLM API server on {llm_config.host}:{llm_config.port}")
-
-    server_config = uvicorn.Config(
-        app,
-        host=llm_config.host,
-        port=llm_config.port,
-        log_level=llm_config.log_level.lower(),
-        access_log=True
-    )
-
-    server = uvicorn.Server(server_config)
-    await server.serve()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+async def main(llm_service, host: str = "0.0.0.0", port: int = 8001):
+    """Main entry point for LLM API server"""
+    server = LLMAPIServer(llm_service, host, port)
+    await server.start()

@@ -1,237 +1,186 @@
 """
-FastAPI server for TTS service
+FastAPI server for TTS service with streaming support
 """
-import asyncio
-from typing import Dict, Any, List, Optional
-from contextlib import asynccontextmanager
+import logging
+from typing import Dict, Any, Optional
+import json
+import base64
 
-from fastapi import FastAPI, HTTPException, File, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
 import uvicorn
 
-from service import TTSService, TTSConfig
-from shared.config.base import ServiceConfig
 from shared.models.base import TTSRequest, TTSResponse
 from shared.utils.logging import setup_logging
-from shared.utils.errors import ErrorHandler, ErrorCode
-from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware
+
+logger = logging.getLogger(__name__)
 
 
 class GenerateSpeechRequest(BaseModel):
-    """Request model for speech generation"""
-    text: str = Field(..., description="Text to convert to speech")
+    """Speech generation request"""
+    text: str = Field(..., description="Text to synthesize")
     voice: Optional[str] = Field(None, description="Voice to use")
-    speed: Optional[float] = Field(None, ge=0.1, le=3.0, description="Speech speed")
-    language: Optional[str] = Field(None, description="Language code")
-    format: Optional[str] = Field("wav", description="Output audio format")
+    speed: Optional[float] = Field(None, description="Speech speed")
+    output_format: Optional[str] = Field(None, description="Output audio format")
+    stream: bool = Field(False, description="Enable streaming response")
 
 
-class VoiceInfo(BaseModel):
-    """Voice information response"""
-    name: str
-    language: str
-    gender: Optional[str] = None
-    age: Optional[str] = None
-    accent: Optional[str] = None
-
-
-class HealthResponse(BaseModel):
-    """Health check response"""
-    status: str
-    model: str
-    device: str
-    available_voices: int
+class VoiceListResponse(BaseModel):
+    """Voice list response"""
+    voices: list
+    presets: dict
     current_voice: str
+    current_model: str
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan manager"""
-    # Startup
-    config = ServiceConfig("tts")
-    tts_config = TTSConfig(**config.all())
+class TTSAPIServer:
+    """TTS API Server"""
 
-    logger = setup_logging(
-        "tts_api",
-        tts_config.log_level,
-        "logs/tts_api.log"
-    )
+    def __init__(self, tts_service, host: str = "0.0.0.0", port: int = 8002):
+        self.tts_service = tts_service
+        self.host = host
+        self.port = port
+        self.logger = setup_logging("tts_api", "INFO", "logs/tts_api.log")
+        self.app = None
 
-    logger.info("Starting TTS API server...")
-
-    # Initialize TTS service
-    app.state.tts_service = TTSService(config)
-    await app.state.tts_service.start()
-
-    logger.info("TTS API server started")
-
-    yield
-
-    # Shutdown
-    logger.info("Shutting down TTS API server...")
-    await app.state.tts_service.stop()
-    logger.info("TTS API server stopped")
-
-
-# Create FastAPI app
-app = FastAPI(
-    title="Morgan TTS Service",
-    description="High-performance text-to-speech synthesis service",
-    version="0.2.0",
-    lifespan=lifespan
-)
-
-# Add middleware
-app.add_middleware(RequestIDMiddleware)
-app.add_middleware(TimingMiddleware)
-
-
-@app.get("/health", response_model=HealthResponse)
-async def health_check() -> HealthResponse:
-    """Health check endpoint"""
-    try:
-        health = await app.state.tts_service.health_check()
-        return HealthResponse(**health)
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Service unhealthy: {e}")
-
-
-@app.post("/generate")
-async def generate_speech(request: GenerateSpeechRequest) -> Dict[str, Any]:
-    """Generate speech from text"""
-    try:
-        # Convert request to internal format
-        tts_request = TTSRequest(
-            text=request.text,
-            voice=request.voice,
-            speed=request.speed,
-            language=request.language,
-            format=request.format
+    def create_app(self) -> FastAPI:
+        """Create FastAPI application"""
+        app = FastAPI(
+            title="Morgan TTS Service",
+            description="Text-to-Speech service with multiple voice models",
+            version="0.2.0"
         )
 
-        response = await app.state.tts_service.generate_speech(tts_request)
+        @app.get("/health")
+        async def health_check():
+            """Health check endpoint"""
+            try:
+                health = await self.tts_service.health_check()
+                return health
+            except Exception as e:
+                raise HTTPException(status_code=503, detail=f"Service unhealthy: {e}")
 
-        return {
-            "audio_data": response.audio_data.hex(),  # Convert to hex for JSON
-            "format": response.format,
-            "sample_rate": response.sample_rate,
-            "duration": response.duration,
-            "metadata": response.metadata
-        }
+        @app.post("/generate")
+        async def generate_speech(request: GenerateSpeechRequest):
+            """Generate speech from text"""
+            try:
+                # Convert to TTSRequest
+                tts_request = TTSRequest(
+                    text=request.text,
+                    voice=request.voice,
+                    speed=request.speed,
+                    output_format=request.output_format
+                )
 
-    except Exception as e:
-        error_handler = ErrorHandler()
-        error_handler.logger.error(f"Speech generation error: {e}")
-        raise HTTPException(status_code=500, detail=f"Speech generation failed: {e}")
+                if request.stream:
+                    # Stream audio chunks
+                    async def stream_audio():
+                        """Stream audio in chunks"""
+                        try:
+                            # Generate full audio first
+                            response = await self.tts_service.generate_speech(tts_request)
+                            
+                            # Stream in chunks (16KB each)
+                            chunk_size = 16384
+                            audio_data = response.audio_data
+                            
+                            for i in range(0, len(audio_data), chunk_size):
+                                chunk = audio_data[i:i + chunk_size]
+                                yield chunk
+                        except Exception as e:
+                            self.logger.error(f"Streaming error: {e}")
+                            raise
 
+                    return StreamingResponse(
+                        stream_audio(),
+                        media_type="audio/wav",
+                        headers={
+                            "Content-Disposition": "attachment; filename=speech.wav",
+                            "Cache-Control": "no-cache"
+                        }
+                    )
+                else:
+                    # Return full audio
+                    response = await self.tts_service.generate_speech(tts_request)
+                    
+                    return {
+                        "audio_data": base64.b64encode(response.audio_data).decode('utf-8'),
+                        "format": response.format,
+                        "sample_rate": response.sample_rate,
+                        "duration": response.duration,
+                        "metadata": response.metadata
+                    }
 
-@app.get("/voices")
-async def list_voices() -> Dict[str, Any]:
-    """List available voices"""
-    try:
-        voices = await app.state.tts_service.list_voices()
-        return voices
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list voices: {e}")
+            except Exception as e:
+                self.logger.error(f"Speech generation error: {e}")
+                raise HTTPException(status_code=500, detail=f"Speech generation failed: {e}")
 
+        @app.post("/generate/audio")
+        async def generate_speech_audio(request: GenerateSpeechRequest):
+            """Generate speech and return raw audio"""
+            try:
+                tts_request = TTSRequest(
+                    text=request.text,
+                    voice=request.voice,
+                    speed=request.speed,
+                    output_format=request.output_format
+                )
 
-@app.post("/generate/stream")
-async def generate_speech_stream(request: GenerateSpeechRequest) -> StreamingResponse:
-    """Generate speech and stream audio data"""
-    try:
-        # Convert request to internal format
-        tts_request = TTSRequest(
-            text=request.text,
-            voice=request.voice,
-            speed=request.speed,
-            language=request.language,
-            format=request.format
-        )
+                response = await self.tts_service.generate_speech(tts_request)
+                
+                return Response(
+                    content=response.audio_data,
+                    media_type="audio/wav",
+                    headers={
+                        "Content-Disposition": "attachment; filename=speech.wav"
+                    }
+                )
 
-        response = await app.state.tts_service.generate_speech(tts_request)
+            except Exception as e:
+                self.logger.error(f"Audio generation error: {e}")
+                raise HTTPException(status_code=500, detail=f"Audio generation failed: {e}")
 
-        async def audio_stream():
-            # Send audio data in chunks
-            chunk_size = 8192
-            audio_data = response.audio_data
+        @app.get("/voices", response_model=VoiceListResponse)
+        async def list_voices():
+            """List available voices"""
+            try:
+                voices_data = await self.tts_service.list_voices()
+                return VoiceListResponse(**voices_data)
+            except Exception as e:
+                self.logger.error(f"List voices error: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to list voices: {e}")
 
-            for i in range(0, len(audio_data), chunk_size):
-                chunk = audio_data[i:i + chunk_size]
-                yield chunk
-
-        return StreamingResponse(
-            audio_stream(),
-            media_type=f"audio/{request.format or 'wav'}",
-            headers={
-                "Content-Length": str(len(response.audio_data)),
-                "X-Sample-Rate": str(response.sample_rate),
-                "X-Duration": str(response.duration or 0),
-                "X-Model": response.metadata.get("model", "unknown") if response.metadata else "unknown"
+        @app.get("/")
+        async def root():
+            """Root endpoint"""
+            return {
+                "service": "Morgan TTS Service",
+                "version": "0.2.0",
+                "status": "running",
+                "docs": "/docs",
+                "health": "/health"
             }
+
+        self.app = app
+        return app
+
+    async def start(self):
+        """Start the API server"""
+        self.create_app()
+        self.logger.info(f"Starting TTS API server on {self.host}:{self.port}")
+        
+        config = uvicorn.Config(
+            self.app,
+            host=self.host,
+            port=self.port,
+            log_level="info"
         )
-
-    except Exception as e:
-        error_handler = ErrorHandler()
-        error_handler.logger.error(f"Streaming speech generation error: {e}")
-        raise HTTPException(status_code=500, detail=f"Streaming speech generation failed: {e}")
+        server = uvicorn.Server(config)
+        await server.serve()
 
 
-@app.post("/preview")
-async def preview_voice(request: GenerateSpeechRequest) -> Dict[str, Any]:
-    """Preview voice with a sample text"""
-    try:
-        # Use a short sample text for preview
-        preview_text = request.text[:100] + "..." if len(request.text) > 100 else request.text
-
-        tts_request = TTSRequest(
-            text=preview_text,
-            voice=request.voice,
-            speed=request.speed,
-            language=request.language,
-            format=request.format
-        )
-
-        response = await app.state.tts_service.generate_speech(tts_request)
-
-        return {
-            "audio_data": response.audio_data.hex(),
-            "format": response.format,
-            "sample_rate": response.sample_rate,
-            "duration": response.duration,
-            "preview_text": preview_text,
-            "metadata": response.metadata
-        }
-
-    except Exception as e:
-        error_handler = ErrorHandler()
-        error_handler.logger.error(f"Voice preview error: {e}")
-        raise HTTPException(status_code=500, detail=f"Voice preview failed: {e}")
-
-
-async def main():
-    """Main entry point"""
-    config = ServiceConfig("tts")
-    tts_config = TTSConfig(**config.all())
-
-    logger = setup_logging(
-        "tts_api_main",
-        tts_config.log_level
-    )
-
-    logger.info(f"Starting TTS API server on {tts_config.host}:{tts_config.port}")
-
-    server_config = uvicorn.Config(
-        app,
-        host=tts_config.host,
-        port=tts_config.port,
-        log_level=tts_config.log_level.lower(),
-        access_log=True
-    )
-
-    server = uvicorn.Server(server_config)
-    await server.serve()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+async def main(tts_service, host: str = "0.0.0.0", port: int = 8002):
+    """Main entry point for TTS API server"""
+    server = TTSAPIServer(tts_service, host, port)
+    await server.start()

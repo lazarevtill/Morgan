@@ -8,6 +8,7 @@ from pathlib import Path
 
 from shared.config.base import ServiceConfig
 from shared.utils.logging import setup_logging
+from service import LLMService
 from api.server import main as server_main
 
 
@@ -25,9 +26,10 @@ async def main():
     config = ServiceConfig("llm", args.config)
 
     # Override with command line arguments
-    config.set("host", args.host)
-    config.set("port", args.port)
-    config.set("log_level", args.log_level)
+    host = args.host
+    port = args.port
+    if args.log_level:
+        config.config["log_level"] = args.log_level
 
     # Setup logging
     logger = setup_logging(
@@ -40,13 +42,20 @@ async def main():
     logger.info(f"Configuration: {config.all()}")
 
     try:
+        # Initialize LLM service
+        llm_service = LLMService(config)
+        await llm_service.start()
+
         # Start the API server
-        await server_main()
+        await server_main(llm_service, host, port)
     except KeyboardInterrupt:
         logger.info("LLM Service interrupted by user")
     except Exception as e:
         logger.error(f"LLM Service failed: {e}")
         raise
+    finally:
+        if 'llm_service' in locals():
+            await llm_service.stop()
 
 
 if __name__ == "__main__":

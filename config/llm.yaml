@@ -1,13 +1,16 @@
-# LLM Service Configuration (OpenAI-compatible API client)
+# LLM Service Configuration (Open WebUI / Ollama API)
+# Reference: https://docs.openwebui.com/getting-started/api-endpoints/
 
 # Network configuration
 host: "0.0.0.0"
 port: 8001
 
-# OpenAI-compatible API configuration (external service)
+# Open WebUI API configuration
+# Chat completions: https://gpt.lazarev.cloud/ollama/v1/chat/completions (OpenAI-compatible)
+# Embeddings: https://gpt.lazarev.cloud/ollama/api/embed (Ollama API)
 openai_api_base: "https://gpt.lazarev.cloud/ollama/v1"
-api_key: ""  # Set via MORGAN_LLM_API_KEY environment variable
-model: "llama3.2:latest"  # Default model, can be overridden by external API
+api_key: ""  # Open WebUI API key
+model: "llama3.2:latest"  # Default chat model
 
 # Generation parameters
 max_tokens: 2048
@@ -25,7 +28,8 @@ system_prompt: "You are Morgan, a helpful and friendly AI assistant. You assist 
 log_level: "INFO"
 
 # Embedding configuration
-embedding_model: "qwen3-embedding:latest"
+# Using nomic-embed-text which is optimized for Ollama embeddings
+embedding_model: "nomic-embed-text:latest"
 
 # Feature flags
 enable_streaming: true

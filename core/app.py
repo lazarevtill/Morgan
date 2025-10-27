@@ -161,6 +161,7 @@ class MorganCore:
                 max_history=self.core_config.max_history,
                 timeout=self.core_config.conversation_timeout
             )
+            await self.conversation_manager.initialize()
 
             # Initialize handler registry
             self.handler_registry = HandlerRegistry(self)
