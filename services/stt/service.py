@@ -115,7 +115,7 @@ class STTService:
                 compute_type="float16" if self.device.type == "cuda" else "int8",
                 cpu_threads=4,
                 num_workers=1,
-                download_root="data/models/whisper",
+                download_root="data/models",
                 local_files_only=False  # Allow downloading if not present
             )
 
@@ -138,7 +138,7 @@ class STTService:
             self.whisper_model = whisper.load_model(
                 self.stt_config.model,
                 device=str(self.device),
-                download_root="data/models/whisper"
+                download_root="data/models"
             )
 
             self.logger.info("OpenAI Whisper model loaded successfully")
@@ -150,6 +150,10 @@ class STTService:
     async def _load_vad_model(self):
         """Load Silero VAD model"""
         try:
+            # Set torch hub cache directory to use mounted volume
+            import os
+            torch.hub.set_dir("data/models/torch_hub")
+
             # Load Silero VAD model
             model, utils = torch.hub.load(
                 repo_or_dir='snakers4/silero-vad',

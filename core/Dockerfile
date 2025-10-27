@@ -60,7 +60,7 @@ COPY shared/ ./shared/
 COPY core/ ./
 
 # Create necessary directories
-RUN mkdir -p logs data/conversations
+RUN mkdir -p logs data/conversations data/models data/models/torch_hub data/models/transformers data/models/huggingface data/models/sentence_transformers
 
 # Stage 4: Runtime image
 FROM build AS runtime
@@ -71,6 +71,12 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+
+# Set model cache directories
+ENV TORCH_HOME=/app/data/models/torch_hub
+ENV TRANSFORMERS_CACHE=/app/data/models/transformers
+ENV HF_HOME=/app/data/models/huggingface
+ENV SENTENCE_TRANSFORMERS_HOME=/app/data/models/sentence_transformers
 
 # Expose ports
 EXPOSE 8000

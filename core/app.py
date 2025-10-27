@@ -46,7 +46,9 @@ class CoreConfig(BaseModel):
     enable_prometheus: bool = True
     enable_memory: bool = True
     enable_tools: bool = True
-
+    use_https: bool = False
+    ssl_cert_path: str = "/app/cert.pem"
+    ssl_key_path: str = "/app/cert.pfx"
     external_llm_api_base: str = "https://gpt.lazarev.cloud/ollama/v1"
     external_llm_api_key: str = ""
     embedding_model: str = "qwen3-embedding:latest"

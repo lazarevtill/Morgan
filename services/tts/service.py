@@ -124,6 +124,10 @@ class TTSService:
         try:
             from TTS.api import TTS
 
+            # Set TTS cache directory to use mounted volume
+            import os
+            os.environ["TTS_CACHE_DIR"] = "data/models/tts"
+
             # Map model names to TTS models
             model_map = {
                 "tts-1": "tts_models/en/ljspeech/tacotron2-DDC_ph",
