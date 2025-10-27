@@ -92,10 +92,15 @@ RUN uv pip install --system \
 COPY services/stt/ ./
 
 # Create necessary directories
-RUN mkdir -p logs data/models
+RUN mkdir -p logs data/models data/models/torch_hub data/models/transformers data/models/huggingface
 
 # Set environment variables for STT
 ENV RUST_BACKTRACE=1
+
+# Set model cache directories
+ENV TORCH_HOME=/app/data/models/torch_hub
+ENV TRANSFORMERS_CACHE=/app/data/models/transformers
+ENV HF_HOME=/app/data/models/huggingface
 
 # Expose ports
 EXPOSE 8003

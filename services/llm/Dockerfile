@@ -55,12 +55,17 @@ WORKDIR /app
 COPY services/llm/ ./
 
 # Create necessary directories
-RUN mkdir -p logs data/models
+RUN mkdir -p logs data/models data/models/torch_hub data/models/transformers data/models/huggingface
 
 # Set common environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+
+# Set model cache directories
+ENV TORCH_HOME=/app/data/models/torch_hub
+ENV TRANSFORMERS_CACHE=/app/data/models/transformers
+ENV HF_HOME=/app/data/models/huggingface
 
 # Expose ports
 EXPOSE 8001

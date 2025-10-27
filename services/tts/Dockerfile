@@ -74,6 +74,12 @@ ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64:$LD
 ENV AUDIODEV=null
 ENV ESPEAK_DATA_PATH=/usr/share/espeak-ng-data
 
+# Set model cache directories
+ENV TORCH_HOME=/app/data/models/torch_hub
+ENV TTS_CACHE_DIR=/app/data/models/tts
+ENV TRANSFORMERS_CACHE=/app/data/models/transformers
+ENV HF_HOME=/app/data/models/huggingface
+
 # Install TTS-specific dependencies
 RUN uv pip install --system \
     TTS \
@@ -88,7 +94,7 @@ RUN uv pip install --system \
 COPY services/tts/ ./
 
 # Create necessary directories
-RUN mkdir -p logs data/models data/voices
+RUN mkdir -p logs data/models data/models/torch_hub data/models/transformers data/models/huggingface data/voices
 
 # Expose ports
 EXPOSE 8002

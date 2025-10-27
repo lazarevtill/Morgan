@@ -13,6 +13,9 @@ services:
       - "8001:8001"
     volumes:
       - ./config:/app/config:ro
+      - ./data/models/torch_hub:/root/.cache/torch:hub
+      - ./data/models/transformers:/app/data/models/transformers
+      - ./data/models/huggingface:/app/data/models/huggingface
       - ./logs/llm:/app/logs
     environment:
       - MORGAN_CONFIG_DIR=/app/config
@@ -22,7 +25,7 @@ services:
     networks:
       - morgan-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD", "curl", "http://localhost:8001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -43,6 +46,9 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./data/models/tts:/app/data/models
+      - ./data/models/torch_hub:/root/.cache/torch:hub
+      - ./data/models/transformers:/app/data/models/transformers
+      - ./data/models/huggingface:/app/data/models/huggingface
       - ./data/voices:/app/data/voices
       - ./logs/tts:/app/logs
     environment:
@@ -60,7 +66,7 @@ services:
     networks:
       - morgan-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      test: ["CMD", "curl", "http://localhost:8002/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -81,6 +87,9 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./data/models/stt:/app/data/models
+      - ./data/models/torch_hub:/root/.cache/torch:hub
+      - ./data/models/transformers:/app/data/models/transformers
+      - ./data/models/huggingface:/app/data/models/huggingface
       - ./logs/stt:/app/logs
     environment:
       - MORGAN_CONFIG_DIR=/app/config
@@ -98,7 +107,7 @@ services:
     networks:
       - morgan-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      test: ["CMD", "curl", "http://localhost:8003/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -143,7 +152,7 @@ services:
     networks:
       - morgan-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:6333"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -164,6 +173,10 @@ services:
     volumes:
       - ./config:/app/config
       - ./data:/app/data
+      - ./data/models/torch_hub:/root/.cache/torch:hub
+      - ./data/models/transformers:/app/data/models/transformers
+      - ./data/models/huggingface:/app/data/models/huggingface
+      - ./data/models/sentence_transformers:/app/data/models/sentence_transformers
       - ./logs/core:/app/logs
     environment:
       - MORGAN_CONFIG_DIR=/app/config
@@ -194,7 +207,7 @@ services:
     networks:
       - morgan-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
