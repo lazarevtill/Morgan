@@ -1,21 +1,25 @@
 """
-Conversation manager for Morgan Core Service
+Conversation manager for Morgan Core Service with PostgreSQL and Redis integration
 """
 import asyncio
 import logging
 import time
 import json
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pathlib import Path
+from uuid import uuid4
 
 from shared.config.base import ServiceConfig
 from shared.models.base import Message, ConversationContext
+from shared.models.database import ConversationModel, MessageModel, UserPreferencesModel
 from shared.utils.logging import setup_logging
+from shared.utils.database import DatabaseManager, get_db_manager
+from shared.utils.redis_client import RedisManager, get_redis_manager
 
 
 class ConversationManager:
-    """Manages conversation contexts and state"""
+    """Manages conversation contexts and state with PostgreSQL and Redis"""
 
     def __init__(self, config: ServiceConfig, max_history: int = 50, timeout: int = 1800):
         self.config = config
@@ -23,7 +27,11 @@ class ConversationManager:
         self.timeout = timeout  # seconds
         self.logger = setup_logging("conversation_manager", "INFO", "logs/conversation.log")
 
-        # In-memory conversation storage (can be replaced with Redis/DB)
+        # Database and cache managers
+        self.db: Optional[DatabaseManager] = None
+        self.redis: Optional[RedisManager] = None
+
+        # In-memory fallback storage
         self.conversations: Dict[str, ConversationContext] = {}
         self.last_accessed: Dict[str, float] = {}
 
@@ -32,51 +40,163 @@ class ConversationManager:
 
         self.logger.info(f"Conversation manager initialized (max_history={max_history}, timeout={timeout}s)")
 
-    def get_context(self, user_id: str) -> ConversationContext:
+    async def initialize(self):
+        """Initialize database and Redis connections"""
+        try:
+            self.db = await get_db_manager()
+            self.redis = await get_redis_manager()
+            self.logger.info("Conversation manager connected to PostgreSQL and Redis")
+        except Exception as e:
+            self.logger.warning(f"Failed to connect to DB/Redis, using in-memory fallback: {e}")
+
+    async def get_context(self, user_id: str) -> ConversationContext:
         """Get or create conversation context for a user"""
         current_time = time.time()
 
+        # Try Redis cache first
+        if self.redis:
+            try:
+                cached_context = await self.redis.get_conversation_context(user_id)
+                if cached_context:
+                    self.last_accessed[user_id] = current_time
+                    return ConversationContext(**cached_context)
+            except Exception as e:
+                self.logger.warning(f"Redis get context error: {e}")
+
+        # Try in-memory cache
         if user_id in self.conversations:
-            # Update access time
             self.last_accessed[user_id] = current_time
             return self.conversations[user_id]
-        else:
-            # Create new conversation context
-            context = ConversationContext(
-                conversation_id=f"conv_{user_id}_{int(current_time)}",
-                user_id=user_id,
-                messages=[]
-            )
 
-            self.conversations[user_id] = context
-            self.last_accessed[user_id] = current_time
+        # Load from database
+        if self.db:
+            try:
+                conversations = await self.db.get_user_conversations(user_id, limit=1)
+                if conversations:
+                    conv = conversations[0]
+                    messages = await self.db.get_recent_messages(conv.conversation_id, self.max_history)
+                    
+                    context = ConversationContext(
+                        conversation_id=conv.conversation_id,
+                        user_id=conv.user_id,
+                        messages=[Message(
+                            role=msg.role,
+                            content=msg.content,
+                            timestamp=msg.created_at,
+                            metadata=msg.metadata
+                        ) for msg in messages]
+                    )
+                    
+                    # Cache in Redis and memory
+                    self.conversations[user_id] = context
+                    self.last_accessed[user_id] = current_time
+                    if self.redis:
+                        await self.redis.cache_conversation_context(user_id, context.to_dict(), ttl=self.timeout)
+                    
+                    self.logger.info(f"Loaded conversation context for user: {user_id} from DB")
+                    return context
+            except Exception as e:
+                self.logger.error(f"Database get context error: {e}")
 
-            self.logger.info(f"Created new conversation context for user: {user_id}")
-            return context
+        # Create new conversation context
+        context = ConversationContext(
+            conversation_id=f"conv_{user_id}_{int(current_time)}",
+            user_id=user_id,
+            messages=[]
+        )
 
-    def reset_context(self, user_id: str):
+        # Save to database
+        if self.db:
+            try:
+                conv_model = ConversationModel(
+                    conversation_id=context.conversation_id,
+                    user_id=user_id,
+                    title=None,
+                    metadata={}
+                )
+                await self.db.create_conversation(conv_model)
+            except Exception as e:
+                self.logger.error(f"Database create conversation error: {e}")
+
+        self.conversations[user_id] = context
+        self.last_accessed[user_id] = current_time
+
+        # Cache in Redis
+        if self.redis:
+            try:
+                await self.redis.cache_conversation_context(user_id, context.to_dict(), ttl=self.timeout)
+            except Exception as e:
+                self.logger.warning(f"Redis cache context error: {e}")
+
+        self.logger.info(f"Created new conversation context for user: {user_id}")
+        return context
+
+    async def reset_context(self, user_id: str):
         """Reset conversation context for a user"""
+        # Remove from memory
         if user_id in self.conversations:
             del self.conversations[user_id]
             del self.last_accessed[user_id]
-            self.logger.info(f"Reset conversation context for user: {user_id}")
-        else:
-            self.logger.warning(f"No conversation context found for user: {user_id}")
 
-    def add_message(self, user_id: str, message: Message):
+        # Remove from Redis
+        if self.redis:
+            try:
+                await self.redis.delete(f"conversation:{user_id}")
+            except Exception as e:
+                self.logger.warning(f"Redis delete context error: {e}")
+
+        # Mark as inactive in database (keep history)
+        if self.db:
+            try:
+                conversations = await self.db.get_user_conversations(user_id, limit=1)
+                if conversations:
+                    await self.db.update_conversation(
+                        conversations[0].conversation_id,
+                        is_active=False
+                    )
+            except Exception as e:
+                self.logger.error(f"Database reset context error: {e}")
+
+        self.logger.info(f"Reset conversation context for user: {user_id}")
+
+    async def add_message(self, user_id: str, message: Message):
         """Add a message to conversation context"""
-        context = self.get_context(user_id)
+        context = await self.get_context(user_id)
         context.add_message(message)
 
         # Trim history if too long
         if len(context.messages) > self.max_history:
             context.messages = context.messages[-self.max_history:]
 
+        # Save to database
+        if self.db:
+            try:
+                # Get conversation UUID from DB
+                conv = await self.db.get_conversation(context.conversation_id)
+                if conv:
+                    msg_model = MessageModel(
+                        conversation_id=conv.id,
+                        role=message.role,
+                        content=message.content,
+                        sequence_number=len(context.messages),
+                        metadata=message.metadata or {}
+                    )
+                    await self.db.add_message(msg_model)
+            except Exception as e:
+                self.logger.error(f"Database add message error: {e}")
+
+        # Update Redis cache
+        if self.redis:
+            try:
+                await self.redis.cache_conversation_context(user_id, context.to_dict(), ttl=self.timeout)
+            except Exception as e:
+                self.logger.warning(f"Redis update context error: {e}")
+
         self.logger.debug(f"Added message to conversation {user_id}: {message.role}")
 
-    def get_recent_messages(self, user_id: str, count: int = 10) -> list:
+    async def get_recent_messages(self, user_id: str, count: int = 10) -> list:
         """Get recent messages from conversation"""
-        context = self.get_context(user_id)
+        context = await self.get_context(user_id)
         return context.get_last_n_messages(count)
 
     def get_conversation_stats(self) -> Dict[str, Any]:
@@ -200,6 +320,46 @@ class ConversationManager:
             "stats": self.get_conversation_stats()
         }
 
+    async def get_user_preferences(self, user_id: str) -> Optional[UserPreferencesModel]:
+        """Get user preferences from cache or database"""
+        # Try Redis cache first
+        if self.redis:
+            try:
+                cached_prefs = await self.redis.get_user_preferences(user_id)
+                if cached_prefs:
+                    return UserPreferencesModel(**cached_prefs)
+            except Exception as e:
+                self.logger.warning(f"Redis get preferences error: {e}")
+
+        # Load from database
+        if self.db:
+            try:
+                prefs = await self.db.get_user_preferences(user_id)
+                if prefs:
+                    # Cache in Redis
+                    if self.redis:
+                        await self.redis.cache_user_preferences(user_id, prefs.dict())
+                    return prefs
+            except Exception as e:
+                self.logger.error(f"Database get preferences error: {e}")
+
+        return None
+
+    async def update_user_preferences(self, preferences: UserPreferencesModel):
+        """Update user preferences"""
+        # Save to database
+        if self.db:
+            try:
+                prefs = await self.db.upsert_user_preferences(preferences)
+                # Update Redis cache
+                if self.redis:
+                    await self.redis.cache_user_preferences(preferences.user_id, prefs.dict())
+                return prefs
+            except Exception as e:
+                self.logger.error(f"Database update preferences error: {e}")
+        
+        return None
+
     def start_cleanup_task(self):
         """Start background cleanup task"""
         if self.cleanup_task is None or self.cleanup_task.done():
@@ -215,9 +375,20 @@ class ConversationManager:
         while True:
             try:
                 self.cleanup_expired()
+                # Sync in-memory cache with Redis periodically
+                if self.redis:
+                    await self._sync_with_redis()
                 await asyncio.sleep(300)  # Clean up every 5 minutes
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 self.logger.error(f"Error in periodic cleanup: {e}")
                 await asyncio.sleep(300)
+
+    async def _sync_with_redis(self):
+        """Sync in-memory cache with Redis"""
+        try:
+            for user_id, context in self.conversations.items():
+                await self.redis.cache_conversation_context(user_id, context.to_dict(), ttl=self.timeout)
+        except Exception as e:
+            self.logger.error(f"Redis sync error: {e}")

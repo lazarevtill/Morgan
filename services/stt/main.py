@@ -7,6 +7,7 @@ import logging
 
 from shared.config.base import ServiceConfig
 from shared.utils.logging import setup_logging
+from service import STTService
 from api.server import main as server_main
 
 
@@ -24,9 +25,10 @@ async def main():
     config = ServiceConfig("stt", args.config)
 
     # Override with command line arguments
-    config.set("host", args.host)
-    config.set("port", args.port)
-    config.set("log_level", args.log_level)
+    host = args.host
+    port = args.port
+    if args.log_level:
+        config.config["log_level"] = args.log_level
 
     # Setup logging
     logger = setup_logging(
@@ -39,13 +41,20 @@ async def main():
     logger.info(f"Configuration: {config.all()}")
 
     try:
+        # Initialize STT service
+        stt_service = STTService(config)
+        await stt_service.start()
+
         # Start the API server
-        await server_main()
+        await server_main(stt_service, host, port)
     except KeyboardInterrupt:
         logger.info("STT Service interrupted by user")
     except Exception as e:
         logger.error(f"STT Service failed: {e}")
         raise
+    finally:
+        if 'stt_service' in locals():
+            await stt_service.stop()
 
 
 if __name__ == "__main__":

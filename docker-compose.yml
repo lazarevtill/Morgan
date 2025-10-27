@@ -122,6 +122,25 @@ services:
       retries: 3
       start_period: 30s
 
+  # Redis for caching and session state
+  redis:
+    image: harbor.in.lazarev.cloud/proxy/redis:7-alpine
+    container_name: morgan-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    networks:
+      - morgan-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   # PostgreSQL database for structured memory and persistence
   postgres:
     image: harbor.in.lazarev.cloud/proxy/postgres:17-alpine
@@ -196,6 +215,8 @@ services:
       - POSTGRES_DB=morgan
       - POSTGRES_USER=morgan
       - POSTGRES_PASSWORD=morgan_secure_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - QDRANT_GRPC_PORT=6334
@@ -207,6 +228,8 @@ services:
       - TORCH_HOME=/root/.cache/torch
       - SENTENCE_TRANSFORMERS_HOME=/root/.cache/torch/sentence_transformers
     depends_on:
+      redis:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       qdrant:
@@ -234,6 +257,8 @@ networks:
         - subnet: 172.20.0.0/16
 
 volumes:
+  redis-data:
+    driver: local
   postgres-data:
     driver: local
   qdrant-data:
