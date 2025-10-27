@@ -1,8 +1,8 @@
 # Optimized Dockerfile for TTS Service with CUDA 12.4
-# Using CUDA 12.4.1 (verified compatible with csm-streaming and faster-whisper)
+# Using CUDA 12.4.0 (verified compatible with csm-streaming)
 
 # Stage 1: Base CUDA image with system dependencies
-FROM harbor.in.lazarev.cloud/proxy/nvidia/cuda:13.0.1-devel-ubuntu22.04 AS base
+FROM harbor.in.lazarev.cloud/proxy/nvidia/cuda:12.4.0-devel-ubuntu22.04 AS base
 
 # Configure apt repositories and install system dependencies
 RUN echo 'deb https://nexus.in.lazarev.cloud/repository/ubuntu-group/ jammy main restricted universe multiverse' > /etc/apt/sources.list && \

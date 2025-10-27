@@ -132,6 +132,13 @@ class MorganCore:
             if self.service_orchestrator:
                 await self.service_orchestrator.stop()
 
+            # Stop conversation manager and disconnect from databases
+            if self.conversation_manager:
+                if self.conversation_manager.db:
+                    await self.conversation_manager.db.disconnect()
+                if self.conversation_manager.redis:
+                    await self.conversation_manager.redis.disconnect()
+
             # Stop database managers
             if self.memory_manager:
                 await self.memory_manager.stop()
@@ -152,16 +159,20 @@ class MorganCore:
             # Register services
             await self._register_services()
 
-            # Initialize database managers
+            # Initialize database clients (PostgreSQL + Redis)
+            db_client, redis_client = await self._initialize_database_clients()
+
+            # Initialize database managers (Memory + Tools)
             await self._initialize_databases()
 
-            # Initialize conversation manager
+            # Initialize conversation manager with database clients
             self.conversation_manager = ConversationManager(
                 config=self.config,
+                db_client=db_client,
+                redis_client=redis_client,
                 max_history=self.core_config.max_history,
                 timeout=self.core_config.conversation_timeout
             )
-            await self.conversation_manager.initialize()
 
             # Initialize handler registry
             self.handler_registry = HandlerRegistry(self)
@@ -187,8 +198,33 @@ class MorganCore:
             self.logger.error(f"Failed to initialize components: {e}")
             raise
 
+    async def _initialize_database_clients(self):
+        """Initialize PostgreSQL and Redis clients"""
+        from shared.utils.database import DatabaseClient
+        from shared.utils.redis_client import RedisClient
+
+        db_client = None
+        redis_client = None
+
+        try:
+            # Initialize PostgreSQL client
+            db_client = DatabaseClient()
+            await db_client.connect()
+            self.logger.info("PostgreSQL client connected")
+
+            # Initialize Redis client
+            redis_client = RedisClient()
+            await redis_client.connect()
+            self.logger.info("Redis client connected")
+
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize database clients: {e}")
+            self.logger.info("Continuing with in-memory fallback")
+
+        return db_client, redis_client
+
     async def _initialize_databases(self):
-        """Initialize database connections"""
+        """Initialize database managers (Memory + Tools)"""
         # Check if memory and tools are enabled
         enable_memory = self.config.get("enable_memory", True)
         enable_tools = self.config.get("enable_tools", True)
@@ -198,24 +234,14 @@ class MorganCore:
             return
 
         try:
-            # Get database configuration from YAML/env
-            postgres_host = self.config.get("postgres_host", "postgres")
-            postgres_port = self.config.get("postgres_port", 5432)
-            postgres_db = self.config.get("postgres_db", "morgan")
-            postgres_user = self.config.get("postgres_user", "morgan")
-            postgres_password = self.config.get("postgres_password", "morgan_secure_password")
-
-            # Build PostgreSQL DSN
-            postgres_dsn = f"postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_db}"
-
             # Initialize Memory Manager if enabled
             if enable_memory:
                 qdrant_host = self.config.get("qdrant_host", "qdrant")
                 qdrant_port = self.config.get("qdrant_port", 6333)
                 embedding_dim = self.config.get("embedding_dimension", 384)
 
+                # Use existing DatabaseClient from conversation manager
                 self.memory_manager = MemoryManager(
-                    postgres_dsn=postgres_dsn,
                     qdrant_host=qdrant_host,
                     qdrant_port=qdrant_port,
                     embedding_dimension=embedding_dim
@@ -225,12 +251,12 @@ class MorganCore:
 
             # Initialize MCP Tools Manager if enabled
             if enable_tools:
-                self.tools_manager = MCPToolsManager(postgres_dsn=postgres_dsn)
+                self.tools_manager = MCPToolsManager()
                 await self.tools_manager.start()
                 self.logger.info("MCP Tools Manager initialized")
 
         except Exception as e:
-            self.logger.error(f"Failed to initialize databases: {e}", exc_info=True)
+            self.logger.error(f"Failed to initialize database managers: {e}", exc_info=True)
             raise
 
     async def _register_services(self):
@@ -273,27 +299,27 @@ class MorganCore:
             try:
                 self.request_count += 1
 
-                # Get or create conversation context
-                context = self.conversation_manager.get_context(user_id)
+                # Get or create conversation context (async)
+                context = await self.conversation_manager.get_context(user_id)
 
-                # Add user message
+                # Add user message (async)
                 user_message = Message(
                     role="user",
                     content=text,
                     metadata=metadata
                 )
-                context.add_message(user_message)
+                await self.conversation_manager.add_message(user_id, user_message)
 
                 # Process through orchestrator
                 response = await self.service_orchestrator.process_request(context, metadata)
 
-                # Add assistant response to context
+                # Add assistant response to context (async)
                 assistant_message = Message(
                     role="assistant",
                     content=response.text,
                     metadata={"actions": len(response.actions) if response.actions else 0}
                 )
-                context.add_message(assistant_message)
+                await self.conversation_manager.add_message(user_id, assistant_message)
 
                 return response
 
@@ -315,21 +341,21 @@ class MorganCore:
             try:
                 self.request_count += 1
 
-                # Get or create conversation context
-                context = self.conversation_manager.get_context(user_id)
+                # Get or create conversation context (async)
+                context = await self.conversation_manager.get_context(user_id)
 
                 # Process through orchestrator with audio
                 response = await self.service_orchestrator.process_audio_request(
                     audio_data, context, metadata
                 )
 
-                # Add assistant response to context
+                # Add assistant response to context (async)
                 assistant_message = Message(
                     role="assistant",
                     content=response.text,
                     metadata={"audio_processed": True}
                 )
-                context.add_message(assistant_message)
+                await self.conversation_manager.add_message(user_id, assistant_message)
 
                 return response
 
