@@ -7,7 +7,7 @@ port: 8003
 # Model configuration
 model: "large-v3"
 device: "cuda"
-language: "auto"
+language: "en"  # Use specific language or null for auto-detection (faster-whisper doesn't support "auto")
 
 # Audio parameters
 sample_rate: 16000

@@ -13,15 +13,18 @@ services:
       - "8001:8001"
     volumes:
       - ./config:/app/config:ro
-      - ./data/models/torch_hub:/root/.cache/torch:hub
+      - ./data/models/torch_hub:/root/.cache/torch/hub
       - ./data/models/transformers:/app/data/models/transformers
-      - ./data/models/huggingface:/app/data/models/huggingface
+      - ./data/models/huggingface:/root/.cache/huggingface
       - ./logs/llm:/app/logs
     environment:
       - MORGAN_CONFIG_DIR=/app/config
       - PYTHONPATH=/app
       - OLLAMA_BASE_URL=https://gpt.lazarev.cloud/ollama/v1
       - MORGAN_LLM_API_KEY=${MORGAN_LLM_API_KEY:-}
+      - HF_HOME=/root/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/data/models/transformers
+      - TORCH_HOME=/root/.cache/torch
     networks:
       - morgan-net
     healthcheck:
@@ -46,9 +49,9 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./data/models/tts:/app/data/models
-      - ./data/models/torch_hub:/root/.cache/torch:hub
+      - ./data/models/torch_hub:/root/.cache/torch/hub
       - ./data/models/transformers:/app/data/models/transformers
-      - ./data/models/huggingface:/app/data/models/huggingface
+      - ./data/models/huggingface:/root/.cache/huggingface
       - ./data/voices:/app/data/voices
       - ./logs/tts:/app/logs
     environment:
@@ -56,6 +59,9 @@ services:
       - CUDA_VISIBLE_DEVICES=0
       - PYTHONPATH=/app
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
+      - HF_HOME=/root/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/data/models/transformers
+      - TORCH_HOME=/root/.cache/torch
     deploy:
       resources:
         reservations:
@@ -87,9 +93,9 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./data/models/stt:/app/data/models
-      - ./data/models/torch_hub:/root/.cache/torch:hub
+      - ./data/models/torch_hub:/root/.cache/torch/hub
       - ./data/models/transformers:/app/data/models/transformers
-      - ./data/models/huggingface:/app/data/models/huggingface
+      - ./data/models/huggingface:/root/.cache/huggingface
       - ./logs/stt:/app/logs
     environment:
       - MORGAN_CONFIG_DIR=/app/config
@@ -97,6 +103,9 @@ services:
       - PYTHONPATH=/app
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
       - RUST_BACKTRACE=1
+      - HF_HOME=/root/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/data/models/transformers
+      - TORCH_HOME=/root/.cache/torch
     deploy:
       resources:
         reservations:
@@ -173,10 +182,10 @@ services:
     volumes:
       - ./config:/app/config
       - ./data:/app/data
-      - ./data/models/torch_hub:/root/.cache/torch:hub
+      - ./data/models/torch_hub:/root/.cache/torch/hub
       - ./data/models/transformers:/app/data/models/transformers
-      - ./data/models/huggingface:/app/data/models/huggingface
-      - ./data/models/sentence_transformers:/app/data/models/sentence_transformers
+      - ./data/models/huggingface:/root/.cache/huggingface
+      - ./data/models/sentence_transformers:/root/.cache/torch/sentence_transformers
       - ./logs/core:/app/logs
     environment:
       - MORGAN_CONFIG_DIR=/app/config
@@ -193,6 +202,10 @@ services:
       - MORGAN_EXTERNAL_LLM_API_BASE=https://gpt.lazarev.cloud/ollama/v1
       - MORGAN_EXTERNAL_LLM_API_KEY=${MORGAN_LLM_API_KEY:-}
       - MORGAN_EMBEDDING_MODEL=qwen3-embedding:latest
+      - HF_HOME=/root/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/data/models/transformers
+      - TORCH_HOME=/root/.cache/torch
+      - SENTENCE_TRANSFORMERS_HOME=/root/.cache/torch/sentence_transformers
     depends_on:
       postgres:
         condition: service_healthy

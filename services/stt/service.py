@@ -262,8 +262,14 @@ class STTService:
                 if segments_list:
                     # Convert avg_logprob (negative) to confidence (0-1)
                     # Using sigmoid-like transformation: confidence = 1 / (1 + exp(-avg_logprob))
+                    # Clamp to ensure valid range [0, 1]
                     avg_logprob = sum(segment.avg_logprob for segment in segments_list) / len(segments_list)
-                    confidence = 1.0 / (1.0 + np.exp(-avg_logprob))  # Sigmoid transformation
+                    try:
+                        confidence = 1.0 / (1.0 + np.exp(-avg_logprob))  # Sigmoid transformation
+                        confidence = max(0.0, min(1.0, float(confidence)))  # Clamp to [0, 1]
+                    except (OverflowError, ValueError):
+                        # Handle extreme values
+                        confidence = 0.5 if avg_logprob > -2.0 else 0.1
                 else:
                     confidence = 0.0
 
@@ -272,7 +278,7 @@ class STTService:
                     "text": segment.text.strip(),
                     "start": segment.start,
                     "end": segment.end,
-                    "confidence": 1.0 / (1.0 + np.exp(-segment.avg_logprob))  # Convert to 0-1 range
+                    "confidence": max(0.0, min(1.0, float(1.0 / (1.0 + np.exp(-segment.avg_logprob)))))  # Clamp to [0, 1]
                 } for segment in segments_list]
 
             else:
@@ -509,8 +515,13 @@ class STTService:
             )
 
             # Prepare transcription options
+            # Convert "auto" to None for faster-whisper compatibility
+            language = request.language or self.stt_config.language
+            if language == "auto":
+                language = None
+            
             trans_options = {
-                "language": request.language or self.stt_config.language,
+                "language": language,
                 "temperature": request.temperature or 0.0,
                 "initial_prompt": request.prompt,
                 "suppress_tokens": [-1],  # Suppress timestamps
@@ -531,8 +542,14 @@ class STTService:
                 if segments:
                     # Convert avg_logprob (negative) to confidence (0-1)
                     # Using sigmoid-like transformation: confidence = 1 / (1 + exp(-avg_logprob))
+                    # Clamp to ensure valid range [0, 1]
                     avg_logprob = sum(segment.avg_logprob for segment in segments) / len(segments)
-                    confidence = 1.0 / (1.0 + np.exp(-avg_logprob))  # Sigmoid transformation
+                    try:
+                        confidence = 1.0 / (1.0 + np.exp(-avg_logprob))  # Sigmoid transformation
+                        confidence = max(0.0, min(1.0, float(confidence)))  # Clamp to [0, 1]
+                    except (OverflowError, ValueError):
+                        # Handle extreme values
+                        confidence = 0.5 if avg_logprob > -2.0 else 0.1
                 else:
                     confidence = 0.0
 
@@ -541,7 +558,7 @@ class STTService:
                     "text": segment.text.strip(),
                     "start": segment.start,
                     "end": segment.end,
-                    "confidence": 1.0 / (1.0 + np.exp(-segment.avg_logprob))  # Convert to 0-1 range
+                    "confidence": max(0.0, min(1.0, float(1.0 / (1.0 + np.exp(-segment.avg_logprob)))))  # Clamp to [0, 1]
                 } for segment in segments]
 
             else:
