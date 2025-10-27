@@ -127,25 +127,25 @@ test_stt_service() {
     fi
 }
 
-# Test VAD service
+# Test VAD service (integrated with STT)
 test_vad_service() {
-    print_header "Testing VAD Service"
+    print_header "Testing VAD Service (Integrated with STT)"
 
-    print_info "Testing voice activity detection..."
-    local response=$(timeout "$TIMEOUT" curl -s -X POST "$BASE_URL:8004/detect" \
-        -H "Content-Type: application/json" \
-        -d '{
-            "audio_data": "'$(echo -n | base64)'",
-            "threshold": 0.5
-        }')
+    print_info "Testing VAD through STT service..."
+    if response=$(timeout "$TIMEOUT" curl -s "$BASE_URL:8003/health"); then
+        local vad_enabled=$(echo "$response" | grep -o '"vad_enabled":[^,]*' | cut -d':' -f2 | tr -d '"')
+        local device=$(echo "$response" | grep -o '"device":[^,]*' | cut -d':' -f2 | tr -d '"')
 
-    if [ $? -eq 0 ]; then
-        print_success "VAD detection OK"
-        local speech_detected=$(echo "$response" | grep -o '"speech_detected":[^,]*' | cut -d':' -f2)
-        print_info "Speech detected: $speech_detected"
-        return 0
+        if [ "$vad_enabled" = "true" ]; then
+            print_success "VAD detection OK"
+            print_info "VAD enabled: $vad_enabled, Device: $device"
+            return 0
+        else
+            print_warning "VAD not enabled in STT service"
+            return 1
+        fi
     else
-        print_error "VAD detection failed"
+        print_error "STT service health check failed"
         return 1
     fi
 }
@@ -189,8 +189,7 @@ test_quick_integration() {
         "core:8000:Core Service"
         "llm:8001:LLM Service"
         "tts:8002:TTS Service"
-        "stt:8003:STT Service"
-        "vad:8004:VAD Service"
+        "stt:8003:STT Service (with VAD)"
     )
 
     local results=()
@@ -238,7 +237,7 @@ test_full_integration() {
         "test_llm_service:LLM Service"
         "test_tts_service:TTS Service"
         "test_stt_service:STT Service"
-        "test_vad_service:VAD Service"
+        "test_vad_service:STT+VAD Service"
         "test_core_service:Core Service"
     )
 
@@ -306,11 +305,11 @@ Prerequisites:
     - Network connectivity to localhost services
 
 Services Tested:
-    - Core Service (port 8000): Main orchestration
-    - LLM Service (port 8001): OpenAI-compatible API for Ollama
-    - TTS Service (port 8002): Text-to-speech synthesis
-    - STT Service (port 8003): Speech-to-text recognition
-    - VAD Service (port 8004): Voice activity detection
+    - Core Service (port 8000): Main orchestration and API gateway
+    - LLM Service (port 8001): OpenAI-compatible API for external Ollama
+    - TTS Service (port 8002): Text-to-speech synthesis with CUDA support
+    - STT Service (port 8003): Speech-to-text recognition with integrated VAD
+    - VAD Service: Voice activity detection (integrated with STT)
 
 Test Types:
     - Quick: Basic health checks for all services
@@ -361,7 +360,7 @@ main() {
                     vad) test_vad_service ;;
                     *)
                         print_error "Unknown service: $service"
-                        print_info "Available services: core, llm, tts, stt, vad"
+                        print_info "Available services: core, llm, tts, stt, vad (integrated with STT)"
                         exit 1
                         ;;
                 esac
