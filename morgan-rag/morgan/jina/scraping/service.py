@@ -661,6 +661,8 @@ class JinaWebScrapingService:
     def _determine_content_type(self, content: str, url: str) -> str:
         """Determine the type of content."""
         url_lower = url.lower()
+        parsed_host = urlparse(url).hostname
+        parsed_host = parsed_host.lower() if parsed_host else ""
         
         # Check URL patterns
         if any(pattern in url_lower for pattern in ['/blog/', '/news/', '/article/', '/post/']):
@@ -669,7 +671,10 @@ class JinaWebScrapingService:
             return "documentation"
         elif any(pattern in url_lower for pattern in ['/api/', '/reference/']):
             return "reference"
-        elif 'github.com' in url_lower or 'gitlab.com' in url_lower:
+        elif (
+            parsed_host == "github.com" or parsed_host.endswith(".github.com")
+            or parsed_host == "gitlab.com" or parsed_host.endswith(".gitlab.com")
+        ):
             return "code_repository"
         elif any(pattern in url_lower for pattern in ['/wiki/', 'wikipedia.org']):
             return "wiki"
