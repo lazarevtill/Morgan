@@ -27,13 +27,12 @@ async def main():
     # Override with command line arguments
     host = args.host
     port = args.port
-    if args.log_level:
-        config.config["log_level"] = args.log_level
+    log_level = args.log_level if args.log_level else config.get("log_level", "INFO")
 
     # Setup logging
     logger = setup_logging(
         "tts_main",
-        config.get("log_level", "INFO"),
+        log_level,
         "logs/tts_main.log"
     )
 

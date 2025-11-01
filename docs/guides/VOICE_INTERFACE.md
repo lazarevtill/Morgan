@@ -74,7 +74,7 @@ Processes audio input through the complete pipeline.
 ## 🔧 Configuration
 
 The voice interface uses the following default settings:
-- **STT Model**: Whisper large-v3 with VAD
+- **STT Model**: Whisper distil-large-v3.5  with VAD
 - **LLM Model**: Llama 3.2 via external Ollama
 - **TTS Voice**: "default" (American female)
 - **Sample Rate**: 16kHz for recording, 22kHz for playback

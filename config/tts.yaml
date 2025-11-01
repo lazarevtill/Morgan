@@ -1,24 +1,28 @@
-# TTS Service Configuration - Using csm-streaming for real-time TTS
+# TTS Service Configuration - CSM Streaming (HuggingFace transformers)
+# Reference: https://huggingface.co/sesame/csm-1b
 
 # Network configuration
 host: "0.0.0.0"
 port: 8002
 
-# Model configuration - csm-streaming
-model: "csm"  # csm-streaming model
+# Model configuration - optimized for real-time streaming
+model: "csm"  # CSM Streaming (real-time TTS with proper transformers implementation)
 device: "cuda"
 language: "en"
-voice: "default"  # csm-streaming voice
+voice: "default"  # CSM default voice
 
-# Audio parameters
+# Audio parameters - optimized for real-time streaming
 speed: 1.0
 output_format: "wav"
-sample_rate: 24000  # csm-streaming uses 24kHz
+sample_rate: 24000  # CSM sample rate (24kHz for high quality)
 
-# Streaming configuration
+# Streaming configuration - optimized for real-time
 streaming_enabled: true
-chunk_size: 512  # Audio chunk size for streaming
-buffer_size: 2048  # Buffer size for streaming
+chunk_size: 1024      # Larger chunks for better quality vs latency balance
+buffer_size: 4096     # Larger buffer for smoother streaming
 
 # Logging
 log_level: "INFO"
+
+# HuggingFace token for model downloads (use environment variable HF_TOKEN instead)
+# hf_token: ""  # Set via environment variable: export HF_TOKEN=your_token_here

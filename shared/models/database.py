@@ -1,5 +1,6 @@
 """
 PostgreSQL database models for Morgan AI Assistant
+Aligned with database/init/01_init_schema.sql
 """
 from datetime import datetime
 from typing import Optional, List, Dict, Any
@@ -29,7 +30,7 @@ class MessageModel(BaseModel):
     """Message database model"""
     id: Optional[UUID] = Field(default_factory=uuid4)
     conversation_id: UUID
-    role: str
+    role: str  # user, assistant, system, tool
     content: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
     sequence_number: int
@@ -52,7 +53,7 @@ class StreamingSessionModel(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     ended_at: Optional[datetime] = None
-    session_type: str  # audio, text, websocket
+    session_type: str = "websocket"  # audio, text, websocket
     metadata: Dict[str, Any] = Field(default_factory=dict)
     audio_chunks_count: int = 0
     total_duration_ms: int = 0
@@ -64,7 +65,7 @@ class StreamingSessionModel(BaseModel):
 class AudioTranscriptionModel(BaseModel):
     """Audio transcription database model"""
     id: Optional[UUID] = Field(default_factory=uuid4)
-    session_id: UUID
+    session_id: Optional[UUID] = None
     message_id: Optional[UUID] = None
     transcription: str
     language: Optional[str] = None
@@ -80,10 +81,10 @@ class AudioTranscriptionModel(BaseModel):
 
 
 class TTSGenerationModel(BaseModel):
-    """TTS generation cache database model"""
+    """TTS generation database model"""
     id: Optional[UUID] = Field(default_factory=uuid4)
-    message_id: UUID
-    text_hash: str
+    message_id: Optional[UUID] = None
+    text_hash: str  # SHA256 hash for caching
     voice: str
     speed: float = 1.0
     audio_data: Optional[bytes] = None
@@ -101,14 +102,14 @@ class UserPreferencesModel(BaseModel):
     """User preferences database model"""
     id: Optional[UUID] = Field(default_factory=uuid4)
     user_id: str
-    preferred_language: str = "en"
-    preferred_voice: str = "af_heart"
+    llm_model: Optional[str] = None
+    tts_voice: Optional[str] = None
     tts_speed: float = 1.0
-    llm_temperature: float = 0.7
-    llm_max_tokens: int = 2048
+    stt_language: Optional[str] = "auto"
+    theme: str = "dark"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    preferences: Dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         from_attributes = True
@@ -117,12 +118,12 @@ class UserPreferencesModel(BaseModel):
 class SystemMetricModel(BaseModel):
     """System metric database model"""
     id: Optional[UUID] = Field(default_factory=uuid4)
-    metric_type: str
-    metric_value: float
     service_name: str
+    metric_type: str  # latency, throughput, error, health
+    metric_value: float
+    unit: str  # ms, req/s, count, percentage
     created_at: datetime = Field(default_factory=datetime.utcnow)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         from_attributes = True
-

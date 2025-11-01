@@ -265,7 +265,7 @@ RuntimeError: CUDA out of memory
 **Solution:**
 1. Check GPU memory: `nvidia-smi`
 2. Reduce batch sizes in configs
-3. Lower model sizes (e.g., `distil-medium` instead of `distil-large-v3`)
+3. Lower model sizes (e.g., `distil-medium` instead of `distil-distil-large-v3.5 `)
 4. Enable model quantization in service configs
 
 ---

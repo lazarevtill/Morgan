@@ -216,7 +216,7 @@ openai==1.12.0
 | Service | VRAM Usage | Notes |
 |---------|------------|-------|
 | TTS Service | 2-4GB | Depends on model size |
-| STT Service | 4-6GB | Whisper large-v3 |
+| STT Service | 4-6GB | Whisper distil-large-v3.5  |
 | Headroom | 2GB+ | For OS and other processes |
 
 ---
@@ -362,7 +362,7 @@ RuntimeError: CUDA out of memory
 1. Check GPU memory: `nvidia-smi`
 2. Reduce batch sizes in service configs
 3. Use smaller models:
-   - STT: `distil-medium` instead of `distil-large-v3`
+   - STT: `distil-medium` instead of `distil-distil-large-v3.5 `
    - TTS: Reduce voice model complexity
 4. Enable model quantization (future)
 

@@ -23,7 +23,7 @@ The Morgan AI Assistant codebase has been completely refactored and optimized ba
 - **Result**: -10GB disk space, faster builds
 
 ### 4. Fixed Configuration Issues ✅
-- Standardized STT model name to `large-v3`
+- Standardized STT model name to `distil-large-v3.5 `
 - Added explicit VAD configuration to STT service
 - Removed dead code from Orchestrator
 - **Result**: Consistent, maintainable configuration
@@ -139,7 +139,7 @@ curl http://localhost:8003/health
 
 **config/stt.yaml**:
 ```diff
-+ model: "large-v3"  # was: whisper-large-v3 or distil-large-v3
++ model: "distil-large-v3.5 "  # was: whisper-distil-large-v3.5  or distil-distil-large-v3.5 
 - threshold: 0.5
 - min_silence_duration: 0.5
 + vad_enabled: true

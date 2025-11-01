@@ -24,6 +24,9 @@ from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware
 from shared.utils.audio import AudioCapture, DeviceAudioCapture
 from shared.utils.http_client import service_registry
 
+# Import WebSocket handler
+from api.websocket_handler import WebSocketHandler
+
 
 class TextRequest(BaseModel):
     """Text input request"""
@@ -57,6 +60,27 @@ class StreamAudioRequest(BaseModel):
     session_id: str = Field(..., description="Streaming session ID")
     audio_data: str = Field(..., description="Base64 encoded audio data")
     timestamp: Optional[float] = Field(None, description="Audio timestamp")
+
+
+class StreamTextRequest(BaseModel):
+    """Streaming text request for TTS"""
+    text: str = Field(..., description="Text to synthesize")
+    voice: Optional[str] = Field("default", description="Voice to use")
+    speed: Optional[float] = Field(1.0, description="Speech speed")
+    user_id: Optional[str] = Field("default", description="User identifier")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class AudioChunkMessage(BaseModel):
+    """Audio chunk message for streaming"""
+    type: str = Field(..., description="Message type: audio, start, end, error")
+    audio_data: Optional[str] = Field(None, description="Base64 encoded audio chunk")
+    chunk_id: Optional[int] = Field(None, description="Sequential chunk ID")
+    timestamp: Optional[float] = Field(None, description="Timestamp")
+    duration: Optional[float] = Field(None, description="Audio duration in seconds")
+    sample_rate: Optional[int] = Field(24000, description="Audio sample rate")
+    format: Optional[str] = Field("wav", description="Audio format")
+    error: Optional[str] = Field(None, description="Error message")
 
 
 class DeviceListResponse(BaseModel):
@@ -94,6 +118,7 @@ class HealthResponse(BaseModel):
     services: Dict[str, bool]
     orchestrator: Dict[str, Any]
     conversations: Dict[str, Any]
+    vad_info: Dict[str, Any]
 
 
 class StatusResponse(BaseModel):
@@ -106,6 +131,7 @@ class StatusResponse(BaseModel):
     services: Dict[str, bool]
     orchestrator: Dict[str, Any]
     conversations: Dict[str, Any]
+    vad_info: Dict[str, Any]
     timestamp: float
 
 
@@ -124,6 +150,9 @@ class APIServer:
         self.app = None
         self.server = None
         self.https_server = None
+        
+        # Initialize WebSocket handler
+        self.websocket_handler = WebSocketHandler(core_service)
 
     async def start(self):
         """Start the API server"""
@@ -295,18 +324,24 @@ class APIServer:
             self.logger.error(f"Transcription error: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
 
-    async def _generate_speech(self, text: str, voice: str = "af_heart") -> Optional[str]:
-        """Generate speech using TTS service"""
+    async def _generate_speech(self, text: str, voice: str = "default") -> Optional[str]:
+        """Generate speech using TTS service with CSM-streaming"""
+        import aiohttp
+
         try:
             self.logger.info(f"Generating TTS for text: {text[:50]}... (length={len(text)})")
 
             # Get TTS service client (await the async method!)
             tts_client = await service_registry.get_service("tts")
 
-            # Send to TTS service
+            # Set longer timeout for TTS generation (CSM-streaming can take time for long texts)
+            timeout = aiohttp.ClientTimeout(total=60)  # 60 seconds
+
+            # Send to TTS service - CSM-streaming uses "default" voice and output_format
             async with tts_client.session.post(
                 f"{tts_client.base_url}/generate",
-                json={"text": text, "voice": voice}
+                json={"text": text, "voice": voice, "output_format": "wav"},
+                timeout=timeout
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
@@ -361,6 +396,25 @@ class APIServer:
             """Health check endpoint"""
             try:
                 status = await self.core_service.get_system_status()
+                # Get VAD info from STT service
+                try:
+                    stt_client = await service_registry.get_service("stt")
+                    stt_health_result = await stt_client.get("/health")
+                    stt_health = stt_health_result.data if isinstance(stt_health_result.data, dict) else {}
+                    vad_info = {
+                        "vad_enabled": stt_health.get("vad_enabled", False),
+                        "vad_type": stt_health.get("vad_type", "unknown"),
+                        "stt_healthy": stt_health.get("status") == "healthy"
+                    }
+                except Exception as vad_error:
+                    self.logger.warning(f"Could not get VAD info: {vad_error}")
+                    vad_info = {
+                        "vad_enabled": False,
+                        "vad_type": "unavailable",
+                        "stt_healthy": False
+                    }
+
+                status["vad_info"] = vad_info
                 return HealthResponse(**status)
             except Exception as e:
                 raise HTTPException(status_code=503, detail=f"Service unhealthy: {e}")
@@ -370,6 +424,25 @@ class APIServer:
             """Detailed system status"""
             try:
                 status = await self.core_service.get_system_status()
+                # Get VAD info from STT service
+                try:
+                    stt_client = await service_registry.get_service("stt")
+                    stt_health_result = await stt_client.get("/health")
+                    stt_health = stt_health_result.data if isinstance(stt_health_result.data, dict) else {}
+                    vad_info = {
+                        "vad_enabled": stt_health.get("vad_enabled", False),
+                        "vad_type": stt_health.get("vad_type", "unknown"),
+                        "stt_healthy": stt_health.get("status") == "healthy"
+                    }
+                except Exception as vad_error:
+                    self.logger.warning(f"Could not get VAD info: {vad_error}")
+                    vad_info = {
+                        "vad_enabled": False,
+                        "vad_type": "unavailable",
+                        "stt_healthy": False
+                    }
+
+                status["vad_info"] = vad_info
                 return StatusResponse(**status)
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Status check failed: {e}")
@@ -759,60 +832,179 @@ class APIServer:
                 error_handler.logger.error(f"Audio processing error: {e}")
                 raise HTTPException(status_code=500, detail=f"Failed to process audio: {e}")
 
+        @self.app.post("/api/audio/stream")
+        async def stream_audio_response(request: StreamTextRequest):
+            """Stream TTS audio response using Server-Sent Events (SSE)"""
+            async def generate_audio_stream():
+                """Generate streaming audio response"""
+                try:
+                    chunk_id = 0
+                    start_time = asyncio.get_event_loop().time()
+
+                    # Send start event
+                    start_event = AudioChunkMessage(
+                        type="start",
+                        chunk_id=chunk_id,
+                        timestamp=start_time,
+                        sample_rate=24000,
+                        format="wav"
+                    )
+                    yield f"data: {start_event.model_dump_json()}\n\n"
+                    chunk_id += 1
+
+                    # Process through core service to get LLM response
+                    llm_response = await self.core_service.process_text_request(
+                        request.text,
+                        request.user_id,
+                        request.metadata
+                    )
+
+                    if not llm_response.text:
+                        # Send error event
+                        error_event = AudioChunkMessage(
+                            type="error",
+                            chunk_id=chunk_id,
+                            timestamp=asyncio.get_event_loop().time(),
+                            error="No response generated"
+                        )
+                        yield f"data: {error_event.model_dump_json()}\n\n"
+                        return
+
+                    # Generate streaming TTS using TTS service
+                    try:
+                        tts_client = await service_registry.get_service("tts")
+
+                        # Stream audio chunks from TTS service
+                        async for audio_chunk in self._stream_tts_audio(
+                            llm_response.text,
+                            request.voice,
+                            request.speed
+                        ):
+                            chunk_event = AudioChunkMessage(
+                                type="audio",
+                                audio_data=base64.b64encode(audio_chunk).decode('utf-8'),
+                                chunk_id=chunk_id,
+                                timestamp=asyncio.get_event_loop().time(),
+                                duration=len(audio_chunk) / (24000 * 2),  # 16-bit samples
+                                sample_rate=24000,
+                                format="wav"
+                            )
+                            yield f"data: {chunk_event.model_dump_json()}\n\n"
+                            chunk_id += 1
+
+                            # Small delay to prevent overwhelming the client
+                            await asyncio.sleep(0.01)
+
+                    except Exception as e:
+                        self.logger.error(f"TTS streaming error: {e}")
+                        error_event = AudioChunkMessage(
+                            type="error",
+                            chunk_id=chunk_id,
+                            timestamp=asyncio.get_event_loop().time(),
+                            error=f"TTS generation failed: {str(e)}"
+                        )
+                        yield f"data: {error_event.model_dump_json()}\n\n"
+                        return
+
+                    # Send end event
+                    end_event = AudioChunkMessage(
+                        type="end",
+                        chunk_id=chunk_id,
+                        timestamp=asyncio.get_event_loop().time(),
+                        duration=asyncio.get_event_loop().time() - start_time
+                    )
+                    yield f"data: {end_event.model_dump_json()}\n\n"
+
+                except Exception as e:
+                    self.logger.error(f"Audio streaming error: {e}")
+                    error_event = AudioChunkMessage(
+                        type="error",
+                        chunk_id=chunk_id,
+                        timestamp=asyncio.get_event_loop().time(),
+                        error=f"Streaming failed: {str(e)}"
+                    )
+                    yield f"data: {error_event.model_dump_json()}\n\n"
+
+            return StreamingResponse(
+                generate_audio_stream(),
+                media_type="text/plain",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "Content-Type": "text/plain; charset=utf-8",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Headers": "Cache-Control"
+                }
+            )
+
         @self.app.websocket("/ws/audio")
         async def websocket_audio_stream(websocket: WebSocket) -> None:
-            """WebSocket endpoint for real-time audio streaming and transcription"""
-            await websocket.accept()
+            """WebSocket endpoint for real-time audio streaming and transcription (legacy)"""
+            await self._handle_legacy_websocket(websocket)
 
-            # Store active streaming sessions
-            if not hasattr(self, 'streaming_sessions'):
-                self.streaming_sessions = {}
+        @self.app.websocket("/ws/stream")
+        async def websocket_stream(websocket: WebSocket, user_id: str = "default") -> None:
+            """WebSocket endpoint for real-time streaming (optimized with StreamingOrchestrator)"""
+            await self.websocket_handler.handle_connection(websocket, user_id)
 
-            session_id = f"ws_{id(websocket)}"
-            self.streaming_sessions[session_id] = {
-                'websocket': websocket,
-                'user_id': 'default',
-                'is_active': True,
-                'audio_buffer': b'',  # Buffer for audio chunks
-                'last_transcription': '',
-                'use_vad': True
-            }
-
-            self.logger.info(f"Audio streaming session started: {session_id}")
-
-            try:
-                while True:
-                    # Receive message from client
-                    message = await websocket.receive_text()
-                    data = json.loads(message)
-
-                    # Handle different message types
-                    if data.get('type') == 'start':
-                        await self._handle_stream_start(websocket, data, session_id)
-                    elif data.get('type') == 'audio':
-                        await self._handle_audio_chunk(websocket, data, session_id)
-                    elif data.get('type') == 'stop':
-                        await self._handle_stream_stop(websocket, session_id)
-                        break
-                    elif data.get('type') == 'config':
-                        await self._handle_stream_config(websocket, data, session_id)
-                    elif data.get('type') == 'webrtc_offer':
-                        await self._handle_webrtc_offer(websocket, data, session_id)
-                    elif data.get('type') == 'webrtc_answer':
-                        await self._handle_webrtc_answer(websocket, data, session_id)
-                    elif data.get('type') == 'webrtc_ice':
-                        await self._handle_webrtc_ice(websocket, data, session_id)
-
-            except WebSocketDisconnect:
-                self.logger.info(f"WebSocket disconnected: {session_id}")
-            except Exception as e:
-                self.logger.error(f"WebSocket error: {e}")
-                await self._send_error(websocket, str(e))
-            finally:
-                if session_id in self.streaming_sessions:
-                    del self.streaming_sessions[session_id]
+        @self.app.websocket("/ws/stream/{user_id}")
+        async def websocket_stream_user(websocket: WebSocket, user_id: str) -> None:
+            """WebSocket endpoint with user ID in path"""
+            await self.websocket_handler.handle_connection(websocket, user_id)
 
         return None
+    
+    async def _handle_legacy_websocket(self, websocket: WebSocket):
+        """Handle legacy WebSocket connection (backward compatibility)"""
+        await websocket.accept()
+
+        # Store active streaming sessions
+        if not hasattr(self, 'streaming_sessions'):
+            self.streaming_sessions = {}
+
+        session_id = f"ws_{id(websocket)}"
+        self.streaming_sessions[session_id] = {
+            'websocket': websocket,
+            'user_id': 'default',
+            'is_active': True,
+            'audio_buffer': b'',  # Buffer for audio chunks
+            'last_transcription': '',
+            'use_vad': True
+        }
+
+        self.logger.info(f"Audio streaming session started: {session_id}")
+
+        try:
+            while True:
+                # Receive message from client
+                message = await websocket.receive_text()
+                data = json.loads(message)
+
+                # Handle different message types
+                if data.get('type') == 'start':
+                    await self._handle_stream_start(websocket, data, session_id)
+                elif data.get('type') == 'audio':
+                    await self._handle_audio_chunk(websocket, data, session_id)
+                elif data.get('type') == 'stop':
+                    await self._handle_stream_stop(websocket, session_id)
+                    break
+                elif data.get('type') == 'config':
+                    await self._handle_stream_config(websocket, data, session_id)
+                elif data.get('type') == 'webrtc_offer':
+                    await self._handle_webrtc_offer(websocket, data, session_id)
+                elif data.get('type') == 'webrtc_answer':
+                    await self._handle_webrtc_answer(websocket, data, session_id)
+                elif data.get('type') == 'webrtc_ice':
+                    await self._handle_webrtc_ice(websocket, data, session_id)
+
+        except WebSocketDisconnect:
+            self.logger.info(f"WebSocket disconnected: {session_id}")
+        except Exception as e:
+            self.logger.error(f"WebSocket error: {e}")
+            await self._send_error(websocket, str(e))
+        finally:
+            if session_id in self.streaming_sessions:
+                del self.streaming_sessions[session_id]
 
     async def _handle_stream_start(self, websocket: WebSocket, data: Dict[str, Any], session_id: str):
         """Handle streaming session start"""
@@ -1041,5 +1233,43 @@ class APIServer:
         except Exception as e:
             self.logger.error(f"Error handling WebRTC ICE: {e}")
             await self._send_error(websocket, str(e))
+
+    async def _stream_tts_audio(self, text: str, voice: str = "default", speed: float = 1.0):
+        """Stream audio chunks from TTS service"""
+        try:
+            import aiohttp
+
+            # Get TTS service client
+            tts_client = await service_registry.get_service("tts")
+
+            # Create TTS request
+            tts_request = {
+                "text": text,
+                "voice": voice,
+                "speed": speed,
+                "output_format": "wav",
+                "stream": True
+            }
+
+            # Stream from TTS service with configured timeout
+            stream_timeout = getattr(self.core_service.core_config, 'stream_timeout', 60)
+            async with tts_client.session.post(
+                f"{tts_client.base_url}/generate",
+                json=tts_request,
+                timeout=aiohttp.ClientTimeout(total=stream_timeout)
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    self.logger.error(f"TTS streaming failed: {response.status} - {error_text}")
+                    return
+
+                # Stream audio chunks
+                async for chunk in response.content.iter_chunked(8192):
+                    if chunk:
+                        yield chunk
+
+        except Exception as e:
+            self.logger.error(f"Error streaming TTS audio: {e}")
+            raise
 
 

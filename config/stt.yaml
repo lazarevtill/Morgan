@@ -4,19 +4,28 @@
 host: "0.0.0.0"
 port: 8003
 
-# Model configuration
-model: "large-v3"
+# Model configuration - optimized for real-time conversation
+model: "base"  # Smaller model for testing faster-whisper functionality
 device: "cuda"
-language: "en"  # Use specific language or null for auto-detection (faster-whisper doesn't support "auto")
+language: "en"  # Use specific language for faster processing (null for auto-detection)
 
 # Audio parameters
 sample_rate: 16000
 chunk_size: 1024
+real_time_chunk_size: 512
 
-# VAD (Voice Activity Detection) parameters
+# VAD (Voice Activity Detection) parameters - using faster-whisper built-in VAD
 vad_enabled: true
 vad_threshold: 0.5
-vad_min_silence_duration: 0.5
+vad_min_speech_duration: 0.1    # Minimum 100ms speech to be considered valid
+vad_max_speech_duration: 30.0   # Maximum 30 seconds of continuous speech
+vad_min_silence_duration: 0.5   # Minimum 500ms silence to end speech segment
+vad_speech_pad_ms: 200          # Pad speech segments by 200ms for context
+
+# Note: These parameters are passed to faster-whisper's built-in VAD filter
+
+# Real-time processing parameters
+real_time_enabled: true
 
 # Logging
 log_level: "INFO"

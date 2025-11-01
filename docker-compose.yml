@@ -14,16 +14,18 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./data/models/torch_hub:/root/.cache/torch/hub
-      - ./data/models/transformers:/app/data/models/transformers
+      - ./data/models/transformers:/root/.cache/huggingface/transformers
       - ./data/models/huggingface:/root/.cache/huggingface
       - ./logs/llm:/app/logs
     environment:
       - MORGAN_CONFIG_DIR=/app/config
       - PYTHONPATH=/app
-      - OLLAMA_BASE_URL=https://gpt.lazarev.cloud/ollama/v1
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-https://gpt.lazarev.cloud/ollama/v1}
       - MORGAN_LLM_API_KEY=${MORGAN_LLM_API_KEY:-}
+      - HF_TOKEN=${HF_TOKEN:-}
       - HF_HOME=/root/.cache/huggingface
-      - TRANSFORMERS_CACHE=/app/data/models/transformers
+      - XDG_CACHE_HOME=/root/.cache
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface/transformers
       - TORCH_HOME=/root/.cache/torch
     networks:
       - morgan-net
@@ -48,9 +50,9 @@ services:
       - "8002:8002"
     volumes:
       - ./config:/app/config:ro
-      - ./data/models/tts:/app/data/models
+      - ./data/models/tts:/app/data/models/tts
       - ./data/models/torch_hub:/root/.cache/torch/hub
-      - ./data/models/transformers:/app/data/models/transformers
+      - ./data/models/transformers:/root/.cache/huggingface/transformers
       - ./data/models/huggingface:/root/.cache/huggingface
       - ./data/voices:/app/data/voices
       - ./logs/tts:/app/logs
@@ -59,9 +61,13 @@ services:
       - CUDA_VISIBLE_DEVICES=0
       - PYTHONPATH=/app
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
+      - HF_TOKEN=${HF_TOKEN:-}
       - HF_HOME=/root/.cache/huggingface
-      - TRANSFORMERS_CACHE=/app/data/models/transformers
+      - XDG_CACHE_HOME=/root/.cache
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface/transformers
       - TORCH_HOME=/root/.cache/torch
+      - CUDA_LAUNCH_BLOCKING=0  # Optimize for real-time performance
+      - TORCH_USE_CUDA_DSA=1    # Enable CUDA device-side assertions for debugging
     deploy:
       resources:
         reservations:
@@ -76,7 +82,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 600s  # 10 minutes for CSM model loading
 
   # STT Service with CUDA support and Silero VAD
   stt-service:
@@ -92,10 +98,11 @@ services:
       - "8003:8003"
     volumes:
       - ./config:/app/config:ro
-      - ./data/models/stt:/app/data/models
-      - ./data/models/torch_hub:/root/.cache/torch/hub
+      - ./data/models/stt:/app/data/models/stt
+      - ./data/models/faster_whisper:/app/data/models/huggingface/hub
+      - ./data/models/torch_hub:/app/data/models/torch_hub
       - ./data/models/transformers:/app/data/models/transformers
-      - ./data/models/huggingface:/root/.cache/huggingface
+      - ./data/models/huggingface:/app/data/models/huggingface
       - ./logs/stt:/app/logs
     environment:
       - MORGAN_CONFIG_DIR=/app/config
@@ -103,9 +110,16 @@ services:
       - PYTHONPATH=/app
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
       - RUST_BACKTRACE=1
-      - HF_HOME=/root/.cache/huggingface
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HF_HOME=/app/data/models/huggingface
+      - HF_HUB_CACHE=/app/data/models/huggingface/hub
+      - HF_DATASETS_CACHE=/app/data/models/huggingface/datasets
       - TRANSFORMERS_CACHE=/app/data/models/transformers
-      - TORCH_HOME=/root/.cache/torch
+      - TORCH_HOME=/app/data/models/torch_hub
+      - NUMBA_CACHE_DIR=/tmp/numba_cache
+      - MPLCONFIGDIR=/tmp/matplotlib
+      - CUDA_LAUNCH_BLOCKING=0  # Optimize for real-time performance
+      - TORCH_USE_CUDA_DSA=1    # Enable CUDA device-side assertions for debugging
     deploy:
       resources:
         reservations:
@@ -121,6 +135,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
 
   # Redis for caching and session state
   redis:
@@ -152,9 +167,9 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d:ro
     environment:
-      - POSTGRES_DB=morgan
-      - POSTGRES_USER=morgan
-      - POSTGRES_PASSWORD=morgan_secure_password
+      - POSTGRES_DB=${POSTGRES_DB:-morgan}
+      - POSTGRES_USER=${POSTGRES_USER:-morgan}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-morgan_secure_password}
     networks:
       - morgan-net
     healthcheck:
@@ -202,7 +217,7 @@ services:
       - ./config:/app/config
       - ./data:/app/data
       - ./data/models/torch_hub:/root/.cache/torch/hub
-      - ./data/models/transformers:/app/data/models/transformers
+      - ./data/models/transformers:/root/.cache/huggingface/transformers
       - ./data/models/huggingface:/root/.cache/huggingface
       - ./data/models/sentence_transformers:/root/.cache/torch/sentence_transformers
       - ./logs/core:/app/logs
@@ -210,21 +225,23 @@ services:
       - MORGAN_CONFIG_DIR=/app/config
       - PYTHONPATH=/app
       - BEHIND_PROXY=true
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=morgan
-      - POSTGRES_USER=morgan
-      - POSTGRES_PASSWORD=morgan_secure_password
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - QDRANT_GRPC_PORT=6334
-      - MORGAN_EXTERNAL_LLM_API_BASE=https://gpt.lazarev.cloud/ollama/v1
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-morgan}
+      - POSTGRES_USER=${POSTGRES_USER:-morgan}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-morgan_secure_password}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - QDRANT_HOST=${QDRANT_HOST:-qdrant}
+      - QDRANT_PORT=${QDRANT_PORT:-6333}
+      - QDRANT_GRPC_PORT=${QDRANT_GRPC_PORT:-6334}
+      - MORGAN_EXTERNAL_LLM_API_BASE=${MORGAN_EXTERNAL_LLM_API_BASE:-https://gpt.lazarev.cloud/ollama/v1}
       - MORGAN_EXTERNAL_LLM_API_KEY=${MORGAN_LLM_API_KEY:-}
-      - MORGAN_EMBEDDING_MODEL=qwen3-embedding:latest
+      - MORGAN_EMBEDDING_MODEL=${MORGAN_EMBEDDING_MODEL:-nomic-embed-text:latest}
+      - HF_TOKEN=${HF_TOKEN:-}
       - HF_HOME=/root/.cache/huggingface
-      - TRANSFORMERS_CACHE=/app/data/models/transformers
+      - XDG_CACHE_HOME=/root/.cache
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface/transformers
       - TORCH_HOME=/root/.cache/torch
       - SENTENCE_TRANSFORMERS_HOME=/root/.cache/torch/sentence_transformers
     depends_on:

@@ -371,12 +371,12 @@ async def _synthesize_coqui(self, text: str, voice: str) -> bytes:
 **Main Class**: `STTService`
 
 **Models**:
-- **Whisper**: distil-large-v3 (default), large-v3, medium, small
+- **Whisper**: distil-distil-large-v3.5  (default), distil-large-v3.5 , medium, small
 - **Silero VAD**: Integrated for voice activity detection
 
 **Configuration** ([config/stt.yaml](config/stt.yaml)):
 ```yaml
-model: "distil-large-v3"
+model: "distil-distil-large-v3.5 "
 device: "cuda"
 language: "auto"
 sample_rate: 16000
@@ -562,7 +562,7 @@ streaming_enabled: true
 #### stt.yaml
 
 ```yaml
-model: "distil-large-v3"  # distil-large-v3, large-v3, medium, small
+model: "distil-distil-large-v3.5 "  # distil-distil-large-v3.5 , distil-large-v3.5 , medium, small
 device: "cuda"
 language: "auto"  # auto or specific language code
 sample_rate: 16000

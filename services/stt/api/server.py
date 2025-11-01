@@ -50,7 +50,7 @@ class STTAPIServer:
         """Create FastAPI application"""
         app = FastAPI(
             title="Morgan STT Service",
-            description="Speech-to-Text service with Faster Whisper and Silero VAD",
+            description="Speech-to-Text service with Faster Whisper and built-in VAD",
             version="0.2.0"
         )
 
@@ -131,6 +131,26 @@ class STTAPIServer:
             except Exception as e:
                 self.logger.error(f"Real-time transcription error: {e}")
                 raise HTTPException(status_code=500, detail=f"Real-time transcription failed: {e}")
+
+        @app.post("/transcribe/realtime-chunk")
+        async def transcribe_realtime_chunk(request: TranscribeRequest):
+            """Process audio chunk in real-time for streaming conversations"""
+            try:
+                # Decode audio data
+                audio_bytes = base64.b64decode(request.audio_data)
+
+                # Process with real-time chunk processing
+                result = await self.stt_service.process_realtime_chunk(
+                    audio_bytes,
+                    session_id="realtime",
+                    language=request.language
+                )
+
+                return result
+
+            except Exception as e:
+                self.logger.error(f"Real-time chunk transcription error: {e}")
+                raise HTTPException(status_code=500, detail=f"Real-time chunk transcription failed: {e}")
 
         @app.post("/stream/start")
         async def start_streaming(request: StreamStartRequest):

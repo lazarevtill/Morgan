@@ -64,7 +64,7 @@ speed: 1.0
 
 **config/stt.yaml**:
 ```yaml
-model: "large-v3"  # or "distil-large-v3", "medium"
+model: "distil-large-v3.5 "  # or "distil-distil-large-v3.5 ", "medium"
 device: "cuda"
 language: "auto"  # or specific language code
 vad_enabled: true
@@ -333,7 +333,7 @@ model: "tts-1"  # instead of kokoro
 **For STT Service** (config/stt.yaml):
 ```yaml
 # Use distilled model
-model: "distil-large-v3"  # instead of large-v3
+model: "distil-distil-large-v3.5 "  # instead of distil-large-v3.5 
 
 # Disable VAD if not needed
 vad_enabled: false

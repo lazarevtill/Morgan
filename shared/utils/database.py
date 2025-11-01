@@ -2,6 +2,7 @@
 PostgreSQL database utilities for Morgan AI Assistant
 """
 import asyncio
+import json
 import logging
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
@@ -99,16 +100,19 @@ class DatabaseClient:
     async def create_conversation(self, conversation: ConversationModel) -> UUID:
         """Create a new conversation"""
         async with self.acquire() as conn:
+            # Convert metadata dict to JSON string for PostgreSQL
+            metadata_json = json.dumps(conversation.metadata) if conversation.metadata else '{}'
+
             row = await conn.fetchrow(
                 """
                 INSERT INTO conversations (conversation_id, user_id, title, metadata)
-                VALUES ($1, $2, $3, $4)
+                VALUES ($1, $2, $3, $4::jsonb)
                 RETURNING id
                 """,
                 conversation.conversation_id,
                 conversation.user_id,
                 conversation.title,
-                conversation.metadata
+                metadata_json
             )
             return row['id']
 
@@ -119,7 +123,15 @@ class DatabaseClient:
                 "SELECT * FROM conversations WHERE conversation_id = $1",
                 conversation_id
             )
-            return ConversationModel(**dict(row)) if row else None
+            if not row:
+                return None
+
+            # Convert row to dict and parse JSON metadata
+            row_dict = dict(row)
+            if isinstance(row_dict.get('metadata'), str):
+                row_dict['metadata'] = json.loads(row_dict['metadata'])
+
+            return ConversationModel(**row_dict)
 
     async def update_conversation(self, conversation_id: str, **kwargs):
         """Update conversation fields"""
@@ -150,26 +162,36 @@ class DatabaseClient:
         
         async with self.acquire() as conn:
             rows = await conn.fetch(query, user_id, limit, offset)
-            return [ConversationModel(**dict(row)) for row in rows]
+            conversations = []
+            for row in rows:
+                row_dict = dict(row)
+                # Parse JSON metadata string to dict
+                if isinstance(row_dict.get('metadata'), str):
+                    row_dict['metadata'] = json.loads(row_dict['metadata'])
+                conversations.append(ConversationModel(**row_dict))
+            return conversations
 
     # Message operations
     async def add_message(self, message: MessageModel) -> UUID:
         """Add a message to conversation"""
         async with self.acquire() as conn:
+            # Convert metadata dict to JSON string for PostgreSQL
+            metadata_json = json.dumps(message.metadata) if message.metadata else '{}'
+
             row = await conn.fetchrow(
                 """
                 INSERT INTO messages (
                     conversation_id, role, content, sequence_number,
                     metadata, tokens_used, processing_time_ms
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
                 RETURNING id
                 """,
                 message.conversation_id,
                 message.role,
                 message.content,
                 message.sequence_number,
-                message.metadata,
+                metadata_json,
                 message.tokens_used,
                 message.processing_time_ms
             )

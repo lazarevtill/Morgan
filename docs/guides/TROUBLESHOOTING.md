@@ -195,7 +195,7 @@ RuntimeError: CUDA out of memory. Tried to allocate X GB
    
    `config/stt.yaml`:
    ```yaml
-   model: "distil-medium"  # Instead of "distil-large-v3"
+   model: "distil-medium"  # Instead of "distil-distil-large-v3.5 "
    ```
    
    `config/tts.yaml`:

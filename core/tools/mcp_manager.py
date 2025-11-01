@@ -159,21 +159,21 @@ class MCPToolsManager:
         try:
             async with self.pg_pool.acquire() as conn:
                 for tool in self.tools.values():
+                    # Don't insert id - let database generate UUID
                     await conn.execute(
                         """
-                        INSERT INTO mcp_tools (id, name, description, category, parameters_schema, enabled)
-                        VALUES ($1, $2, $3, $4, $5, $6)
+                        INSERT INTO mcp_tools (name, description, category, parameters_schema, enabled)
+                        VALUES ($1, $2, $3, $4, $5)
                         ON CONFLICT (name) DO UPDATE SET
                             description = EXCLUDED.description,
                             category = EXCLUDED.category,
                             parameters_schema = EXCLUDED.parameters_schema,
                             updated_at = CURRENT_TIMESTAMP
                         """,
-                        tool.id,
                         tool.name,
                         tool.description,
                         tool.category,
-                        tool.parameters_schema,
+                        json.dumps(tool.parameters_schema),
                         tool.enabled
                     )
             self.logger.info("Built-in tools synced to database")

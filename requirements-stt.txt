@@ -1,14 +1,15 @@
 # STT service requirements
 -r requirements-cuda.txt
-# Pinned versions for fast resolution
 # PyTorch versions inherited from requirements-cuda.txt (2.5.1+cu124)
-# Using latest faster-whisper for CUDA 12.4 compatibility
-# Note: faster-whisper uses silero-vad internally for VAD - it's not a separate service
-faster-whisper==1.0.3
-soundfile==0.12.1
-librosa==0.10.1
-pydub==0.25.1
-silero-vad==4.0.2  # Used by faster-whisper for integrated VAD
-websockets==12.0
-aiofiles==23.2.1
 
+# Core audio processing (faster-whisper with built-in VAD)
+faster-whisper>=1.1.0
+soundfile>=0.12.0
+librosa>=0.10.0
+pydub>=0.25.0
+websockets>=14.0
+aiofiles>=24.0
+
+# Additional dependencies from requirements-base that STT needs
+pyyaml>=6.0
+aiohttp>=3.11

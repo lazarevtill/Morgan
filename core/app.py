@@ -28,6 +28,7 @@ from conversation.manager import ConversationManager
 from handlers.registry import HandlerRegistry
 from integrations.manager import IntegrationManager
 from services.orchestrator import ServiceOrchestrator
+from services.streaming_orchestrator import StreamingOrchestrator
 from memory.manager import MemoryManager
 from tools.mcp_manager import MCPToolsManager
 
@@ -48,6 +49,12 @@ class CoreConfig(BaseModel):
     enable_tools: bool = True
     use_https: bool = False
     ssl_cert_path: str = "/app/cert.pem"
+
+    # Streaming optimization
+    streaming_enabled: bool = True
+    stream_chunk_size: int = 8192
+    stream_timeout: int = 60
+    real_time_processing: bool = True
     ssl_key_path: str = "/app/cert.pfx"
     external_llm_api_base: str = "https://gpt.lazarev.cloud/ollama/v1"
     external_llm_api_key: str = ""
@@ -75,6 +82,7 @@ class MorganCore:
         self.handler_registry = None
         self.integration_manager = None
         self.service_orchestrator = None
+        self.streaming_orchestrator = None  # New real-time streaming orchestrator
         self.api_server = None
         self.memory_manager = None
         self.tools_manager = None
@@ -128,7 +136,10 @@ class MorganCore:
             if self.api_server:
                 await self.api_server.stop()
 
-            # Stop service orchestrator
+            # Stop service orchestrators
+            if self.streaming_orchestrator:
+                await self.streaming_orchestrator.stop()
+            
             if self.service_orchestrator:
                 await self.service_orchestrator.stop()
 
@@ -180,7 +191,7 @@ class MorganCore:
             # Initialize integration manager
             self.integration_manager = IntegrationManager(self.config)
 
-            # Initialize service orchestrator
+            # Initialize service orchestrator (legacy)
             self.service_orchestrator = ServiceOrchestrator(
                 config=self.config,
                 conversation_manager=self.conversation_manager,
@@ -191,6 +202,20 @@ class MorganCore:
             )
 
             await self.service_orchestrator.start()
+
+            # Initialize streaming orchestrator (real-time optimized)
+            self.streaming_orchestrator = StreamingOrchestrator(
+                config=self.config,
+                conversation_manager=self.conversation_manager,
+                handler_registry=self.handler_registry,
+                integration_manager=self.integration_manager,
+                memory_manager=self.memory_manager,
+                tools_manager=self.tools_manager,
+                redis_client=redis_client,
+                db_client=db_client
+            )
+
+            await self.streaming_orchestrator.start()
 
             self.logger.info("All components initialized successfully")
 
@@ -240,8 +265,18 @@ class MorganCore:
                 qdrant_port = self.config.get("qdrant_port", 6333)
                 embedding_dim = self.config.get("embedding_dimension", 384)
 
+                # Construct PostgreSQL DSN
+                postgres_host = self.config.get("postgres_host", "postgres")
+                postgres_port = self.config.get("postgres_port", 5432)
+                postgres_db = self.config.get("postgres_db", "morgan")
+                postgres_user = self.config.get("postgres_user", "morgan")
+                postgres_password = self.config.get("postgres_password", "morgan_secure_password")
+
+                postgres_dsn = f"postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_db}"
+
                 # Use existing DatabaseClient from conversation manager
                 self.memory_manager = MemoryManager(
+                    postgres_dsn=postgres_dsn,
                     qdrant_host=qdrant_host,
                     qdrant_port=qdrant_port,
                     embedding_dimension=embedding_dim
@@ -251,7 +286,7 @@ class MorganCore:
 
             # Initialize MCP Tools Manager if enabled
             if enable_tools:
-                self.tools_manager = MCPToolsManager()
+                self.tools_manager = MCPToolsManager(postgres_dsn=postgres_dsn)
                 await self.tools_manager.start()
                 self.logger.info("MCP Tools Manager initialized")
 

@@ -432,7 +432,7 @@ GET /models
       "performance": "balanced"
     },
     {
-      "name": "whisper-large-v3",
+      "name": "whisper-distil-large-v3.5 ",
       "size": "1.5GB",
       "languages": ["auto"],
       "performance": "accurate"
@@ -784,7 +784,7 @@ curl -X POST http://localhost:8003/transcribe \
   -H "Content-Type: application/json" \
   -d '{
     "audio_data": "UklGRnoGAABXQVZFZm10IBAAAA...",
-    "model": "whisper-large-v3",
+    "model": "whisper-distil-large-v3.5 ",
     "temperature": 0.0,
     "prompt": "This is a conversation with Morgan AI Assistant."
   }'

@@ -1,6 +1,7 @@
 """
 FastAPI server for TTS service with streaming support
 """
+import asyncio
 import logging
 from typing import Dict, Any, Optional
 import json
@@ -74,20 +75,20 @@ class TTSAPIServer:
                 )
 
                 if request.stream:
-                    # Stream audio chunks
+                    # Stream audio chunks using real streaming from CSM generator
                     async def stream_audio():
-                        """Stream audio in chunks"""
+                        """Stream audio in chunks using CSM streaming generation"""
                         try:
-                            # Generate full audio first
-                            response = await self.tts_service.generate_speech(tts_request)
-                            
-                            # Stream in chunks (16KB each)
-                            chunk_size = 16384
-                            audio_data = response.audio_data
-                            
-                            for i in range(0, len(audio_data), chunk_size):
-                                chunk = audio_data[i:i + chunk_size]
-                                yield chunk
+                            chunk_id = 0
+
+                            # Use the streaming generation method
+                            async for audio_chunk in self.tts_service.generate_speech_stream(tts_request):
+                                yield audio_chunk
+                                chunk_id += 1
+
+                                # Small delay to ensure smooth streaming
+                                await asyncio.sleep(0.001)
+
                         except Exception as e:
                             self.logger.error(f"Streaming error: {e}")
                             raise
@@ -97,7 +98,8 @@ class TTSAPIServer:
                         media_type="audio/wav",
                         headers={
                             "Content-Disposition": "attachment; filename=speech.wav",
-                            "Cache-Control": "no-cache"
+                            "Cache-Control": "no-cache",
+                            "Connection": "keep-alive"
                         }
                     )
                 else:
@@ -115,6 +117,49 @@ class TTSAPIServer:
             except Exception as e:
                 self.logger.error(f"Speech generation error: {e}")
                 raise HTTPException(status_code=500, detail=f"Speech generation failed: {e}")
+
+        @app.post("/generate/stream")
+        async def generate_speech_stream(request: GenerateSpeechRequest):
+            """Generate streaming speech (alias for streaming mode)"""
+            try:
+                tts_request = TTSRequest(
+                    text=request.text,
+                    voice=request.voice,
+                    speed=request.speed,
+                    output_format=request.output_format
+                )
+
+                # Always stream for this endpoint
+                async def stream_audio():
+                    """Stream audio in chunks"""
+                    try:
+                        async for audio_chunk in self.tts_service.generate_speech_stream(tts_request):
+                            # Send as JSON chunks for easier handling
+                            chunk_data = {
+                                "audio_data": base64.b64encode(audio_chunk).decode('utf-8'),
+                                "chunk_size": len(audio_chunk)
+                            }
+                            yield f"data: {json.dumps(chunk_data)}\n\n"
+                        
+                        # Send done signal
+                        yield f"data: {json.dumps({'done': True})}\n\n"
+                    except Exception as e:
+                        self.logger.error(f"Streaming error: {e}")
+                        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+                return StreamingResponse(
+                    stream_audio(),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive",
+                        "X-Accel-Buffering": "no"
+                    }
+                )
+
+            except Exception as e:
+                self.logger.error(f"Stream generation error: {e}")
+                raise HTTPException(status_code=500, detail=f"Stream generation failed: {e}")
 
         @app.post("/generate/audio")
         async def generate_speech_audio(request: GenerateSpeechRequest):

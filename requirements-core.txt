@@ -1,12 +1,12 @@
 # Core service requirements
 -r requirements-base.txt
-websockets==12.0
-numpy==1.26.3
-qdrant-client==1.7.3
-pytz==2024.1
+websockets==14.1
+numpy==1.26.4
+qdrant-client==1.12.1
+pytz==2024.2
 # sentence-transformers pulls in PyTorch - pinned for speed
-sentence-transformers==2.3.1
+sentence-transformers==3.3.1
 # Database and caching
-asyncpg==0.29.0
-redis[hiredis]==5.0.1
+asyncpg==0.30.0
+redis[hiredis]==5.2.1
 

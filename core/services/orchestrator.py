@@ -320,14 +320,14 @@ class ServiceOrchestrator:
             return {"text": response_text, "error": str(e)}
 
     async def _generate_tts_response(self, text: str) -> Optional[bytes]:
-        """Generate TTS audio response"""
+        """Generate TTS audio response using CSM-streaming"""
         try:
-            # Prepare TTS request
+            # Prepare TTS request for CSM-streaming
             tts_request = {
                 "text": text,
-                "voice": "default",
+                "voice": "default",  # CSM-streaming default voice
                 "speed": 1.0,
-                "format": "wav"
+                "output_format": "wav"
             }
 
             # Call TTS service
@@ -335,11 +335,12 @@ class ServiceOrchestrator:
             result = await client.post("/generate", json_data=tts_request)
 
             if result.success:
-                # Handle response data - TTS service returns dict with hex audio_data
+                # Handle response data - TTS service returns dict with base64 audio_data
                 response_data = result.data
                 if isinstance(response_data, dict) and response_data.get("audio_data"):
-                    # Convert hex back to bytes
-                    return bytes.fromhex(response_data["audio_data"])
+                    # Convert base64 back to bytes
+                    import base64
+                    return base64.b64decode(response_data["audio_data"])
                 else:
                     self.logger.warning(f"TTS generation failed or returned no audio: {result.error}")
                     return None
@@ -358,7 +359,7 @@ class ServiceOrchestrator:
             stt_request = {
                 "audio_data": audio_data.hex(),  # Convert to hex for JSON
                 "language": "auto",
-                "model": "whisper-large-v3"
+                "model": "whisper-distil-large-v3.5 "
             }
 
             # Call STT service

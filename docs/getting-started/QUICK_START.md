@@ -234,7 +234,7 @@ docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
 
 `config/stt.yaml`:
 ```yaml
-model: "distil-medium"  # Instead of "distil-large-v3"
+model: "distil-medium"  # Instead of "distil-distil-large-v3.5 "
 ```
 
 `config/llm.yaml`:
@@ -316,7 +316,7 @@ speed: 1.0
 ### STT Service (`config/stt.yaml`)
 
 ```yaml
-model: "distil-large-v3"
+model: "distil-distil-large-v3.5 "
 device: "cuda"  # or "cpu"
 language: "auto"
 ```

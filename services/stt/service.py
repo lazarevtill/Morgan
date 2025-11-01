@@ -27,19 +27,24 @@ class STTConfig(BaseModel):
     """STT service configuration"""
     host: str = "0.0.0.0"
     port: int = 8003
-    model: str = "large-v3"
+    model: str = "distil-large-v3.5 "
     device: str = "cuda"
-    language: str = "auto"
+    language: str = "en"
     sample_rate: int = 16000
     chunk_size: int = 1024
+    real_time_chunk_size: int = 512
     vad_enabled: bool = True
     vad_threshold: float = 0.5
+    vad_min_speech_duration: float = 0.1
+    vad_max_speech_duration: float = 30.0
     vad_min_silence_duration: float = 0.5
+    vad_speech_pad_ms: int = 200
+    real_time_enabled: bool = True
     log_level: str = "INFO"
 
 
 class STTService:
-    """STT Service with Silero VAD integration"""
+    """STT Service with faster-whisper built-in VAD integration"""
 
     def __init__(self, config: Optional[ServiceConfig] = None):
         self.config = config or ServiceConfig("stt")
@@ -53,18 +58,32 @@ class STTService:
         # Load configuration
         self.stt_config = STTConfig(**self.config.all())
 
+        # Require CUDA for STT service - no CPU fallback
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "CUDA is required for STT service but not available. "
+                "Please ensure you have a CUDA-compatible GPU and drivers installed."
+            )
+
+        self.logger.info(f"CUDA available: {torch.cuda.is_available()}")
+        if torch.cuda.is_available():
+            self.logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
+            self.logger.info(f"CUDA Version: {torch.version.cuda}")
+
         # Model management
         self.whisper_model = None
-        self.vad_model = None
-        self.device = torch.device(self.stt_config.device if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(self.stt_config.device)
+        self.vad_available = False  # Will be set after whisper model loads
 
         # Audio processing
         self.audio_utils = AudioUtils()
 
-        # VAD state
-        self.vad_state = None
-        self.speech_buffer = []
-        self.silence_threshold = self.stt_config.vad_min_silence_duration * self.stt_config.sample_rate
+        # VAD state (using faster-whisper built-in)
+
+        # Real-time processing state
+        self.audio_buffer = np.array([], dtype=np.float32)
+        self.last_transcription_time = 0
+        self.min_transcription_interval = 0.5  # Minimum 500ms between transcriptions
 
         # Streaming sessions
         self.streaming_sessions: Dict[str, Dict[str, Any]] = {}
@@ -76,7 +95,7 @@ class STTService:
         try:
             await self._load_whisper_model()
             if self.stt_config.vad_enabled:
-                await self._load_vad_model()
+                self._setup_vad_filter()
             self.logger.info("STT Service started successfully")
         except Exception as e:
             self.logger.error(f"Failed to start STT service: {e}")
@@ -91,9 +110,7 @@ class STTService:
             del self.whisper_model
             self.whisper_model = None
 
-        if self.vad_model:
-            del self.vad_model
-            self.vad_model = None
+        self.vad_available = False
 
         # Clear CUDA cache
         if torch.cuda.is_available():
@@ -102,80 +119,41 @@ class STTService:
         self.logger.info("STT Service stopped")
 
     async def _load_whisper_model(self):
-        """Load Whisper model"""
+        """Load faster-whisper model with proper VAD support"""
         try:
             from faster_whisper import WhisperModel
 
-            self.logger.info(f"Loading Whisper model: {self.stt_config.model}")
+            self.logger.info(f"Loading faster-whisper model: {self.stt_config.model}")
 
-            # Load model with optimized settings for CUDA 13
+            # Load model with optimized settings for CUDA
             self.whisper_model = WhisperModel(
                 self.stt_config.model,
                 device=str(self.device),
                 compute_type="float16" if self.device.type == "cuda" else "int8",
-                cpu_threads=4,
+                cpu_threads=4 if self.device.type == "cpu" else 1,
                 num_workers=1,
-                download_root="data/models",
+                download_root="data/models/whisper",
                 local_files_only=False  # Allow downloading if not present
             )
 
-            self.logger.info("Whisper model loaded successfully")
+            self.logger.info(f"faster-whisper model loaded successfully on {self.device}")
+            self.logger.info(f"VAD enabled: {self.stt_config.vad_enabled}")
 
-        except ImportError:
-            self.logger.error("faster-whisper not available, falling back to openai-whisper")
-            await self._load_openai_whisper()
         except Exception as e:
-            self.logger.error(f"Failed to load Whisper model: {e}")
-            await self._load_openai_whisper()
+            self.logger.error(f"Failed to load faster-whisper model: {e}")
+            raise AudioError(f"Whisper model loading failed: {e}", ErrorCode.MODEL_NOT_LOADED)
 
-    async def _load_openai_whisper(self):
-        """Load OpenAI Whisper model as fallback"""
+
+    def _setup_vad_filter(self):
+        """Setup VAD filter availability check"""
         try:
-            import whisper
-
-            self.logger.info(f"Loading OpenAI Whisper model: {self.stt_config.model}")
-
-            self.whisper_model = whisper.load_model(
-                self.stt_config.model,
-                device=str(self.device),
-                download_root="data/models"
-            )
-
-            self.logger.info("OpenAI Whisper model loaded successfully")
+            # VAD is handled through transcribe parameters in faster-whisper
+            self.vad_available = self.stt_config.vad_enabled
+            self.logger.info(f"VAD configured: {self.vad_available}")
 
         except Exception as e:
-            self.logger.error(f"Failed to load OpenAI Whisper model: {e}")
-            raise AudioError(f"No STT model available: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
-
-    async def _load_vad_model(self):
-        """Load Silero VAD model"""
-        try:
-            # Set torch hub cache directory to use mounted volume
-            import os
-            torch.hub.set_dir("data/models/torch_hub")
-
-            # Load Silero VAD model
-            model, utils = torch.hub.load(
-                repo_or_dir='snakers4/silero-vad',
-                model='silero_vad',
-                force_reload=False
-            )
-
-            # Unpack utilities
-            # utils tuple order: (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks)
-            self.get_speech_timestamps = utils[0]
-            self.collect_chunks = utils[4]
-
-            self.vad_model = model
-            self.vad_utils = utils
-            self.vad_state = None  # not needed for batch API
-
-            self.logger.info("Silero VAD model loaded successfully")
-
-        except Exception as e:
-            self.logger.error(f"Failed to load VAD model: {e}")
-            # VAD is optional, continue without it
-            self.vad_model = None
+            self.logger.warning(f"VAD setup failed: {e}")
+            self.vad_available = False
 
     async def transcribe(self, request: STTRequest) -> STTResponse:
         """Transcribe audio to text"""
@@ -188,8 +166,8 @@ class STTService:
                 )
 
                 # Apply VAD if enabled and available
-                if self.stt_config.vad_enabled and self.vad_model:
-                    audio_array = await self._apply_vad(audio_array)
+                if self.stt_config.vad_enabled and self.vad_available:
+                    audio_array = await self._apply_vad_filter(audio_array)
 
                 # Transcribe with Whisper
                 return await self._transcribe_with_whisper(audio_array, request)
@@ -198,31 +176,63 @@ class STTService:
                 self.logger.error(f"Error transcribing audio: {e}")
                 raise AudioError(f"Transcription failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
 
-    async def _apply_vad(self, audio_array: np.ndarray) -> np.ndarray:
-        """Apply Voice Activity Detection to audio"""
+    async def _apply_vad_filter(self, audio_array: np.ndarray) -> np.ndarray:
+        """Apply VAD filter using faster-whisper's built-in functionality"""
         try:
-            # Convert numpy array to torch tensor as expected by silero-vad
-            audio_tensor = torch.from_numpy(audio_array).float()
+            # Since we're now using VAD parameters directly in the transcribe method,
+            # we don't need to pre-process the audio here. The VAD filtering
+            # happens during transcription, so we can return the original audio.
+            # The actual VAD filtering is handled by faster-whisper internally.
 
-            # Detect speech timestamps
-            speech_timestamps = self.get_speech_timestamps(
-                audio_tensor,
-                self.vad_model,
-                sampling_rate=self.stt_config.sample_rate,
-                threshold=self.stt_config.vad_threshold
-            )
-
-            if not speech_timestamps:
-                self.logger.warning("No speech detected by VAD")
+            if self.stt_config.vad_enabled and self.vad_available:
+                self.logger.debug("VAD will be applied during transcription by faster-whisper")
+                # Return original audio - VAD filtering happens in transcribe()
                 return audio_array
-
-            # Collect only speech chunks and return as numpy
-            speech_audio = self.collect_chunks(speech_timestamps, audio_tensor)
-            return speech_audio.numpy()
+            else:
+                # Fallback to simple energy-based VAD if needed
+                return await self._apply_simple_energy_vad(audio_array)
 
         except Exception as e:
-            self.logger.error(f"VAD processing failed: {e}")
-            # Fallback to original audio
+            self.logger.error(f"VAD filter processing failed: {e}")
+            # Return original audio as fallback
+            return audio_array
+
+    async def _apply_simple_energy_vad(self, audio_array: np.ndarray) -> np.ndarray:
+        """Simple energy-based VAD as fallback"""
+        try:
+            # Calculate frame energy
+            frame_length = int(self.stt_config.sample_rate * 0.025)  # 25ms frames
+            hop_length = int(self.stt_config.sample_rate * 0.010)   # 10ms hop
+
+            energy_threshold = self.stt_config.vad_threshold * np.max(np.abs(audio_array))
+
+            speech_frames = []
+            for i in range(0, len(audio_array) - frame_length, hop_length):
+                frame = audio_array[i:i + frame_length]
+                energy = np.sqrt(np.mean(frame ** 2))
+
+                if energy > energy_threshold:
+                    speech_frames.extend(range(i, min(i + frame_length, len(audio_array))))
+
+            if speech_frames:
+                # Get unique indices and create continuous speech segment
+                speech_indices = sorted(list(set(speech_frames)))
+                start_idx = speech_indices[0]
+                end_idx = speech_indices[-1]
+
+                # Add some padding
+                padding = int(self.stt_config.sample_rate * 0.1)  # 100ms padding
+                start_idx = max(0, start_idx - padding)
+                end_idx = min(len(audio_array), end_idx + padding)
+
+                self.logger.debug(f"Energy VAD detected speech from {start_idx} to {end_idx}")
+                return audio_array[start_idx:end_idx]
+            else:
+                self.logger.debug("Energy VAD: No speech detected")
+                return np.array([], dtype=np.float32)
+
+        except Exception as e:
+            self.logger.error(f"Simple energy VAD failed: {e}")
             return audio_array
 
     async def _transcribe_with_whisper(self, audio_array: np.ndarray, request: STTRequest) -> STTResponse:
@@ -243,10 +253,26 @@ class STTService:
             }
 
             if self.whisper_model.__class__.__module__.startswith('faster_whisper'):
-                # Faster Whisper API
+                # Faster Whisper API with VAD integration
+                trans_options_with_vad = trans_options.copy()
+
+                # Add VAD parameters for real-time processing
+                if self.stt_config.vad_enabled:
+                    trans_options_with_vad.update({
+                        "vad_filter": True,
+                        "vad_parameters": {
+                            "threshold": self.stt_config.vad_threshold,
+                            "min_speech_duration_ms": int(self.stt_config.vad_min_speech_duration * 1000),
+                            "max_speech_duration_s": self.stt_config.vad_max_speech_duration,
+                            "min_silence_duration_ms": int(self.stt_config.vad_min_silence_duration * 1000),
+                            "speech_pad_ms": self.stt_config.vad_speech_pad_ms
+                        }
+                    })
+                    self.logger.debug(f"Using VAD parameters: {trans_options_with_vad['vad_parameters']}")
+
                 segments, info = self.whisper_model.transcribe(
                     audio_array,
-                    **trans_options
+                    **trans_options_with_vad
                 )
 
                 # Convert segments generator to list
@@ -301,7 +327,8 @@ class STTService:
                 segments=detailed_segments,
                 metadata={
                     "model": self.stt_config.model,
-                    "vad_enabled": self.vad_model is not None,
+                    "vad_enabled": self.vad_available,
+                    "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based",
                     "device": str(self.device)
                 }
             )
@@ -351,13 +378,40 @@ class STTService:
     async def transcribe_chunk(self, audio_bytes: bytes, language: Optional[str] = None) -> STTResponse:
         """Transcribe a single audio chunk (for streaming)"""
         try:
+            # Convert audio bytes to numpy array
+            audio_array = self.audio_utils.bytes_to_numpy(audio_bytes, self.stt_config.sample_rate)
+
+            # Apply real-time VAD if enabled
+            if self.stt_config.vad_enabled and self.vad_available:
+                processed_audio = await self._apply_vad_filter(audio_array)
+
+                # If no speech detected, return empty result
+                if len(processed_audio) == 0:
+                    return STTResponse(
+                        text="",
+                        language=language or self.stt_config.language,
+                        confidence=0.0,
+                        duration=len(audio_array) / self.stt_config.sample_rate,
+                        segments=[],
+                        metadata={
+                            "model": self.stt_config.model,
+                            "vad_enabled": self.vad_available,
+                            "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based",
+                            "vad_result": "no_speech",
+                            "device": str(self.device),
+                            "real_time": True
+                        }
+                    )
+
+                audio_array = processed_audio
+
             # Create STT request
             request = STTRequest(
-                audio_data=audio_bytes,
+                audio_data=self.audio_utils.numpy_to_bytes(audio_array, self.stt_config.sample_rate),
                 language=language or self.stt_config.language
             )
 
-            # Transcribe without VAD for real-time processing
+            # Transcribe with Whisper
             return await self._transcribe_with_whisper_direct(audio_bytes, request)
 
         except Exception as e:
@@ -504,6 +558,80 @@ class STTService:
             self.logger.error(f"Failed to end audio stream: {e}")
             raise AudioError(f"Failed to end audio stream: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
 
+    async def process_realtime_chunk(self, audio_bytes: bytes, session_id: str = "default",
+                                   language: Optional[str] = None) -> Dict[str, Any]:
+        """Process audio chunk in real-time with VAD and transcription"""
+        try:
+            current_time = time.time()
+
+            # Convert audio bytes to numpy array
+            audio_array = self.audio_utils.bytes_to_numpy(audio_bytes, self.stt_config.sample_rate)
+
+            # Apply real-time VAD if enabled
+            vad_result = "vad_disabled"
+            if self.stt_config.vad_enabled and self.vad_available:
+                processed_audio = await self._apply_vad_filter(audio_array)
+
+                if len(processed_audio) == 0:
+                    return {
+                        "text": "",
+                        "confidence": 0.0,
+                        "vad_result": "no_speech",
+                        "segments": [],
+                        "is_final": False,
+                        "session_id": session_id
+                    }
+
+                audio_array = processed_audio
+                vad_result = "speech_detected"
+
+            # Throttle transcription requests
+            if current_time - self.last_transcription_time < self.min_transcription_interval:
+                return {
+                    "text": "",
+                    "confidence": 0.0,
+                    "vad_result": vad_result,
+                    "segments": [],
+                    "is_final": False,
+                    "session_id": session_id,
+                    "throttled": True
+                }
+
+            # Transcribe the audio
+            request = STTRequest(
+                audio_data=self.audio_utils.numpy_to_bytes(audio_array, self.stt_config.sample_rate),
+                language=language or self.stt_config.language
+            )
+
+            response = await self._transcribe_with_whisper_direct(audio_bytes, request)
+            self.last_transcription_time = current_time
+
+            return {
+                "text": response.text,
+                "confidence": response.confidence,
+                "language": response.language,
+                "duration": response.duration,
+                "segments": response.segments,
+                "vad_result": vad_result,
+                "is_final": response.confidence > 0.8,  # Consider high confidence as final
+                "session_id": session_id,
+                "metadata": {
+                    **response.metadata,
+                    "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based"
+                }
+            }
+
+        except Exception as e:
+            self.logger.error(f"Real-time chunk processing failed: {e}")
+            return {
+                "text": "",
+                "confidence": 0.0,
+                "error": str(e),
+                "segments": [],
+                "is_final": False,
+                "session_id": session_id
+            }
+
 
     async def _transcribe_with_whisper_direct(self, audio_bytes: bytes, request: STTRequest) -> STTResponse:
         """Direct transcription without VAD for streaming"""
@@ -580,7 +708,8 @@ class STTService:
                 segments=detailed_segments,
                 metadata={
                     "model": self.stt_config.model,
-                    "vad_enabled": False,  # Direct transcription
+                    "vad_enabled": self.vad_available,
+                    "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based",
                     "device": str(self.device)
                 }
             )
@@ -621,8 +750,8 @@ class STTService:
             audio_array = self.audio_utils.bytes_to_numpy(audio_bytes, self.stt_config.sample_rate)
 
             # Apply real-time VAD if enabled
-            if self.stt_config.vad_enabled and self.vad_model:
-                processed_audio = await self._apply_realtime_vad(audio_array)
+            if self.stt_config.vad_enabled and self.vad_available:
+                processed_audio = await self._apply_vad_filter(audio_array)
 
                 # If no speech detected, return empty result
                 if len(processed_audio) == 0:
@@ -644,7 +773,8 @@ class STTService:
                 "language": response.language,
                 "duration": response.duration,
                 "segments": response.segments,
-                "vad_result": "speech_detected" if self.vad_model else "vad_disabled"
+                "vad_result": "speech_detected" if self.vad_available else "vad_disabled",
+                "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based"
             }
 
         except Exception as e:
@@ -656,71 +786,14 @@ class STTService:
                 "segments": []
             }
 
-    async def _apply_realtime_vad(self, audio_array: np.ndarray) -> np.ndarray:
-        """Apply real-time VAD processing to audio stream"""
-        try:
-            # Convert to tensor for VAD
-            audio_tensor = torch.from_numpy(audio_array).float()
-
-            # Use collect_chunks for real-time processing
-            if hasattr(self, 'get_speech_timestamps') and hasattr(self, 'collect_chunks'):
-                # Detect speech segments
-                speech_timestamps = self.get_speech_timestamps(
-                    audio_tensor,
-                    self.vad_model,
-                    sampling_rate=self.stt_config.sample_rate,
-                    threshold=self.stt_config.vad_threshold
-                )
-
-                if speech_timestamps:
-                    # Collect only speech chunks
-                    speech_audio = self.collect_chunks(speech_timestamps, audio_tensor)
-                    return speech_audio.numpy()
-                else:
-                    # No speech detected
-                    return np.array([], dtype=np.float32)
-
-            # Fallback to simple VAD model call
-            elif self.vad_model:
-                # Process in smaller chunks for real-time
-                chunk_size = int(self.stt_config.sample_rate * 0.5)  # 0.5 second chunks
-                speech_chunks = []
-
-                for i in range(0, len(audio_array), chunk_size):
-                    chunk = audio_array[i:i + chunk_size]
-
-                    if len(chunk) < chunk_size:
-                        # Pad last chunk
-                        padding = np.zeros(chunk_size - len(chunk))
-                        chunk = np.concatenate([chunk, padding])
-
-                    # Convert chunk to tensor
-                    chunk_tensor = torch.from_numpy(chunk).float()
-
-                    # Run VAD on chunk
-                    confidence = self.vad_model(chunk_tensor, self.stt_config.sample_rate)
-
-                    if confidence > self.stt_config.vad_threshold:
-                        speech_chunks.append(chunk)
-
-                if speech_chunks:
-                    return np.concatenate(speech_chunks)
-                else:
-                    return np.array([], dtype=np.float32)
-
-        except Exception as e:
-            self.logger.error(f"Real-time VAD processing failed: {e}")
-            # Return original audio if VAD fails
-            return audio_array
-
-        return audio_array
 
     async def list_models(self) -> List[str]:
-        """List available Whisper models"""
+        """List available faster-whisper models"""
         return [
-            "tiny", "tiny.en", "base", "base.en", "small", "small.en",
-            "medium", "medium.en", "large-v1", "large-v2", "large-v3",
-            "distil-large-v2", "distil-large-v3"
+            "tiny.en", "tiny", "base.en", "base", "small.en", "small",
+            "medium.en", "medium", "large-v1", "large-v2", "large-v3",
+            "large", "distil-large-v2", "distil-medium.en", "distil-small.en",
+            "distil-large-v3", "large-v3-turbo", "turbo"
         ]
 
     async def health_check(self) -> Dict[str, Any]:
@@ -729,21 +802,14 @@ class STTService:
             # Lightweight checks only to avoid heavy GPU inference here
             whisper_loaded = self.whisper_model is not None
 
-            # Optional: quick VAD run on small silent buffer (CPU-friendly)
-            if self.vad_model is not None and hasattr(self, 'get_speech_timestamps'):
-                silent = np.zeros(int(self.stt_config.sample_rate * 0.25), dtype=np.float32)
-                _ = self.get_speech_timestamps(
-                    torch.from_numpy(silent).float(),
-                    self.vad_model,
-                    sampling_rate=self.stt_config.sample_rate,
-                    threshold=self.stt_config.vad_threshold
-                )
+            # VAD is now handled by faster-whisper internally, no separate VAD model needed
 
             return {
                 "status": "healthy" if whisper_loaded else "degraded",
                 "model": self.stt_config.model,
                 "device": str(self.device),
-                "vad_enabled": self.vad_model is not None,
+                "vad_enabled": self.vad_available,
+                "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based",
                 "sample_rate": self.stt_config.sample_rate,
                 "test_transcription": False
             }
@@ -753,7 +819,8 @@ class STTService:
                 "status": "unhealthy",
                 "error": str(e),
                 "device": str(self.device),
-                "vad_enabled": self.vad_model is not None
+                "vad_enabled": self.vad_available,
+                "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based"
             }
 
     async def list_active_sessions(self) -> Dict[str, Any]:

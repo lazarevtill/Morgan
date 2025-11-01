@@ -16,12 +16,13 @@ CREATE TABLE IF NOT EXISTS conversations (
     last_message_at TIMESTAMP WITH TIME ZONE,
     message_count INTEGER DEFAULT 0,
     metadata JSONB DEFAULT '{}',
-    is_active BOOLEAN DEFAULT TRUE,
-    INDEX idx_conversations_user_id (user_id),
-    INDEX idx_conversations_conversation_id (conversation_id),
-    INDEX idx_conversations_created_at (created_at DESC),
-    INDEX idx_conversations_updated_at (updated_at DESC)
+    is_active BOOLEAN DEFAULT TRUE
 );
+
+CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_conversation_id ON conversations(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at DESC);
 
 -- Messages table for storing conversation messages
 CREATE TABLE IF NOT EXISTS messages (
@@ -32,14 +33,14 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     sequence_number INTEGER NOT NULL,
     metadata JSONB DEFAULT '{}',
-    embedding VECTOR(384), -- For semantic search (adjust dimension based on embedding model)
     tokens_used INTEGER,
     processing_time_ms INTEGER,
-    INDEX idx_messages_conversation_id (conversation_id),
-    INDEX idx_messages_created_at (created_at DESC),
-    INDEX idx_messages_role (role),
     UNIQUE(conversation_id, sequence_number)
 );
+
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_role ON messages(role);
 
 -- Streaming sessions table for active streaming conversations
 CREATE TABLE IF NOT EXISTS streaming_sessions (
@@ -54,12 +55,13 @@ CREATE TABLE IF NOT EXISTS streaming_sessions (
     session_type VARCHAR(50) NOT NULL CHECK (session_type IN ('audio', 'text', 'websocket')),
     metadata JSONB DEFAULT '{}',
     audio_chunks_count INTEGER DEFAULT 0,
-    total_duration_ms INTEGER DEFAULT 0,
-    INDEX idx_streaming_sessions_session_id (session_id),
-    INDEX idx_streaming_sessions_user_id (user_id),
-    INDEX idx_streaming_sessions_status (status),
-    INDEX idx_streaming_sessions_created_at (created_at DESC)
+    total_duration_ms INTEGER DEFAULT 0
 );
+
+CREATE INDEX IF NOT EXISTS idx_streaming_sessions_session_id ON streaming_sessions(session_id);
+CREATE INDEX IF NOT EXISTS idx_streaming_sessions_user_id ON streaming_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_streaming_sessions_status ON streaming_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_streaming_sessions_created_at ON streaming_sessions(created_at DESC);
 
 -- Audio transcriptions table for storing STT results
 CREATE TABLE IF NOT EXISTS audio_transcriptions (
@@ -73,43 +75,46 @@ CREATE TABLE IF NOT EXISTS audio_transcriptions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     audio_format VARCHAR(50),
     sample_rate INTEGER,
-    metadata JSONB DEFAULT '{}',
-    INDEX idx_audio_transcriptions_session_id (session_id),
-    INDEX idx_audio_transcriptions_created_at (created_at DESC)
+    metadata JSONB DEFAULT '{}' 
 );
+
+CREATE INDEX IF NOT EXISTS idx_audio_transcriptions_session_id ON audio_transcriptions(session_id);
+CREATE INDEX IF NOT EXISTS idx_audio_transcriptions_created_at ON audio_transcriptions(created_at DESC);
 
 -- TTS generations table for caching TTS results
 CREATE TABLE IF NOT EXISTS tts_generations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
-    text_hash VARCHAR(64) NOT NULL, -- SHA256 hash of text + voice + speed for caching
+    text_hash VARCHAR(64) NOT NULL,
     voice VARCHAR(100) NOT NULL,
     speed FLOAT DEFAULT 1.0,
-    audio_data BYTEA, -- Store audio data for caching (optional, can use external storage)
+    audio_data BYTEA,
     audio_format VARCHAR(50),
     sample_rate INTEGER,
     duration_ms INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    metadata JSONB DEFAULT '{}',
-    INDEX idx_tts_generations_text_hash (text_hash),
-    INDEX idx_tts_generations_message_id (message_id),
-    INDEX idx_tts_generations_created_at (created_at DESC)
+    metadata JSONB DEFAULT '{}'
 );
+
+CREATE INDEX IF NOT EXISTS idx_tts_generations_text_hash ON tts_generations(text_hash);
+CREATE INDEX IF NOT EXISTS idx_tts_generations_message_id ON tts_generations(message_id);
+CREATE INDEX IF NOT EXISTS idx_tts_generations_created_at ON tts_generations(created_at DESC);
 
 -- User preferences table
 CREATE TABLE IF NOT EXISTS user_preferences (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id VARCHAR(255) UNIQUE NOT NULL,
     preferred_language VARCHAR(10) DEFAULT 'en',
-    preferred_voice VARCHAR(100) DEFAULT 'af_heart',
+    preferred_voice VARCHAR(100) DEFAULT 'speaker_0',
     tts_speed FLOAT DEFAULT 1.0,
     llm_temperature FLOAT DEFAULT 0.7,
     llm_max_tokens INTEGER DEFAULT 2048,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    metadata JSONB DEFAULT '{}',
-    INDEX idx_user_preferences_user_id (user_id)
+    metadata JSONB DEFAULT '{}'
 );
+
+CREATE INDEX IF NOT EXISTS idx_user_preferences_user_id ON user_preferences(user_id);
 
 -- System metrics table for monitoring
 CREATE TABLE IF NOT EXISTS system_metrics (
@@ -118,11 +123,12 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     metric_value FLOAT NOT NULL,
     service_name VARCHAR(100) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    metadata JSONB DEFAULT '{}',
-    INDEX idx_system_metrics_metric_type (metric_type),
-    INDEX idx_system_metrics_service_name (service_name),
-    INDEX idx_system_metrics_created_at (created_at DESC)
+    metadata JSONB DEFAULT '{}'
 );
+
+CREATE INDEX IF NOT EXISTS idx_system_metrics_metric_type ON system_metrics(metric_type);
+CREATE INDEX IF NOT EXISTS idx_system_metrics_service_name ON system_metrics(service_name);
+CREATE INDEX IF NOT EXISTS idx_system_metrics_created_at ON system_metrics(created_at DESC);
 
 -- Create trigger function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

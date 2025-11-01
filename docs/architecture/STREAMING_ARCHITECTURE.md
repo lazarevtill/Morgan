@@ -105,7 +105,7 @@ Morgan now supports full real-time streaming capabilities with PostgreSQL persis
 #### Features
 - **Faster Whisper Integration**: High-speed transcription
 - **Silero VAD**: Voice activity detection
-- **Supported Models**: distil-large-v3, large-v3, medium, small
+- **Supported Models**: distil-distil-large-v3.5 , distil-large-v3.5 , medium, small
 - **Languages**: 16+ languages with auto-detection
 
 #### Standard Endpoints

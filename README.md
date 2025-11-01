@@ -290,7 +290,7 @@ streaming_enabled: true  # Enable real-time streaming
 # config/stt.yaml
 host: "0.0.0.0"
 port: 8003
-model: "whisper-large-v3"
+model: "whisper-distil-large-v3.5 "
 device: "cuda"
 language: "auto"
 sample_rate: 16000

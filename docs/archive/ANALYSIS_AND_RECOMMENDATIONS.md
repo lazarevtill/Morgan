@@ -364,17 +364,17 @@ These are necessary for each service since they're in separate containers, but w
 
 **STT Config** ([config/stt.yaml](config/stt.yaml)):
 ```yaml
-model: "distil-large-v3"  # ← Config file
+model: "distil-distil-large-v3.5 "  # ← Config file
 ```
 
 **STT Service Default** ([services/stt/service.py:29](services/stt/service.py#L29)):
 ```python
-model: str = "whisper-large-v3"  # ← Code default (different!)
+model: str = "whisper-distil-large-v3.5 "  # ← Code default (different!)
 ```
 
 **Core Orchestrator** ([core/services/orchestrator.py:224](core/services/orchestrator.py#L224)):
 ```python
-"model": "whisper-large-v3"  # ← Hardcoded in orchestrator!
+"model": "whisper-distil-large-v3.5 "  # ← Hardcoded in orchestrator!
 ```
 
 **Issue**: Inconsistent model names across config, code, and orchestrator.
@@ -411,7 +411,7 @@ These fields are **dead code**.
 1. **Standardize Model Names**:
    ```yaml
    # config/stt.yaml
-   model: "large-v3"  # Use consistent naming
+   model: "distil-large-v3.5 "  # Use consistent naming
    ```
 
 2. **Remove Dead Code**:

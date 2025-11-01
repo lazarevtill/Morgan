@@ -6,10 +6,9 @@ host: "0.0.0.0"
 port: 8001
 
 # Open WebUI API configuration
-# Chat completions: https://gpt.lazarev.cloud/ollama/v1/chat/completions (OpenAI-compatible)
-# Embeddings: https://gpt.lazarev.cloud/ollama/api/embed (Ollama API)
-openai_api_base: "https://gpt.lazarev.cloud/ollama/v1"
-api_key: ""  # Open WebUI API key
+# Set via environment variables: OLLAMA_BASE_URL and MORGAN_LLM_API_KEY
+openai_api_base: ""  # Set via OLLAMA_BASE_URL environment variable
+api_key: ""  # Set via MORGAN_LLM_API_KEY environment variable
 model: "llama3.2:latest"  # Default chat model
 
 # Generation parameters

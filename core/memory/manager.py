@@ -407,8 +407,8 @@ class MemoryManager:
             # Generate embedding using LLM service
             result = await llm_client.post("/embed", json_data={"text": text})
 
-            if result.success and result.data.get("embeddings"):
-                embedding = result.data["embeddings"]
+            if result.success and result.data.get("embedding"):
+                embedding = result.data["embedding"]
 
                 # Convert to numpy array and ensure correct dimension
                 embedding_array = np.array(embedding, dtype=np.float32)

@@ -127,7 +127,7 @@ class BaseConfig:
         return value
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Get configuration value by key"""
+        """Get configuration value by key with environment variable fallback"""
         keys = key.split('.')
         current = self._config
 
@@ -135,7 +135,20 @@ class BaseConfig:
             if isinstance(current, dict) and k in current:
                 current = current[k]
             else:
+                # Check environment variable before returning default
+                env_var = f"MORGAN_{key.replace('.', '_').upper()}"
+                env_value = os.getenv(env_var)
+                if env_value is not None:
+                    return self._convert_env_value(env_value)
                 return default
+
+        # If current value is empty string, check environment variable
+        if current == "":
+            env_var = f"MORGAN_{key.replace('.', '_').upper()}"
+            env_value = os.getenv(env_var)
+            if env_value is not None:
+                return self._convert_env_value(env_value)
+            return default if default is not None else current
 
         return current
 

@@ -1,13 +1,32 @@
 # TTS service requirements
 -r requirements-cuda.txt
-# Pinned versions for fast resolution
 # PyTorch versions inherited from requirements-cuda.txt (2.5.1+cu124)
-# Using csm-streaming for real-time TTS (aligned with CUDA 12.4 / PyTorch 2.5.1)
-csm-streaming==0.1.0
+
+# Core audio processing
 soundfile==0.12.1
-librosa==0.10.1
+sounddevice
+librosa==0.10.2
 pydub==0.25.1
-# Fallback TTS engines (optional)
-# TTS==0.22.0
-# pyttsx3==2.90
+scipy==1.14.1
+numba==0.60.0
+
+# Build dependencies
+packaging==24.2
+wheel==0.45.1
+setuptools==75.6.0
+
+# Hugging Face and transformers for CSM
+# Note: Installing transformers from GitHub main branch for CSM compatibility
+# This version has fixes for CSM generation that aren't in the stable releases
+huggingface-hub>=0.30.0
+git+https://github.com/huggingface/transformers.git@main
+accelerate==1.2.1
+einops==0.8.0
+safetensors==0.4.5
+
+# Vision and audio support
+torchvision==0.20.1+cu124
+
+# CSM models loaded from HuggingFace Hub using official transformers implementation
+# Model: sesame/csm-1b (24kHz speech generation)
 

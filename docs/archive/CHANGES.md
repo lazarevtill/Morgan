@@ -62,7 +62,7 @@
 ### 4. Fixed Configuration Inconsistencies
 
 **STT Service**:
-- Model name standardized to `large-v3` (was mixed `whisper-large-v3` / `distil-large-v3`)
+- Model name standardized to `distil-large-v3.5 ` (was mixed `whisper-distil-large-v3.5 ` / `distil-distil-large-v3.5 `)
 - Added explicit VAD configuration:
   ```yaml
   vad_enabled: true

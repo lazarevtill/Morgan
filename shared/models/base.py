@@ -45,6 +45,7 @@ class ConversationContext(BaseModel):
     created_at: Optional[datetime] = Field(default_factory=datetime.now, description="Creation timestamp")
     updated_at: Optional[datetime] = Field(default_factory=datetime.now, description="Last update timestamp")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
+    id: Optional[Any] = Field(default=None, description="Database UUID (when persisted)")
 
     def add_message(self, message: Message):
         """Add a message to the conversation"""
@@ -114,7 +115,7 @@ class TTSRequest(BaseModel):
     voice: Optional[str] = Field(default=None, description="Voice to use")
     speed: Optional[float] = Field(default=None, ge=0.1, le=3.0, description="Speech speed")
     language: Optional[str] = Field(default=None, description="Language code")
-    format: Optional[str] = Field(default=None, description="Output format")
+    output_format: Optional[str] = Field(default=None, description="Output format")
     sample_rate: Optional[int] = Field(default=None, gt=0, description="Sample rate")
 
 

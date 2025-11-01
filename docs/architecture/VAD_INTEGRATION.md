@@ -69,7 +69,7 @@ from faster_whisper import WhisperModel
 class STTService:
     def __init__(self):
         self.model = WhisperModel(
-            "distil-large-v3",
+            "distil-distil-large-v3.5 ",
             device="cuda",
             compute_type="float16"
         )
@@ -161,7 +161,7 @@ curl -X POST http://localhost:8003/transcribe \
 ```yaml
 host: "0.0.0.0"
 port: 8003
-model: "distil-large-v3"
+model: "distil-distil-large-v3.5 "
 device: "cuda"
 language: "auto"
 sample_rate: 16000

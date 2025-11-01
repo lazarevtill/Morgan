@@ -15,26 +15,32 @@ llm_service_url: "http://llm-service:8001"
 tts_service_url: "http://tts-service:8002"
 stt_service_url: "http://stt-service:8003"
 
-# External API configuration
-external_llm_api_base: "https://gpt.lazarev.cloud/ollama/v1"
+# External API configuration (set via environment variables)
+external_llm_api_base: ""  # Set via MORGAN_EXTERNAL_LLM_API_BASE environment variable
 external_llm_api_key: ""  # Set via MORGAN_EXTERNAL_LLM_API_KEY environment variable
-embedding_model: "qwen3-embedding:latest"
+embedding_model: ""  # Set via MORGAN_EMBEDDING_MODEL environment variable
 
-# Conversation settings
+# Conversation settings - optimized for real-time streaming
 conversation_timeout: 1800  # 30 minutes
 max_history: 50
+
+# Streaming optimization
+streaming_enabled: true
+stream_chunk_size: 8192        # 8KB chunks for smooth streaming
+stream_timeout: 60             # 60 second timeout for streaming requests
+real_time_processing: true     # Enable real-time processing optimizations
 
 # Logging
 log_level: "INFO"
 
-# Database configuration
-postgres_host: "postgres"
+# Database configuration (set via environment variables)
+postgres_host: ""  # Set via POSTGRES_HOST environment variable
 postgres_port: 5432
-postgres_db: "morgan"
-postgres_user: "morgan"
-postgres_password: "morgan_secure_password"
+postgres_db: ""  # Set via POSTGRES_DB environment variable
+postgres_user: ""  # Set via POSTGRES_USER environment variable
+postgres_password: ""  # Set via POSTGRES_PASSWORD environment variable
 
-qdrant_host: "qdrant"
+qdrant_host: ""  # Set via QDRANT_HOST environment variable
 qdrant_port: 6333
 qdrant_grpc_port: 6334
 
@@ -48,3 +54,6 @@ enable_prometheus: true
 enable_caching: true
 enable_memory: true
 enable_tools: true
+
+# HuggingFace token for model downloads
+hf_token: ""  # Set via HF_TOKEN environment variable

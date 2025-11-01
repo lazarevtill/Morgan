@@ -318,7 +318,7 @@ docker-compose up -d
 
 Ensure you have sufficient disk space for model caching:
 
-- **Whisper large-v3**: ~3GB
+- **Whisper distil-large-v3.5 **: ~3GB
 - **csm-streaming TTS**: ~150MB
 - **Sentence Transformers**: ~500MB
 - **Total recommended**: 20GB free

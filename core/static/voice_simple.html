@@ -101,6 +101,16 @@
             animation: pulse-green 1s infinite;
         }
 
+        .voice-button.streaming {
+            background: linear-gradient(45deg, #17a2b8, #138496);
+            animation: pulse-blue 1s infinite;
+        }
+
+        @keyframes pulse-blue {
+            0%, 100% { box-shadow: 0 8px 25px rgba(23, 162, 184, 0.4); }
+            50% { box-shadow: 0 8px 45px rgba(23, 162, 184, 0.8); }
+        }
+
         @keyframes pulse {
             0%, 100% { box-shadow: 0 8px 25px rgba(220, 53, 69, 0.4); }
             50% { box-shadow: 0 8px 45px rgba(220, 53, 69, 0.8); }
@@ -146,6 +156,11 @@
         .status.playing {
             background: #d4edda;
             color: #155724;
+        }
+
+        .status.streaming {
+            background: #d1ecf1;
+            color: #0c5460;
         }
 
         .status.error {
@@ -358,7 +373,11 @@
             1. Click the button to start recording<br>
             2. Speak your question or command<br>
             3. Click again to stop and process<br>
-            4. Morgan will respond automatically
+            4. Morgan will respond with streaming audio<br><br>
+            <label style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="streamingMode" checked>
+                <span>Enable streaming mode (faster responses)</span>
+            </label>
         </div>
 
         <div class="content">
@@ -385,6 +404,10 @@
         let audioChunks = [];
         let isRecording = false;
         let isProcessing = false;
+        let isStreaming = false;
+        let audioContext = null;
+        let audioBufferQueue = [];
+        let isPlayingStream = false;
 
         // Enhanced logging for debugging
         function debugLog(message, data = null) {
@@ -395,8 +418,118 @@
             }
         }
 
+        // Initialize Web Audio API optimized for CSM-streaming
+        function initWebAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 24000,  // CSM-streaming sample rate
+                    latencyHint: 'interactive'  // Low latency for real-time playback
+                });
+                console.log('Web Audio API initialized for CSM-streaming:', {
+                    sampleRate: audioContext.sampleRate,
+                    state: audioContext.state,
+                    latencyHint: 'interactive'
+                });
+                return true;
+            } catch (error) {
+                console.error('Failed to initialize Web Audio API:', error);
+                // Fallback to default audio context
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    console.log('Web Audio API fallback initialized:', audioContext.state);
+                    return true;
+                } catch (fallbackError) {
+                    console.error('Web Audio API fallback failed:', fallbackError);
+                    return false;
+                }
+            }
+        }
+
+        // Convert audio chunk to audio buffer optimized for CSM-streaming
+        async function chunkToAudioBuffer(audioChunk) {
+            try {
+                // Convert hex string to ArrayBuffer
+                const hexMatches = audioChunk.match(/.{1,2}/g);
+                if (!hexMatches) {
+                    throw new Error('Invalid hex audio data');
+                }
+
+                const audioBytes = new Uint8Array(hexMatches.map(byte => parseInt(byte, 16)));
+                const arrayBuffer = audioBytes.buffer.slice(audioBytes.byteOffset, audioBytes.byteOffset + audioBytes.byteLength);
+
+                // Decode audio data with CSM-specific parameters
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                console.log('Audio buffer created:', {
+                    duration: audioBuffer.duration,
+                    sampleRate: audioBuffer.sampleRate,
+                    numberOfChannels: audioBuffer.numberOfChannels,
+                    length: audioBuffer.length
+                });
+                return audioBuffer;
+            } catch (error) {
+                console.error('Error converting chunk to audio buffer:', error);
+                return null;
+            }
+        }
+
+        // Play audio buffer with Web Audio API
+        function playAudioBuffer(audioBuffer) {
+            return new Promise((resolve, reject) => {
+                try {
+                    const source = audioContext.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(audioContext.destination);
+
+                    source.onended = () => {
+                        console.log('Audio buffer playback ended');
+                        resolve();
+                    };
+
+                    source.onerror = (error) => {
+                        console.error('Audio buffer playback error:', error);
+                        reject(error);
+                    };
+
+                    source.start(0);
+                } catch (error) {
+                    console.error('Error playing audio buffer:', error);
+                    reject(error);
+                }
+            });
+        }
+
+        // Process audio buffer queue
+        async function processAudioQueue() {
+            if (audioBufferQueue.length === 0 || isPlayingStream) {
+                return;
+            }
+
+            isPlayingStream = true;
+            console.log('Starting audio queue playback, queue length:', audioBufferQueue.length);
+
+            try {
+                while (audioBufferQueue.length > 0) {
+                    const audioBuffer = audioBufferQueue.shift();
+                    if (audioBuffer) {
+                        await playAudioBuffer(audioBuffer);
+                    }
+                }
+            } catch (error) {
+                console.error('Error processing audio queue:', error);
+            } finally {
+                isPlayingStream = false;
+            }
+        }
+
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize Web Audio API
+            if (!initWebAudio()) {
+                updateStatus('Web Audio API not supported', 'error');
+                document.getElementById('voiceButton').disabled = true;
+                return;
+            }
+
             // Check if MediaDevices is available
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 updateStatus('Microphone not supported in this browser', 'error');
@@ -549,78 +682,14 @@
             try {
                 debugLog('Starting audio processing', { chunks: audioChunks.length });
 
-                // Create audio blob
-                const mimeType = mediaRecorder.mimeType || 'audio/webm';
-                const audioBlob = new Blob(audioChunks, { type: mimeType });
+                // Check if streaming mode is enabled
+                const streamingMode = document.getElementById('streamingMode').checked;
+                debugLog('Streaming mode enabled:', streamingMode);
 
-                debugLog('Audio blob created', {
-                    size: audioBlob.size,
-                    type: audioBlob.type,
-                    chunks: audioChunks.length
-                });
-
-                // Validate audio size
-                if (audioBlob.size < 1000) {
-                    throw new Error('Audio too short. Please speak longer.');
-                }
-
-                // Create form data
-                const formData = new FormData();
-                formData.append('file', audioBlob, `recording.${mimeType.split('/')[1].split(';')[0]}`);
-                formData.append('user_id', 'voice_user');
-                formData.append('device_type', 'microphone');
-                formData.append('language', 'auto');
-
-                debugLog('Sending request to API', { url: window.MORGAN_API_BASE });
-                updateStatus('📤 Sending audio...', 'processing');
-
-                // Send to processing endpoint with timeout
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-
-                const response = await fetch(`${window.MORGAN_API_BASE}/api/audio`, {
-                    method: 'POST',
-                    body: formData,
-                    signal: controller.signal
-                }).catch(error => {
-                    if (error.name === 'AbortError') {
-                        throw new Error('Request timeout. Please try again.');
-                    }
-                    throw error;
-                }).finally(() => {
-                    clearTimeout(timeoutId);
-                });
-
-                debugLog('Response received', { status: response.status });
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    debugLog('Error response', { status: response.status, error: errorText });
-                    throw new Error(`Server error (${response.status}): ${errorText.substring(0, 100)}`);
-                }
-
-                updateStatus('📝 Processing response...', 'processing');
-                const result = await response.json();
-                debugLog('Processing result received', { hasTranscription: !!result.transcription, hasResponse: !!result.ai_response });
-
-                // Show transcription
-                const transcriptionDiv = document.getElementById('transcription');
-                const transcriptionText = document.getElementById('transcriptionText');
-                transcriptionText.textContent = result.transcription || 'No speech detected';
-                transcriptionDiv.classList.remove('hidden');
-
-                // Show AI response
-                const responseDiv = document.getElementById('response');
-                const responseText = document.getElementById('responseText');
-                responseText.textContent = result.ai_response || 'No response generated';
-                responseDiv.classList.remove('hidden');
-
-                // Play audio response if available
-                if (result.audio) {
-                    await playAudioResponse(result.audio);
+                if (streamingMode) {
+                    await processAudioStreaming();
                 } else {
-                    updateStatus('✅ Complete', 'idle');
-                    resetButton();
+                    await processAudioTraditional();
                 }
 
             } catch (error) {
@@ -640,6 +709,279 @@
                 }
 
                 updateStatus(errorMsg, 'error');
+                resetButton();
+            }
+        }
+
+        async function processAudioTraditional() {
+            // Traditional processing (existing implementation)
+            // Create audio blob
+            const mimeType = mediaRecorder.mimeType || 'audio/webm';
+            const audioBlob = new Blob(audioChunks, { type: mimeType });
+
+            debugLog('Audio blob created', {
+                size: audioBlob.size,
+                type: audioBlob.type,
+                chunks: audioChunks.length
+            });
+
+            // Validate audio size
+            if (audioBlob.size < 1000) {
+                throw new Error('Audio too short. Please speak longer.');
+            }
+
+            // Create form data
+            const formData = new FormData();
+            formData.append('file', audioBlob, `recording.${mimeType.split('/')[1].split(';')[0]}`);
+            formData.append('user_id', 'voice_user');
+            formData.append('device_type', 'microphone');
+            formData.append('language', 'auto');
+
+            debugLog('Sending request to API', { url: window.MORGAN_API_BASE });
+            updateStatus('📤 Sending audio...', 'processing');
+
+            // Send to processing endpoint with retry logic and longer timeout
+            let response;
+            let retries = 3;
+            let lastError;
+
+            for (let attempt = 1; attempt <= retries; attempt++) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+
+                    updateStatus(`📤 Sending audio (attempt ${attempt}/${retries})...`, 'processing');
+
+                    response = await fetch(`${window.MORGAN_API_BASE}/api/audio`, {
+                        method: 'POST',
+                        body: formData,
+                        signal: controller.signal
+                    }).catch(error => {
+                        if (error.name === 'AbortError') {
+                            throw new Error('Request timeout (120s). Server may be overloaded.');
+                        }
+                        throw error;
+                    }).finally(() => {
+                        clearTimeout(timeoutId);
+                    });
+
+                    // If we got here, request succeeded
+                    break;
+
+                } catch (error) {
+                    lastError = error;
+                    debugLog(`Attempt ${attempt} failed`, { error: error.message });
+
+                    if (attempt < retries) {
+                        updateStatus(`⏱️ Retry ${attempt}/${retries}... Please wait`, 'processing');
+                        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s before retry
+                    }
+                }
+            }
+
+            if (!response) {
+                throw lastError || new Error('All retry attempts failed');
+            }
+
+            debugLog('Response received', { status: response.status });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                debugLog('Error response', { status: response.status, error: errorText });
+                throw new Error(`Server error (${response.status}): ${errorText.substring(0, 100)}`);
+            }
+
+            updateStatus('📝 Processing response...', 'processing');
+            const result = await response.json();
+            debugLog('Processing result received', { hasTranscription: !!result.transcription, hasResponse: !!result.ai_response });
+
+            // Show transcription
+            const transcriptionDiv = document.getElementById('transcription');
+            const transcriptionText = document.getElementById('transcriptionText');
+            transcriptionText.textContent = result.transcription || 'No speech detected';
+            transcriptionDiv.classList.remove('hidden');
+
+            // Show AI response
+            const responseDiv = document.getElementById('response');
+            const responseText = document.getElementById('responseText');
+            responseText.textContent = result.ai_response || 'No response generated';
+            responseDiv.classList.remove('hidden');
+
+            // Play audio response if available
+            if (result.audio) {
+                await playAudioResponse(result.audio);
+            } else {
+                updateStatus('✅ Complete', 'idle');
+                resetButton();
+            }
+        }
+
+        async function processAudioStreaming() {
+            // Streaming processing using new streaming endpoint
+            debugLog('Starting streaming audio processing');
+
+            // Create audio blob for transcription
+            const mimeType = mediaRecorder.mimeType || 'audio/webm';
+            const audioBlob = new Blob(audioChunks, { type: mimeType });
+
+            // First, transcribe the audio using STT
+            const transcription = await transcribeAudio(audioBlob, mimeType);
+            if (!transcription) {
+                updateStatus('No speech detected', 'error');
+                resetButton();
+                return;
+            }
+
+            // Show transcription
+            const transcriptionDiv = document.getElementById('transcription');
+            const transcriptionText = document.getElementById('transcriptionText');
+            transcriptionText.textContent = transcription;
+            transcriptionDiv.classList.remove('hidden');
+
+            // Start streaming TTS response
+            await streamTTSResponse(transcription);
+        }
+
+        async function transcribeAudio(audioBlob, mimeType) {
+            try {
+                const formData = new FormData();
+                formData.append('file', audioBlob, `recording.${mimeType.split('/')[1].split(';')[0]}`);
+                formData.append('user_id', 'voice_user');
+                formData.append('device_type', 'microphone');
+                formData.append('language', 'auto');
+
+                const response = await fetch(`${window.MORGAN_API_BASE}/api/audio`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Transcription failed: ${response.status}`);
+                }
+
+                const result = await response.json();
+                return result.transcription || '';
+            } catch (error) {
+                debugLog('Transcription error:', error);
+                return '';
+            }
+        }
+
+        async function streamTTSResponse(text) {
+            try {
+                updateStatus('🎤 Streaming response...', 'streaming');
+                document.getElementById('voiceButton').classList.remove('processing');
+                document.getElementById('voiceButton').classList.add('streaming');
+                document.getElementById('voiceButton').innerHTML = '🎵';
+
+                // Clear any existing audio buffer queue
+                audioBufferQueue = [];
+                isPlayingStream = false;
+                const startTime = Date.now();
+
+                // Connect to streaming endpoint with CSM-optimized parameters
+                const response = await fetch(`${window.MORGAN_API_BASE}/api/audio/stream`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        voice: 'default',
+                        speed: 1.0,
+                        user_id: 'voice_user',
+                        metadata: {
+                            source: 'voice_streaming',
+                            model: 'csm-streaming',
+                            real_time: true
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Streaming failed: ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let chunkId = 0;
+
+                // Show response area
+                const responseDiv = document.getElementById('response');
+                const responseText = document.getElementById('responseText');
+                responseDiv.classList.remove('hidden');
+                responseText.textContent = 'Streaming response...';
+
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n');
+
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.substring(6));
+
+                                    if (data.type === 'start') {
+                                        debugLog('Streaming started');
+                                        chunkId = 0;
+                                    } else if (data.type === 'audio') {
+                                        // Process audio chunk
+                                        if (data.audio_data) {
+                                            const audioBuffer = await chunkToAudioBuffer(data.audio_data);
+                                            if (audioBuffer) {
+                                                audioBufferQueue.push(audioBuffer);
+                                                processAudioQueue(); // Start playing if not already playing
+                                            }
+                                        }
+                                        chunkId++;
+                                    } else if (data.type === 'end') {
+                                        debugLog('Streaming ended');
+                                        // Process any remaining audio in queue
+                                        setTimeout(() => processAudioQueue(), 100);
+                                    } else if (data.type === 'error') {
+                                        throw new Error(data.error || 'Streaming error');
+                                    }
+                                } catch (parseError) {
+                                    debugLog('Error parsing streaming data:', parseError);
+                                }
+                            }
+                        }
+                    }
+                } finally {
+                    reader.releaseLock();
+                }
+
+                // Update response text with final message
+                responseText.textContent = 'Morgan is responding with CSM-streaming audio...';
+
+                // Enhanced logging for CSM-streaming performance
+                console.log('CSM-streaming session completed:', {
+                    totalChunks: chunkId,
+                    audioQueueLength: audioBufferQueue.length,
+                    isPlaying: isPlayingStream,
+                    duration: Date.now() - startTime
+                });
+
+                // Wait for audio to finish playing
+                const checkAudioFinished = () => {
+                    if (audioBufferQueue.length === 0 && !isPlayingStream) {
+                        updateStatus('✅ CSM-streaming complete', 'idle');
+                        resetButton();
+                    } else {
+                        setTimeout(checkAudioFinished, 100);
+                    }
+                };
+
+                setTimeout(checkAudioFinished, 100);
+
+            } catch (error) {
+                debugLog('Streaming error:', error);
+                console.error('Error in streaming:', error);
+                updateStatus(`⚠️ ${error.message || 'Streaming failed'}`, 'error');
                 resetButton();
             }
         }
@@ -728,8 +1070,13 @@
 
         function resetButton() {
             isProcessing = false;
-            document.getElementById('voiceButton').classList.remove('recording', 'processing', 'playing');
+            isStreaming = false;
+            document.getElementById('voiceButton').classList.remove('recording', 'processing', 'playing', 'streaming');
             document.getElementById('voiceButton').innerHTML = '🎤';
+
+            // Clear audio buffer queue
+            audioBufferQueue = [];
+            isPlayingStream = false;
         }
 
         function updateStatus(message, type = 'idle') {

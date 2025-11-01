@@ -7,6 +7,7 @@ Reference: https://docs.openwebui.com/getting-started/api-endpoints/
 """
 import asyncio
 import logging
+import os
 from typing import Dict, Any, List, Optional, AsyncGenerator
 import json
 
@@ -56,8 +57,25 @@ class LLMService:
             "logs/llm_service.log"
         )
 
-        # Load configuration
-        self.llm_config = LLMConfig(**self.config.all())
+        # Load configuration with environment variable overrides
+        config_dict = self.config.all()
+
+        # Check for OLLAMA_BASE_URL environment variable (used by docker-compose)
+        ollama_base_url = os.getenv("OLLAMA_BASE_URL")
+        if ollama_base_url:
+            config_dict["openai_api_base"] = ollama_base_url
+
+        # Check for MORGAN_LLM_API_KEY environment variable
+        api_key = os.getenv("MORGAN_LLM_API_KEY")
+        if api_key:
+            config_dict["api_key"] = api_key
+
+        # Check for MORGAN_EMBEDDING_MODEL environment variable
+        embedding_model = os.getenv("MORGAN_EMBEDDING_MODEL")
+        if embedding_model:
+            config_dict["embedding_model"] = embedding_model
+
+        self.llm_config = LLMConfig(**config_dict)
         self.openai_client = None
 
         # Model and conversation management
@@ -70,10 +88,19 @@ class LLMService:
     async def start(self):
         """Start the LLM service"""
         try:
-            # Initialize OpenAI client
+            # Import httpx for custom client
+            import httpx
+
+            # Initialize OpenAI client with custom HTTP client (no proxy support)
+            http_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(self.llm_config.timeout),
+                follow_redirects=True
+            )
+
             self.openai_client = AsyncOpenAI(
                 base_url=self.llm_config.openai_api_base,
-                api_key=self.llm_config.api_key
+                api_key=self.llm_config.api_key,
+                http_client=http_client
             )
 
             # Test connection to OpenAI-compatible API only if API key is provided
@@ -242,8 +269,8 @@ class LLMService:
         Reference: https://docs.openwebui.com/getting-started/api-endpoints/#-generate-embeddings
         Endpoint: POST /ollama/api/embed
         """
-        if not self.llm_config.api_key:
-            raise ModelError("API key required for embeddings", ErrorCode.AUTHENTICATION_ERROR)
+        # Note: API key check removed - Ollama doesn't require authentication
+        # If using a proxy that requires auth, set MORGAN_LLM_API_KEY in .env
 
         try:
             # Use configured embedding model or fallback to specified model
@@ -264,9 +291,13 @@ class LLMService:
             import aiohttp
             async with aiohttp.ClientSession() as session:
                 headers = {
-                    'Authorization': f'Bearer {self.llm_config.api_key}',
                     'Content-Type': 'application/json'
                 }
+
+                # Add Authorization header only if API key is configured
+                # Ollama proxy doesn't require it, but some Open WebUI setups might
+                if self.llm_config.api_key:
+                    headers['Authorization'] = f'Bearer {self.llm_config.api_key}'
                 
                 # Ollama embed API expects 'input' as array of strings
                 payload = {

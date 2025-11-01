@@ -50,6 +50,10 @@ class ConversationManager:
             f"db={'enabled' if db_client else 'disabled'}, redis={'enabled' if redis_client else 'disabled'})"
         )
 
+    async def get_or_create_context(self, user_id: str) -> ConversationContext:
+        """Get or create conversation context for a user (alias for get_context)"""
+        return await self.get_context(user_id)
+
     async def get_context(self, user_id: str) -> ConversationContext:
         """Get or create conversation context for a user"""
         current_time = time.time()
@@ -67,6 +71,9 @@ class ConversationManager:
                         user_id=user_id,
                         messages=messages
                     )
+                    # Add database UUID if available
+                    if "db_id" in cached_context:
+                        context.id = cached_context["db_id"]
                     self.conversations[user_id] = context
                     return context
             except Exception as e:
@@ -101,6 +108,7 @@ class ConversationManager:
                         user_id=user_id,
                         messages=messages
                     )
+                    context.id = conv.id  # Store database UUID
                 else:
                     # Create new conversation in DB
                     conversation_id = f"conv_{user_id}_{int(current_time)}"
@@ -115,6 +123,10 @@ class ConversationManager:
                         user_id=user_id,
                         messages=[]
                     )
+                    # Get the created conversation ID
+                    created_conv = await self.db.get_conversation(conversation_id)
+                    if created_conv:
+                        context.id = created_conv.id
                 
                 # Cache in memory and Redis
                 self.conversations[user_id] = context
@@ -220,12 +232,16 @@ class ConversationManager:
                     {
                         "role": msg.role,
                         "content": msg.content,
-                        "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+                        "timestamp": msg.timestamp.isoformat() if hasattr(msg.timestamp, 'isoformat') else str(msg.timestamp),
                         "metadata": msg.metadata
                     }
                     for msg in context.messages[-self.max_history:]  # Only cache recent messages
                 ]
             }
+            # Include database UUID if available
+            if hasattr(context, 'id') and context.id:
+                cache_data["db_id"] = str(context.id)
+            
             await self.redis.set_json(
                 f"conv:context:{user_id}",
                 cache_data,
