@@ -2,9 +2,8 @@
 /morgan-venv
 /data/cache
 *.pyc
-morgan-rag/data/cache/
+/morgan-rag/data/cache/
 *.meta
-/data/cache/models
 *.cache
-morgan-rag/data/cache/
+/.env
 .env
