@@ -2,7 +2,7 @@
 fastapi==0.109.2
 uvicorn[standard]==0.27.0.post1
 pydantic==2.6.1
-aiohttp==3.9.3
+aiohttp==3.12.14
 pyyaml==6.0.1
 python-dotenv==1.0.1
 structlog==24.4.0
