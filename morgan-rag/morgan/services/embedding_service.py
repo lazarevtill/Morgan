@@ -53,9 +53,7 @@ def _mask_api_key(api_key: Optional[str]) -> str:
     """
     if not api_key:
         return "<none>"
-    if len(api_key) <= 8:
-        return "***"
-    return f"{api_key[:4]}...{api_key[-4:]}"
+    return "***"
 
 
 class EmbeddingService:
