@@ -13,7 +13,7 @@ numba==0.60.0
 # Build dependencies
 packaging==24.2
 wheel==0.45.1
-setuptools==75.6.0
+setuptools==78.1.1
 
 # Hugging Face and transformers for CSM
 # Note: Installing transformers from GitHub main branch for CSM compatibility
