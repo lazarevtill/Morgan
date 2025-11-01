@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .relationship-summary {
+            background: linear-gradient(135deg, #ffeaa7, #fab1a0);
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .relationship-summary h3 {
+            margin-bottom: 20px;
+            color: #333;
+            text-align: center;
+        }
+        
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .stat-card {
+            background: rgba(255,255,255,0.8);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .timeline-container {
+            position: relative;
+            margin-top: 30px;
+        }
+        
+        .timeline-line {
+            position: absolute;
+            left: 30px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(to bottom, #007bff, #28a745);
+            border-radius: 2px;
+        }
+        
+        .timeline-item {
+            position: relative;
+            margin-bottom: 30px;
+            padding-left: 80px;
+            opacity: 0;
+            transform: translateX(-20px);
+            animation: slideIn 0.6s ease-out forwards;
+        }
+        
+        .timeline-item:nth-child(even) {
+            animation-delay: 0.1s;
+        }
+        
+        .timeline-item:nth-child(odd) {
+            animation-delay: 0.2s;
+        }
+        
+        @keyframes slideIn {
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        .timeline-marker {
+            position: absolute;
+            left: -50px;
+            top: 10px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .milestone-first_conversation { background: #007bff; }
+        .milestone-breakthrough_moment { background: #28a745; }
+        .milestone-goal_achieved { background: #ffc107; }
+        .milestone-learning_milestone { background: #17a2b8; }
+        .milestone-emotional_support { background: #e83e8c; }
+        .milestone-trust_building { background: #6f42c1; }
+        
+        .timeline-content {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-left: 4px solid #007bff;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .timeline-content:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        
+        .milestone-type {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+        
+        .type-first_conversation {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .type-breakthrough_moment {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+        
+        .type-goal_achieved {
+            background: #fff8e1;
+            color: #f57c00;
+        }
+        
+        .type-learning_milestone {
+            background: #e0f2f1;
+            color: #00695c;
+        }
+        
+        .type-emotional_support {
+            background: #fce4ec;
+            color: #c2185b;
+        }
+        
+        .type-trust_building {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+        
+        .milestone-description {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .milestone-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .milestone-date {
+            font-weight: 500;
+        }
+        
+        .significance-bar {
+            width: 100px;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        .significance-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #ffc107, #dc3545);
+            border-radius: 3px;
+            transition: width 0.8s ease-out;
+        }
+        
+        .empty-timeline {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+        
+        .empty-timeline .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 40px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📈 Relationship Timeline</h1>
+            <div class="subtitle">Your journey with Morgan</div>
+        </div>
+        
+        <div class="content">
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Loading your relationship timeline...</p>
+            </div>
+            
+            <div id="timelineContent" style="display: none;">
+                <div class="relationship-summary" id="relationshipSummary">
+                    <!-- Summary will be populated by JavaScript -->
+                </div>
+                
+                <div class="timeline-container" id="timelineContainer">
+                    <div class="timeline-line"></div>
+                    <!-- Timeline items will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <div class="actions">
+                <a href="/" class="btn btn-primary">💬 Continue Chatting</a>
+                <a href="/preferences/{{ user_id }}" class="btn btn-secondary">⚙️ Preferences</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const userId = '{{ user_id }}';
+        
+        async function loadTimelineData() {
+            try {
+                const response = await fetch(`/api/timeline/${userId}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    renderTimeline(data);
+                } else {
+                    showError('Failed to load timeline data');
+                }
+            } catch (error) {
+                console.error('Error loading timeline:', error);
+                showError('Error loading timeline data');
+            }
+        }
+        
+        function renderTimeline(data) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('timelineContent').style.display = 'block';
+            
+            // Render relationship summary
+            renderSummary(data.profile_summary);
+            
+            // Render timeline
+            if (data.timeline && data.timeline.length > 0) {
+                renderTimelineItems(data.timeline);
+            } else {
+                renderEmptyTimeline();
+            }
+        }
+        
+        function renderSummary(summary) {
+            const summaryContainer = document.getElementById('relationshipSummary');
+            summaryContainer.innerHTML = `
+                <h3>🤝 Your Relationship with Morgan</h3>
+                <div class="summary-stats">
+                    <div class="stat-card">
+                        <div class="stat-value">${summary.relationship_age_days}</div>
+                        <div class="stat-label">Days Together</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${summary.interaction_count}</div>
+                        <div class="stat-label">Conversations</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${Math.round(summary.trust_level * 100)}%</div>
+                        <div class="stat-label">Trust Level</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${Math.round(summary.engagement_score * 100)}%</div>
+                        <div class="stat-label">Engagement Score</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function renderTimelineItems(timeline) {
+            const container = document.getElementById('timelineContainer');
+            
+            timeline.forEach((milestone, index) => {
+                const timelineItem = document.createElement('div');
+                timelineItem.className = 'timeline-item';
+                timelineItem.style.animationDelay = `${index * 0.1}s`;
+                
+                const date = new Date(milestone.timestamp);
+                const formattedDate = date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                timelineItem.innerHTML = `
+                    <div class="timeline-marker milestone-${milestone.type}"></div>
+                    <div class="timeline-content">
+                        <div class="milestone-type type-${milestone.type}">
+                            ${milestone.type.replace('_', ' ')}
+                        </div>
+                        <div class="milestone-description">
+                            ${milestone.description}
+                        </div>
+                        <div class="milestone-meta">
+                            <span class="milestone-date">${formattedDate}</span>
+                            <div class="significance-bar">
+                                <div class="significance-fill" style="width: ${milestone.emotional_significance * 100}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(timelineItem);
+            });
+        }
+        
+        function renderEmptyTimeline() {
+            const container = document.getElementById('timelineContainer');
+            container.innerHTML = `
+                <div class="empty-timeline">
+                    <div class="icon">🌱</div>
+                    <h3>Your Journey is Just Beginning!</h3>
+                    <p>Start chatting with Morgan to create meaningful milestones in your relationship.</p>
+                </div>
+            `;
+        }
+        
+        function showError(message) {
+            document.getElementById('loading').innerHTML = `
+                <div style="color: #dc3545;">
+                    <h3>⚠️ Error</h3>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+        
+        // Load timeline data when page loads
+        document.addEventListener('DOMContentLoaded', loadTimelineData);
+    </script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="/static/css/chat.css">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <div class="connection-status" id="connectionStatus">
+                <span class="status-disconnected">● Connecting...</span>
+            </div>
+            <div class="user-info">
+                <button onclick="openPreferences()">⚙️ Preferences</button>
+                <button onclick="openTimeline()">📈 Timeline</button>
+                <button onclick="showFeedback()">💭 Feedback</button>
+            </div>
+            <h1>Morgan</h1>
+            <div class="subtitle">Your Emotionally Intelligent AI Companion</div>
+        </div>
+        
+        <div class="chat-messages" id="chatMessages">
+            <!-- Messages will be added here -->
+        </div>
+        
+        <div class="chat-input">
+            <input type="text" id="messageInput" placeholder="Type your message..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">➤</button>
+        </div>
+    </div>
+    
+    <!-- Feedback Popup -->
+    <div class="feedback-overlay" id="feedbackOverlay" onclick="closeFeedback()"></div>
+    <div class="feedback-popup" id="feedbackPopup">
+        <h3>How was our conversation?</h3>
+        <div class="rating-stars" id="ratingStars">
+            <span class="star" data-rating="1">★</span>
+            <span class="star" data-rating="2">★</span>
+            <span class="star" data-rating="3">★</span>
+            <span class="star" data-rating="4">★</span>
+            <span class="star" data-rating="5">★</span>
+        </div>
+        <textarea id="feedbackComment" placeholder="Any additional comments? (optional)" 
+                  style="width: 100%; height: 80px; margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 8px;"></textarea>
+        <div style="text-align: center; margin-top: 15px;">
+            <button onclick="submitFeedback()" 
+                    style="background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; margin-right: 10px;">Submit</button>
+            <button onclick="closeFeedback()" 
+                    style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer;">Cancel</button>
+        </div>
+    </div>
+
+    <script src="/static/js/chat.js"></script>
+</body>
+</html>
