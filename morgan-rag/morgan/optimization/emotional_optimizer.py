@@ -570,7 +570,7 @@ class EmotionalProcessingOptimizer:
         context_str = str(sorted(context.items())) if context else ""
         
         cache_input = f"{user_id}:{text_sample}:{context_str}"
-        return hashlib.md5(cache_input.encode()).hexdigest()
+        return hashlib.sha256(cache_input.encode()).hexdigest()
     
     def _is_pattern_fresh(self, pattern: EmotionalPattern) -> bool:
         """Check if emotional pattern is still fresh."""
