@@ -49,7 +49,7 @@ class EmotionalState:
     def to_cache_key(self) -> str:
         """Generate cache key for this emotional state."""
         content = f"{self.user_id}:{self.primary_emotion}:{self.intensity:.2f}"
-        return hashlib.md5(content.encode()).hexdigest()
+        return hashlib.sha256(content.encode()).hexdigest()
 
 
 @dataclass
