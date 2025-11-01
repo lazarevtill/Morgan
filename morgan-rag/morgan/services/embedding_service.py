@@ -634,14 +634,12 @@ class EmbeddingService:
                         continue
                     else:
                         # Final attempt failed - log with masked key
-                        masked_key = _mask_api_key(getattr(self.settings, 'llm_api_key', None))
-                        logger.warning(f"Remote embedding service not available after {max_retries} attempts (key: {masked_key}): {e}")
+                        logger.warning(f"Remote embedding service not available after {max_retries} attempts: {e}")
                         self._remote_available = False
                         return False
                 except Exception as e:
-                    # Non-retryable error - mask API key in error messages
-                    masked_key = _mask_api_key(getattr(self.settings, 'llm_api_key', None))
-                    logger.warning(f"Remote embedding service not available (key: {masked_key}): {e}")
+                    # Non-retryable error - do not log API key in error messages
+                    logger.warning(f"Remote embedding service not available: {e}")
                     self._remote_available = False
                     return False
 
