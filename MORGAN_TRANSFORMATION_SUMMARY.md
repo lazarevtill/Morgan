@@ -21,8 +21,8 @@ Transform Morgan into a fully self-hosted, intelligent personal AI assistant wit
 ## Your Hardware Setup (Distributed)
 
 **4 Separate Hosts:**
-1. **Host 1**: RTX 3090 (24GB) - Main reasoning LLM
-2. **Host 2**: RTX 3090 (24GB) - Backup/load-balanced LLM
+1. **Host 1**: RTX 3090 (12GB) - Main reasoning LLM
+2. **Host 2**: RTX 3090 (12GB) - Backup/load-balanced LLM
 3. **Host 3**: RTX 4070 (8GB) - Embeddings + Fast LLM
 4. **Host 4**: RTX 2060 (6GB) - Reranking + utilities
 

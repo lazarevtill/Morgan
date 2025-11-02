@@ -268,7 +268,7 @@ class MultiGPUManager:
         Setup default GPU allocation for JARVIS.
 
         Assumes hardware:
-        - GPU 0+1: RTX 3090 (24GB each)
+        - GPU 0+1: RTX 3090 (12GB each)
         - GPU 2: RTX 4070 (8GB)
         - GPU 3: RTX 2060 (6GB)
         """

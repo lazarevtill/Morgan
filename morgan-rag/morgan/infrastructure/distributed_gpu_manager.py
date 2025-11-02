@@ -2,8 +2,8 @@
 Distributed GPU Manager for Morgan 6-Host Setup
 
 Manages GPU resources across distributed hosts:
-- Host 3: RTX 3090 (24GB) - Main LLM #1
-- Host 4: RTX 3090 (24GB) - Main LLM #2
+- Host 3: RTX 3090 (12GB) - Main LLM #1
+- Host 4: RTX 3090 (12GB) - Main LLM #2
 - Host 5: RTX 4070 (8GB) - Embeddings + Fast LLM
 - Host 6: RTX 2060 (6GB) - Reranking
 
