@@ -8,7 +8,7 @@ Primary Goal: Align Morgan’s codebase with the advanced architecture by delive
   - [x] 1.1 Wire `KnowledgeBase.ingest_documents` to call `HierarchicalEmbeddingService.create_hierarchical_embeddings` (R1.1, R1.2)
   - [x] 1.2 Extend `VectorDBClient` helpers to dual-write named vectors and manage hierarchical collections (R1.2, R1.3)
   - [x] 1.3 Implement Git hash cache reuse with cache-hit metrics (R1.3, R9.1)
-  - [-] 1.4 Provide migration scripts to re-embed existing knowledge bases (R10.4, R10.5)
+  - [x] 1.4 Provide migration scripts to re-embed existing knowledge bases (R10.4, R10.5)
   - [ ]* 1.5 Add regression tests covering hierarchical + legacy ingestion modes (R10.1, R10.2)
 
 ## Phase 2: Jina Search & Reranking Integration (Priority: CRITICAL)
