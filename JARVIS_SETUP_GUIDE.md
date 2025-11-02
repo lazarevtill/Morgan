@@ -3,7 +3,7 @@
 ## Hardware Configuration
 
 **Your Setup:**
-- 2x RTX 3090 (24GB each = 48GB total)
+- 2x RTX 3090 (12GB each = 48GB total)
 - 1x RTX 4070 (8GB)
 - 1x RTX 2060 (6GB)
 - 4x i9 systems with 64GB RAM each
@@ -377,7 +377,7 @@ nvidia-smi -l 1
 
 **Expected GPU Usage:**
 - GPU 0+1 (RTX 3090s): 70-90% utilization during inference
-- GPU Memory: ~20-22GB out of 24GB per card
+- GPU Memory: ~20-22GB out of 12GB per card
 - GPU 2 (RTX 4070): 40-60% during embeddings
 
 ---

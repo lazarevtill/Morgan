@@ -27,8 +27,8 @@ Morgan is a fully self-hosted, distributed personal AI assistant being transform
 - **Host 2** (i9, 64GB RAM): Background Services + Monitoring
 
 ### GPU Hosts
-- **Host 3** (RTX 3090, 24GB): Main LLM #1 (Qwen2.5-32B)
-- **Host 4** (RTX 3090, 24GB): Main LLM #2 (Load balanced)
+- **Host 3** (RTX 3090, 12GB): Main LLM #1 (Qwen2.5-32B)
+- **Host 4** (RTX 3090, 12GB): Main LLM #2 (Load balanced)
 - **Host 5** (RTX 4070, 8GB): Embeddings + Fast LLM
 - **Host 6** (RTX 2060, 6GB): Reranking + Utilities
 

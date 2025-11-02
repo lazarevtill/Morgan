@@ -360,7 +360,7 @@ pip install --upgrade 'transformers>=4.52.1'
 
 ## Performance Metrics
 
-Based on NVIDIA RTX 3090 (24GB VRAM):
+Based on NVIDIA RTX 3090 (12GB VRAM):
 
 | Metric | Value |
 |--------|-------|

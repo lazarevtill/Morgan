@@ -18,7 +18,7 @@ Transforming Morgan into a fully self-hosted, JARVIS-like personal AI assistant 
 ## Hardware Configuration
 
 ✅ **Your Setup:**
-- 2x RTX 3090 (24GB each = 48GB total)
+- 2x RTX 3090 (12GB each = 48GB total)
 - 1x RTX 4070 (8GB)
 - 1x RTX 2060 (6GB)
 - 4x i9 systems (64GB RAM each)

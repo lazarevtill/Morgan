@@ -3,8 +3,8 @@
 ## Your Distributed Hardware Configuration
 
 **4 Separate Hosts:**
-- **Host 1**: 1x RTX 3090 (24GB), i9 CPU, 64GB RAM
-- **Host 2**: 1x RTX 3090 (24GB), i9 CPU, 64GB RAM
+- **Host 1**: 1x RTX 3090 (12GB), i9 CPU, 64GB RAM
+- **Host 2**: 1x RTX 3090 (12GB), i9 CPU, 64GB RAM
 - **Host 3**: 1x RTX 4070 (8GB), i9 CPU, 64GB RAM
 - **Host 4**: 1x RTX 2060 (6GB), i9 CPU, 64GB RAM
 

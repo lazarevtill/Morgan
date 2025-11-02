@@ -4,8 +4,8 @@
 
 **6 Hosts Total:**
 - **Host 1-2 (CPU Only)**: i9 11th/13th gen, 64GB RAM (no GPU)
-- **Host 3 (GPU)**: i9 + RTX 3090 (24GB VRAM) + 32GB+ RAM
-- **Host 4 (GPU)**: i9 + RTX 3090 (24GB VRAM) + 32GB+ RAM
+- **Host 3 (GPU)**: i9 + RTX 3090 (12GB VRAM) + 32GB+ RAM
+- **Host 4 (GPU)**: i9 + RTX 3090 (12GB VRAM) + 32GB+ RAM
 - **Host 5 (GPU)**: i9 + RTX 4070 (8GB VRAM) + 32GB+ RAM
 - **Host 6 (GPU)**: i9 + RTX 2060 (6GB VRAM) + 32GB+ RAM
 
