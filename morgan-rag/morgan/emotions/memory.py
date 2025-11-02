@@ -8,14 +8,14 @@ emotional context preservation and relationship significance tracking.
 import threading
 import uuid
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional, Tuple
-import json
+from typing import List, Dict, Any, Optional
 
 from morgan.config import get_settings
 from morgan.utils.logger import get_logger
-from morgan.storage.vector_storage import get_vector_storage
+from morgan.vector_db.client import VectorDBClient
+from morgan.services.embedding_service import get_embedding_service
 from morgan.emotional.models import (
-    EmotionalState, EmotionType, ConversationContext, RelationshipMilestone
+    EmotionalState, EmotionType, ConversationContext
 )
 
 logger = get_logger(__name__)
@@ -183,7 +183,8 @@ class EmotionalMemoryStorage:
     def __init__(self):
         """Initialize emotional memory storage."""
         self.settings = get_settings()
-        self.vector_storage = get_vector_storage()
+        self.vector_client = VectorDBClient()
+        self.embedding_service = get_embedding_service()
         
         # Memory collection name
         self.collection_name = "morgan_emotional_memories"
@@ -236,10 +237,10 @@ class EmotionalMemoryStorage:
         )
         
         # Generate embedding for content
-        embedding = self.vector_storage.generate_embedding(content)
+        embedding = self.embedding_service.encode(content, instruction="document")
         
         # Store in vector database
-        self.vector_storage.upsert_points(
+        self.vector_client.upsert_points(
             collection_name=self.collection_name,
             points=[{
                 'id': memory_id,
@@ -289,18 +290,17 @@ class EmotionalMemoryStorage:
         # Search memories
         if query:
             # Semantic search
-            query_embedding = self.vector_storage.generate_embedding(query)
-            results = self.vector_storage.search(
+            query_embedding = self.embedding_service.encode(query, instruction="query")
+            results = self.vector_client.search(
                 collection_name=self.collection_name,
                 query_vector=query_embedding,
-                filter_conditions=filter_conditions,
                 limit=limit * 2  # Get more to filter by importance
             )
         else:
-            # Get all matching memories
-            results = self.vector_storage.scroll(
+            # Get all matching memories - use simple search without filter for now
+            results = self.vector_client.search(
                 collection_name=self.collection_name,
-                filter_conditions=filter_conditions,
+                query_vector=[0.0] * 1536,  # Dummy vector for getting all results
                 limit=limit * 2
             )
         
@@ -329,15 +329,20 @@ class EmotionalMemoryStorage:
             Emotional memory or None if not found
         """
         try:
-            result = self.vector_storage.get_point(
+            # Use search with a dummy vector to find the specific memory by ID
+            # This is a workaround since there's no direct get_point method
+            results = self.vector_client.search(
                 collection_name=self.collection_name,
-                point_id=memory_id
+                query_vector=[0.0] * 1536,  # Dummy vector
+                limit=1000  # Get many results to find the specific ID
             )
             
-            if result:
-                memory = EmotionalMemory.from_dict(result['payload'])
-                memory.mark_accessed()
-                return memory
+            # Find the memory with matching ID
+            for result in results:
+                if result.id == memory_id:
+                    memory = EmotionalMemory.from_dict(result.payload)
+                    memory.mark_accessed()
+                    return memory
             
         except Exception as e:
             logger.warning(f"Failed to retrieve memory {memory_id}: {e}")
@@ -365,12 +370,14 @@ class EmotionalMemoryStorage:
         
         memory.relationship_significance = relationship_significance
         
-        # Update in storage
-        self.vector_storage.upsert_points(
+        # Update in storage - we need to get the existing vector first
+        # For now, we'll regenerate the embedding
+        embedding = self.embedding_service.encode(memory.content, instruction="document")
+        self.vector_client.upsert_points(
             collection_name=self.collection_name,
             points=[{
                 'id': memory_id,
-                'vector': None,  # Keep existing vector
+                'vector': embedding,
                 'payload': memory.to_dict()
             }]
         )
@@ -410,7 +417,7 @@ class EmotionalMemoryStorage:
         consolidated_count = 0
         for memory in to_consolidate:
             try:
-                self.vector_storage.delete_points(
+                self.vector_client.delete_points(
                     collection_name=self.collection_name,
                     point_ids=[memory.memory_id]
                 )
@@ -484,12 +491,12 @@ class EmotionalMemoryStorage:
         """Initialize the emotional memories collection."""
         try:
             # Check if collection exists
-            if not self.vector_storage.collection_exists(self.collection_name):
+            if not self.vector_client.collection_exists(self.collection_name):
                 # Create collection with appropriate configuration
-                self.vector_storage.create_collection(
-                    collection_name=self.collection_name,
+                self.vector_client.create_collection(
+                    name=self.collection_name,
                     vector_size=1536,  # Standard embedding size
-                    distance_metric="cosine"
+                    distance="cosine"
                 )
                 logger.info(f"Created emotional memories collection: {self.collection_name}")
             
