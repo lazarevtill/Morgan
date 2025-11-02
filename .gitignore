@@ -7,3 +7,6 @@
 *.cache
 /.env
 .env
+data/
+logs/
+*.logs
