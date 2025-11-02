@@ -1546,6 +1546,463 @@ class VectorDBClient:
             logger.error(f"Emotional context search failed in '{collection_name}': {e}")
             return []
     
+    def upsert_hierarchical_points(
+        self,
+        collection_name: str,
+        points: List[Dict[str, Any]],
+        use_batch_optimization: bool = True
+    ) -> bool:
+        """
+        Upsert points with named vectors for hierarchical collections.
+        
+        Supports dual-write functionality for hierarchical embeddings with
+        coarse, medium, and fine named vectors.
+        
+        Args:
+            collection_name: Target hierarchical collection
+            points: List of points with named vector structure:
+                   {
+                       "id": str,
+                       "vector": {
+                           "coarse": List[float],
+                           "medium": List[float], 
+                           "fine": List[float]
+                       },
+                       "payload": Dict[str, Any]
+                   }
+            use_batch_optimization: Use optimized batch processing
+            
+        Returns:
+            True if successful
+        """
+        try:
+            # Validate hierarchical point structure
+            for point in points:
+                if "vector" not in point or not isinstance(point["vector"], dict):
+                    raise ValidationError(
+                        f"Point {point.get('id', 'unknown')} missing named vector structure",
+                        operation="upsert_hierarchical_points",
+                        component="vector_db_client"
+                    )
+                
+                required_vectors = ["coarse", "medium", "fine"]
+                missing_vectors = [v for v in required_vectors if v not in point["vector"]]
+                if missing_vectors:
+                    raise ValidationError(
+                        f"Point {point.get('id', 'unknown')} missing vectors: {missing_vectors}",
+                        operation="upsert_hierarchical_points", 
+                        component="vector_db_client"
+                    )
+            
+            # Use optimized batch processing for large point sets
+            if use_batch_optimization and len(points) > 50:
+                try:
+                    def hierarchical_upsert_operation(batch_points: List[Dict[str, Any]]) -> List[Any]:
+                        qdrant_points = []
+                        for point in batch_points:
+                            qdrant_points.append(
+                                models.PointStruct(
+                                    id=point["id"],
+                                    vector=point["vector"],  # Named vectors dict
+                                    payload=point.get("payload", {})
+                                )
+                            )
+                        
+                        # Use connection pooling if available
+                        if self.use_connection_pooling:
+                            try:
+                                with self.pool_manager.get_connection("qdrant") as pooled_client:
+                                    pooled_client.upsert(
+                                        collection_name=collection_name,
+                                        points=qdrant_points
+                                    )
+                            except Exception:
+                                # Fall back to primary client
+                                self.client.upsert(
+                                    collection_name=collection_name,
+                                    points=qdrant_points
+                                )
+                        else:
+                            self.client.upsert(
+                                collection_name=collection_name,
+                                points=qdrant_points
+                            )
+                        
+                        return qdrant_points
+                    
+                    # Process with batch optimizer
+                    result = self.batch_processor.process_vector_operations_batch(
+                        operations=points,
+                        operation_function=hierarchical_upsert_operation,
+                        operation_type="hierarchical_upsert"
+                    )
+                    
+                    if result.success_rate >= 95.0:
+                        logger.info(
+                            f"Optimized hierarchical batch upsert completed: {result.processed_items}/{result.total_items} "
+                            f"points ({result.success_rate:.1f}%) to '{collection_name}'"
+                        )
+                        return True
+                    else:
+                        logger.warning(
+                            f"Hierarchical batch upsert had low success rate ({result.success_rate:.1f}%), "
+                            f"falling back to standard processing"
+                        )
+                        
+                except Exception as e:
+                    logger.warning(f"Optimized hierarchical batch upsert failed, falling back to standard: {e}")
+            
+            # Standard hierarchical upsert processing
+            qdrant_points = []
+            for point in points:
+                qdrant_points.append(
+                    models.PointStruct(
+                        id=point["id"],
+                        vector=point["vector"],  # Named vectors dict
+                        payload=point.get("payload", {})
+                    )
+                )
+            
+            # Use connection pooling if available
+            if self.use_connection_pooling and len(points) > 10:
+                try:
+                    with self.pool_manager.get_connection("qdrant") as pooled_client:
+                        pooled_client.upsert(
+                            collection_name=collection_name,
+                            points=qdrant_points
+                        )
+                except Exception:
+                    # Fall back to primary client
+                    self.client.upsert(
+                        collection_name=collection_name,
+                        points=qdrant_points
+                    )
+            else:
+                # Direct upsert for small batches
+                self.client.upsert(
+                    collection_name=collection_name,
+                    points=qdrant_points
+                )
+            
+            logger.debug(f"Upserted {len(points)} hierarchical points to '{collection_name}'")
+            return True
+            
+        except Exception as e:
+            raise StorageError(
+                f"Failed to upsert hierarchical points to collection '{collection_name}': {e}",
+                operation="upsert_hierarchical_points",
+                component="vector_db_client",
+                metadata={
+                    "collection_name": collection_name,
+                    "points_count": len(points),
+                    "use_batch_optimization": use_batch_optimization,
+                    "error_type": type(e).__name__
+                }
+            ) from e
+    
+    def search_hierarchical_named(
+        self,
+        collection_name: str,
+        vector_name: str,
+        query_vector: List[float],
+        limit: int = 10,
+        score_threshold: Optional[float] = None,
+        filter_conditions: Optional[Dict[str, Any]] = None
+    ) -> List[SearchResult]:
+        """
+        Search using a specific named vector in hierarchical collection.
+        
+        Args:
+            collection_name: Hierarchical collection to search
+            vector_name: Name of vector to search ("coarse", "medium", "fine")
+            query_vector: Query vector for the specified scale
+            limit: Maximum results to return
+            score_threshold: Minimum similarity score
+            filter_conditions: Optional payload filters
+            
+        Returns:
+            List of search results
+        """
+        try:
+            # Validate vector name
+            if vector_name not in ["coarse", "medium", "fine"]:
+                raise ValidationError(
+                    f"Invalid vector name: {vector_name}. Must be 'coarse', 'medium', or 'fine'",
+                    operation="search_hierarchical_named",
+                    component="vector_db_client"
+                )
+            
+            # Build filter if provided
+            query_filter = None
+            if filter_conditions:
+                must_conditions = []
+                for key, value in filter_conditions.items():
+                    if isinstance(value, dict) and "gte" in value:
+                        must_conditions.append(
+                            models.FieldCondition(
+                                key=key,
+                                range=models.Range(gte=value["gte"])
+                            )
+                        )
+                    elif isinstance(value, list):
+                        must_conditions.append(
+                            models.FieldCondition(
+                                key=key,
+                                match=models.MatchAny(any=value)
+                            )
+                        )
+                    else:
+                        must_conditions.append(
+                            models.FieldCondition(
+                                key=key,
+                                match=models.MatchValue(value=value)
+                            )
+                        )
+                query_filter = models.Filter(must=must_conditions)
+            
+            # Perform search with named vector
+            results = self.client.search(
+                collection_name=collection_name,
+                query_vector=(vector_name, query_vector),
+                query_filter=query_filter,
+                limit=limit,
+                score_threshold=score_threshold
+            )
+            
+            # Convert to our format
+            search_results = []
+            for result in results:
+                search_results.append(SearchResult(
+                    id=str(result.id),
+                    score=result.score,
+                    payload=result.payload or {}
+                ))
+            
+            logger.debug(
+                f"Found {len(search_results)} results using '{vector_name}' vector in '{collection_name}'"
+            )
+            return search_results
+            
+        except Exception as e:
+            raise StorageError(
+                f"Hierarchical named search failed in collection '{collection_name}': {e}",
+                operation="search_hierarchical_named",
+                component="vector_db_client",
+                metadata={
+                    "collection_name": collection_name,
+                    "vector_name": vector_name,
+                    "query_vector_dim": len(query_vector),
+                    "limit": limit,
+                    "score_threshold": score_threshold,
+                    "error_type": type(e).__name__
+                }
+            ) from e
+    
+    def dual_write_points(
+        self,
+        legacy_collection: str,
+        hierarchical_collection: str,
+        points: List[Dict[str, Any]],
+        hierarchical_points: List[Dict[str, Any]]
+    ) -> Dict[str, bool]:
+        """
+        Dual-write points to both legacy and hierarchical collections.
+        
+        Enables safe migration by writing to both collection types simultaneously.
+        
+        Args:
+            legacy_collection: Legacy single-vector collection name
+            hierarchical_collection: Hierarchical named-vector collection name
+            points: Points for legacy collection (single vector per point)
+            hierarchical_points: Points for hierarchical collection (named vectors)
+            
+        Returns:
+            Dict with success status for each collection
+        """
+        results = {
+            "legacy": False,
+            "hierarchical": False
+        }
+        
+        try:
+            # Write to legacy collection first (safer fallback)
+            try:
+                results["legacy"] = self.upsert_points(legacy_collection, points)
+                if results["legacy"]:
+                    logger.debug(f"Successfully wrote {len(points)} points to legacy collection '{legacy_collection}'")
+            except Exception as e:
+                logger.error(f"Failed to write to legacy collection '{legacy_collection}': {e}")
+                results["legacy"] = False
+            
+            # Write to hierarchical collection
+            try:
+                results["hierarchical"] = self.upsert_hierarchical_points(
+                    hierarchical_collection, hierarchical_points
+                )
+                if results["hierarchical"]:
+                    logger.debug(f"Successfully wrote {len(hierarchical_points)} points to hierarchical collection '{hierarchical_collection}'")
+            except Exception as e:
+                logger.error(f"Failed to write to hierarchical collection '{hierarchical_collection}': {e}")
+                results["hierarchical"] = False
+            
+            # Log dual-write results
+            if results["legacy"] and results["hierarchical"]:
+                logger.info(f"Dual-write successful: {len(points)} points to both collections")
+            elif results["legacy"]:
+                logger.warning(f"Partial dual-write: only legacy collection '{legacy_collection}' succeeded")
+            elif results["hierarchical"]:
+                logger.warning(f"Partial dual-write: only hierarchical collection '{hierarchical_collection}' succeeded")
+            else:
+                logger.error("Dual-write failed: both collections failed")
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Dual-write operation failed: {e}")
+            return results
+    
+    def ensure_hierarchical_collection(
+        self,
+        name: str,
+        coarse_size: int = 384,
+        medium_size: int = 768,
+        fine_size: int = 1536,
+        distance: str = "cosine"
+    ) -> bool:
+        """
+        Ensure hierarchical collection exists with proper configuration.
+        
+        Creates the collection if it doesn't exist, validates configuration if it does.
+        
+        Args:
+            name: Collection name
+            coarse_size: Coarse embedding dimension
+            medium_size: Medium embedding dimension
+            fine_size: Fine embedding dimension
+            distance: Distance metric
+            
+        Returns:
+            True if collection exists and is properly configured
+        """
+        try:
+            # Check if collection exists
+            if self.collection_exists(name):
+                # Validate existing collection configuration
+                try:
+                    collection_info = self.client.get_collection(name)
+                    
+                    # Check if it has named vectors configuration
+                    if hasattr(collection_info.config, 'params') and hasattr(collection_info.config.params, 'vectors'):
+                        vectors_config = collection_info.config.params.vectors
+                        
+                        # Validate named vectors exist
+                        if isinstance(vectors_config, dict):
+                            required_vectors = ["coarse", "medium", "fine"]
+                            existing_vectors = list(vectors_config.keys())
+                            
+                            if all(v in existing_vectors for v in required_vectors):
+                                logger.debug(f"Hierarchical collection '{name}' already exists with proper configuration")
+                                return True
+                            else:
+                                logger.warning(
+                                    f"Collection '{name}' exists but missing named vectors. "
+                                    f"Expected: {required_vectors}, Found: {existing_vectors}"
+                                )
+                                return False
+                        else:
+                            logger.warning(f"Collection '{name}' exists but doesn't have named vectors configuration")
+                            return False
+                    else:
+                        logger.warning(f"Collection '{name}' exists but configuration is not accessible")
+                        return False
+                        
+                except Exception as e:
+                    logger.warning(f"Could not validate existing collection '{name}': {e}")
+                    # Assume it exists and is configured correctly
+                    return True
+            else:
+                # Create new hierarchical collection
+                success = self.create_hierarchical_collection(
+                    name=name,
+                    coarse_size=coarse_size,
+                    medium_size=medium_size,
+                    fine_size=fine_size,
+                    distance=distance
+                )
+                
+                if success:
+                    logger.info(f"Created new hierarchical collection '{name}'")
+                    return True
+                else:
+                    logger.error(f"Failed to create hierarchical collection '{name}'")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Failed to ensure hierarchical collection '{name}': {e}")
+            return False
+    
+    def get_hierarchical_collection_info(self, collection_name: str) -> Dict[str, Any]:
+        """
+        Get detailed information about a hierarchical collection.
+        
+        Args:
+            collection_name: Name of hierarchical collection
+            
+        Returns:
+            Dictionary with collection information including named vector details
+        """
+        try:
+            if not self.collection_exists(collection_name):
+                return {
+                    "exists": False,
+                    "error": f"Collection '{collection_name}' does not exist"
+                }
+            
+            # Get basic collection info
+            collection_info = self.client.get_collection(collection_name)
+            
+            result = {
+                "exists": True,
+                "name": collection_name,
+                "points_count": collection_info.points_count,
+                "vectors_count": collection_info.vectors_count,
+                "disk_usage": getattr(collection_info, 'disk_usage', 0),
+                "status": collection_info.status,
+                "is_hierarchical": False,
+                "named_vectors": {}
+            }
+            
+            # Check for named vectors configuration
+            if hasattr(collection_info.config, 'params') and hasattr(collection_info.config.params, 'vectors'):
+                vectors_config = collection_info.config.params.vectors
+                
+                if isinstance(vectors_config, dict):
+                    result["is_hierarchical"] = True
+                    
+                    for vector_name, vector_config in vectors_config.items():
+                        result["named_vectors"][vector_name] = {
+                            "size": vector_config.size,
+                            "distance": vector_config.distance.name if hasattr(vector_config.distance, 'name') else str(vector_config.distance)
+                        }
+                    
+                    # Check if it's a proper hierarchical collection
+                    required_vectors = ["coarse", "medium", "fine"]
+                    has_all_vectors = all(v in result["named_vectors"] for v in required_vectors)
+                    result["is_complete_hierarchical"] = has_all_vectors
+                    
+                    if not has_all_vectors:
+                        missing = [v for v in required_vectors if v not in result["named_vectors"]]
+                        result["missing_vectors"] = missing
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to get hierarchical collection info for '{collection_name}': {e}")
+            return {
+                "exists": False,
+                "error": str(e)
+            }
+
     def _upsert_with_retry(
         self,
         collection_name: str,

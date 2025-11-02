@@ -93,6 +93,11 @@ morgan/
 └── core/                   # Core orchestration (EXISTING)
 ```
 
+### Operational Constraints
+
+- **OpenAI-Compatible Endpoints**: All embedding/LLM requests MUST target the configured OpenAI-compatible API base URL/IP when reachable. The system MAY fall back to approved local HuggingFace/`sentence-transformers` models (e.g., self-hosted Jina checkpoints) but MUST log the fallback decision.
+- **CLI-First Workflows**: Ingestion, search, and validation flows MUST remain fully operable via CLI/bash commands (`morgan learn`, `morgan ask`, background management scripts) so that operators can run Morgan headlessly without GUI dependencies.
+
 ### 1. Enhanced Document Processor
 
 **Purpose**: Intelligent document processing with semantic-aware chunking
