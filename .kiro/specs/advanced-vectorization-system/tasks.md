@@ -88,7 +88,9 @@ Primary Goal: Build a modular AI assistant with advanced emotional intelligence 
     - Create `morgan/empathy/tone.py` for emotional tone matching
     - _Requirements: 9.1, 9.2, 9.3_
 
-  - [-] 2.3 Build emotional memory and context system
+  - [ ] 2.3 Build emotional memory and context system
+
+
 
 
     - Create `morgan/emotions/memory.py` for emotional memory storage
@@ -99,6 +101,7 @@ Primary Goal: Build a modular AI assistant with advanced emotional intelligence 
     - _Requirements: 9.1, 9.2, 9.3_
 
   - [ ] 2.4 Implement relationship intelligence modules
+
     - Create `morgan/relationships/builder.py` for relationship development
     - Add `morgan/relationships/milestones.py` for milestone detection
     - Build `morgan/relationships/timeline.py` for relationship history
@@ -107,6 +110,7 @@ Primary Goal: Build a modular AI assistant with advanced emotional intelligence 
     - _Requirements: 9.4, 9.5, 10.3_
 
   - [ ] 2.5 Build emotional communication system
+
     - Create `morgan/communication/style.py` for communication style adaptation
     - Add `morgan/communication/preferences.py` for user preference learning
     - Build `morgan/communication/feedback.py` for emotional feedback processing
@@ -126,6 +130,7 @@ Primary Goal: Build a modular AI assistant with advanced emotional intelligence 
 
 - [ ] 3. Create comprehensive personalization modules
   - [ ] 3.1 Build core learning engine
+
     - Create `morgan/learning/engine.py` for main learning coordination
     - Add `morgan/learning/patterns.py` for interaction pattern analysis
     - Build `morgan/learning/preferences.py` for preference extraction and storage
@@ -134,6 +139,7 @@ Primary Goal: Build a modular AI assistant with advanced emotional intelligence 
     - _Requirements: 24.1, 24.2, 24.3, 24.4, 24.5_
 
   - [ ] 3.2 Implement personality and style modules
+
     - Create `morgan/personality/traits.py` for personality trait modeling
     - Add `morgan/personality/style.py` for communication style adaptation
     - Build `morgan/personality/humor.py` for humor detection and generation
@@ -142,6 +148,7 @@ Primary Goal: Build a modular AI assistant with advanced emotional intelligence 
     - _Requirements: 24.1, 24.4, 24.5_
 
   - [ ] 3.3 Build domain expertise modules
+
     - Create `morgan/expertise/domains.py` for domain knowledge tracking
     - Add `morgan/expertise/vocabulary.py` for specialized vocabulary learning
     - Build `morgan/expertise/context.py` for domain context understanding
@@ -150,6 +157,7 @@ Primary Goal: Build a modular AI assistant with advanced emotional intelligence 
     - _Requirements: 24.2, 24.3, 24.4_
 
   - [ ] 3.4 Implement conversation intelligence
+
     - Create `morgan/conversation/flow.py` for conversation flow management
     - Add `morgan/conversation/topics.py` for topic preference learning
     - Build `morgan/conversation/timing.py` for optimal timing detection
@@ -158,6 +166,7 @@ Primary Goal: Build a modular AI assistant with advanced emotional intelligence 
     - _Requirements: 24.1, 24.4, 24.5_
 
   - [ ] 3.5 Build habit and routine recognition
+
     - Create `morgan/habits/detector.py` for habit pattern detection
     - Add `morgan/habits/scheduler.py` for routine-based interactions
     - Build `morgan/habits/reminders.py` for intelligent reminder system
@@ -501,6 +510,18 @@ morgan/
 ### Low Priority (Complete Last)
 9. **Phase 7**: Content processing - Local specialized processing
 10. **Phase 10**: Documentation and deployment - Production readiness
+
+## Phase 11: Operational Validation & CLI Compliance (Priority: HIGH)
+
+- [ ] 11.1 Verify embedding + LLM endpoint usage
+  - Confirm all embedding requests target the configured OpenAI-compatible base URL when reachable, with logged fallback to local HuggingFace/`sentence-transformers` models (Requirements 1, 16, 23)
+  - Ensure LLM completions (where applicable) respect the same endpoint/fallback policy
+- [ ] 11.2 Validate CLI-first workflows
+  - Exercise document ingestion via `morgan learn` to cover the full hierarchical/vectorization pipeline without GUI dependencies (Requirement 1)
+  - Exercise search and reranking via `morgan ask`/CLI scripts to confirm multi-stage search, reranking, and memory integration work headlessly (Requirement 2)
+- [ ] 11.3 Provide operational scripts and diagnostics
+  - Deliver bash scripts or documented commands for common scenarios (ingestion, search, background tasks) to support automation (Requirements 1, 2, 21)
+  - Extend logging/metrics dashboards to highlight endpoint selection (remote vs. local fallback) for auditing
 
 ## Success Criteria
 

@@ -51,6 +51,7 @@ The enhancement will provide Morgan with sophisticated document processing, inte
 3. WHEN a document is already processed, THE Semantic_Cache SHALL detect duplicate content and skip re-processing
 4. WHEN processing fails for a document, THE Vectorization_Service SHALL log the error and continue processing remaining documents
 5. WHEN processing completes, THE Vectorization_Service SHALL provide a human-readable summary including processing time and document count
+6. WHEN ingestion is initiated via CLI commands (e.g., `morgan learn`), THE Vectorization_Service SHALL expose the full ingestion workflow without requiring a graphical interface.
 
 ### Requirement 2
 
@@ -63,6 +64,7 @@ The enhancement will provide Morgan with sophisticated document processing, inte
 3. WHEN search results are returned, THE Vectorization_Service SHALL include relevance scores between 0.0 and 1.0
 4. WHEN similar content exists, THE Search_Fusion SHALL deduplicate results based on semantic similarity
 5. WHEN no relevant results are found above threshold, THE Hierarchical_Search SHALL return an empty result set rather than low-quality matches
+6. WHEN queries are issued through CLI tools (e.g., `morgan ask`), THE Hierarchical_Search SHALL deliver complete search and reranking functionality without depending on GUI clients.
 
 ### Requirement 3
 
@@ -231,6 +233,7 @@ The enhancement will provide Morgan with sophisticated document processing, inte
 3. WHEN processing multimodal content, THE Vectorization_Service SHALL use jina-clip-v2 model for combined text and image embeddings
 4. WHEN embedding model selection occurs, THE Vectorization_Service SHALL automatically choose the appropriate Jina model based on content type
 5. WHEN generating embeddings, THE Jina_Embeddings SHALL maintain compatibility with existing vector database schema
+6. WHEN the configured OpenAI-compatible embedding endpoint is reachable, THE Vectorization_Service SHALL send embedding requests there; only when it is unavailable SHALL it fall back to approved local HuggingFace/`sentence-transformers` models and log the fallback decision.
 
 ### Requirement 17
 

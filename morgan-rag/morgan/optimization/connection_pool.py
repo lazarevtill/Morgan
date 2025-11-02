@@ -47,6 +47,28 @@ class ConnectionConfig:
     connection_timeout: float = 30.0
     idle_timeout: float = 300.0  # 5 minutes
     max_connection_age: float = 3600.0  # 1 hour
+
+
+@dataclass
+class PoolConfig:
+    """Configuration for connection pools (alias for ConnectionConfig for backward compatibility)."""
+    # Pool sizing
+    min_connections: int = 2
+    max_connections: int = 20
+    initial_connections: int = 5
+    
+    # Connection management
+    connection_timeout: float = 30.0
+    idle_timeout: float = 300.0  # 5 minutes
+    max_connection_age: float = 3600.0  # 1 hour
+    
+    # Health checks
+    enable_health_checks: bool = False
+    health_check_interval: float = 60.0  # 1 minute
+    
+    # Performance tuning
+    connection_retry_attempts: int = 3
+    connection_retry_delay: float = 1.0
     
     # Health checking
     health_check_interval: float = 60.0  # 1 minute

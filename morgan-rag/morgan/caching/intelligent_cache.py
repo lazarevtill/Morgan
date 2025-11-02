@@ -136,6 +136,7 @@ class IntelligentCacheManager:
                 if not collection_path.exists():
                     cache_status.is_valid = False
                     cache_status.collection_exists = False
+                    cache_status.cache_hit = False
             
             # Update metrics
             self._update_metrics(

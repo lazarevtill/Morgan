@@ -123,6 +123,28 @@ class MetricsCollector:
             registry=self.registry
         )
         
+        # Git hash cache metrics (implements R1.3, R9.1)
+        self.git_cache_requests = Counter(
+            'morgan_git_cache_requests_total',
+            'Total Git hash cache requests',
+            ['result'],
+            registry=self.registry
+        )
+        
+        self.git_hash_calculations = Counter(
+            'morgan_git_hash_calculations_total',
+            'Total Git hash calculations performed',
+            ['source_type'],
+            registry=self.registry
+        )
+        
+        self.cache_invalidations = Counter(
+            'morgan_cache_invalidations_total',
+            'Total cache invalidations',
+            ['reason'],
+            registry=self.registry
+        )
+        
         self.memory_usage = Gauge(
             'morgan_memory_usage_bytes',
             'Memory usage in bytes',
@@ -329,6 +351,62 @@ class MetricsCollector:
         logger.debug("Recorded cache hit rate",
                     cache_type=cache_type,
                     hit_rate=hit_rate)
+    
+    def record_git_cache_request(self, cache_hit: bool, source_type: str = "unknown"):
+        """Record Git hash cache request result."""
+        with self._lock:
+            result = "hit" if cache_hit else "miss"
+            self.git_cache_requests.labels(result=result).inc()
+            
+            # Buffer for real-time monitoring
+            metric = MetricValue(
+                name="git_cache_request",
+                value=1,
+                timestamp=datetime.now(),
+                labels={
+                    "result": result,
+                    "source_type": source_type
+                }
+            )
+            self._metrics_buffer["git_cache_requests"].append(metric)
+        
+        logger.debug("Recorded Git cache request",
+                    cache_hit=cache_hit,
+                    source_type=source_type)
+    
+    def record_git_hash_calculation(self, source_type: str = "file"):
+        """Record Git hash calculation."""
+        with self._lock:
+            self.git_hash_calculations.labels(source_type=source_type).inc()
+            
+            # Buffer for real-time monitoring
+            metric = MetricValue(
+                name="git_hash_calculation",
+                value=1,
+                timestamp=datetime.now(),
+                labels={"source_type": source_type}
+            )
+            self._metrics_buffer["git_hash_calculations"].append(metric)
+        
+        logger.debug("Recorded Git hash calculation",
+                    source_type=source_type)
+    
+    def record_cache_invalidation(self, reason: str = "manual"):
+        """Record cache invalidation event."""
+        with self._lock:
+            self.cache_invalidations.labels(reason=reason).inc()
+            
+            # Buffer for real-time monitoring
+            metric = MetricValue(
+                name="cache_invalidation",
+                value=1,
+                timestamp=datetime.now(),
+                labels={"reason": reason}
+            )
+            self._metrics_buffer["cache_invalidations"].append(metric)
+        
+        logger.info("Recorded cache invalidation",
+                   reason=reason)
     
     def record_memory_usage(self, component: str, memory_bytes: int):
         """Record memory usage for a component."""

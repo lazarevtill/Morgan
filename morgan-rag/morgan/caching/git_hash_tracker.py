@@ -3,6 +3,7 @@ Git hash tracking system for intelligent caching.
 
 This module provides Git hash calculation and storage for document collections,
 enabling efficient cache invalidation based on content changes.
+Implements requirements R1.3 and R9.1 for cache reuse and metrics.
 """
 
 import hashlib
@@ -36,12 +37,24 @@ class GitHashTracker:
         self.cache_dir = Path(cache_dir)
         self.hash_file = self.cache_dir / "git_hashes.json"
         self.collections_file = self.cache_dir / "collections.json"
+        self.metrics_file = self.cache_dir / "cache_metrics.json"
         
         # Create cache directory
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
         # Initialize storage files
         self._init_storage_files()
+        
+        # Cache metrics tracking
+        self._cache_metrics = {
+            "total_requests": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "hash_calculations": 0,
+            "invalidations": 0,
+            "last_reset": datetime.now().isoformat()
+        }
+        self._load_metrics()
     
     def _init_storage_files(self) -> None:
         """Initialize storage files if they don't exist."""
@@ -52,6 +65,17 @@ class GitHashTracker:
         if not self.collections_file.exists():
             with open(self.collections_file, 'w') as f:
                 json.dump({}, f)
+        
+        if not self.metrics_file.exists():
+            with open(self.metrics_file, 'w') as f:
+                json.dump({
+                    "total_requests": 0,
+                    "cache_hits": 0,
+                    "cache_misses": 0,
+                    "hash_calculations": 0,
+                    "invalidations": 0,
+                    "last_reset": datetime.now().isoformat()
+                }, f)
     
     def calculate_git_hash(self, source_path: str) -> Optional[str]:
         """
@@ -83,16 +107,20 @@ class GitHashTracker:
             if result.returncode == 0:
                 git_hash = result.stdout.strip()
                 logger.debug(f"Git hash for {source_path}: {git_hash}")
+                self._increment_metric("hash_calculations")
                 return git_hash
             else:
                 logger.warning(f"Failed to get Git hash for {source_path}: {result.stderr}")
+                self._increment_metric("hash_calculations")
                 return self._calculate_file_hash(source_path)
                 
         except subprocess.TimeoutExpired:
             logger.warning(f"Git command timed out for {source_path}")
+            self._increment_metric("hash_calculations")
             return self._calculate_file_hash(source_path)
         except Exception as e:
             logger.warning(f"Error calculating Git hash for {source_path}: {e}")
+            self._increment_metric("hash_calculations")
             return self._calculate_file_hash(source_path)
     
     def _is_git_repository(self, path: Path) -> bool:
@@ -138,10 +166,12 @@ class GitHashTracker:
                 # Path doesn't exist
                 hasher.update(b'nonexistent')
             
+            self._increment_metric("hash_calculations")
             return hasher.hexdigest()
             
         except Exception as e:
             logger.warning(f"Error calculating file hash for {source_path}: {e}")
+            self._increment_metric("hash_calculations")
             return hashlib.sha256(str(source_path).encode()).hexdigest()
     
     def store_git_hash(
@@ -294,6 +324,15 @@ class GitHashTracker:
                 collection_exists
             )
             
+            # Track cache metrics
+            self._increment_metric("total_requests")
+            if is_valid:
+                self._increment_metric("cache_hits")
+                logger.debug(f"Cache hit for collection {collection_name}")
+            else:
+                self._increment_metric("cache_misses")
+                logger.debug(f"Cache miss for collection {collection_name}")
+            
             # Get last updated time
             last_updated = self._get_last_updated(collection_name)
             
@@ -416,6 +455,7 @@ class GitHashTracker:
                 with open(self.collections_file, 'w') as f:
                     json.dump(collections, f, indent=2)
             
+            self._increment_metric("invalidations")
             logger.info(f"Invalidated cache for collection {collection_name}")
             return True
             
@@ -539,3 +579,175 @@ class GitHashTracker:
         except Exception as e:
             logger.error(f"Error cleaning up orphaned entries: {e}")
             return 0
+    
+    def _load_metrics(self) -> None:
+        """Load cache metrics from storage."""
+        try:
+            if self.metrics_file.exists():
+                with open(self.metrics_file, 'r') as f:
+                    stored_metrics = json.load(f)
+                    self._cache_metrics.update(stored_metrics)
+        except Exception as e:
+            logger.warning(f"Failed to load cache metrics: {e}")
+    
+    def _save_metrics(self) -> None:
+        """Save cache metrics to storage."""
+        try:
+            with open(self.metrics_file, 'w') as f:
+                json.dump(self._cache_metrics, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save cache metrics: {e}")
+    
+    def _increment_metric(self, metric_name: str) -> None:
+        """Increment a cache metric and save to storage."""
+        if metric_name in self._cache_metrics:
+            self._cache_metrics[metric_name] += 1
+            self._save_metrics()
+    
+    def get_cache_metrics(self) -> Dict[str, Any]:
+        """
+        Get comprehensive cache performance metrics.
+        
+        Returns:
+            Dictionary with cache performance statistics
+        """
+        try:
+            # Calculate derived metrics
+            total_requests = self._cache_metrics["total_requests"]
+            cache_hits = self._cache_metrics["cache_hits"]
+            cache_misses = self._cache_metrics["cache_misses"]
+            
+            hit_rate = cache_hits / total_requests if total_requests > 0 else 0.0
+            miss_rate = cache_misses / total_requests if total_requests > 0 else 0.0
+            
+            # Get collection statistics
+            collections = self.list_collections()
+            total_collections = len(collections)
+            total_documents = sum(c.document_count for c in collections)
+            total_size_bytes = sum(c.size_bytes for c in collections)
+            
+            return {
+                "cache_performance": {
+                    "total_requests": total_requests,
+                    "cache_hits": cache_hits,
+                    "cache_misses": cache_misses,
+                    "hit_rate": hit_rate,
+                    "miss_rate": miss_rate,
+                    "hash_calculations": self._cache_metrics["hash_calculations"],
+                    "invalidations": self._cache_metrics["invalidations"]
+                },
+                "collection_stats": {
+                    "total_collections": total_collections,
+                    "total_documents": total_documents,
+                    "total_size_bytes": total_size_bytes,
+                    "average_documents_per_collection": total_documents / total_collections if total_collections > 0 else 0
+                },
+                "metrics_metadata": {
+                    "last_reset": self._cache_metrics["last_reset"],
+                    "last_updated": datetime.now().isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting cache metrics: {e}")
+            return {
+                "error": str(e),
+                "cache_performance": {
+                    "total_requests": 0,
+                    "cache_hits": 0,
+                    "cache_misses": 0,
+                    "hit_rate": 0.0,
+                    "miss_rate": 0.0
+                }
+            }
+    
+    def reset_cache_metrics(self) -> bool:
+        """
+        Reset cache performance metrics.
+        
+        Returns:
+            True if reset was successful
+        """
+        try:
+            self._cache_metrics = {
+                "total_requests": 0,
+                "cache_hits": 0,
+                "cache_misses": 0,
+                "hash_calculations": 0,
+                "invalidations": 0,
+                "last_reset": datetime.now().isoformat()
+            }
+            self._save_metrics()
+            logger.info("Cache metrics reset successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to reset cache metrics: {e}")
+            return False
+    
+    def get_cache_efficiency_report(self) -> Dict[str, Any]:
+        """
+        Generate a comprehensive cache efficiency report.
+        
+        Returns:
+            Detailed report on cache performance and recommendations
+        """
+        try:
+            metrics = self.get_cache_metrics()
+            cache_perf = metrics["cache_performance"]
+            collection_stats = metrics["collection_stats"]
+            
+            # Calculate efficiency indicators
+            hit_rate = cache_perf["hit_rate"]
+            total_requests = cache_perf["total_requests"]
+            
+            # Determine efficiency level
+            if hit_rate >= 0.9:
+                efficiency_level = "Excellent"
+                efficiency_color = "green"
+            elif hit_rate >= 0.7:
+                efficiency_level = "Good"
+                efficiency_color = "yellow"
+            elif hit_rate >= 0.5:
+                efficiency_level = "Fair"
+                efficiency_color = "orange"
+            else:
+                efficiency_level = "Poor"
+                efficiency_color = "red"
+            
+            # Generate recommendations
+            recommendations = []
+            if hit_rate < 0.7:
+                recommendations.append("Consider increasing cache retention time")
+                recommendations.append("Review document change patterns to optimize caching strategy")
+            
+            if cache_perf["hash_calculations"] > total_requests * 2:
+                recommendations.append("High hash calculation overhead detected - consider optimizing Git operations")
+            
+            if collection_stats["total_collections"] > 100:
+                recommendations.append("Large number of collections - consider cleanup of unused collections")
+            
+            return {
+                "summary": {
+                    "efficiency_level": efficiency_level,
+                    "efficiency_color": efficiency_color,
+                    "hit_rate_percentage": f"{hit_rate * 100:.1f}%",
+                    "total_requests": total_requests,
+                    "cache_hits": cache_perf["cache_hits"],
+                    "cache_misses": cache_perf["cache_misses"]
+                },
+                "detailed_metrics": cache_perf,
+                "collection_overview": collection_stats,
+                "recommendations": recommendations,
+                "report_generated": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating cache efficiency report: {e}")
+            return {
+                "error": str(e),
+                "summary": {
+                    "efficiency_level": "Unknown",
+                    "hit_rate_percentage": "0.0%"
+                }
+            }
