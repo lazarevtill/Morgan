@@ -55,13 +55,15 @@ All planning documents have been consolidated into:
 
 ### 2. design.md - The "HOW"
 
+> **Note**: The detailed architecture design is located at `.kiro/specs/morgan-multi-host-mvp/design.md`
+
 **Comprehensive Architecture** including:
 
-#### Service Topology
-- Consul for service discovery (3-node cluster)
-- Traefik API gateway for load balancing
-- Docker Swarm for orchestration (recommended)
-- PostgreSQL with streaming replication
+#### Service Topology (MicroK8s/Kubernetes Architecture)
+- Kubernetes Services for native service discovery
+- Kubernetes Ingress (Nginx/Traefik) for load balancing and routing
+- MicroK8s for lightweight container orchestration
+- PostgreSQL with streaming replication (or Patroni for HA)
 - Redis cluster (3 nodes)
 - Qdrant vector database
 
@@ -263,7 +265,7 @@ The MVP is **complete** when:
 - Service failover tested (chaos tests pass)
 
 ✅ **User Experience**
-- Single API endpoint via Traefik
+- Single API endpoint via Kubernetes Ingress
 - <2 second response time for text requests
 - Conversation history persists across Core instances
 
@@ -363,19 +365,19 @@ Multi-Host Cluster
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
-| **Discovery** | HashiCorp Consul | Service registry, health checks, config store |
-| **Gateway** | Traefik | Load balancing, TLS, routing |
-| **Orchestration** | Docker Swarm | Container scheduling across hosts |
+| **Discovery** | Kubernetes Services | Native K8s service discovery, health checks via readiness/liveness probes |
+| **Gateway** | Kubernetes Ingress | Load balancing, TLS termination, routing (Nginx or Traefik addon) |
+| **Orchestration** | MicroK8s | Lightweight Kubernetes for container scheduling across hosts |
 | **Databases** | PostgreSQL 17 | Structured data (conversations, tools) |
 |  | Redis Cluster | Caching (conversation context) |
 |  | Qdrant | Vector search (semantic memory) |
-| **Monitoring** | Prometheus | Metrics collection |
+| **Monitoring** | Prometheus | Metrics collection (via MicroK8s addon) |
 |  | Grafana | Visualization and dashboards |
 |  | Loki | Log aggregation |
-| **Security** | TLS/mTLS | Encrypted communication |
-|  | API Keys | Client authentication |
-| **Container** | Docker | Linux, Windows (via WSL2) |
-|  | Colima | macOS M1 |
+| **Security** | TLS | Encrypted communication (cert-manager for certs) |
+|  | Kubernetes Secrets | Secure secrets management with encryption at rest |
+| **Container** | MicroK8s | Linux (snap-based), cross-platform container runtime |
+|  | kubectl | CLI for cluster management |
 
 ---
 

@@ -449,7 +449,7 @@ spec:
 
 **Responsibilities**:
 - User interaction via command-line interface
-- Connect directly to Mce vi8s cluster a or KongKuber Services
+- Connect directly to Kubernetes Services (or Istio Gateway if enabled)
 - Display rich terminal output with progress bars, colored text, tables
 - Handle user input (interactive chat, one-shot queries, file paths)
 

@@ -73,13 +73,13 @@ class TestCoreServiceAPI:
 
     @pytest.mark.asyncio
     async def test_text_api_request_contract(self):
-        """Test /api/text POST request contract"""
+        """Test /api/chat POST request contract"""
         async with AsyncClient(
             base_url="http://localhost:8000", timeout=60.0
         ) as client:
             # Valid request
             response = await client.post(
-                "/api/text",
+                "/api/chat",
                 json={
                     "text": "Hello",
                     "user_id": "test_user",
@@ -96,13 +96,13 @@ class TestCoreServiceAPI:
 
     @pytest.mark.asyncio
     async def test_text_api_validation(self):
-        """Test /api/text validation rules"""
+        """Test /api/chat validation rules"""
         async with AsyncClient(
             base_url="http://localhost:8000", timeout=60.0
         ) as client:
             # Missing required field
             response = await client.post(
-                "/api/text", json={"user_id": "test_user"}  # Missing 'text'
+                "/api/chat", json={"user_id": "test_user"}  # Missing 'text'
             )
 
             assert response.status_code in [
@@ -216,7 +216,7 @@ class TestErrorResponseContracts:
             base_url="http://localhost:8000", timeout=30.0
         ) as client:
             # Send invalid request
-            response = await client.post("/api/text", json={"invalid": "data"})
+            response = await client.post("/api/chat", json={"invalid": "data"})
 
             assert response.status_code in [400, 422]
 
@@ -247,7 +247,7 @@ class TestErrorResponseContracts:
         ) as client:
             # Send invalid request
             response = await client.post(
-                "/api/text", json={}  # Invalid - missing required fields
+                "/api/chat", json={}  # Invalid - missing required fields
             )
 
             # Should have request ID even in error responses
@@ -266,7 +266,7 @@ class TestRateLimitHeaders:
             base_url="http://localhost:8000", timeout=30.0
         ) as client:
             response = await client.post(
-                "/api/text", json={"text": "test", "user_id": "test_user"}
+                "/api/chat", json={"text": "test", "user_id": "test_user"}
             )
 
             # Rate limit headers should be present
