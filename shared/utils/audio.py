@@ -98,8 +98,9 @@ class AudioUtils:
                         if os.path.exists(path):
                             try:
                                 os.unlink(path)
-                            except:
-                                pass
+                            except (OSError, PermissionError) as cleanup_error:
+                                # Log but don't fail on cleanup errors
+                                logger.debug(f"Failed to cleanup temp file {path}: {cleanup_error}")
 
             except ImportError as ie:
                 raise ValueError(f"soundfile is required: {ie}")
