@@ -12,6 +12,7 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
+  PIP_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
 
 jobs:
   dependency-check:
@@ -33,8 +34,6 @@ jobs:
           setup-key: ${{ secrets.NETBIRD_SETUP_KEY }}
 
       - name: Install safety
-        env:
-          PIP_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
         run: |
           pip install safety pip-audit
 
@@ -101,8 +100,6 @@ jobs:
           setup-key: ${{ secrets.NETBIRD_SETUP_KEY }}
 
       - name: Install bandit
-        env:
-          PIP_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
         run: |
           pip install bandit[toml]
 
@@ -244,14 +241,10 @@ jobs:
           setup-key: ${{ secrets.NETBIRD_SETUP_KEY }}
 
       - name: Install pip-licenses
-        env:
-          PIP_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
         run: |
           pip install pip-licenses
 
       - name: Check licenses
-        env:
-          PIP_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
         run: |
           pip install -r requirements-base.txt
           pip-licenses --format=markdown --output-file=licenses.md || true
