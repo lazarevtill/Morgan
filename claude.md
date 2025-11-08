@@ -151,7 +151,7 @@ Morgan is a fully self-hosted, distributed personal AI assistant being transform
 
 ## Project Structure
 
-```
+```python
 Morgan/
 ├── morgan-rag/                    # Main project directory
 │   ├── morgan/

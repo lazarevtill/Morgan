@@ -16,7 +16,7 @@ Primary Goal: Build a modular AI assistant with advanced emotional intelligence 
     - Build `morgan/storage/` for unified data persistence
     - Add `morgan/config/` for centralized configuration management
     - Implement `morgan/utils/` for shared utilities following DRY principles
-    - CLean up all old incomplete parts
+    - Clean up legacy ingestion pathway, partial embedding pipeline, deprecated model adapters, and unfinished integration tests
     - _Requirements: 23.1, 23.2, 23.3, 23.4, 23.5_
 
 

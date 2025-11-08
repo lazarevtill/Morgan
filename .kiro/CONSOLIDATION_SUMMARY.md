@@ -191,17 +191,18 @@ Host 4 (macOS M1):
 
 ### Key Decisions Made
 
-1. **Service Discovery**: HashiCorp Consul
-   - **Why**: Lightweight, excellent Docker integration, built-in health checks, KV store for config
-   - **Alternative considered**: etcd, Eureka (too heavyweight for self-hosted)
+1. **Orchestration**: MicroK8s (Lightweight Kubernetes)
+   - **Why**: Production-ready Kubernetes with minimal overhead, built-in addons (DNS, storage, GPU), native service discovery
+   - **Benefits**: Cloud-native patterns, automatic service discovery via Kubernetes DNS, built-in health checks, self-healing pods
+   - **Alternative considered**: Docker Swarm, Docker Compose (less cloud-native, no built-in service mesh)
 
-2. **Orchestration**: Docker Swarm (recommended) vs. Docker Compose per host
-   - **Why Swarm**: Native Docker, familiar syntax, built-in load balancing, Windows support
-   - **Why not Kubernetes**: Too complex for 6-7 host setup, resource overhead
+2. **Service Discovery**: Kubernetes Services and DNS
+   - **Why**: Native K8s service discovery, no external tools needed, automatic DNS resolution
+   - **Pattern**: Services are discovered via `service-name.namespace.svc.cluster.local`
 
-3. **Load Balancer**: Traefik
-   - **Why**: Native Consul integration, automatic service discovery, excellent WebSocket support
-   - **Alternative considered**: HAProxy, Nginx (manual configuration)
+3. **Ingress & Load Balancing**: Kubernetes Ingress (Nginx or Traefik addon)
+   - **Why**: Native K8s ingress controller, automatic load balancing across pods, excellent WebSocket support
+   - **Configuration**: Managed via Ingress resources and Services
 
 4. **Databases**:
    - **PostgreSQL**: Streaming replication for HA (Patroni optional for auto-failover)
