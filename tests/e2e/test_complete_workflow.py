@@ -10,16 +10,17 @@ Tests complete workflows from user input to response:
 - Performance under load
 """
 
-import pytest
 import asyncio
-import httpx
-from pathlib import Path
-import sys
-import os
-import time
-import struct
-import wave
 import io
+import os
+import struct
+import sys
+import time
+import wave
+from pathlib import Path
+
+import httpx
+import pytest
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))

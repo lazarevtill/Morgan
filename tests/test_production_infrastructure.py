@@ -10,7 +10,7 @@ Demonstrates the new production-quality patterns:
 
 import asyncio
 import time
-from typing import Dict, Any
+from typing import Any, Dict
 
 # Mock imports for testing without dependencies
 try:
@@ -18,10 +18,10 @@ try:
         CircuitBreaker,
         CircuitBreakerConfig,
         CircuitBreakerState,
-        TokenBucketRateLimiter,
-        RateLimitConfig,
         HealthMonitor,
         HealthStatus,
+        RateLimitConfig,
+        TokenBucketRateLimiter,
     )
 
     INFRASTRUCTURE_AVAILABLE = True

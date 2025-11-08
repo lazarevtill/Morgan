@@ -13,17 +13,16 @@ import asyncio
 import functools
 import logging
 import time
-from typing import Callable, Any, Optional, Type, Tuple, List, Dict
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 from shared.utils.exceptions import (
-    MorganException,
     ErrorSeverity,
+    MorganException,
     NetworkTimeoutError,
     ServiceTimeoutError,
     ServiceUnavailableError,
 )
-
 
 logger = logging.getLogger(__name__)
 

@@ -4,9 +4,10 @@ API Contract Tests for Morgan AI Assistant
 Ensures all API endpoints conform to their contracts
 """
 
+import base64
+
 import pytest
 from httpx import AsyncClient
-import base64
 
 
 class TestCoreServiceAPI:
