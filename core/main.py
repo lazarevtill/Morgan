@@ -3,7 +3,6 @@ Main entry point for Core service
 """
 import asyncio
 import argparse
-import logging
 
 from shared.config.base import ServiceConfig
 from shared.utils.logging import setup_logging

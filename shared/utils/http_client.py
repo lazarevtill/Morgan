@@ -2,7 +2,6 @@
 HTTP client utilities for service-to-service communication
 """
 import asyncio
-import json
 from typing import Dict, Any, Optional, Union
 import logging
 from urllib.parse import urljoin
@@ -10,7 +9,7 @@ from urllib.parse import urljoin
 import aiohttp
 from aiohttp import ClientTimeout, ClientError
 
-from .errors import ServiceError, ErrorCode, ErrorHandler
+from .exceptions import ServiceException, ErrorCategory
 from ..models.base import ProcessingResult
 
 logger = logging.getLogger(__name__)
@@ -28,7 +27,7 @@ class MorganHTTPClient:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.session: Optional[aiohttp.ClientSession] = None
-        self.error_handler = ErrorHandler(logger or logging.getLogger(__name__))
+        self.logger = logger or logging.getLogger(__name__)
 
     async def __aenter__(self):
         """Async context manager entry"""
@@ -68,10 +67,10 @@ class MorganHTTPClient:
                 async with self.session.request(method, url, **kwargs) as response:
                     if response.status >= 400:
                         error_text = await response.text()
-                        raise ServiceError(
-                            f"HTTP {response.status}: {error_text}",
-                            ErrorCode.SERVICE_ERROR,
-                            {"status": response.status, "url": url}
+                        raise ServiceException(
+                            service_name=self.service_name,
+                            message=f"HTTP {response.status}: {error_text}",
+                            status_code=response.status
                         )
 
                     content = await response.json()
@@ -85,10 +84,10 @@ class MorganHTTPClient:
 
             except ClientError as e:
                 if attempt == self.max_retries - 1:
-                    raise ServiceError(
-                        f"Failed to connect to {self.service_name}: {e}",
-                        ErrorCode.CONNECTION_ERROR,
-                        {"url": url, "attempts": attempt + 1}
+                    raise ServiceException(
+                        service_name=self.service_name,
+                        message=f"Failed to connect: {e}",
+                        status_code=503
                     )
 
                 logger.warning(f"Request failed (attempt {attempt + 1}/{self.max_retries}): {e}")
@@ -96,27 +95,27 @@ class MorganHTTPClient:
 
             except asyncio.TimeoutError:
                 if attempt == self.max_retries - 1:
-                    raise ServiceError(
-                        f"Timeout connecting to {self.service_name}",
-                        ErrorCode.SERVICE_TIMEOUT,
-                        {"url": url, "timeout": self.timeout.total}
+                    raise ServiceException(
+                        service_name=self.service_name,
+                        message=f"Timeout connecting",
+                        status_code=504
                     )
 
                 logger.warning(f"Request timeout (attempt {attempt + 1}/{self.max_retries})")
                 await asyncio.sleep(self.retry_delay * (2 ** attempt))
 
             except Exception as e:
-                raise ServiceError(
-                    f"Unexpected error in {self.service_name}: {e}",
-                    ErrorCode.SERVICE_ERROR,
-                    {"url": url, "error_type": type(e).__name__}
+                raise ServiceException(
+                    service_name=self.service_name,
+                    message=f"Unexpected error: {e}",
+                    status_code=500
                 )
 
         # This should never be reached, but just in case
-        raise ServiceError(
-            f"Max retries exceeded for {self.service_name}",
-            ErrorCode.SERVICE_ERROR,
-            {"url": url, "max_retries": self.max_retries}
+        raise ServiceException(
+            service_name=self.service_name,
+            message=f"Max retries exceeded",
+            status_code=503
         )
 
     async def get(self, endpoint: str, params: Optional[Dict[str, Any]] = None, request_id: Optional[str] = None) -> ProcessingResult:

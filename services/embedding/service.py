@@ -23,7 +23,7 @@ import numpy as np
 
 from shared.config.base import ServiceConfig
 from shared.utils.logging import setup_logging, Timer
-from shared.utils.errors import ErrorHandler, ModelError, ErrorCode
+from shared.utils.exceptions import MorganException, ErrorCategory, ModelException, ModelLoadError, ModelInferenceError
 from shared.infrastructure import (
     EnhancedHTTPClient,
     ConnectionPoolConfig,
@@ -171,7 +171,6 @@ class ProductionEmbeddingService:
 
     def __init__(self, config: Optional[ServiceConfig] = None):
         self.config = config or ServiceConfig("embedding")
-        self.error_handler = ErrorHandler(logger)
         self.logger = setup_logging(
             "production_embedding_service",
             self.config.get("log_level", "INFO"),

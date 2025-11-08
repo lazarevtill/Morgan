@@ -25,7 +25,7 @@ torch._dynamo.config.suppress_errors = True
 from shared.config.base import ServiceConfig
 from shared.models.base import TTSRequest, TTSResponse, ProcessingResult
 from shared.utils.logging import setup_logging, Timer
-from shared.utils.errors import ErrorHandler, AudioError, ErrorCode
+from shared.utils.exceptions import MorganException, ErrorCategory, AudioException, AudioProcessingError
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,6 @@ class TTSService:
 
     def __init__(self, config: Optional[ServiceConfig] = None):
         self.config = config or ServiceConfig("tts")
-        self.error_handler = ErrorHandler(logger)
         self.logger = setup_logging(
             "tts_service",
             self.config.get("log_level", "INFO"),
@@ -237,7 +236,7 @@ class TTSService:
         """Generate speech using CSM with csm-streaming-tf Generator"""
         try:
             if not hasattr(self, 'csm_generator'):
-                raise AudioError("CSM generator not loaded", ErrorCode.MODEL_NOT_LOADED)
+                raise AudioProcessingError("CSM generator not loaded", operation="speech_setup")
 
             # Process text for CSM
             processed_text = await self._process_text(text)
@@ -278,7 +277,7 @@ class TTSService:
 
             # Concatenate all audio chunks
             if len(audio_chunks) == 0:
-                raise AudioError("No audio generated", ErrorCode.AUDIO_PROCESSING_ERROR)
+                raise AudioProcessingError("No audio generated", operation="csm_synthesis")
 
             audio_array = np.concatenate(audio_chunks)
 
@@ -302,7 +301,7 @@ class TTSService:
 
         except Exception as e:
             self.logger.error(f"CSM generation failed: {e}", exc_info=True)
-            raise AudioError(f"CSM speech generation failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+            raise AudioProcessingError(f"CSM speech generation failed: {e}", operation="csm_generation")
 
     def _preprocess_text_for_tts(self, text: str) -> str:
         """
@@ -342,13 +341,13 @@ class TTSService:
 
                 # Only use CSM streaming
                 if not hasattr(self, 'csm_model'):
-                    raise AudioError("CSM model not loaded", ErrorCode.MODEL_NOT_LOADED)
+                    raise AudioProcessingError("CSM model not loaded", operation="model_check")
 
                 return await self._generate_csm_speech(request, processed_text)
 
             except Exception as e:
                 self.logger.error(f"Error generating speech: {e}", exc_info=True)
-                raise AudioError(f"Speech generation failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+                raise AudioProcessingError(f"Speech generation failed: {e}", operation="generate_speech")
 
 
 
@@ -367,13 +366,13 @@ class TTSService:
 
         except Exception as e:
             self.logger.error(f"Error generating streaming speech: {e}")
-            raise AudioError(f"Streaming speech generation failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+            raise AudioProcessingError(f"Streaming speech generation failed: {e}", operation="stream_generation")
 
     async def _generate_csm_speech_stream(self, request: TTSRequest, text: str) -> AsyncGenerator[bytes, None]:
         """Generate streaming speech using CSM with real-time chunking"""
         try:
             if not hasattr(self, 'csm_generator'):
-                raise AudioError("CSM generator not loaded", ErrorCode.MODEL_NOT_LOADED)
+                raise AudioProcessingError("CSM generator not loaded", operation="stream_setup")
 
             # Process text for CSM
             processed_text = await self._process_text(text)
@@ -420,7 +419,7 @@ class TTSService:
 
         except Exception as e:
             self.logger.error(f"CSM streaming generation failed: {e}", exc_info=True)
-            raise AudioError(f"CSM speech streaming failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+            raise AudioProcessingError(f"CSM speech streaming failed: {e}", operation="csm_streaming")
 
     async def _stream_csm_audio_chunks(self, inputs, request: TTSRequest, chunk_token_size: int = 20) -> AsyncGenerator[torch.Tensor, None]:
         """Stream audio chunks from CSM generator"""

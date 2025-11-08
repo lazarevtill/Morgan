@@ -5,7 +5,6 @@ Reference: https://docs.openwebui.com/getting-started/api-endpoints/
 - Chat completions via OpenAI-compatible endpoint
 - Embeddings via Ollama API proxy endpoint
 """
-import asyncio
 import logging
 import os
 from typing import Dict, Any, List, Optional, AsyncGenerator
@@ -17,7 +16,7 @@ from pydantic import BaseModel, Field
 from shared.config.base import ServiceConfig
 from shared.models.base import LLMRequest, LLMResponse, Message, ProcessingResult
 from shared.utils.logging import setup_logging, Timer
-from shared.utils.errors import ErrorHandler, ModelError, ErrorCode
+from shared.utils.exceptions import MorganException, ErrorCategory, ModelException, ModelLoadError, ModelInferenceError
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +49,6 @@ class LLMService:
 
     def __init__(self, config: Optional[ServiceConfig] = None):
         self.config = config or ServiceConfig("llm")
-        self.error_handler = ErrorHandler(logger)
         self.logger = setup_logging(
             "llm_service",
             self.config.get("log_level", "INFO"),
@@ -147,14 +145,14 @@ class LLMService:
                     self.current_model = self.llm_config.model
                     self.logger.info(f"Using fallback model: {self.llm_config.model}")
                 else:
-                    raise ModelError("No models available in OpenAI-compatible API service", ErrorCode.MODEL_LOAD_ERROR)
+                    raise ModelLoadError("openai_api", "No models available in OpenAI-compatible API service")
             else:
                 self.current_model = self.llm_config.model
                 self.logger.info(f"Model {self.llm_config.model} is available")
 
         except Exception as e:
             self.logger.error(f"Error testing OpenAI-compatible API connection: {e}")
-            raise ModelError(f"Failed to connect to OpenAI-compatible API: {e}", ErrorCode.MODEL_LOAD_ERROR)
+            raise ModelLoadError("openai_api", f"Failed to connect to OpenAI-compatible API: {e}")
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         """Generate text response using LLM"""
@@ -220,7 +218,7 @@ class LLMService:
 
             except Exception as e:
                 self.logger.error(f"Error in text generation: {e}")
-                raise ModelError(f"Text generation failed: {e}", ErrorCode.MODEL_INFERENCE_ERROR)
+                raise ModelInferenceError(self.llm_config.model, f"Text generation failed: {e}")
 
     async def generate_stream(self, request: LLMRequest) -> AsyncGenerator[str, None]:
         """Generate streaming text response"""
@@ -261,7 +259,7 @@ class LLMService:
 
         except Exception as e:
             self.logger.error(f"Error in streaming generation: {e}")
-            raise ModelError(f"Streaming generation failed: {e}", ErrorCode.MODEL_INFERENCE_ERROR)
+            raise ModelInferenceError(self.llm_config.model, f"Streaming generation failed: {e}")
 
     async def embed_text(self, text: str, model: Optional[str] = None) -> List[float]:
         """Generate embeddings for text using Ollama API via Open WebUI proxy
@@ -308,9 +306,9 @@ class LLMService:
                 async with session.post(embed_url, json=payload, headers=headers, timeout=30) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        raise ModelError(
-                            f"Embeddings API returned {response.status}: {error_text}",
-                            ErrorCode.MODEL_INFERENCE_ERROR
+                        raise ModelInferenceError(
+                            self.llm_config.embedding_model,
+                            f"Embeddings API returned {response.status}: {error_text}"
                         )
                     
                     result = await response.json()
@@ -321,14 +319,14 @@ class LLMService:
                     elif 'embedding' in result:
                         return result['embedding']
                     else:
-                        raise ModelError(
-                            f"Unexpected response format from embeddings API: {result}",
-                            ErrorCode.MODEL_INFERENCE_ERROR
+                        raise ModelInferenceError(
+                            self.llm_config.embedding_model,
+                            f"Unexpected response format from embeddings API: {result}"
                         )
 
         except Exception as e:
             self.logger.error(f"Failed to generate embeddings: {e}")
-            raise ModelError(f"Embedding generation failed: {e}", ErrorCode.MODEL_INFERENCE_ERROR)
+            raise ModelInferenceError(self.llm_config.embedding_model, f"Embedding generation failed: {e}")
 
     async def list_models(self) -> Dict[str, Any]:
         """List available models"""
@@ -353,7 +351,7 @@ class LLMService:
             }
         except Exception as e:
             self.logger.error(f"Error listing models: {e}")
-            raise ModelError(f"Failed to list models: {e}", ErrorCode.MODEL_LOAD_ERROR)
+            raise ModelLoadError("openai_api", f"Failed to list models: {e}")
 
     async def get_model_info(self, model: Optional[str] = None) -> Dict[str, Any]:
         """Get information about a specific model"""
@@ -375,7 +373,7 @@ class LLMService:
             }
         except Exception as e:
             self.logger.error(f"Error getting model info: {e}")
-            raise ModelError(f"Failed to get model info: {e}", ErrorCode.MODEL_LOAD_ERROR)
+            raise ModelLoadError(model_name, f"Failed to get model info: {e}")
 
     async def pull_model(self, model: str) -> AsyncGenerator[str, None]:
         """Pull a model from OpenAI-compatible API"""

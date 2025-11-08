@@ -750,50 +750,58 @@ response = await llm_client.post("/api/generate", json={...})
 
 ### Current Implementation
 
-**NOTE**: The codebase currently uses Python `@dataclass` instead of Pydantic `BaseModel` for shared models. This is inconsistent with `.cursorrules` requirements and should be standardized.
+**NOTE**: ✅ The codebase uses Pydantic `BaseModel` for ALL shared models, providing type safety, validation, and serialization. All models are fully compliant with `.cursorrules` requirements.
 
 ### Core Models
+
+All models inherit from Pydantic's `BaseModel` with backward-compatible helper methods:
 
 #### BaseModel
 
 ```python
-@dataclass
-class BaseModel:
-    """Base model with serialization"""
+from pydantic import BaseModel as PydanticBaseModel
+
+class BaseModel(PydanticBaseModel):
+    """Base model with Pydantic validation and backward-compatible methods"""
 
     def to_dict(self) -> dict:
-        """Convert to dictionary"""
+        """Convert to dictionary (wraps model_dump())"""
+        return self.model_dump()
 
     def to_json(self) -> str:
-        """Convert to JSON string"""
+        """Convert to JSON string (wraps model_dump_json())"""
+        return self.model_dump_json()
 
     @classmethod
     def from_dict(cls, data: dict):
-        """Create from dictionary"""
+        """Create from dictionary (wraps model_validate())"""
+        return cls(**data)
 ```
 
 #### Message
 
 ```python
-@dataclass
+from pydantic import Field
+
 class Message(BaseModel):
-    role: str  # "user", "assistant", "system"
-    content: str
-    timestamp: str
-    metadata: dict = field(default_factory=dict)
+    role: str = Field(..., description="Message role: user, assistant, or system")
+    content: str = Field(..., description="Message content")
+    timestamp: str = Field(..., description="ISO timestamp")
+    metadata: dict = Field(default_factory=dict, description="Additional metadata")
 ```
 
 #### ConversationContext
 
 ```python
-@dataclass
+from typing import List
+
 class ConversationContext(BaseModel):
-    conversation_id: str
-    user_id: str
-    messages: List[Message]
-    created_at: str
-    updated_at: str
-    metadata: dict = field(default_factory=dict)
+    conversation_id: str = Field(..., description="Unique conversation identifier")
+    user_id: str = Field(..., description="User identifier")
+    messages: List[Message] = Field(default_factory=list, description="Conversation messages")
+    created_at: str = Field(..., description="Creation timestamp")
+    updated_at: str = Field(..., description="Last update timestamp")
+    metadata: dict = Field(default_factory=dict, description="Additional metadata")
 ```
 
 ### Service Request/Response Models

@@ -8,7 +8,6 @@ import io
 import wave
 import numpy as np
 import time
-from pathlib import Path
 
 import torch
 import torchaudio
@@ -17,7 +16,7 @@ from pydantic import BaseModel
 from shared.config.base import ServiceConfig
 from shared.models.base import STTRequest, STTResponse, ProcessingResult, AudioChunk
 from shared.utils.logging import setup_logging, Timer
-from shared.utils.errors import ErrorHandler, AudioError, ErrorCode
+from shared.utils.exceptions import MorganException, ErrorCategory, AudioException, AudioProcessingError
 from shared.utils.audio import AudioUtils
 
 logger = logging.getLogger(__name__)
@@ -48,7 +47,6 @@ class STTService:
 
     def __init__(self, config: Optional[ServiceConfig] = None):
         self.config = config or ServiceConfig("stt")
-        self.error_handler = ErrorHandler(logger)
         self.logger = setup_logging(
             "stt_service",
             self.config.get("log_level", "INFO"),
@@ -141,7 +139,7 @@ class STTService:
 
         except Exception as e:
             self.logger.error(f"Failed to load faster-whisper model: {e}")
-            raise AudioError(f"Whisper model loading failed: {e}", ErrorCode.MODEL_NOT_LOADED)
+            raise AudioProcessingError(f"Whisper model loading failed: {e}", operation="model_loading")
 
 
     def _setup_vad_filter(self):
@@ -174,7 +172,7 @@ class STTService:
 
             except Exception as e:
                 self.logger.error(f"Error transcribing audio: {e}")
-                raise AudioError(f"Transcription failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+                raise AudioProcessingError(f"Transcription failed: {e}", operation="transcription")
 
     async def _apply_vad_filter(self, audio_array: np.ndarray) -> np.ndarray:
         """Apply VAD filter using faster-whisper's built-in functionality"""
@@ -373,7 +371,7 @@ class STTService:
 
         except Exception as e:
             self.logger.error(f"Stream transcription failed: {e}")
-            raise AudioError(f"Stream transcription failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+            raise AudioProcessingError(f"Stream transcription failed: {e}", operation="stream_transcription")
 
     async def transcribe_chunk(self, audio_bytes: bytes, language: Optional[str] = None) -> STTResponse:
         """Transcribe a single audio chunk (for streaming)"""
@@ -416,7 +414,7 @@ class STTService:
 
         except Exception as e:
             self.logger.error(f"Chunk transcription failed: {e}")
-            raise AudioError(f"Chunk transcription failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+            raise AudioProcessingError(f"Chunk transcription failed: {e}", operation="chunk_transcription")
 
     async def transcribe_streaming(self, audio_chunks: List[bytes],
                                  language: Optional[str] = None) -> STTResponse:
@@ -454,7 +452,7 @@ class STTService:
 
         except Exception as e:
             self.logger.error(f"Streaming transcription failed: {e}")
-            raise AudioError(f"Streaming transcription failed: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+            raise AudioProcessingError(f"Streaming transcription failed: {e}", operation="streaming_transcription")
 
     async def start_audio_stream(self, session_id: str, language: str = "auto") -> Dict[str, Any]:
         """Start a new audio streaming session"""
@@ -478,17 +476,17 @@ class STTService:
 
         except Exception as e:
             self.logger.error(f"Failed to start audio stream: {e}")
-            raise AudioError(f"Failed to start audio stream: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+            raise AudioProcessingError(f"Failed to start audio stream: {e}", operation="start_stream")
 
     async def add_audio_chunk(self, session_id: str, audio_bytes: bytes) -> Dict[str, Any]:
         """Add audio chunk to streaming session"""
         try:
             if session_id not in self.streaming_sessions:
-                raise AudioError(f"Session {session_id} not found", ErrorCode.AUDIO_PROCESSING_ERROR)
+                raise AudioProcessingError(f"Session {session_id} not found", operation="add_chunk")
 
             session = self.streaming_sessions[session_id]
             if not session["is_active"]:
-                raise AudioError(f"Session {session_id} is not active", ErrorCode.AUDIO_PROCESSING_ERROR)
+                raise AudioProcessingError(f"Session {session_id} is not active", operation="add_chunk")
 
             # Add chunk to session
             session["chunks"].append(audio_bytes)
@@ -525,13 +523,13 @@ class STTService:
 
         except Exception as e:
             self.logger.error(f"Failed to add audio chunk: {e}")
-            raise AudioError(f"Failed to add audio chunk: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+            raise AudioProcessingError(f"Failed to add audio chunk: {e}", operation="add_chunk")
 
     async def end_audio_stream(self, session_id: str) -> STTResponse:
         """End audio streaming session and return final transcription"""
         try:
             if session_id not in self.streaming_sessions:
-                raise AudioError(f"Session {session_id} not found", ErrorCode.AUDIO_PROCESSING_ERROR)
+                raise AudioProcessingError(f"Session {session_id} not found", operation="end_stream")
 
             session = self.streaming_sessions[session_id]
             session["is_active"] = False
@@ -556,7 +554,7 @@ class STTService:
 
         except Exception as e:
             self.logger.error(f"Failed to end audio stream: {e}")
-            raise AudioError(f"Failed to end audio stream: {e}", ErrorCode.AUDIO_PROCESSING_ERROR)
+            raise AudioProcessingError(f"Failed to end audio stream: {e}", operation="end_stream")
 
     async def process_realtime_chunk(self, audio_bytes: bytes, session_id: str = "default",
                                    language: Optional[str] = None) -> Dict[str, Any]:
