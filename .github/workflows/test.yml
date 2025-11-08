@@ -10,6 +10,7 @@ on:
 env:
   PYTHON_VERSION: "3.11"
   UV_VERSION: "0.1.18"
+  UV_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
 
 jobs:
   test:
@@ -41,8 +42,6 @@ jobs:
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
-        env:
-          UV_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
         run: |
           uv pip install --system pytest pytest-cov pytest-asyncio pytest-mock httpx
           uv pip install --system -r requirements-base.txt
@@ -134,8 +133,6 @@ jobs:
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
-        env:
-          UV_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
         run: |
           uv pip install --system pytest pytest-asyncio pytest-mock httpx
           uv pip install --system -r requirements-base.txt

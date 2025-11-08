@@ -199,6 +199,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Setup NetBird VPN
+        uses: ./.github/actions/setup-netbird
+        with:
+          setup-key: ${{ secrets.NETBIRD_SETUP_KEY }}
+
       - name: Install radon
         run: |
           pip install radon
