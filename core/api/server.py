@@ -1,35 +1,56 @@
 """
 FastAPI server for Morgan Core Service
 """
+
 import asyncio
-import logging
-from typing import Dict, Any, Optional, List
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI, HTTPException, Request, File, UploadFile, Form, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-import uvicorn
-import json
 import base64
+import json
+import logging
 import os
+from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional
 
-from shared.config.base import ServiceConfig
-from shared.models.base import Response, ProcessingResult
-from shared.utils.logging import setup_logging
-from shared.utils.exceptions import MorganException, ErrorCategory, ServiceException
-from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware, RateLimitMiddleware
-from shared.utils.audio import AudioCapture, DeviceAudioCapture, validate_audio_file, AudioValidationError, safe_base64_decode
-from shared.utils.http_client import service_registry
+import uvicorn
 
 # Import WebSocket handler
 from api.websocket_handler import WebSocketHandler
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+
+from shared.config.base import ServiceConfig
+from shared.models.base import ProcessingResult, Response
+from shared.utils.audio import (
+    AudioCapture,
+    AudioValidationError,
+    DeviceAudioCapture,
+    safe_base64_decode,
+    validate_audio_file,
+)
+from shared.utils.exceptions import ErrorCategory, MorganException, ServiceException
+from shared.utils.http_client import service_registry
+from shared.utils.logging import setup_logging
+from shared.utils.middleware import (
+    RateLimitMiddleware,
+    RequestIDMiddleware,
+    TimingMiddleware,
+)
 
 
 class TextRequest(BaseModel):
     """Text input request"""
+
     text: str = Field(..., description="Input text")
     user_id: Optional[str] = Field("default", description="User identifier")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
@@ -37,26 +58,32 @@ class TextRequest(BaseModel):
 
 class AudioRequest(BaseModel):
     """Audio input request"""
+
     user_id: Optional[str] = Field("default", description="User identifier")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
 
 class ConversationResetRequest(BaseModel):
     """Conversation reset request"""
+
     user_id: Optional[str] = Field("default", description="User identifier")
 
 
 class DeviceAudioRequest(BaseModel):
     """Device audio input request"""
+
     device_id: Optional[str] = Field(None, description="Audio device ID")
     device_type: str = Field("microphone", description="Type of audio device")
     language: Optional[str] = Field("auto", description="Language for transcription")
     real_time: bool = Field(False, description="Enable real-time processing")
-    chunk_duration_ms: int = Field(100, description="Audio chunk duration in milliseconds")
+    chunk_duration_ms: int = Field(
+        100, description="Audio chunk duration in milliseconds"
+    )
 
 
 class StreamAudioRequest(BaseModel):
     """Streaming audio request"""
+
     session_id: str = Field(..., description="Streaming session ID")
     audio_data: str = Field(..., description="Base64 encoded audio data")
     timestamp: Optional[float] = Field(None, description="Audio timestamp")
@@ -64,6 +91,7 @@ class StreamAudioRequest(BaseModel):
 
 class StreamTextRequest(BaseModel):
     """Streaming text request for TTS"""
+
     text: str = Field(..., description="Text to synthesize")
     voice: Optional[str] = Field("default", description="Voice to use")
     speed: Optional[float] = Field(1.0, description="Speech speed")
@@ -73,6 +101,7 @@ class StreamTextRequest(BaseModel):
 
 class AudioChunkMessage(BaseModel):
     """Audio chunk message for streaming"""
+
     type: str = Field(..., description="Message type: audio, start, end, error")
     audio_data: Optional[str] = Field(None, description="Base64 encoded audio chunk")
     chunk_id: Optional[int] = Field(None, description="Sequential chunk ID")
@@ -85,6 +114,7 @@ class AudioChunkMessage(BaseModel):
 
 class DeviceListResponse(BaseModel):
     """Device list response"""
+
     devices: List[Dict[str, Any]]
     count: int
     supported_formats: List[str]
@@ -92,6 +122,7 @@ class DeviceListResponse(BaseModel):
 
 class StreamAudioMessage(BaseModel):
     """WebSocket message for streaming audio"""
+
     type: str = Field(..., description="Message type: audio, start, stop, config")
     audio_data: Optional[str] = Field(None, description="Base64 encoded audio data")
     sample_rate: Optional[int] = Field(16000, description="Audio sample rate")
@@ -101,6 +132,7 @@ class StreamAudioMessage(BaseModel):
 
 class StreamResponse(BaseModel):
     """WebSocket response message"""
+
     type: str = Field(..., description="Response type: transcription, error, status")
     text: Optional[str] = Field(None, description="Transcribed text")
     confidence: Optional[float] = Field(None, description="Confidence score")
@@ -110,6 +142,7 @@ class StreamResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     """Health check response"""
+
     status: str
     version: str
     uptime: str
@@ -123,6 +156,7 @@ class HealthResponse(BaseModel):
 
 class StatusResponse(BaseModel):
     """System status response"""
+
     version: str
     status: str
     uptime: str
@@ -138,7 +172,16 @@ class StatusResponse(BaseModel):
 class APIServer:
     """FastAPI server for Morgan Core"""
 
-    def __init__(self, core_service, host: str = "0.0.0.0", port: int = 8000, https_port: int = 8443, use_https: bool = False, ssl_cert_path: str = None, ssl_key_path: str = None):
+    def __init__(
+        self,
+        core_service,
+        host: str = "0.0.0.0",
+        port: int = 8000,
+        https_port: int = 8443,
+        use_https: bool = False,
+        ssl_cert_path: str = None,
+        ssl_key_path: str = None,
+    ):
         self.core_service = core_service
         self.host = host
         self.port = port
@@ -150,7 +193,7 @@ class APIServer:
         self.app = None
         self.server = None
         self.https_server = None
-        
+
         # Initialize WebSocket handler
         self.websocket_handler = WebSocketHandler(core_service)
 
@@ -162,7 +205,7 @@ class APIServer:
             description="Modern AI assistant with voice and text capabilities",
             version="0.2.0",
             docs_url="/docs",
-            redoc_url="/redoc"
+            redoc_url="/redoc",
         )
 
         # Add request size limit middleware
@@ -179,7 +222,9 @@ class APIServer:
                 if int(content_length) > max_size:
                     return JSONResponse(
                         status_code=413,
-                        content={"error": "Request body too large. Maximum size is 10MB."}
+                        content={
+                            "error": "Request body too large. Maximum size is 10MB."
+                        },
                     )
 
             return await call_next(request)
@@ -190,17 +235,24 @@ class APIServer:
 
         # Add rate limiting middleware if enabled
         if self.core_service.config.get("rate_limit_enabled", True):
-            rate_limit_rps = self.core_service.config.get("rate_limit_requests_per_second", 10.0)
+            rate_limit_rps = self.core_service.config.get(
+                "rate_limit_requests_per_second", 10.0
+            )
             rate_limit_burst = self.core_service.config.get("rate_limit_burst_size", 20)
-            rate_limit_exempt = self.core_service.config.get("rate_limit_exempt_paths", ["/health", "/docs", "/redoc", "/openapi.json"])
+            rate_limit_exempt = self.core_service.config.get(
+                "rate_limit_exempt_paths",
+                ["/health", "/docs", "/redoc", "/openapi.json"],
+            )
 
             self.app.add_middleware(
                 RateLimitMiddleware,
                 requests_per_second=rate_limit_rps,
                 burst_size=rate_limit_burst,
-                exempt_paths=rate_limit_exempt
+                exempt_paths=rate_limit_exempt,
             )
-            self.logger.info(f"Rate limiting enabled: {rate_limit_rps} req/s, burst={rate_limit_burst}")
+            self.logger.info(
+                f"Rate limiting enabled: {rate_limit_rps} req/s, burst={rate_limit_burst}"
+            )
         else:
             self.logger.warning("Rate limiting is disabled")
 
@@ -217,12 +269,16 @@ class APIServer:
                 self.logger.warning(f"Could not import proxy middleware: {e}")
 
         # Add CORS middleware - use configuration from core.yaml or environment
-        cors_origins = self.core_service.config.get("cors_origins", ["http://localhost:3000"])
+        cors_origins = self.core_service.config.get(
+            "cors_origins", ["http://localhost:3000"]
+        )
         # Support both list and string (comma-separated) from environment
         if isinstance(cors_origins, str):
             cors_origins = [origin.strip() for origin in cors_origins.split(",")]
 
-        cors_allow_credentials = self.core_service.config.get("cors_allow_credentials", True)
+        cors_allow_credentials = self.core_service.config.get(
+            "cors_allow_credentials", True
+        )
         cors_max_age = self.core_service.config.get("cors_max_age", 600)
 
         self.logger.info(f"CORS configured with origins: {cors_origins}")
@@ -273,11 +329,7 @@ class APIServer:
 
         # Create HTTP server
         config = uvicorn.Config(
-            self.app,
-            host=self.host,
-            port=self.port,
-            log_level="info",
-            access_log=True
+            self.app, host=self.host, port=self.port, log_level="info", access_log=True
         )
         self.server = uvicorn.Server(config)
 
@@ -287,6 +339,7 @@ class APIServer:
         if self.use_https and self.ssl_cert_path and self.ssl_key_path:
             try:
                 import ssl
+
                 ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
                 ssl_context.load_cert_chain(self.ssl_cert_path, self.ssl_key_path)
 
@@ -297,19 +350,23 @@ class APIServer:
                     log_level="info",
                     access_log=True,
                     ssl_certfile=self.ssl_cert_path,
-                    ssl_keyfile=self.ssl_key_path
+                    ssl_keyfile=self.ssl_key_path,
                 )
                 self.https_server = uvicorn.Server(https_config)
                 servers.append(self.https_server)
 
-                self.logger.info(f"Starting HTTPS API server on {self.host}:{self.https_port}")
+                self.logger.info(
+                    f"Starting HTTPS API server on {self.host}:{self.https_port}"
+                )
             except Exception as e:
                 self.logger.error(f"Failed to setup HTTPS server: {e}")
                 self.use_https = False
 
         self.logger.info(f"Starting API server on {self.host}:{self.port}")
         if self.use_https:
-            self.logger.info(f"Starting HTTPS API server on {self.host}:{self.https_port}")
+            self.logger.info(
+                f"Starting HTTPS API server on {self.host}:{self.https_port}"
+            )
 
         # Start servers concurrently
         await asyncio.gather(*[server.serve() for server in servers])
@@ -323,7 +380,9 @@ class APIServer:
             self.https_server.should_exit = True
         self.logger.info("API server stopped")
 
-    async def _transcribe_audio(self, audio_data: bytes, filename: str, content_type: str) -> str:
+    async def _transcribe_audio(
+        self, audio_data: bytes, filename: str, content_type: str
+    ) -> str:
         """Transcribe audio using STT service"""
         import aiohttp
 
@@ -335,10 +394,12 @@ class APIServer:
 
             # Create multipart form data
             form_data = aiohttp.FormData()
-            form_data.add_field('file',
-                               audio_data,
-                               filename=filename or 'audio.webm',
-                               content_type=content_type or 'audio/webm')
+            form_data.add_field(
+                "file",
+                audio_data,
+                filename=filename or "audio.webm",
+                content_type=content_type or "audio/webm",
+            )
 
             # Send to STT service with timeout
             timeout = aiohttp.ClientTimeout(total=120)  # 2 minutes
@@ -346,14 +407,18 @@ class APIServer:
             async with stt_client.session.post(
                 f"{stt_client.base_url}/transcribe/file",
                 data=form_data,
-                timeout=timeout
+                timeout=timeout,
             ) as response:
                 self.logger.info(f"STT response status: {response.status}")
 
                 if response.status != 200:
                     error_text = await response.text()
-                    self.logger.error(f"STT service error ({response.status}): {error_text}")
-                    raise HTTPException(status_code=500, detail=f"STT error: {error_text}")
+                    self.logger.error(
+                        f"STT service error ({response.status}): {error_text}"
+                    )
+                    raise HTTPException(
+                        status_code=500, detail=f"STT error: {error_text}"
+                    )
 
                 result = await response.json()
                 transcription = result.get("text", "")
@@ -370,12 +435,16 @@ class APIServer:
             self.logger.error(f"Transcription error: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
 
-    async def _generate_speech(self, text: str, voice: str = "default") -> Optional[str]:
+    async def _generate_speech(
+        self, text: str, voice: str = "default"
+    ) -> Optional[str]:
         """Generate speech using TTS service with CSM-streaming"""
         import aiohttp
 
         try:
-            self.logger.info(f"Generating TTS for text: {text[:50]}... (length={len(text)})")
+            self.logger.info(
+                f"Generating TTS for text: {text[:50]}... (length={len(text)})"
+            )
 
             # Get TTS service client (await the async method!)
             tts_client = await service_registry.get_service("tts")
@@ -387,11 +456,13 @@ class APIServer:
             async with tts_client.session.post(
                 f"{tts_client.base_url}/generate",
                 json={"text": text, "voice": voice, "output_format": "wav"},
-                timeout=timeout
+                timeout=timeout,
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    self.logger.error(f"TTS failed with status {response.status}: {error_text}")
+                    self.logger.error(
+                        f"TTS failed with status {response.status}: {error_text}"
+                    )
                     return None
 
                 result = await response.json()
@@ -405,26 +476,37 @@ class APIServer:
 
                 # TTS service returns hex string already
                 if isinstance(audio_bytes, str):
-                    self.logger.info(f"Got hex string from TTS: {len(audio_bytes)} chars")
+                    self.logger.info(
+                        f"Got hex string from TTS: {len(audio_bytes)} chars"
+                    )
                     # Validate it's hex
                     try:
                         # Test if it's valid hex by converting first few bytes
-                        test_bytes = bytes.fromhex(audio_bytes[:100] if len(audio_bytes) > 100 else audio_bytes)
-                        self.logger.info(f"Hex validated, first 4 bytes: {test_bytes[:4].hex()}")
+                        test_bytes = bytes.fromhex(
+                            audio_bytes[:100] if len(audio_bytes) > 100 else audio_bytes
+                        )
+                        self.logger.info(
+                            f"Hex validated, first 4 bytes: {test_bytes[:4].hex()}"
+                        )
                         return audio_bytes
                     except ValueError as ve:
                         self.logger.error(f"Invalid hex string from TTS: {ve}")
                         # Maybe it's base64?
                         import base64
+
                         try:
                             decoded = base64.b64decode(audio_bytes)
-                            self.logger.info(f"Decoded from base64: {len(decoded)} bytes")
+                            self.logger.info(
+                                f"Decoded from base64: {len(decoded)} bytes"
+                            )
                             return decoded.hex()
                         except Exception as be:
                             self.logger.error(f"Failed to decode as base64: {be}")
                             return None
                 elif isinstance(audio_bytes, bytes):
-                    self.logger.info(f"Got raw bytes from TTS: {len(audio_bytes)} bytes")
+                    self.logger.info(
+                        f"Got raw bytes from TTS: {len(audio_bytes)} bytes"
+                    )
                     return audio_bytes.hex()
 
                 self.logger.warning(f"Unexpected audio_data type: {type(audio_bytes)}")
@@ -446,18 +528,22 @@ class APIServer:
                 try:
                     stt_client = await service_registry.get_service("stt")
                     stt_health_result = await stt_client.get("/health")
-                    stt_health = stt_health_result.data if isinstance(stt_health_result.data, dict) else {}
+                    stt_health = (
+                        stt_health_result.data
+                        if isinstance(stt_health_result.data, dict)
+                        else {}
+                    )
                     vad_info = {
                         "vad_enabled": stt_health.get("vad_enabled", False),
                         "vad_type": stt_health.get("vad_type", "unknown"),
-                        "stt_healthy": stt_health.get("status") == "healthy"
+                        "stt_healthy": stt_health.get("status") == "healthy",
                     }
                 except Exception as vad_error:
                     self.logger.warning(f"Could not get VAD info: {vad_error}")
                     vad_info = {
                         "vad_enabled": False,
                         "vad_type": "unavailable",
-                        "stt_healthy": False
+                        "stt_healthy": False,
                     }
 
                 status["vad_info"] = vad_info
@@ -474,18 +560,22 @@ class APIServer:
                 try:
                     stt_client = await service_registry.get_service("stt")
                     stt_health_result = await stt_client.get("/health")
-                    stt_health = stt_health_result.data if isinstance(stt_health_result.data, dict) else {}
+                    stt_health = (
+                        stt_health_result.data
+                        if isinstance(stt_health_result.data, dict)
+                        else {}
+                    )
                     vad_info = {
                         "vad_enabled": stt_health.get("vad_enabled", False),
                         "vad_type": stt_health.get("vad_type", "unknown"),
-                        "stt_healthy": stt_health.get("status") == "healthy"
+                        "stt_healthy": stt_health.get("status") == "healthy",
                     }
                 except Exception as vad_error:
                     self.logger.warning(f"Could not get VAD info: {vad_error}")
                     vad_info = {
                         "vad_enabled": False,
                         "vad_type": "unavailable",
-                        "stt_healthy": False
+                        "stt_healthy": False,
                     }
 
                 status["vad_info"] = vad_info
@@ -498,29 +588,33 @@ class APIServer:
             """Process text input"""
             try:
                 response = await self.core_service.process_text_request(
-                    request.text,
-                    request.user_id,
-                    request.metadata
+                    request.text, request.user_id, request.metadata
                 )
 
                 return {
                     "text": response.text,
                     "audio": response.audio_data.hex() if response.audio_data else None,
-                    "actions": [action.model_dump() for action in response.actions] if response.actions else [],
+                    "actions": (
+                        [action.model_dump() for action in response.actions]
+                        if response.actions
+                        else []
+                    ),
                     "metadata": response.metadata,
-                    "confidence": response.confidence
+                    "confidence": response.confidence,
                 }
 
             except Exception as e:
                 self.logger.error(f"Text processing error: {e}")
-                raise HTTPException(status_code=500, detail=f"Text processing failed: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Text processing failed: {e}"
+                )
 
         @self.app.post("/api/audio")
         async def process_audio(
             file: UploadFile = File(...),
             user_id: str = Form("voice_user"),
             device_type: str = Form("microphone"),
-            language: str = Form("auto")
+            language: str = Form("auto"),
         ) -> Dict[str, Any]:
             """Process audio input - simplified voice interface"""
             try:
@@ -532,7 +626,7 @@ class APIServer:
                     validation_result = validate_audio_file(
                         audio_data,
                         max_size_mb=10,
-                        allowed_formats=['wav', 'mp3', 'webm', 'ogg', 'flac']
+                        allowed_formats=["wav", "mp3", "webm", "ogg", "flac"],
                     )
                     self.logger.info(
                         f"Audio validated: size={validation_result['size']/1024:.2f}KB, "
@@ -540,19 +634,25 @@ class APIServer:
                     )
                 except AudioValidationError as e:
                     self.logger.error(f"Audio validation failed: {e}")
-                    raise HTTPException(status_code=400, detail=f"Invalid audio file: {str(e)}")
+                    raise HTTPException(
+                        status_code=400, detail=f"Invalid audio file: {str(e)}"
+                    )
 
-                self.logger.info(f"Processing audio: size={len(audio_data)}, type={file.content_type}, filename={file.filename}")
+                self.logger.info(
+                    f"Processing audio: size={len(audio_data)}, type={file.content_type}, filename={file.filename}"
+                )
 
                 # Step 1: Transcribe audio using STT service
-                transcription = await self._transcribe_audio(audio_data, file.filename, file.content_type)
+                transcription = await self._transcribe_audio(
+                    audio_data, file.filename, file.content_type
+                )
 
                 if not transcription:
                     return {
                         "transcription": "",
                         "ai_response": "I couldn't understand what you said. Please try speaking more clearly.",
                         "audio": None,
-                        "metadata": {"error": "no_speech_detected"}
+                        "metadata": {"error": "no_speech_detected"},
                     }
 
                 self.logger.info(f"Transcription: {transcription}")
@@ -561,7 +661,7 @@ class APIServer:
                 llm_response = await self.core_service.process_text_request(
                     transcription,
                     user_id,
-                    {"source": "voice", "device_type": device_type}
+                    {"source": "voice", "device_type": device_type},
                 )
 
                 # Step 3: Generate TTS audio
@@ -569,7 +669,9 @@ class APIServer:
                 if llm_response.text:
                     tts_audio = await self._generate_speech(llm_response.text)
                     if tts_audio:
-                        self.logger.info(f"TTS audio generated: {len(tts_audio)} hex chars ({len(tts_audio)//2} bytes)")
+                        self.logger.info(
+                            f"TTS audio generated: {len(tts_audio)} hex chars ({len(tts_audio)//2} bytes)"
+                        )
                     else:
                         self.logger.warning("TTS generation returned None")
 
@@ -581,21 +683,31 @@ class APIServer:
                         "user_id": user_id,
                         "device_type": device_type,
                         "language": language,
-                        "processing_time": llm_response.metadata.get("processing_time") if llm_response.metadata else None,
+                        "processing_time": (
+                            llm_response.metadata.get("processing_time")
+                            if llm_response.metadata
+                            else None
+                        ),
                         "has_audio": tts_audio is not None,
-                        "audio_size": len(tts_audio)//2 if tts_audio else 0
-                    }
+                        "audio_size": len(tts_audio) // 2 if tts_audio else 0,
+                    },
                 }
 
-                self.logger.info(f"Returning audio response: has_audio={tts_audio is not None}, transcription_len={len(transcription)}, response_len={len(llm_response.text)}")
+                self.logger.info(
+                    f"Returning audio response: has_audio={tts_audio is not None}, transcription_len={len(transcription)}, response_len={len(llm_response.text)}"
+                )
                 return response_data
 
             except Exception as e:
                 self.logger.error(f"Audio processing error: {e}")
-                raise HTTPException(status_code=500, detail=f"Audio processing failed: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Audio processing failed: {e}"
+                )
 
         @self.app.post("/api/conversation/reset")
-        async def reset_conversation(request: ConversationResetRequest) -> Dict[str, Any]:
+        async def reset_conversation(
+            request: ConversationResetRequest,
+        ) -> Dict[str, Any]:
             """Reset conversation for a user"""
             try:
                 # Reset conversation in manager
@@ -604,12 +716,14 @@ class APIServer:
                 return {
                     "success": True,
                     "message": f"Conversation reset for user: {request.user_id}",
-                    "user_id": request.user_id
+                    "user_id": request.user_id,
                 }
 
             except Exception as e:
                 self.logger.error(f"Conversation reset error: {e}")
-                raise HTTPException(status_code=500, detail=f"Conversation reset failed: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Conversation reset failed: {e}"
+                )
 
         @self.app.get("/")
         async def root():
@@ -620,20 +734,22 @@ class APIServer:
                 "status": "running",
                 "docs": "/docs",
                 "health": "/health",
-                "voice": "/voice"
+                "voice": "/voice",
             }
 
         @self.app.get("/voice", response_class=HTMLResponse)
         async def voice_interface():
             """Voice interface page - simple one-button interface"""
             try:
-                static_path = os.path.join(os.path.dirname(__file__), "..", "static", "voice_simple.html")
-                with open(static_path, 'r', encoding='utf-8') as f:
+                static_path = os.path.join(
+                    os.path.dirname(__file__), "..", "static", "voice_simple.html"
+                )
+                with open(static_path, "r", encoding="utf-8") as f:
                     return HTMLResponse(content=f.read())
             except FileNotFoundError:
                 return HTMLResponse(
                     content="<h1>Voice Interface</h1><p>Voice interface not available. Please check server configuration.</p>",
-                    status_code=404
+                    status_code=404,
                 )
 
         @self.app.get("/audio/devices")
@@ -648,22 +764,22 @@ class APIServer:
                         "name": "Default Microphone",
                         "type": "microphone",
                         "is_default": True,
-                        "is_available": True
+                        "is_available": True,
                     },
                     {
                         "id": "system_mic",
                         "name": "System Microphone",
                         "type": "microphone",
                         "is_default": False,
-                        "is_available": True
+                        "is_available": True,
                     },
                     {
                         "id": "line_in",
                         "name": "Line Input",
                         "type": "line_in",
                         "is_default": False,
-                        "is_available": True
-                    }
+                        "is_available": True,
+                    },
                 ]
 
                 formatted_devices = DeviceAudioCapture.format_device_list(mock_devices)
@@ -671,13 +787,14 @@ class APIServer:
                 return DeviceListResponse(
                     devices=formatted_devices,
                     count=len(formatted_devices),
-                    supported_formats=DeviceAudioCapture.get_supported_audio_formats()
+                    supported_formats=DeviceAudioCapture.get_supported_audio_formats(),
                 )
 
             except Exception as e:
                 self.logger.error(f"Device list error: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to list devices: {e}")
-
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to list devices: {e}"
+                )
 
         @self.app.post("/audio/stream/start")
         async def start_audio_stream(request: DeviceAudioRequest) -> Dict[str, Any]:
@@ -685,28 +802,36 @@ class APIServer:
             try:
                 # Start STT streaming session
                 stt_client = await service_registry.get_service("stt")
-                stt_result = await stt_client.post("/stream/start", json_data={
-                    "language": request.language
-                })
+                stt_result = await stt_client.post(
+                    "/stream/start", json_data={"language": request.language}
+                )
 
                 # Check if HTTP request was successful
                 if not stt_result.success:
-                    raise HTTPException(status_code=500, detail=stt_result.error or "Failed to start stream")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=stt_result.error or "Failed to start stream",
+                    )
 
                 # Handle response data - could be a dict or ProcessingResult
                 response_data = stt_result.data
-                if hasattr(response_data, 'get'):
+                if hasattr(response_data, "get"):
                     # It's a dictionary-like object
                     session_id = response_data.get("session_id")
                 else:
                     # It's a ProcessingResult or other object
-                    session_id = getattr(response_data, 'session_id', None)
+                    session_id = getattr(response_data, "session_id", None)
 
                 if not session_id:
-                    raise HTTPException(status_code=500, detail="No session_id returned from STT service")
+                    raise HTTPException(
+                        status_code=500,
+                        detail="No session_id returned from STT service",
+                    )
 
                 # Generate device configuration
-                device_config = DeviceAudioCapture.get_recommended_settings(request.device_type)
+                device_config = DeviceAudioCapture.get_recommended_settings(
+                    request.device_type
+                )
 
                 # Get the host for WebSocket connection
                 # For external access, use the host that can access the exposed ports
@@ -718,39 +843,51 @@ class APIServer:
                     "device_config": device_config,
                     "sample_rate": device_config["sample_rate"],
                     "chunk_size": device_config["chunk_size"],
-                    "websocket_url": f"ws://{host}:8003/ws/stream/{session_id}"
+                    "websocket_url": f"ws://{host}:8003/ws/stream/{session_id}",
                 }
 
             except Exception as e:
                 self.logger.error(f"Start audio stream error: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to start audio stream: {e}")
-
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to start audio stream: {e}"
+                )
 
         @self.app.post("/audio/stream/{session_id}/chunk")
-        async def send_audio_chunk(session_id: str, request: StreamAudioRequest) -> Dict[str, Any]:
+        async def send_audio_chunk(
+            session_id: str, request: StreamAudioRequest
+        ) -> Dict[str, Any]:
             """Send audio chunk to streaming session"""
             try:
                 # Forward to STT service
                 stt_client = await service_registry.get_service("stt")
-                stt_response = await stt_client.post(f"/stream/{session_id}/chunk", json_data={
-                    "audio_data": request.audio_data
-                })
+                stt_response = await stt_client.post(
+                    f"/stream/{session_id}/chunk",
+                    json_data={"audio_data": request.audio_data},
+                )
 
                 # Check if HTTP request was successful
                 if not stt_response.success:
-                    raise HTTPException(status_code=500, detail=stt_response.error or "Chunk processing failed")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=stt_response.error or "Chunk processing failed",
+                    )
 
                 # Handle response data - could be a dict or ProcessingResult
                 response_data = stt_response.data
-                if hasattr(response_data, 'get'):
+                if hasattr(response_data, "get"):
                     # It's a dictionary-like object
                     if response_data.get("status") == "error":
-                        raise HTTPException(status_code=500, detail=response_data.get("message", "Chunk processing failed"))
+                        raise HTTPException(
+                            status_code=500,
+                            detail=response_data.get(
+                                "message", "Chunk processing failed"
+                            ),
+                        )
 
                     return response_data
                 else:
                     # It's a ProcessingResult or other object, convert to dict
-                    if hasattr(response_data, '__dict__'):
+                    if hasattr(response_data, "__dict__"):
                         return response_data.__dict__
                     else:
                         # Fallback - return basic success response
@@ -758,8 +895,9 @@ class APIServer:
 
             except Exception as e:
                 self.logger.error(f"Audio chunk error: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to process audio chunk: {e}")
-
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to process audio chunk: {e}"
+                )
 
         @self.app.post("/audio/stream/{session_id}/end")
         async def end_audio_stream(session_id: str) -> Dict[str, Any]:
@@ -771,59 +909,68 @@ class APIServer:
 
                 # Check if HTTP request was successful
                 if not stt_response.success:
-                    raise HTTPException(status_code=500, detail=stt_response.error or "Failed to end stream")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=stt_response.error or "Failed to end stream",
+                    )
 
                 # Handle response data - could be a dict or ProcessingResult
                 response_data = stt_response.data
                 self.logger.debug(f"Response data type: {type(response_data)}")
                 self.logger.debug(f"Response data content: {response_data}")
 
-                if hasattr(response_data, 'get'):
+                if hasattr(response_data, "get"):
                     # It's a dictionary-like object
                     if response_data.get("status") == "error":
-                        raise HTTPException(status_code=500, detail=response_data.get("message", "Failed to end stream"))
+                        raise HTTPException(
+                            status_code=500,
+                            detail=response_data.get("message", "Failed to end stream"),
+                        )
 
                     transcription = response_data.get("text", "")
                 else:
                     # It's a ProcessingResult or other object, try to extract text
-                    transcription = getattr(response_data, 'text', '')
+                    transcription = getattr(response_data, "text", "")
 
                 if transcription:
                     # Create a text request from the transcription
-                    text_request = TextRequest(text=transcription, user_id="streaming_user")
+                    text_request = TextRequest(
+                        text=transcription, user_id="streaming_user"
+                    )
 
                     # Process through core orchestrator
                     response = await self.core_service.process_text_request(
                         text_request.text,
                         text_request.user_id,
-                        {"source": "voice_streaming", "session_id": session_id}
+                        {"source": "voice_streaming", "session_id": session_id},
                     )
 
                     return {
                         "transcription": transcription,
                         "ai_response": response.text,
                         "session_id": session_id,
-                        "metadata": response.metadata
+                        "metadata": response.metadata,
                     }
                 else:
                     return {
                         "transcription": "",
                         "ai_response": "",
                         "session_id": session_id,
-                        "metadata": {"no_speech_detected": True}
+                        "metadata": {"no_speech_detected": True},
                     }
 
             except Exception as e:
                 self.logger.error(f"End audio stream error: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to end audio stream: {e}")
-
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to end audio stream: {e}"
+                )
 
         @self.app.post("/audio/process")
         async def process_audio_file(
             file: UploadFile = File(...),
             device_type: str = Form("microphone"),
             language: str = Form("auto"),
-            real_time: bool = Form(False)
+            real_time: bool = Form(False),
         ) -> Dict[str, Any]:
             """Process uploaded audio file from device"""
             try:
@@ -835,7 +982,7 @@ class APIServer:
                     validation_result = validate_audio_file(
                         audio_bytes,
                         max_size_mb=10,
-                        allowed_formats=['wav', 'mp3', 'webm', 'ogg', 'flac']
+                        allowed_formats=["wav", "mp3", "webm", "ogg", "flac"],
                     )
                     self.logger.info(
                         f"Audio file validated: size={validation_result['size']/1024:.2f}KB, "
@@ -843,35 +990,46 @@ class APIServer:
                     )
                 except AudioValidationError as e:
                     self.logger.error(f"Audio validation failed: {e}")
-                    raise HTTPException(status_code=400, detail=f"Invalid audio file: {str(e)}")
+                    raise HTTPException(
+                        status_code=400, detail=f"Invalid audio file: {str(e)}"
+                    )
 
                 # Get STT service client
                 stt_client = await service_registry.get_service("stt")
 
                 if real_time:
                     # Use real-time processing
-                    stt_response = await stt_client.post("/transcribe/realtime", json_data={
-                        "audio_data": base64.b64encode(audio_bytes).decode('utf-8')
-                    })
+                    stt_response = await stt_client.post(
+                        "/transcribe/realtime",
+                        json_data={
+                            "audio_data": base64.b64encode(audio_bytes).decode("utf-8")
+                        },
+                    )
                 else:
                     # Use standard transcription
-                    stt_response = await stt_client.post("/transcribe", json_data={
-                        "audio_data": base64.b64encode(audio_bytes).decode('utf-8'),
-                        "language": language
-                    })
+                    stt_response = await stt_client.post(
+                        "/transcribe",
+                        json_data={
+                            "audio_data": base64.b64encode(audio_bytes).decode("utf-8"),
+                            "language": language,
+                        },
+                    )
 
                 # Check if HTTP request was successful
                 if not stt_response.success:
-                    raise HTTPException(status_code=500, detail=stt_response.error or "Transcription failed")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=stt_response.error or "Transcription failed",
+                    )
 
                 # Handle response data - could be a dict or ProcessingResult
                 response_data = stt_response.data
-                if hasattr(response_data, 'get'):
+                if hasattr(response_data, "get"):
                     # It's a dictionary-like object
                     transcription = response_data.get("text", "")
                 else:
                     # It's a ProcessingResult or other object
-                    transcription = getattr(response_data, 'text', "")
+                    transcription = getattr(response_data, "text", "")
 
                 # Process through core orchestrator
                 response = await self.core_service.process_text_request(
@@ -881,24 +1039,27 @@ class APIServer:
                         "source": "device_upload",
                         "device_type": device_type,
                         "audio_format": validation,
-                        "real_time": real_time
-                    }
+                        "real_time": real_time,
+                    },
                 )
 
                 return {
                     "transcription": transcription,
                     "ai_response": response.text,
                     "audio_metadata": validation,
-                    "processing_metadata": response.metadata
+                    "processing_metadata": response.metadata,
                 }
 
             except Exception as e:
                 self.logger.error(f"Audio processing error: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to process audio: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to process audio: {e}"
+                )
 
         @self.app.post("/api/audio/stream")
         async def stream_audio_response(request: StreamTextRequest):
             """Stream TTS audio response using Server-Sent Events (SSE)"""
+
             async def generate_audio_stream():
                 """Generate streaming audio response"""
                 try:
@@ -911,16 +1072,14 @@ class APIServer:
                         chunk_id=chunk_id,
                         timestamp=start_time,
                         sample_rate=24000,
-                        format="wav"
+                        format="wav",
                     )
                     yield f"data: {start_event.model_dump_json()}\n\n"
                     chunk_id += 1
 
                     # Process through core service to get LLM response
                     llm_response = await self.core_service.process_text_request(
-                        request.text,
-                        request.user_id,
-                        request.metadata
+                        request.text, request.user_id, request.metadata
                     )
 
                     if not llm_response.text:
@@ -929,7 +1088,7 @@ class APIServer:
                             type="error",
                             chunk_id=chunk_id,
                             timestamp=asyncio.get_event_loop().time(),
-                            error="No response generated"
+                            error="No response generated",
                         )
                         yield f"data: {error_event.model_dump_json()}\n\n"
                         return
@@ -940,18 +1099,19 @@ class APIServer:
 
                         # Stream audio chunks from TTS service
                         async for audio_chunk in self._stream_tts_audio(
-                            llm_response.text,
-                            request.voice,
-                            request.speed
+                            llm_response.text, request.voice, request.speed
                         ):
                             chunk_event = AudioChunkMessage(
                                 type="audio",
-                                audio_data=base64.b64encode(audio_chunk).decode('utf-8'),
+                                audio_data=base64.b64encode(audio_chunk).decode(
+                                    "utf-8"
+                                ),
                                 chunk_id=chunk_id,
                                 timestamp=asyncio.get_event_loop().time(),
-                                duration=len(audio_chunk) / (24000 * 2),  # 16-bit samples
+                                duration=len(audio_chunk)
+                                / (24000 * 2),  # 16-bit samples
                                 sample_rate=24000,
-                                format="wav"
+                                format="wav",
                             )
                             yield f"data: {chunk_event.model_dump_json()}\n\n"
                             chunk_id += 1
@@ -965,7 +1125,7 @@ class APIServer:
                             type="error",
                             chunk_id=chunk_id,
                             timestamp=asyncio.get_event_loop().time(),
-                            error=f"TTS generation failed: {str(e)}"
+                            error=f"TTS generation failed: {str(e)}",
                         )
                         yield f"data: {error_event.model_dump_json()}\n\n"
                         return
@@ -975,7 +1135,7 @@ class APIServer:
                         type="end",
                         chunk_id=chunk_id,
                         timestamp=asyncio.get_event_loop().time(),
-                        duration=asyncio.get_event_loop().time() - start_time
+                        duration=asyncio.get_event_loop().time() - start_time,
                     )
                     yield f"data: {end_event.model_dump_json()}\n\n"
 
@@ -985,7 +1145,7 @@ class APIServer:
                         type="error",
                         chunk_id=chunk_id,
                         timestamp=asyncio.get_event_loop().time(),
-                        error=f"Streaming failed: {str(e)}"
+                        error=f"Streaming failed: {str(e)}",
                     )
                     yield f"data: {error_event.model_dump_json()}\n\n"
 
@@ -997,8 +1157,8 @@ class APIServer:
                     "Connection": "keep-alive",
                     "Content-Type": "text/plain; charset=utf-8",
                     "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Headers": "Cache-Control"
-                }
+                    "Access-Control-Allow-Headers": "Cache-Control",
+                },
             )
 
         @self.app.websocket("/ws/audio")
@@ -1007,7 +1167,9 @@ class APIServer:
             await self._handle_legacy_websocket(websocket)
 
         @self.app.websocket("/ws/stream")
-        async def websocket_stream(websocket: WebSocket, user_id: str = "default") -> None:
+        async def websocket_stream(
+            websocket: WebSocket, user_id: str = "default"
+        ) -> None:
             """WebSocket endpoint for real-time streaming (optimized with StreamingOrchestrator)"""
             await self.websocket_handler.handle_connection(websocket, user_id)
 
@@ -1017,23 +1179,23 @@ class APIServer:
             await self.websocket_handler.handle_connection(websocket, user_id)
 
         return None
-    
+
     async def _handle_legacy_websocket(self, websocket: WebSocket):
         """Handle legacy WebSocket connection (backward compatibility)"""
         await websocket.accept()
 
         # Store active streaming sessions
-        if not hasattr(self, 'streaming_sessions'):
+        if not hasattr(self, "streaming_sessions"):
             self.streaming_sessions = {}
 
         session_id = f"ws_{id(websocket)}"
         self.streaming_sessions[session_id] = {
-            'websocket': websocket,
-            'user_id': 'default',
-            'is_active': True,
-            'audio_buffer': b'',  # Buffer for audio chunks
-            'last_transcription': '',
-            'use_vad': True
+            "websocket": websocket,
+            "user_id": "default",
+            "is_active": True,
+            "audio_buffer": b"",  # Buffer for audio chunks
+            "last_transcription": "",
+            "use_vad": True,
         }
 
         self.logger.info(f"Audio streaming session started: {session_id}")
@@ -1047,7 +1209,9 @@ class APIServer:
                 try:
                     data = json.loads(message)
                     if not isinstance(data, dict):
-                        await self._send_error(websocket, "Invalid message format: expected JSON object")
+                        await self._send_error(
+                            websocket, "Invalid message format: expected JSON object"
+                        )
                         continue
                 except json.JSONDecodeError as e:
                     self.logger.error(f"Invalid JSON from WebSocket: {e}")
@@ -1055,29 +1219,33 @@ class APIServer:
                     continue
                 except Exception as e:
                     self.logger.error(f"Failed to parse WebSocket message: {e}")
-                    await self._send_error(websocket, f"Failed to parse message: {str(e)}")
+                    await self._send_error(
+                        websocket, f"Failed to parse message: {str(e)}"
+                    )
                     continue
 
                 # Validate message type
-                if not data.get('type'):
-                    await self._send_error(websocket, "Message missing required 'type' field")
+                if not data.get("type"):
+                    await self._send_error(
+                        websocket, "Message missing required 'type' field"
+                    )
                     continue
 
                 # Handle different message types
-                if data.get('type') == 'start':
+                if data.get("type") == "start":
                     await self._handle_stream_start(websocket, data, session_id)
-                elif data.get('type') == 'audio':
+                elif data.get("type") == "audio":
                     await self._handle_audio_chunk(websocket, data, session_id)
-                elif data.get('type') == 'stop':
+                elif data.get("type") == "stop":
                     await self._handle_stream_stop(websocket, session_id)
                     break
-                elif data.get('type') == 'config':
+                elif data.get("type") == "config":
                     await self._handle_stream_config(websocket, data, session_id)
-                elif data.get('type') == 'webrtc_offer':
+                elif data.get("type") == "webrtc_offer":
                     await self._handle_webrtc_offer(websocket, data, session_id)
-                elif data.get('type') == 'webrtc_answer':
+                elif data.get("type") == "webrtc_answer":
                     await self._handle_webrtc_answer(websocket, data, session_id)
-                elif data.get('type') == 'webrtc_ice':
+                elif data.get("type") == "webrtc_ice":
                     await self._handle_webrtc_ice(websocket, data, session_id)
 
         except WebSocketDisconnect:
@@ -1089,31 +1257,40 @@ class APIServer:
             if session_id in self.streaming_sessions:
                 del self.streaming_sessions[session_id]
 
-    async def _handle_stream_start(self, websocket: WebSocket, data: Dict[str, Any], session_id: str):
+    async def _handle_stream_start(
+        self, websocket: WebSocket, data: Dict[str, Any], session_id: str
+    ):
         """Handle streaming session start"""
         try:
-            self.streaming_sessions[session_id]['user_id'] = data.get('user_id', 'default')
-            self.streaming_sessions[session_id]['language'] = data.get('language', 'auto')
-            self.streaming_sessions[session_id]['sample_rate'] = data.get('sample_rate', 16000)
+            self.streaming_sessions[session_id]["user_id"] = data.get(
+                "user_id", "default"
+            )
+            self.streaming_sessions[session_id]["language"] = data.get(
+                "language", "auto"
+            )
+            self.streaming_sessions[session_id]["sample_rate"] = data.get(
+                "sample_rate", 16000
+            )
 
             # Send confirmation
-            response = StreamResponse(
-                type="status",
-                text="Streaming started"
-            )
+            response = StreamResponse(type="status", text="Streaming started")
             await websocket.send_text(response.model_dump_json())
 
-            self.logger.info(f"Streaming started for session {session_id}, user: {self.streaming_sessions[session_id]['user_id']}")
+            self.logger.info(
+                f"Streaming started for session {session_id}, user: {self.streaming_sessions[session_id]['user_id']}"
+            )
 
         except Exception as e:
             self.logger.error(f"Error starting stream: {e}")
             await self._send_error(websocket, str(e))
 
-    async def _handle_audio_chunk(self, websocket: WebSocket, data: Dict[str, Any], session_id: str):
+    async def _handle_audio_chunk(
+        self, websocket: WebSocket, data: Dict[str, Any], session_id: str
+    ):
         """Handle incoming audio chunk"""
         try:
             # Decode base64 audio data
-            audio_b64 = data.get('audio_data')
+            audio_b64 = data.get("audio_data")
             if not audio_b64:
                 return
 
@@ -1121,107 +1298,109 @@ class APIServer:
 
             # Get session info
             session = self.streaming_sessions.get(session_id)
-            if not session or not session.get('is_active'):
+            if not session or not session.get("is_active"):
                 return
 
             # Buffer audio chunks for better processing
-            session['audio_buffer'] += audio_bytes
+            session["audio_buffer"] += audio_bytes
 
             # Process if buffer is large enough (e.g., > 1 second of audio)
-            sample_rate = session.get('sample_rate', 16000)
-            chunk_duration = len(session['audio_buffer']) / (sample_rate * 2)  # 16-bit samples
+            sample_rate = session.get("sample_rate", 16000)
+            chunk_duration = len(session["audio_buffer"]) / (
+                sample_rate * 2
+            )  # 16-bit samples
 
             if chunk_duration >= 0.5:  # Process every 0.5 seconds
-                await self._process_audio_chunk(session['audio_buffer'], websocket, session)
-                session['audio_buffer'] = b''  # Clear buffer after processing
+                await self._process_audio_chunk(
+                    session["audio_buffer"], websocket, session
+                )
+                session["audio_buffer"] = b""  # Clear buffer after processing
 
         except Exception as e:
             self.logger.error(f"Error processing audio chunk: {e}")
             await self._send_error(websocket, str(e))
 
-    async def _process_audio_chunk(self, audio_bytes: bytes, websocket: WebSocket, session: Dict[str, Any]):
+    async def _process_audio_chunk(
+        self, audio_bytes: bytes, websocket: WebSocket, session: Dict[str, Any]
+    ):
         """Process audio chunk through STT service with real-time VAD"""
         try:
             # Send to STT service (use real-time endpoint with VAD)
-            stt_response = await self.core_service.streaming_orchestrator.transcribe_chunk(
-                audio_bytes,
-                session.get('language', 'auto')
+            stt_response = (
+                await self.core_service.streaming_orchestrator.transcribe_chunk(
+                    audio_bytes, session.get("language", "auto")
+                )
             )
 
             # Check if we got a valid response with text
             if stt_response and stt_response.success:
                 response_data = stt_response.data
-                if hasattr(response_data, 'get'):
+                if hasattr(response_data, "get"):
                     # It's a dictionary-like object
-                    text = response_data.get('text', '').strip()
+                    text = response_data.get("text", "").strip()
                 else:
                     # It's a ProcessingResult or other object
-                    text = getattr(response_data, 'text', '').strip()
+                    text = getattr(response_data, "text", "").strip()
 
                 if text:
-                    if hasattr(response_data, 'get'):
-                        current_text = response_data['text'].strip()
-                        confidence = response_data.get('confidence', 0.0)
-                        vad_result = response_data.get('vad_result', 'unknown')
+                    if hasattr(response_data, "get"):
+                        current_text = response_data["text"].strip()
+                        confidence = response_data.get("confidence", 0.0)
+                        vad_result = response_data.get("vad_result", "unknown")
                     else:
-                        current_text = getattr(response_data, 'text', '').strip()
-                        confidence = getattr(response_data, 'confidence', 0.0)
-                        vad_result = getattr(response_data, 'vad_result', 'unknown')
+                        current_text = getattr(response_data, "text", "").strip()
+                        confidence = getattr(response_data, "confidence", 0.0)
+                        vad_result = getattr(response_data, "vad_result", "unknown")
 
                 # Only process if we have meaningful text or if VAD detected speech
-                if confidence > 0.1 or vad_result == 'speech_detected':
+                if confidence > 0.1 or vad_result == "speech_detected":
                     # Send transcription result (partial for now)
                     response = StreamResponse(
                         type="transcription",
                         text=current_text,
                         confidence=confidence,
-                        is_final=False  # Real-time, not final
+                        is_final=False,  # Real-time, not final
                     )
                     await websocket.send_text(response.model_dump_json())
 
                     # Update session's last transcription
-                    session['last_transcription'] = current_text
+                    session["last_transcription"] = current_text
 
                     # Process through LLM if confidence is high enough or if it's been a while
                     if confidence > 0.7 or len(current_text.split()) > 3:
-                        await self._process_transcription(current_text, websocket, session)
+                        await self._process_transcription(
+                            current_text, websocket, session
+                        )
                 else:
                     # Send VAD status if no speech detected
-                    response = StreamResponse(
-                        type="status",
-                        text=f"VAD: {vad_result}"
-                    )
+                    response = StreamResponse(type="status", text=f"VAD: {vad_result}")
                     await websocket.send_text(response.model_dump_json())
 
         except Exception as e:
             self.logger.error(f"Error in STT processing: {e}")
             await self._send_error(websocket, "Speech recognition failed")
 
-    async def _process_transcription(self, text: str, websocket: WebSocket, session: Dict[str, Any]):
+    async def _process_transcription(
+        self, text: str, websocket: WebSocket, session: Dict[str, Any]
+    ):
         """Process transcription through LLM and generate response"""
         try:
             # Process through core service
             response = await self.core_service.process_text_request(
                 text,
-                session.get('user_id', 'default'),
-                metadata={"source": "voice", "session_id": session}
+                session.get("user_id", "default"),
+                metadata={"source": "voice", "session_id": session},
             )
 
             if response and response.text:
                 # Send LLM response
-                llm_response = StreamResponse(
-                    type="response",
-                    text=response.text
-                )
+                llm_response = StreamResponse(type="response", text=response.text)
                 await websocket.send_text(llm_response.model_dump_json())
 
                 # If there's audio response, send it too
                 if response.audio_data:
-                    audio_b64 = base64.b64encode(response.audio_data).decode('utf-8')
-                    audio_response = StreamResponse(
-                        type="audio",
-                        text=audio_b64
-                    )
+                    audio_b64 = base64.b64encode(response.audio_data).decode("utf-8")
+                    audio_response = StreamResponse(type="audio", text=audio_b64)
                     await websocket.send_text(audio_response.model_dump_json())
 
         except Exception as e:
@@ -1232,12 +1411,9 @@ class APIServer:
         """Handle streaming session stop"""
         try:
             if session_id in self.streaming_sessions:
-                self.streaming_sessions[session_id]['is_active'] = False
+                self.streaming_sessions[session_id]["is_active"] = False
 
-            response = StreamResponse(
-                type="status",
-                text="Streaming stopped"
-            )
+            response = StreamResponse(type="status", text="Streaming stopped")
             await websocket.send_text(response.model_dump_json())
 
             self.logger.info(f"Streaming stopped for session {session_id}")
@@ -1245,22 +1421,29 @@ class APIServer:
         except Exception as e:
             self.logger.error(f"Error stopping stream: {e}")
 
-    async def _handle_stream_config(self, websocket: WebSocket, data: Dict[str, Any], session_id: str):
+    async def _handle_stream_config(
+        self, websocket: WebSocket, data: Dict[str, Any], session_id: str
+    ):
         """Handle streaming configuration update"""
         try:
             # Update session configuration
             if session_id in self.streaming_sessions:
                 session = self.streaming_sessions[session_id]
-                session.update({
-                    'language': data.get('language', session.get('language', 'auto')),
-                    'sample_rate': data.get('sample_rate', session.get('sample_rate', 16000)),
-                    'user_id': data.get('user_id', session.get('user_id', 'default'))
-                })
+                session.update(
+                    {
+                        "language": data.get(
+                            "language", session.get("language", "auto")
+                        ),
+                        "sample_rate": data.get(
+                            "sample_rate", session.get("sample_rate", 16000)
+                        ),
+                        "user_id": data.get(
+                            "user_id", session.get("user_id", "default")
+                        ),
+                    }
+                )
 
-            response = StreamResponse(
-                type="status",
-                text="Configuration updated"
-            )
+            response = StreamResponse(type="status", text="Configuration updated")
             await websocket.send_text(response.model_dump_json())
 
         except Exception as e:
@@ -1270,44 +1453,46 @@ class APIServer:
     async def _send_error(self, websocket: WebSocket, error_message: str):
         """Send error message to WebSocket client"""
         try:
-            response = StreamResponse(
-                type="error",
-                error=error_message
-            )
+            response = StreamResponse(type="error", error=error_message)
             await websocket.send_text(response.model_dump_json())
         except Exception:
             # If we can't send error, connection is probably closed
             pass
 
-    async def _handle_webrtc_offer(self, websocket: WebSocket, data: Dict[str, Any], session_id: str):
+    async def _handle_webrtc_offer(
+        self, websocket: WebSocket, data: Dict[str, Any], session_id: str
+    ):
         """Handle WebRTC offer from client"""
         try:
             self.logger.info(f"Received WebRTC offer for session {session_id}")
             # For now, just acknowledge - full WebRTC implementation would be more complex
             response = StreamResponse(
                 type="webrtc_status",
-                text="WebRTC offer received - using fallback WebSocket mode"
+                text="WebRTC offer received - using fallback WebSocket mode",
             )
             await websocket.send_text(response.model_dump_json())
         except Exception as e:
             self.logger.error(f"Error handling WebRTC offer: {e}")
             await self._send_error(websocket, str(e))
 
-    async def _handle_webrtc_answer(self, websocket: WebSocket, data: Dict[str, Any], session_id: str):
+    async def _handle_webrtc_answer(
+        self, websocket: WebSocket, data: Dict[str, Any], session_id: str
+    ):
         """Handle WebRTC answer from client"""
         try:
             self.logger.info(f"Received WebRTC answer for session {session_id}")
             # Acknowledge WebRTC answer
             response = StreamResponse(
-                type="webrtc_status",
-                text="WebRTC connection established"
+                type="webrtc_status", text="WebRTC connection established"
             )
             await websocket.send_text(response.model_dump_json())
         except Exception as e:
             self.logger.error(f"Error handling WebRTC answer: {e}")
             await self._send_error(websocket, str(e))
 
-    async def _handle_webrtc_ice(self, websocket: WebSocket, data: Dict[str, Any], session_id: str):
+    async def _handle_webrtc_ice(
+        self, websocket: WebSocket, data: Dict[str, Any], session_id: str
+    ):
         """Handle WebRTC ICE candidate from client"""
         try:
             self.logger.debug(f"Received WebRTC ICE candidate for session {session_id}")
@@ -1317,7 +1502,9 @@ class APIServer:
             self.logger.error(f"Error handling WebRTC ICE: {e}")
             await self._send_error(websocket, str(e))
 
-    async def _stream_tts_audio(self, text: str, voice: str = "default", speed: float = 1.0):
+    async def _stream_tts_audio(
+        self, text: str, voice: str = "default", speed: float = 1.0
+    ):
         """Stream audio chunks from TTS service"""
         try:
             import aiohttp
@@ -1331,19 +1518,23 @@ class APIServer:
                 "voice": voice,
                 "speed": speed,
                 "output_format": "wav",
-                "stream": True
+                "stream": True,
             }
 
             # Stream from TTS service with configured timeout
-            stream_timeout = getattr(self.core_service.core_config, 'stream_timeout', 60)
+            stream_timeout = getattr(
+                self.core_service.core_config, "stream_timeout", 60
+            )
             async with tts_client.session.post(
                 f"{tts_client.base_url}/generate",
                 json=tts_request,
-                timeout=aiohttp.ClientTimeout(total=stream_timeout)
+                timeout=aiohttp.ClientTimeout(total=stream_timeout),
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    self.logger.error(f"TTS streaming failed: {response.status} - {error_text}")
+                    self.logger.error(
+                        f"TTS streaming failed: {response.status} - {error_text}"
+                    )
                     return
 
                 # Stream audio chunks
@@ -1354,5 +1545,3 @@ class APIServer:
         except Exception as e:
             self.logger.error(f"Error streaming TTS audio: {e}")
             raise
-
-

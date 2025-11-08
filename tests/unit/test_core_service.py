@@ -10,19 +10,20 @@ Tests the core service functionality including:
 - Error handling
 """
 
-import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from pathlib import Path
 import sys
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from shared.config.base import ServiceConfig, BaseConfig
-from shared.models.base import Message, ConversationContext
+from shared.config.base import BaseConfig, ServiceConfig
+from shared.models.base import ConversationContext, Message
+from shared.utils.exceptions import ErrorCategory, MorganException, ServiceException
 from shared.utils.http_client import MorganHTTPClient, ServiceRegistry
-from shared.utils.exceptions import MorganException, ErrorCategory, ServiceException
 
 
 class TestServiceConfig:
@@ -31,11 +32,13 @@ class TestServiceConfig:
     def test_base_config_loads_yaml(self, tmp_path):
         """Test that BaseConfig can load YAML files."""
         config_file = tmp_path / "test_config.yaml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 host: "0.0.0.0"
 port: 8000
 log_level: "INFO"
-        """)
+        """
+        )
 
         config = BaseConfig(str(config_file))
         assert config.get("host") == "0.0.0.0"
@@ -86,7 +89,7 @@ class TestDataModels:
             role="user",
             content="Hello",
             timestamp="2025-01-01T00:00:00Z",
-            metadata={"source": "test"}
+            metadata={"source": "test"},
         )
 
         assert msg.role == "user"
@@ -100,7 +103,7 @@ class TestDataModels:
             role="assistant",
             content="Hi there",
             timestamp="2025-01-01T00:00:00Z",
-            metadata={}
+            metadata={},
         )
 
         msg_dict = msg.to_dict()
@@ -111,10 +114,7 @@ class TestDataModels:
     def test_message_to_json(self):
         """Test Message serialization to JSON."""
         msg = Message(
-            role="user",
-            content="Test",
-            timestamp="2025-01-01T00:00:00Z",
-            metadata={}
+            role="user", content="Test", timestamp="2025-01-01T00:00:00Z", metadata={}
         )
 
         json_str = msg.to_json()
@@ -133,7 +133,7 @@ class TestDataModels:
             messages=[msg1, msg2],
             created_at="2025-01-01T00:00:00Z",
             updated_at="2025-01-01T00:00:01Z",
-            metadata={}
+            metadata={},
         )
 
         assert ctx.conversation_id == "conv_123"
@@ -153,7 +153,7 @@ class TestHTTPClient:
             service_name="test-service",
             base_url="http://test-service:8001",
             timeout=30.0,
-            max_retries=3
+            max_retries=3,
         )
 
         assert client.service_name == "test-service"
@@ -163,9 +163,11 @@ class TestHTTPClient:
     @pytest.mark.asyncio
     async def test_http_client_get_request(self):
         """Test HTTP GET request."""
-        client = MorganHTTPClient(service_name="test-service", base_url="http://test-service:8001")
+        client = MorganHTTPClient(
+            service_name="test-service", base_url="http://test-service:8001"
+        )
 
-        with patch('shared.utils.http_client.httpx.AsyncClient') as mock_client_class:
+        with patch("shared.utils.http_client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_response = AsyncMock()
             mock_response.status_code = 200
@@ -181,9 +183,11 @@ class TestHTTPClient:
     @pytest.mark.asyncio
     async def test_http_client_post_request(self):
         """Test HTTP POST request."""
-        client = MorganHTTPClient(service_name="test-service", base_url="http://test-service:8001")
+        client = MorganHTTPClient(
+            service_name="test-service", base_url="http://test-service:8001"
+        )
 
-        with patch('shared.utils.http_client.httpx.AsyncClient') as mock_client_class:
+        with patch("shared.utils.http_client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_response = AsyncMock()
             mock_response.status_code = 200
@@ -199,9 +203,13 @@ class TestHTTPClient:
     @pytest.mark.asyncio
     async def test_http_client_retry_on_failure(self):
         """Test that HTTP client retries on failure."""
-        client = MorganHTTPClient(service_name="test-service", base_url="http://test-service:8001", max_retries=3)
+        client = MorganHTTPClient(
+            service_name="test-service",
+            base_url="http://test-service:8001",
+            max_retries=3,
+        )
 
-        with patch('shared.utils.http_client.httpx.AsyncClient') as mock_client_class:
+        with patch("shared.utils.http_client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
 
             # First two calls fail, third succeeds
@@ -216,7 +224,7 @@ class TestHTTPClient:
             mock_client.get.side_effect = [
                 Exception("Connection failed"),
                 Exception("Connection failed"),
-                mock_response_success
+                mock_response_success,
             ]
 
             mock_client_class.return_value.__aenter__.return_value = mock_client
@@ -229,9 +237,11 @@ class TestHTTPClient:
     @pytest.mark.asyncio
     async def test_http_client_health_check(self):
         """Test HTTP client health check."""
-        client = MorganHTTPClient(service_name="test-service", base_url="http://test-service:8001")
+        client = MorganHTTPClient(
+            service_name="test-service", base_url="http://test-service:8001"
+        )
 
-        with patch('shared.utils.http_client.httpx.AsyncClient') as mock_client_class:
+        with patch("shared.utils.http_client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_response = AsyncMock()
             mock_response.status_code = 200
@@ -251,9 +261,7 @@ class TestServiceRegistry:
         registry = ServiceRegistry()
 
         client = registry.register_service(
-            "llm",
-            "http://llm-service:8001",
-            timeout=30.0
+            "llm", "http://llm-service:8001", timeout=30.0
         )
 
         assert isinstance(client, MorganHTTPClient)
@@ -282,7 +290,9 @@ class TestServiceRegistry:
         """Test checking health of all services."""
         registry = ServiceRegistry()
 
-        with patch.object(MorganHTTPClient, 'health_check', new_callable=AsyncMock) as mock_health:
+        with patch.object(
+            MorganHTTPClient, "health_check", new_callable=AsyncMock
+        ) as mock_health:
             mock_health.return_value = True
 
             registry.register_service("llm", "http://llm-service:8001")
@@ -302,7 +312,7 @@ class TestCustomErrors:
             message="Service unavailable",
             service_name="test-service",
             category=ErrorCategory.SERVICE_UNAVAILABLE,
-            context={"status_code": 503}
+            context={"status_code": 503},
         )
 
         assert error.message == "Service unavailable"
@@ -316,12 +326,12 @@ class TestCustomErrors:
             message="Test error",
             service_name="test-service",
             category=ErrorCategory.VALIDATION_ERROR,
-            context={"status_code": 400}
+            context={"status_code": 400},
         )
 
         error_str = str(error)
         assert "Test error" in error_str
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

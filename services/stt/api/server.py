@@ -1,25 +1,38 @@
 """
 FastAPI server for STT service with real-time streaming support
 """
-import logging
-from typing import Dict, Any, Optional
-import json
+
 import base64
+import json
+import logging
+from typing import Any, Dict, Optional
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, Field
 import uvicorn
+from fastapi import (
+    FastAPI,
+    File,
+    HTTPException,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from pydantic import BaseModel, Field
 
 from shared.models.base import STTRequest, STTResponse
 from shared.utils.logging import setup_logging
-from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware, RateLimitMiddleware
+from shared.utils.middleware import (
+    RateLimitMiddleware,
+    RequestIDMiddleware,
+    TimingMiddleware,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class TranscribeRequest(BaseModel):
     """Transcription request"""
+
     audio_data: str = Field(..., description="Base64 encoded audio data")
     language: Optional[str] = Field("auto", description="Language code or 'auto'")
     temperature: Optional[float] = Field(0.0, description="Sampling temperature")
@@ -28,12 +41,14 @@ class TranscribeRequest(BaseModel):
 
 class StreamStartRequest(BaseModel):
     """Streaming session start request"""
+
     language: str = Field("auto", description="Language for transcription")
     session_id: Optional[str] = Field(None, description="Custom session ID")
 
 
 class StreamChunkRequest(BaseModel):
     """Streaming audio chunk request"""
+
     audio_data: str = Field(..., description="Base64 encoded audio chunk")
 
 
@@ -52,7 +67,7 @@ class STTAPIServer:
         app = FastAPI(
             title="Morgan STT Service",
             description="Speech-to-Text service with Faster Whisper and built-in VAD",
-            version="0.2.0"
+            version="0.2.0",
         )
 
         # Add middleware
@@ -62,7 +77,7 @@ class STTAPIServer:
             RateLimitMiddleware,
             requests_per_second=15.0,  # STT is resource-intensive
             burst_size=30,
-            exempt_paths=["/health", "/docs", "/redoc", "/openapi.json"]
+            exempt_paths=["/health", "/docs", "/redoc", "/openapi.json"],
         )
 
         @app.get("/health")
@@ -86,7 +101,7 @@ class STTAPIServer:
                     audio_data=audio_bytes,
                     language=request.language,
                     temperature=request.temperature,
-                    prompt=request.prompt
+                    prompt=request.prompt,
                 )
 
                 response = await self.stt_service.transcribe(stt_request)
@@ -94,7 +109,9 @@ class STTAPIServer:
 
             except Exception as e:
                 self.logger.error(f"Transcription error: {e}")
-                raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Transcription failed: {e}"
+                )
 
         @app.post("/transcribe/file")
         async def transcribe_file(file: UploadFile = File(...)):
@@ -104,25 +121,24 @@ class STTAPIServer:
                 audio_bytes = await file.read()
 
                 # Create STT request
-                stt_request = STTRequest(
-                    audio_data=audio_bytes,
-                    language="auto"
-                )
+                stt_request = STTRequest(audio_data=audio_bytes, language="auto")
 
                 response = await self.stt_service.transcribe(stt_request)
-                
+
                 return {
                     "text": response.text,
                     "language": response.language,
                     "confidence": response.confidence,
                     "duration": response.duration,
                     "segments": response.segments,
-                    "metadata": response.metadata
+                    "metadata": response.metadata,
                 }
 
             except Exception as e:
                 self.logger.error(f"File transcription error: {e}")
-                raise HTTPException(status_code=500, detail=f"File transcription failed: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"File transcription failed: {e}"
+                )
 
         @app.post("/transcribe/realtime")
         async def transcribe_realtime(request: TranscribeRequest):
@@ -133,15 +149,16 @@ class STTAPIServer:
 
                 # Process with real-time VAD
                 result = await self.stt_service.process_realtime_audio(
-                    audio_bytes,
-                    request.language
+                    audio_bytes, request.language
                 )
 
                 return result
 
             except Exception as e:
                 self.logger.error(f"Real-time transcription error: {e}")
-                raise HTTPException(status_code=500, detail=f"Real-time transcription failed: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Real-time transcription failed: {e}"
+                )
 
         @app.post("/transcribe/realtime-chunk")
         async def transcribe_realtime_chunk(request: TranscribeRequest):
@@ -152,33 +169,34 @@ class STTAPIServer:
 
                 # Process with real-time chunk processing
                 result = await self.stt_service.process_realtime_chunk(
-                    audio_bytes,
-                    session_id="realtime",
-                    language=request.language
+                    audio_bytes, session_id="realtime", language=request.language
                 )
 
                 return result
 
             except Exception as e:
                 self.logger.error(f"Real-time chunk transcription error: {e}")
-                raise HTTPException(status_code=500, detail=f"Real-time chunk transcription failed: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Real-time chunk transcription failed: {e}"
+                )
 
         @app.post("/stream/start")
         async def start_streaming(request: StreamStartRequest):
             """Start a new streaming session"""
             try:
                 session_id = request.session_id or str(uuid4())
-                
+
                 result = await self.stt_service.start_audio_stream(
-                    session_id,
-                    request.language
+                    session_id, request.language
                 )
 
                 return result
 
             except Exception as e:
                 self.logger.error(f"Stream start error: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to start stream: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to start stream: {e}"
+                )
 
         @app.post("/stream/{session_id}/chunk")
         async def add_stream_chunk(session_id: str, request: StreamChunkRequest):
@@ -192,32 +210,38 @@ class STTAPIServer:
 
             except Exception as e:
                 self.logger.error(f"Stream chunk error: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to process chunk: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to process chunk: {e}"
+                )
 
         @app.post("/stream/{session_id}/end")
         async def end_streaming(session_id: str):
             """End streaming session and get final transcription"""
             try:
                 result = await self.stt_service.end_audio_stream(session_id)
-                
+
                 return {
                     "text": result.text,
                     "language": result.language,
                     "confidence": result.confidence,
                     "duration": result.duration,
                     "segments": result.segments,
-                    "metadata": result.metadata
+                    "metadata": result.metadata,
                 }
 
             except Exception as e:
                 self.logger.error(f"Stream end error: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to end stream: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to end stream: {e}"
+                )
 
         @app.websocket("/ws/stream/{session_id}")
         async def websocket_stream(websocket: WebSocket, session_id: str):
             """WebSocket endpoint for real-time audio streaming"""
             await websocket.accept()
-            self.logger.info(f"WebSocket connection established for session: {session_id}")
+            self.logger.info(
+                f"WebSocket connection established for session: {session_id}"
+            )
 
             try:
                 # Initialize streaming session
@@ -232,75 +256,96 @@ class STTAPIServer:
                         message = json.loads(data)
                         if not isinstance(message, dict):
                             logger.error("Invalid message format: expected JSON object")
-                            await websocket.send_text(json.dumps({
-                                "type": "error",
-                                "error": "Invalid message format: expected JSON object"
-                            }))
+                            await websocket.send_text(
+                                json.dumps(
+                                    {
+                                        "type": "error",
+                                        "error": "Invalid message format: expected JSON object",
+                                    }
+                                )
+                            )
                             continue
                     except json.JSONDecodeError as e:
                         logger.error(f"Invalid JSON from WebSocket: {e}")
-                        await websocket.send_text(json.dumps({
-                            "type": "error",
-                            "error": f"Invalid JSON: {str(e)}"
-                        }))
+                        await websocket.send_text(
+                            json.dumps(
+                                {"type": "error", "error": f"Invalid JSON: {str(e)}"}
+                            )
+                        )
                         continue
                     except Exception as e:
                         logger.error(f"Failed to parse WebSocket message: {e}")
-                        await websocket.send_text(json.dumps({
-                            "type": "error",
-                            "error": f"Failed to parse message: {str(e)}"
-                        }))
+                        await websocket.send_text(
+                            json.dumps(
+                                {
+                                    "type": "error",
+                                    "error": f"Failed to parse message: {str(e)}",
+                                }
+                            )
+                        )
                         continue
 
                     if message.get("type") == "audio":
                         # Decode and process audio chunk
                         audio_data = base64.b64decode(message["audio_data"])
-                        
+
                         # Add chunk to session
-                        result = await self.stt_service.add_audio_chunk(session_id, audio_data)
+                        result = await self.stt_service.add_audio_chunk(
+                            session_id, audio_data
+                        )
 
                         # Send transcription result if available
                         if result.get("transcription"):
-                            await websocket.send_text(json.dumps({
-                                "type": "transcription",
-                                "text": result["transcription"],
-                                "confidence": result["confidence"],
-                                "is_final": result["is_final"]
-                            }))
+                            await websocket.send_text(
+                                json.dumps(
+                                    {
+                                        "type": "transcription",
+                                        "text": result["transcription"],
+                                        "confidence": result["confidence"],
+                                        "is_final": result["is_final"],
+                                    }
+                                )
+                            )
                         else:
                             # Send status update
-                            await websocket.send_text(json.dumps({
-                                "type": "status",
-                                "message": "buffering"
-                            }))
+                            await websocket.send_text(
+                                json.dumps({"type": "status", "message": "buffering"})
+                            )
 
                     elif message.get("type") == "end":
                         # End streaming session
-                        final_result = await self.stt_service.end_audio_stream(session_id)
-                        
-                        await websocket.send_text(json.dumps({
-                            "type": "final",
-                            "text": final_result.text,
-                            "language": final_result.language,
-                            "confidence": final_result.confidence
-                        }))
+                        final_result = await self.stt_service.end_audio_stream(
+                            session_id
+                        )
+
+                        await websocket.send_text(
+                            json.dumps(
+                                {
+                                    "type": "final",
+                                    "text": final_result.text,
+                                    "language": final_result.language,
+                                    "confidence": final_result.confidence,
+                                }
+                            )
+                        )
                         break
 
             except WebSocketDisconnect:
                 self.logger.info(f"WebSocket disconnected: {session_id}")
             except Exception as e:
                 self.logger.error(f"WebSocket error: {e}")
-                await websocket.send_text(json.dumps({
-                    "type": "error",
-                    "message": str(e)
-                }))
+                await websocket.send_text(
+                    json.dumps({"type": "error", "message": str(e)})
+                )
             finally:
                 # Clean up session
                 try:
                     await self.stt_service.end_audio_stream(session_id)
                 except Exception as cleanup_error:
                     # Log but don't fail on cleanup errors
-                    logger.debug(f"Failed to cleanup session {session_id}: {cleanup_error}")
+                    logger.debug(
+                        f"Failed to cleanup session {session_id}: {cleanup_error}"
+                    )
 
         @app.get("/sessions")
         async def list_sessions():
@@ -310,7 +355,9 @@ class STTAPIServer:
                 return sessions
             except Exception as e:
                 self.logger.error(f"List sessions error: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to list sessions: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to list sessions: {e}"
+                )
 
         @app.get("/models")
         async def list_models():
@@ -320,7 +367,9 @@ class STTAPIServer:
                 return {"models": models, "total": len(models)}
             except Exception as e:
                 self.logger.error(f"List models error: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to list models: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to list models: {e}"
+                )
 
         @app.get("/")
         async def root():
@@ -330,7 +379,7 @@ class STTAPIServer:
                 "version": "0.2.0",
                 "status": "running",
                 "docs": "/docs",
-                "health": "/health"
+                "health": "/health",
             }
 
         self.app = app
@@ -340,12 +389,9 @@ class STTAPIServer:
         """Start the API server"""
         self.create_app()
         self.logger.info(f"Starting STT API server on {self.host}:{self.port}")
-        
+
         config = uvicorn.Config(
-            self.app,
-            host=self.host,
-            port=self.port,
-            log_level="info"
+            self.app, host=self.host, port=self.port, log_level="info"
         )
         server = uvicorn.Server(config)
         await server.serve()

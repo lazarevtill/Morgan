@@ -11,33 +11,41 @@ Features:
 - Caching support
 - Comprehensive error handling
 """
+
 import asyncio
 import hashlib
 import logging
 import os
-from typing import List, Optional, Dict, Any, Union
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel
 import numpy as np
+from pydantic import BaseModel
 
 from shared.config.base import ServiceConfig
-from shared.utils.logging import setup_logging, Timer
-from shared.utils.exceptions import MorganException, ErrorCategory, ModelException, ModelLoadError, ModelInferenceError
 from shared.infrastructure import (
-    EnhancedHTTPClient,
+    CircuitBreakerConfig,
     ConnectionPoolConfig,
+    EnhancedHTTPClient,
+    RateLimitConfig,
     RetryConfig,
     TimeoutConfig,
-    CircuitBreakerConfig,
-    RateLimitConfig,
 )
+from shared.utils.exceptions import (
+    ErrorCategory,
+    ModelException,
+    ModelInferenceError,
+    ModelLoadError,
+    MorganException,
+)
+from shared.utils.logging import Timer, setup_logging
 
 logger = logging.getLogger(__name__)
 
 
 class EmbeddingConfig(BaseModel):
     """Embedding service configuration"""
+
     # Service settings
     host: str = "0.0.0.0"
     port: int = 8003
@@ -81,6 +89,7 @@ class EmbeddingConfig(BaseModel):
 @dataclass
 class EmbeddingResult:
     """Result of embedding operation"""
+
     embedding: List[float]
     model: str
     dimension: int
@@ -143,7 +152,7 @@ class EmbeddingCache:
             "max_size": self.max_size,
             "hits": self.hits,
             "misses": self.misses,
-            "hit_rate": hit_rate
+            "hit_rate": hit_rate,
         }
 
     def clear(self):
@@ -174,7 +183,7 @@ class ProductionEmbeddingService:
         self.logger = setup_logging(
             "production_embedding_service",
             self.config.get("log_level", "INFO"),
-            "logs/production_embedding_service.log"
+            "logs/production_embedding_service.log",
         )
 
         # Load configuration
@@ -187,9 +196,7 @@ class ProductionEmbeddingService:
         # Cache
         self.cache: Optional[EmbeddingCache] = None
         if self.embedding_config.enable_caching:
-            self.cache = EmbeddingCache(
-                max_size=self.embedding_config.cache_size
-            )
+            self.cache = EmbeddingCache(max_size=self.embedding_config.cache_size)
 
         # Metrics
         self.embedding_count = 0
@@ -232,31 +239,26 @@ class ProductionEmbeddingService:
             pool_config = ConnectionPoolConfig(
                 max_connections=self.embedding_config.max_connections,
                 max_keepalive_connections=self.embedding_config.max_keepalive_connections,
-                keepalive_expiry=self.embedding_config.keepalive_expiry
+                keepalive_expiry=self.embedding_config.keepalive_expiry,
             )
 
-            timeout_config = TimeoutConfig(
-                connect=5.0,
-                read=30.0,
-                write=10.0,
-                pool=5.0
-            )
+            timeout_config = TimeoutConfig(connect=5.0, read=30.0, write=10.0, pool=5.0)
 
             circuit_breaker_config = CircuitBreakerConfig(
                 failure_threshold=self.embedding_config.circuit_breaker_failure_threshold,
-                timeout=self.embedding_config.circuit_breaker_timeout
+                timeout=self.embedding_config.circuit_breaker_timeout,
             )
 
             rate_limit_config = RateLimitConfig(
                 requests_per_second=self.embedding_config.rate_limit_rps,
-                burst_size=self.embedding_config.rate_limit_burst
+                burst_size=self.embedding_config.rate_limit_burst,
             )
 
             retry_config = RetryConfig(
                 max_retries=self.embedding_config.max_retries,
                 base_delay=self.embedding_config.base_retry_delay,
                 max_delay=self.embedding_config.max_retry_delay,
-                jitter=True
+                jitter=True,
             )
 
             self.http_client = EnhancedHTTPClient(
@@ -268,7 +270,7 @@ class ProductionEmbeddingService:
                 circuit_breaker_config=circuit_breaker_config,
                 rate_limit_config=rate_limit_config,
                 enable_health_monitoring=self.embedding_config.enable_health_monitoring,
-                health_check_interval=self.embedding_config.health_check_interval
+                health_check_interval=self.embedding_config.health_check_interval,
             )
 
             await self.http_client.start()
@@ -289,9 +291,7 @@ class ProductionEmbeddingService:
         self.logger.info("Production Embedding Service stopped")
 
     async def embed(
-        self,
-        text: Union[str, List[str]],
-        model: Optional[str] = None
+        self, text: Union[str, List[str]], model: Optional[str] = None
     ) -> Union[EmbeddingResult, List[EmbeddingResult]]:
         """
         Generate embeddings for text(s)
@@ -315,9 +315,7 @@ class ProductionEmbeddingService:
             return results
 
     async def _embed_single(
-        self,
-        text: str,
-        model: Optional[str] = None
+        self, text: str, model: Optional[str] = None
     ) -> EmbeddingResult:
         """Generate embedding for single text"""
         embedding_model = model or self.embedding_config.model
@@ -332,7 +330,7 @@ class ProductionEmbeddingService:
                     model=embedding_model,
                     dimension=len(cached_embedding),
                     text_length=len(text),
-                    cached=True
+                    cached=True,
                 )
 
         # Generate embedding
@@ -344,37 +342,32 @@ class ProductionEmbeddingService:
                         f"Text truncated from {len(text)} to "
                         f"{self.embedding_config.max_text_length} chars"
                     )
-                    text = text[:self.embedding_config.max_text_length]
+                    text = text[: self.embedding_config.max_text_length]
 
                 # Prepare request
-                payload = {
-                    'model': embedding_model,
-                    'input': [text]
-                }
+                payload = {"model": embedding_model, "input": [text]}
 
-                headers = {'Content-Type': 'application/json'}
+                headers = {"Content-Type": "application/json"}
                 if self.embedding_config.api_key:
-                    headers['Authorization'] = f'Bearer {self.embedding_config.api_key}'
+                    headers["Authorization"] = f"Bearer {self.embedding_config.api_key}"
 
                 # Make request
                 response = await self.http_client.post(
-                    '/api/embed',
-                    json=payload,
-                    headers=headers
+                    "/api/embed", json=payload, headers=headers
                 )
 
                 result = response.json()
 
                 # Extract embedding
-                if 'embeddings' in result and len(result['embeddings']) > 0:
-                    embedding = result['embeddings'][0]
-                elif 'embedding' in result:
-                    embedding = result['embedding']
+                if "embeddings" in result and len(result["embeddings"]) > 0:
+                    embedding = result["embeddings"][0]
+                elif "embedding" in result:
+                    embedding = result["embedding"]
                 else:
                     raise ModelError(
                         "Unexpected embedding response format",
                         ErrorCode.MODEL_INFERENCE_ERROR,
-                        {"response": result}
+                        {"response": result},
                     )
 
                 # Cache the result
@@ -390,20 +383,17 @@ class ProductionEmbeddingService:
                     dimension=len(embedding),
                     text_length=len(text),
                     cached=False,
-                    metadata={"service": "production_embedding"}
+                    metadata={"service": "production_embedding"},
                 )
 
             except Exception as e:
                 self.logger.error(f"Embedding generation failed: {e}")
                 raise ModelError(
-                    f"Embedding generation failed: {e}",
-                    ErrorCode.MODEL_INFERENCE_ERROR
+                    f"Embedding generation failed: {e}", ErrorCode.MODEL_INFERENCE_ERROR
                 )
 
     async def _embed_batch(
-        self,
-        texts: List[str],
-        model: Optional[str] = None
+        self, texts: List[str], model: Optional[str] = None
     ) -> List[EmbeddingResult]:
         """
         Generate embeddings for batch of texts
@@ -423,13 +413,10 @@ class ProductionEmbeddingService:
             all_results = []
 
             for i in range(0, len(texts), batch_size):
-                batch = texts[i:i + batch_size]
+                batch = texts[i : i + batch_size]
 
                 # Process batch concurrently
-                tasks = [
-                    self._embed_single(text, embedding_model)
-                    for text in batch
-                ]
+                tasks = [self._embed_single(text, embedding_model) for text in batch]
 
                 batch_results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -440,11 +427,12 @@ class ProductionEmbeddingService:
                         # Create error result
                         all_results.append(
                             EmbeddingResult(
-                                embedding=[0.0] * self.embedding_config.embedding_dimension,
+                                embedding=[0.0]
+                                * self.embedding_config.embedding_dimension,
                                 model=embedding_model,
                                 dimension=self.embedding_config.embedding_dimension,
                                 text_length=0,
-                                metadata={"error": str(result)}
+                                metadata={"error": str(result)},
                             )
                         )
                     else:
@@ -455,10 +443,7 @@ class ProductionEmbeddingService:
             return all_results
 
     async def compute_similarity(
-        self,
-        text1: str,
-        text2: str,
-        model: Optional[str] = None
+        self, text1: str, text2: str, model: Optional[str] = None
     ) -> float:
         """
         Compute cosine similarity between two texts
@@ -478,9 +463,7 @@ class ProductionEmbeddingService:
         emb1 = np.array(results[0].embedding)
         emb2 = np.array(results[1].embedding)
 
-        similarity = np.dot(emb1, emb2) / (
-            np.linalg.norm(emb1) * np.linalg.norm(emb2)
-        )
+        similarity = np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
 
         return float(similarity)
 
@@ -491,7 +474,7 @@ class ProductionEmbeddingService:
                 "service": "production_embedding",
                 "model": self.embedding_config.model,
                 "api_base": self.embedding_config.api_base,
-                "metrics": self.get_metrics()
+                "metrics": self.get_metrics(),
             }
 
             # Test connectivity by generating a test embedding
@@ -499,13 +482,15 @@ class ProductionEmbeddingService:
 
             client_status = self.http_client.get_status()
 
-            health_status.update({
-                "status": "healthy",
-                "test_embedding_dimension": test_result.dimension,
-                "http_client": client_status,
-                "circuit_breaker": client_status.get("circuit_breaker"),
-                "rate_limiter": client_status.get("rate_limiter")
-            })
+            health_status.update(
+                {
+                    "status": "healthy",
+                    "test_embedding_dimension": test_result.dimension,
+                    "http_client": client_status,
+                    "circuit_breaker": client_status.get("circuit_breaker"),
+                    "rate_limiter": client_status.get("rate_limiter"),
+                }
+            )
 
             return health_status
 
@@ -515,7 +500,7 @@ class ProductionEmbeddingService:
                 "service": "production_embedding",
                 "status": "unhealthy",
                 "error": str(e),
-                "api_base": self.embedding_config.api_base
+                "api_base": self.embedding_config.api_base,
             }
 
     def get_metrics(self) -> Dict[str, Any]:
@@ -525,8 +510,9 @@ class ProductionEmbeddingService:
             "batch_count": self.batch_count,
             "avg_processing_time": (
                 self.total_processing_time / self.embedding_count
-                if self.embedding_count > 0 else 0.0
-            )
+                if self.embedding_count > 0
+                else 0.0
+            ),
         }
 
         if self.cache:

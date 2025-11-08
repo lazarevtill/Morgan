@@ -1,16 +1,18 @@
 """
 Middleware utilities for FastAPI services
 """
-import uuid
-import time
+
 import logging
+import time
+import uuid
 from typing import Callable, Optional
+
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from shared.infrastructure.rate_limiter import TokenBucketRateLimiter, RateLimitConfig
+from shared.infrastructure.rate_limiter import RateLimitConfig, TokenBucketRateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +68,10 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
                     "error": {
                         "message": "Internal server error",
                         "detail": str(exc),
-                        "request_id": request_id
+                        "request_id": request_id,
                     }
                 },
-                headers={"X-Request-ID": request_id}
+                headers={"X-Request-ID": request_id},
             )
 
 
@@ -85,16 +87,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         app: ASGIApp,
         requests_per_second: float = 10.0,
         burst_size: Optional[int] = None,
-        exempt_paths: Optional[list[str]] = None
+        exempt_paths: Optional[list[str]] = None,
     ):
         super().__init__(app)
         self.config = RateLimitConfig(
-            requests_per_second=requests_per_second,
-            burst_size=burst_size
+            requests_per_second=requests_per_second, burst_size=burst_size
         )
         # Store rate limiters per IP address
         self.limiters: dict[str, TokenBucketRateLimiter] = {}
-        self.exempt_paths = exempt_paths or ["/health", "/docs", "/redoc", "/openapi.json"]
+        self.exempt_paths = exempt_paths or [
+            "/health",
+            "/docs",
+            "/redoc",
+            "/openapi.json",
+        ]
         logger.info(
             f"Rate limit middleware initialized: {requests_per_second} req/s, "
             f"burst={burst_size or int(requests_per_second)}"
@@ -139,8 +145,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
             # Add rate limit info to response headers
             state = limiter.get_state()
-            response.headers["X-RateLimit-Limit"] = str(int(self.config.requests_per_second))
-            response.headers["X-RateLimit-Remaining"] = str(int(state["available_tokens"]))
+            response.headers["X-RateLimit-Limit"] = str(
+                int(self.config.requests_per_second)
+            )
+            response.headers["X-RateLimit-Remaining"] = str(
+                int(state["available_tokens"])
+            )
 
             return response
 

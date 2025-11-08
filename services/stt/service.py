@@ -1,29 +1,36 @@
 """
 STT Service implementation with Silero VAD integration
 """
-import asyncio
-import logging
-from typing import Dict, Any, List, Optional, Tuple
-import io
-import wave
-import numpy as np
-import time
 
+import asyncio
+import io
+import logging
+import time
+import wave
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
 import torch
 import torchaudio
 from pydantic import BaseModel
 
 from shared.config.base import ServiceConfig
-from shared.models.base import STTRequest, STTResponse, ProcessingResult, AudioChunk
-from shared.utils.logging import setup_logging, Timer
-from shared.utils.exceptions import MorganException, ErrorCategory, AudioException, AudioProcessingError
+from shared.models.base import AudioChunk, ProcessingResult, STTRequest, STTResponse
 from shared.utils.audio import AudioUtils
+from shared.utils.exceptions import (
+    AudioException,
+    AudioProcessingError,
+    ErrorCategory,
+    MorganException,
+)
+from shared.utils.logging import Timer, setup_logging
 
 logger = logging.getLogger(__name__)
 
 
 class STTConfig(BaseModel):
     """STT service configuration"""
+
     host: str = "0.0.0.0"
     port: int = 8003
     model: str = "distil-large-v3.5 "
@@ -48,9 +55,7 @@ class STTService:
     def __init__(self, config: Optional[ServiceConfig] = None):
         self.config = config or ServiceConfig("stt")
         self.logger = setup_logging(
-            "stt_service",
-            self.config.get("log_level", "INFO"),
-            "logs/stt_service.log"
+            "stt_service", self.config.get("log_level", "INFO"), "logs/stt_service.log"
         )
 
         # Load configuration
@@ -131,16 +136,19 @@ class STTService:
                 cpu_threads=4 if self.device.type == "cpu" else 1,
                 num_workers=1,
                 download_root="data/models/whisper",
-                local_files_only=False  # Allow downloading if not present
+                local_files_only=False,  # Allow downloading if not present
             )
 
-            self.logger.info(f"faster-whisper model loaded successfully on {self.device}")
+            self.logger.info(
+                f"faster-whisper model loaded successfully on {self.device}"
+            )
             self.logger.info(f"VAD enabled: {self.stt_config.vad_enabled}")
 
         except Exception as e:
             self.logger.error(f"Failed to load faster-whisper model: {e}")
-            raise AudioProcessingError(f"Whisper model loading failed: {e}", operation="model_loading")
-
+            raise AudioProcessingError(
+                f"Whisper model loading failed: {e}", operation="model_loading"
+            )
 
     def _setup_vad_filter(self):
         """Setup VAD filter availability check"""
@@ -155,12 +163,14 @@ class STTService:
 
     async def transcribe(self, request: STTRequest) -> STTResponse:
         """Transcribe audio to text"""
-        with Timer(self.logger, f"STT transcription for audio length {len(request.audio_data)} bytes"):
+        with Timer(
+            self.logger,
+            f"STT transcription for audio length {len(request.audio_data)} bytes",
+        ):
             try:
                 # Convert audio bytes to numpy array
                 audio_array = self.audio_utils.bytes_to_numpy(
-                    request.audio_data,
-                    sample_rate=self.stt_config.sample_rate
+                    request.audio_data, sample_rate=self.stt_config.sample_rate
                 )
 
                 # Apply VAD if enabled and available
@@ -172,7 +182,9 @@ class STTService:
 
             except Exception as e:
                 self.logger.error(f"Error transcribing audio: {e}")
-                raise AudioProcessingError(f"Transcription failed: {e}", operation="transcription")
+                raise AudioProcessingError(
+                    f"Transcription failed: {e}", operation="transcription"
+                )
 
     async def _apply_vad_filter(self, audio_array: np.ndarray) -> np.ndarray:
         """Apply VAD filter using faster-whisper's built-in functionality"""
@@ -183,7 +195,9 @@ class STTService:
             # The actual VAD filtering is handled by faster-whisper internally.
 
             if self.stt_config.vad_enabled and self.vad_available:
-                self.logger.debug("VAD will be applied during transcription by faster-whisper")
+                self.logger.debug(
+                    "VAD will be applied during transcription by faster-whisper"
+                )
                 # Return original audio - VAD filtering happens in transcribe()
                 return audio_array
             else:
@@ -200,17 +214,21 @@ class STTService:
         try:
             # Calculate frame energy
             frame_length = int(self.stt_config.sample_rate * 0.025)  # 25ms frames
-            hop_length = int(self.stt_config.sample_rate * 0.010)   # 10ms hop
+            hop_length = int(self.stt_config.sample_rate * 0.010)  # 10ms hop
 
-            energy_threshold = self.stt_config.vad_threshold * np.max(np.abs(audio_array))
+            energy_threshold = self.stt_config.vad_threshold * np.max(
+                np.abs(audio_array)
+            )
 
             speech_frames = []
             for i in range(0, len(audio_array) - frame_length, hop_length):
-                frame = audio_array[i:i + frame_length]
-                energy = np.sqrt(np.mean(frame ** 2))
+                frame = audio_array[i : i + frame_length]
+                energy = np.sqrt(np.mean(frame**2))
 
                 if energy > energy_threshold:
-                    speech_frames.extend(range(i, min(i + frame_length, len(audio_array))))
+                    speech_frames.extend(
+                        range(i, min(i + frame_length, len(audio_array)))
+                    )
 
             if speech_frames:
                 # Get unique indices and create continuous speech segment
@@ -223,7 +241,9 @@ class STTService:
                 start_idx = max(0, start_idx - padding)
                 end_idx = min(len(audio_array), end_idx + padding)
 
-                self.logger.debug(f"Energy VAD detected speech from {start_idx} to {end_idx}")
+                self.logger.debug(
+                    f"Energy VAD detected speech from {start_idx} to {end_idx}"
+                )
                 return audio_array[start_idx:end_idx]
             else:
                 self.logger.debug("Energy VAD: No speech detected")
@@ -233,7 +253,9 @@ class STTService:
             self.logger.error(f"Simple energy VAD failed: {e}")
             return audio_array
 
-    async def _transcribe_with_whisper(self, audio_array: np.ndarray, request: STTRequest) -> STTResponse:
+    async def _transcribe_with_whisper(
+        self, audio_array: np.ndarray, request: STTRequest
+    ) -> STTResponse:
         """Transcribe audio using Whisper"""
         try:
             # Determine language (None means auto-detect)
@@ -247,30 +269,37 @@ class STTService:
                 "temperature": request.temperature or 0.0,
                 "initial_prompt": request.prompt,
                 "suppress_tokens": [-1],  # Suppress timestamps
-                "without_timestamps": True
+                "without_timestamps": True,
             }
 
-            if self.whisper_model.__class__.__module__.startswith('faster_whisper'):
+            if self.whisper_model.__class__.__module__.startswith("faster_whisper"):
                 # Faster Whisper API with VAD integration
                 trans_options_with_vad = trans_options.copy()
 
                 # Add VAD parameters for real-time processing
                 if self.stt_config.vad_enabled:
-                    trans_options_with_vad.update({
-                        "vad_filter": True,
-                        "vad_parameters": {
-                            "threshold": self.stt_config.vad_threshold,
-                            "min_speech_duration_ms": int(self.stt_config.vad_min_speech_duration * 1000),
-                            "max_speech_duration_s": self.stt_config.vad_max_speech_duration,
-                            "min_silence_duration_ms": int(self.stt_config.vad_min_silence_duration * 1000),
-                            "speech_pad_ms": self.stt_config.vad_speech_pad_ms
+                    trans_options_with_vad.update(
+                        {
+                            "vad_filter": True,
+                            "vad_parameters": {
+                                "threshold": self.stt_config.vad_threshold,
+                                "min_speech_duration_ms": int(
+                                    self.stt_config.vad_min_speech_duration * 1000
+                                ),
+                                "max_speech_duration_s": self.stt_config.vad_max_speech_duration,
+                                "min_silence_duration_ms": int(
+                                    self.stt_config.vad_min_silence_duration * 1000
+                                ),
+                                "speech_pad_ms": self.stt_config.vad_speech_pad_ms,
+                            },
                         }
-                    })
-                    self.logger.debug(f"Using VAD parameters: {trans_options_with_vad['vad_parameters']}")
+                    )
+                    self.logger.debug(
+                        f"Using VAD parameters: {trans_options_with_vad['vad_parameters']}"
+                    )
 
                 segments, info = self.whisper_model.transcribe(
-                    audio_array,
-                    **trans_options_with_vad
+                    audio_array, **trans_options_with_vad
                 )
 
                 # Convert segments generator to list
@@ -280,17 +309,25 @@ class STTService:
                 text = " ".join([segment.text.strip() for segment in segments_list])
 
                 # Get detected language from info
-                detected_language = info.language if hasattr(info, 'language') else (language or "en")
+                detected_language = (
+                    info.language if hasattr(info, "language") else (language or "en")
+                )
 
                 # Calculate confidence (convert negative log probabilities to 0-1 range)
                 if segments_list:
                     # Convert avg_logprob (negative) to confidence (0-1)
                     # Using sigmoid-like transformation: confidence = 1 / (1 + exp(-avg_logprob))
                     # Clamp to ensure valid range [0, 1]
-                    avg_logprob = sum(segment.avg_logprob for segment in segments_list) / len(segments_list)
+                    avg_logprob = sum(
+                        segment.avg_logprob for segment in segments_list
+                    ) / len(segments_list)
                     try:
-                        confidence = 1.0 / (1.0 + np.exp(-avg_logprob))  # Sigmoid transformation
-                        confidence = max(0.0, min(1.0, float(confidence)))  # Clamp to [0, 1]
+                        confidence = 1.0 / (
+                            1.0 + np.exp(-avg_logprob)
+                        )  # Sigmoid transformation
+                        confidence = max(
+                            0.0, min(1.0, float(confidence))
+                        )  # Clamp to [0, 1]
                     except (OverflowError, ValueError):
                         # Handle extreme values
                         confidence = 0.5 if avg_logprob > -2.0 else 0.1
@@ -298,12 +335,18 @@ class STTService:
                     confidence = 0.0
 
                 # Extract detailed segments
-                detailed_segments = [{
-                    "text": segment.text.strip(),
-                    "start": segment.start,
-                    "end": segment.end,
-                    "confidence": max(0.0, min(1.0, float(1.0 / (1.0 + np.exp(-segment.avg_logprob)))))  # Clamp to [0, 1]
-                } for segment in segments_list]
+                detailed_segments = [
+                    {
+                        "text": segment.text.strip(),
+                        "start": segment.start,
+                        "end": segment.end,
+                        "confidence": max(
+                            0.0,
+                            min(1.0, float(1.0 / (1.0 + np.exp(-segment.avg_logprob)))),
+                        ),  # Clamp to [0, 1]
+                    }
+                    for segment in segments_list
+                ]
 
             else:
                 # OpenAI Whisper API
@@ -326,9 +369,13 @@ class STTService:
                 metadata={
                     "model": self.stt_config.model,
                     "vad_enabled": self.vad_available,
-                    "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based",
-                    "device": str(self.device)
-                }
+                    "vad_type": (
+                        "faster_whisper_builtin"
+                        if self.vad_available
+                        else "energy_based"
+                    ),
+                    "device": str(self.device),
+                },
             )
 
         except Exception as e:
@@ -344,8 +391,7 @@ class STTService:
 
             for chunk in audio_chunks:
                 audio_array = self.audio_utils.bytes_to_numpy(
-                    chunk.data,
-                    sample_rate=chunk.sample_rate
+                    chunk.data, sample_rate=chunk.sample_rate
                 )
                 combined_audio.append(audio_array)
                 total_duration += len(audio_array) / chunk.sample_rate
@@ -355,7 +401,7 @@ class STTService:
                     text="",
                     confidence=0.0,
                     duration=0.0,
-                    metadata={"error": "No audio data"}
+                    metadata={"error": "No audio data"},
                 )
 
             # Concatenate audio
@@ -363,21 +409,29 @@ class STTService:
 
             # Create a simple STT request
             request = STTRequest(
-                audio_data=self.audio_utils.numpy_to_bytes(final_audio, self.stt_config.sample_rate),
-                language=self.stt_config.language
+                audio_data=self.audio_utils.numpy_to_bytes(
+                    final_audio, self.stt_config.sample_rate
+                ),
+                language=self.stt_config.language,
             )
 
             return await self.transcribe(request)
 
         except Exception as e:
             self.logger.error(f"Stream transcription failed: {e}")
-            raise AudioProcessingError(f"Stream transcription failed: {e}", operation="stream_transcription")
+            raise AudioProcessingError(
+                f"Stream transcription failed: {e}", operation="stream_transcription"
+            )
 
-    async def transcribe_chunk(self, audio_bytes: bytes, language: Optional[str] = None) -> STTResponse:
+    async def transcribe_chunk(
+        self, audio_bytes: bytes, language: Optional[str] = None
+    ) -> STTResponse:
         """Transcribe a single audio chunk (for streaming)"""
         try:
             # Convert audio bytes to numpy array
-            audio_array = self.audio_utils.bytes_to_numpy(audio_bytes, self.stt_config.sample_rate)
+            audio_array = self.audio_utils.bytes_to_numpy(
+                audio_bytes, self.stt_config.sample_rate
+            )
 
             # Apply real-time VAD if enabled
             if self.stt_config.vad_enabled and self.vad_available:
@@ -394,19 +448,25 @@ class STTService:
                         metadata={
                             "model": self.stt_config.model,
                             "vad_enabled": self.vad_available,
-                            "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based",
+                            "vad_type": (
+                                "faster_whisper_builtin"
+                                if self.vad_available
+                                else "energy_based"
+                            ),
                             "vad_result": "no_speech",
                             "device": str(self.device),
-                            "real_time": True
-                        }
+                            "real_time": True,
+                        },
                     )
 
                 audio_array = processed_audio
 
             # Create STT request
             request = STTRequest(
-                audio_data=self.audio_utils.numpy_to_bytes(audio_array, self.stt_config.sample_rate),
-                language=language or self.stt_config.language
+                audio_data=self.audio_utils.numpy_to_bytes(
+                    audio_array, self.stt_config.sample_rate
+                ),
+                language=language or self.stt_config.language,
             )
 
             # Transcribe with Whisper
@@ -414,10 +474,13 @@ class STTService:
 
         except Exception as e:
             self.logger.error(f"Chunk transcription failed: {e}")
-            raise AudioProcessingError(f"Chunk transcription failed: {e}", operation="chunk_transcription")
+            raise AudioProcessingError(
+                f"Chunk transcription failed: {e}", operation="chunk_transcription"
+            )
 
-    async def transcribe_streaming(self, audio_chunks: List[bytes],
-                                 language: Optional[str] = None) -> STTResponse:
+    async def transcribe_streaming(
+        self, audio_chunks: List[bytes], language: Optional[str] = None
+    ) -> STTResponse:
         """Transcribe streaming audio chunks in real-time"""
         try:
             # Combine all audio chunks
@@ -425,8 +488,7 @@ class STTService:
 
             for chunk in audio_chunks:
                 audio_array = self.audio_utils.bytes_to_numpy(
-                    chunk,
-                    sample_rate=self.stt_config.sample_rate
+                    chunk, sample_rate=self.stt_config.sample_rate
                 )
                 combined_audio.append(audio_array)
 
@@ -436,7 +498,7 @@ class STTService:
                     language=language or self.stt_config.language,
                     confidence=0.0,
                     duration=0.0,
-                    metadata={"error": "No audio data", "streaming": True}
+                    metadata={"error": "No audio data", "streaming": True},
                 )
 
             # Concatenate all chunks
@@ -444,17 +506,24 @@ class STTService:
 
             # Create request and transcribe
             request = STTRequest(
-                audio_data=self.audio_utils.numpy_to_bytes(final_audio, self.stt_config.sample_rate),
-                language=language or self.stt_config.language
+                audio_data=self.audio_utils.numpy_to_bytes(
+                    final_audio, self.stt_config.sample_rate
+                ),
+                language=language or self.stt_config.language,
             )
 
             return await self.transcribe(request)
 
         except Exception as e:
             self.logger.error(f"Streaming transcription failed: {e}")
-            raise AudioProcessingError(f"Streaming transcription failed: {e}", operation="streaming_transcription")
+            raise AudioProcessingError(
+                f"Streaming transcription failed: {e}",
+                operation="streaming_transcription",
+            )
 
-    async def start_audio_stream(self, session_id: str, language: str = "auto") -> Dict[str, Any]:
+    async def start_audio_stream(
+        self, session_id: str, language: str = "auto"
+    ) -> Dict[str, Any]:
         """Start a new audio streaming session"""
         try:
             # Initialize streaming session
@@ -462,7 +531,7 @@ class STTService:
                 "chunks": [],
                 "start_time": time.time(),
                 "language": language,
-                "is_active": True
+                "is_active": True,
             }
 
             self.logger.info(f"Started audio streaming session: {session_id}")
@@ -471,33 +540,45 @@ class STTService:
                 "status": "active",
                 "language": language,
                 "sample_rate": self.stt_config.sample_rate,
-                "chunk_size": self.stt_config.chunk_size
+                "chunk_size": self.stt_config.chunk_size,
             }
 
         except Exception as e:
             self.logger.error(f"Failed to start audio stream: {e}")
-            raise AudioProcessingError(f"Failed to start audio stream: {e}", operation="start_stream")
+            raise AudioProcessingError(
+                f"Failed to start audio stream: {e}", operation="start_stream"
+            )
 
-    async def add_audio_chunk(self, session_id: str, audio_bytes: bytes) -> Dict[str, Any]:
+    async def add_audio_chunk(
+        self, session_id: str, audio_bytes: bytes
+    ) -> Dict[str, Any]:
         """Add audio chunk to streaming session"""
         try:
             if session_id not in self.streaming_sessions:
-                raise AudioProcessingError(f"Session {session_id} not found", operation="add_chunk")
+                raise AudioProcessingError(
+                    f"Session {session_id} not found", operation="add_chunk"
+                )
 
             session = self.streaming_sessions[session_id]
             if not session["is_active"]:
-                raise AudioProcessingError(f"Session {session_id} is not active", operation="add_chunk")
+                raise AudioProcessingError(
+                    f"Session {session_id} is not active", operation="add_chunk"
+                )
 
             # Add chunk to session
             session["chunks"].append(audio_bytes)
 
             # Check if we have enough audio for transcription (at least 1 second)
-            total_samples = sum(len(self.audio_utils.bytes_to_numpy(chunk, self.stt_config.sample_rate))
-                               for chunk in session["chunks"])
+            total_samples = sum(
+                len(self.audio_utils.bytes_to_numpy(chunk, self.stt_config.sample_rate))
+                for chunk in session["chunks"]
+            )
 
             if total_samples >= self.stt_config.sample_rate:  # At least 1 second
                 # Transcribe current buffer
-                result = await self.transcribe_streaming(session["chunks"], session["language"])
+                result = await self.transcribe_streaming(
+                    session["chunks"], session["language"]
+                )
 
                 # Clear processed chunks (keep last 0.5 seconds for context)
                 if len(session["chunks"]) > 2:
@@ -509,7 +590,7 @@ class STTService:
                     "confidence": result.confidence,
                     "is_final": False,
                     "duration": result.duration,
-                    "metadata": result.metadata
+                    "metadata": result.metadata,
                 }
             else:
                 return {
@@ -518,32 +599,38 @@ class STTService:
                     "confidence": 0.0,
                     "is_final": False,
                     "duration": total_samples / self.stt_config.sample_rate,
-                    "metadata": {"buffering": True}
+                    "metadata": {"buffering": True},
                 }
 
         except Exception as e:
             self.logger.error(f"Failed to add audio chunk: {e}")
-            raise AudioProcessingError(f"Failed to add audio chunk: {e}", operation="add_chunk")
+            raise AudioProcessingError(
+                f"Failed to add audio chunk: {e}", operation="add_chunk"
+            )
 
     async def end_audio_stream(self, session_id: str) -> STTResponse:
         """End audio streaming session and return final transcription"""
         try:
             if session_id not in self.streaming_sessions:
-                raise AudioProcessingError(f"Session {session_id} not found", operation="end_stream")
+                raise AudioProcessingError(
+                    f"Session {session_id} not found", operation="end_stream"
+                )
 
             session = self.streaming_sessions[session_id]
             session["is_active"] = False
 
             # Transcribe all remaining chunks
             if session["chunks"]:
-                result = await self.transcribe_streaming(session["chunks"], session["language"])
+                result = await self.transcribe_streaming(
+                    session["chunks"], session["language"]
+                )
             else:
                 result = STTResponse(
                     text="",
                     language=session["language"],
                     confidence=0.0,
                     duration=0.0,
-                    metadata={"error": "No audio received"}
+                    metadata={"error": "No audio received"},
                 )
 
             # Clean up session
@@ -554,16 +641,24 @@ class STTService:
 
         except Exception as e:
             self.logger.error(f"Failed to end audio stream: {e}")
-            raise AudioProcessingError(f"Failed to end audio stream: {e}", operation="end_stream")
+            raise AudioProcessingError(
+                f"Failed to end audio stream: {e}", operation="end_stream"
+            )
 
-    async def process_realtime_chunk(self, audio_bytes: bytes, session_id: str = "default",
-                                   language: Optional[str] = None) -> Dict[str, Any]:
+    async def process_realtime_chunk(
+        self,
+        audio_bytes: bytes,
+        session_id: str = "default",
+        language: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Process audio chunk in real-time with VAD and transcription"""
         try:
             current_time = time.time()
 
             # Convert audio bytes to numpy array
-            audio_array = self.audio_utils.bytes_to_numpy(audio_bytes, self.stt_config.sample_rate)
+            audio_array = self.audio_utils.bytes_to_numpy(
+                audio_bytes, self.stt_config.sample_rate
+            )
 
             # Apply real-time VAD if enabled
             vad_result = "vad_disabled"
@@ -577,14 +672,17 @@ class STTService:
                         "vad_result": "no_speech",
                         "segments": [],
                         "is_final": False,
-                        "session_id": session_id
+                        "session_id": session_id,
                     }
 
                 audio_array = processed_audio
                 vad_result = "speech_detected"
 
             # Throttle transcription requests
-            if current_time - self.last_transcription_time < self.min_transcription_interval:
+            if (
+                current_time - self.last_transcription_time
+                < self.min_transcription_interval
+            ):
                 return {
                     "text": "",
                     "confidence": 0.0,
@@ -592,13 +690,15 @@ class STTService:
                     "segments": [],
                     "is_final": False,
                     "session_id": session_id,
-                    "throttled": True
+                    "throttled": True,
                 }
 
             # Transcribe the audio
             request = STTRequest(
-                audio_data=self.audio_utils.numpy_to_bytes(audio_array, self.stt_config.sample_rate),
-                language=language or self.stt_config.language
+                audio_data=self.audio_utils.numpy_to_bytes(
+                    audio_array, self.stt_config.sample_rate
+                ),
+                language=language or self.stt_config.language,
             )
 
             response = await self._transcribe_with_whisper_direct(audio_bytes, request)
@@ -611,12 +711,17 @@ class STTService:
                 "duration": response.duration,
                 "segments": response.segments,
                 "vad_result": vad_result,
-                "is_final": response.confidence > 0.8,  # Consider high confidence as final
+                "is_final": response.confidence
+                > 0.8,  # Consider high confidence as final
                 "session_id": session_id,
                 "metadata": {
                     **response.metadata,
-                    "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based"
-                }
+                    "vad_type": (
+                        "faster_whisper_builtin"
+                        if self.vad_available
+                        else "energy_based"
+                    ),
+                },
             }
 
         except Exception as e:
@@ -627,17 +732,17 @@ class STTService:
                 "error": str(e),
                 "segments": [],
                 "is_final": False,
-                "session_id": session_id
+                "session_id": session_id,
             }
 
-
-    async def _transcribe_with_whisper_direct(self, audio_bytes: bytes, request: STTRequest) -> STTResponse:
+    async def _transcribe_with_whisper_direct(
+        self, audio_bytes: bytes, request: STTRequest
+    ) -> STTResponse:
         """Direct transcription without VAD for streaming"""
         try:
             # Convert audio bytes to numpy array
             audio_array = self.audio_utils.bytes_to_numpy(
-                audio_bytes,
-                sample_rate=self.stt_config.sample_rate
+                audio_bytes, sample_rate=self.stt_config.sample_rate
             )
 
             # Prepare transcription options
@@ -645,20 +750,19 @@ class STTService:
             language = request.language or self.stt_config.language
             if language == "auto":
                 language = None
-            
+
             trans_options = {
                 "language": language,
                 "temperature": request.temperature or 0.0,
                 "initial_prompt": request.prompt,
                 "suppress_tokens": [-1],  # Suppress timestamps
-                "without_timestamps": True
+                "without_timestamps": True,
             }
 
-            if self.whisper_model.__class__.__module__.startswith('faster_whisper'):
+            if self.whisper_model.__class__.__module__.startswith("faster_whisper"):
                 # Faster Whisper API
                 segments, info = self.whisper_model.transcribe(
-                    audio_array,
-                    **trans_options
+                    audio_array, **trans_options
                 )
 
                 # Extract text from segments
@@ -669,10 +773,16 @@ class STTService:
                     # Convert avg_logprob (negative) to confidence (0-1)
                     # Using sigmoid-like transformation: confidence = 1 / (1 + exp(-avg_logprob))
                     # Clamp to ensure valid range [0, 1]
-                    avg_logprob = sum(segment.avg_logprob for segment in segments) / len(segments)
+                    avg_logprob = sum(
+                        segment.avg_logprob for segment in segments
+                    ) / len(segments)
                     try:
-                        confidence = 1.0 / (1.0 + np.exp(-avg_logprob))  # Sigmoid transformation
-                        confidence = max(0.0, min(1.0, float(confidence)))  # Clamp to [0, 1]
+                        confidence = 1.0 / (
+                            1.0 + np.exp(-avg_logprob)
+                        )  # Sigmoid transformation
+                        confidence = max(
+                            0.0, min(1.0, float(confidence))
+                        )  # Clamp to [0, 1]
                     except (OverflowError, ValueError):
                         # Handle extreme values
                         confidence = 0.5 if avg_logprob > -2.0 else 0.1
@@ -680,12 +790,18 @@ class STTService:
                     confidence = 0.0
 
                 # Extract detailed segments
-                detailed_segments = [{
-                    "text": segment.text.strip(),
-                    "start": segment.start,
-                    "end": segment.end,
-                    "confidence": max(0.0, min(1.0, float(1.0 / (1.0 + np.exp(-segment.avg_logprob)))))  # Clamp to [0, 1]
-                } for segment in segments]
+                detailed_segments = [
+                    {
+                        "text": segment.text.strip(),
+                        "start": segment.start,
+                        "end": segment.end,
+                        "confidence": max(
+                            0.0,
+                            min(1.0, float(1.0 / (1.0 + np.exp(-segment.avg_logprob)))),
+                        ),  # Clamp to [0, 1]
+                    }
+                    for segment in segments
+                ]
 
             else:
                 # OpenAI Whisper API
@@ -707,9 +823,13 @@ class STTService:
                 metadata={
                     "model": self.stt_config.model,
                     "vad_enabled": self.vad_available,
-                    "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based",
-                    "device": str(self.device)
-                }
+                    "vad_type": (
+                        "faster_whisper_builtin"
+                        if self.vad_available
+                        else "energy_based"
+                    ),
+                    "device": str(self.device),
+                },
             )
 
         except Exception as e:
@@ -720,10 +840,12 @@ class STTService:
         """Detect language of audio"""
         try:
             # Convert to numpy array
-            audio_array = self.audio_utils.bytes_to_numpy(audio_bytes, self.stt_config.sample_rate)
+            audio_array = self.audio_utils.bytes_to_numpy(
+                audio_bytes, self.stt_config.sample_rate
+            )
 
             # Use Whisper for language detection
-            if self.whisper_model.__class__.__module__.startswith('faster_whisper'):
+            if self.whisper_model.__class__.__module__.startswith("faster_whisper"):
                 _, info = self.whisper_model.transcribe(audio_array, language=None)
                 detected_language = info.language
             else:
@@ -741,11 +863,15 @@ class STTService:
             self.logger.error(f"Language detection failed: {e}")
             return "unknown"
 
-    async def process_realtime_audio(self, audio_bytes: bytes, language: str = "auto") -> Dict[str, Any]:
+    async def process_realtime_audio(
+        self, audio_bytes: bytes, language: str = "auto"
+    ) -> Dict[str, Any]:
         """Process audio with real-time VAD and transcription"""
         try:
             # Convert to numpy array
-            audio_array = self.audio_utils.bytes_to_numpy(audio_bytes, self.stt_config.sample_rate)
+            audio_array = self.audio_utils.bytes_to_numpy(
+                audio_bytes, self.stt_config.sample_rate
+            )
 
             # Apply real-time VAD if enabled
             if self.stt_config.vad_enabled and self.vad_available:
@@ -757,7 +883,7 @@ class STTService:
                         "text": "",
                         "confidence": 0.0,
                         "vad_result": "no_speech",
-                        "segments": []
+                        "segments": [],
                     }
                 audio_array = processed_audio
 
@@ -771,27 +897,39 @@ class STTService:
                 "language": response.language,
                 "duration": response.duration,
                 "segments": response.segments,
-                "vad_result": "speech_detected" if self.vad_available else "vad_disabled",
-                "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based"
+                "vad_result": (
+                    "speech_detected" if self.vad_available else "vad_disabled"
+                ),
+                "vad_type": (
+                    "faster_whisper_builtin" if self.vad_available else "energy_based"
+                ),
             }
 
         except Exception as e:
             self.logger.error(f"Real-time audio processing failed: {e}")
-            return {
-                "text": "",
-                "confidence": 0.0,
-                "error": str(e),
-                "segments": []
-            }
-
+            return {"text": "", "confidence": 0.0, "error": str(e), "segments": []}
 
     async def list_models(self) -> List[str]:
         """List available faster-whisper models"""
         return [
-            "tiny.en", "tiny", "base.en", "base", "small.en", "small",
-            "medium.en", "medium", "large-v1", "large-v2", "large-v3",
-            "large", "distil-large-v2", "distil-medium.en", "distil-small.en",
-            "distil-large-v3", "large-v3-turbo", "turbo"
+            "tiny.en",
+            "tiny",
+            "base.en",
+            "base",
+            "small.en",
+            "small",
+            "medium.en",
+            "medium",
+            "large-v1",
+            "large-v2",
+            "large-v3",
+            "large",
+            "distil-large-v2",
+            "distil-medium.en",
+            "distil-small.en",
+            "distil-large-v3",
+            "large-v3-turbo",
+            "turbo",
         ]
 
     async def health_check(self) -> Dict[str, Any]:
@@ -807,9 +945,11 @@ class STTService:
                 "model": self.stt_config.model,
                 "device": str(self.device),
                 "vad_enabled": self.vad_available,
-                "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based",
+                "vad_type": (
+                    "faster_whisper_builtin" if self.vad_available else "energy_based"
+                ),
                 "sample_rate": self.stt_config.sample_rate,
-                "test_transcription": False
+                "test_transcription": False,
             }
         except Exception as e:
             self.logger.error(f"Health check failed: {e}")
@@ -818,21 +958,16 @@ class STTService:
                 "error": str(e),
                 "device": str(self.device),
                 "vad_enabled": self.vad_available,
-                "vad_type": "faster_whisper_builtin" if self.vad_available else "energy_based"
+                "vad_type": (
+                    "faster_whisper_builtin" if self.vad_available else "energy_based"
+                ),
             }
 
     async def list_active_sessions(self) -> Dict[str, Any]:
         """List active streaming sessions"""
         try:
             sessions = list(self.streaming_sessions.keys())
-            return {
-                "active_sessions": sessions,
-                "count": len(sessions)
-            }
+            return {"active_sessions": sessions, "count": len(sessions)}
         except Exception as e:
             self.logger.error(f"Failed to list sessions: {e}")
-            return {
-                "active_sessions": [],
-                "count": 0,
-                "error": str(e)
-            }
+            return {"active_sessions": [], "count": 0, "error": str(e)}

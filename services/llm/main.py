@@ -1,13 +1,15 @@
 """
 Main entry point for LLM service
 """
-import asyncio
+
 import argparse
+import asyncio
+
+from api.server import main as server_main
+from service import LLMService
 
 from shared.config.base import ServiceConfig
 from shared.utils.logging import setup_logging
-from service import LLMService
-from api.server import main as server_main
 
 
 async def main():
@@ -29,11 +31,7 @@ async def main():
     log_level = args.log_level if args.log_level else config.get("log_level", "INFO")
 
     # Setup logging
-    logger = setup_logging(
-        "llm_main",
-        log_level,
-        "logs/llm_main.log"
-    )
+    logger = setup_logging("llm_main", log_level, "logs/llm_main.log")
 
     logger.info("Starting Morgan LLM Service...")
     logger.info(f"Configuration: {config.all()}")
@@ -51,7 +49,7 @@ async def main():
         logger.error(f"LLM Service failed: {e}")
         raise
     finally:
-        if 'llm_service' in locals():
+        if "llm_service" in locals():
             await llm_service.stop()
 
 

@@ -1,13 +1,15 @@
 """
 Main entry point for STT service
 """
-import asyncio
+
 import argparse
+import asyncio
+
+from api.server import main as server_main
+from service import STTService
 
 from shared.config.base import ServiceConfig
 from shared.utils.logging import setup_logging
-from service import STTService
-from api.server import main as server_main
 
 
 async def main():
@@ -29,11 +31,7 @@ async def main():
     log_level = args.log_level if args.log_level else config.get("log_level", "INFO")
 
     # Setup logging
-    logger = setup_logging(
-        "stt_main",
-        log_level,
-        "logs/stt_main.log"
-    )
+    logger = setup_logging("stt_main", log_level, "logs/stt_main.log")
 
     logger.info("Starting Morgan STT Service...")
     logger.info(f"Configuration: {config.all()}")
@@ -51,7 +49,7 @@ async def main():
         logger.error(f"STT Service failed: {e}")
         raise
     finally:
-        if 'stt_service' in locals():
+        if "stt_service" in locals():
             await stt_service.stop()
 
 

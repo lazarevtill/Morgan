@@ -2,8 +2,9 @@
 PostgreSQL database models for Morgan AI Assistant
 Aligned with database/init/01_init_schema.sql
 """
+
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
@@ -11,6 +12,7 @@ from pydantic import BaseModel, Field
 
 class ConversationModel(BaseModel):
     """Conversation database model"""
+
     id: Optional[UUID] = Field(default_factory=uuid4)
     conversation_id: str
     user_id: str
@@ -28,6 +30,7 @@ class ConversationModel(BaseModel):
 
 class MessageModel(BaseModel):
     """Message database model"""
+
     id: Optional[UUID] = Field(default_factory=uuid4)
     conversation_id: UUID
     role: str  # user, assistant, system, tool
@@ -45,6 +48,7 @@ class MessageModel(BaseModel):
 
 class StreamingSessionModel(BaseModel):
     """Streaming session database model"""
+
     id: Optional[UUID] = Field(default_factory=uuid4)
     session_id: str
     user_id: str
@@ -64,6 +68,7 @@ class StreamingSessionModel(BaseModel):
 
 class AudioTranscriptionModel(BaseModel):
     """Audio transcription database model"""
+
     id: Optional[UUID] = Field(default_factory=uuid4)
     session_id: Optional[UUID] = None
     message_id: Optional[UUID] = None
@@ -82,6 +87,7 @@ class AudioTranscriptionModel(BaseModel):
 
 class TTSGenerationModel(BaseModel):
     """TTS generation database model"""
+
     id: Optional[UUID] = Field(default_factory=uuid4)
     message_id: Optional[UUID] = None
     text_hash: str  # SHA256 hash for caching
@@ -100,6 +106,7 @@ class TTSGenerationModel(BaseModel):
 
 class UserPreferencesModel(BaseModel):
     """User preferences database model"""
+
     id: Optional[UUID] = Field(default_factory=uuid4)
     user_id: str
     llm_model: Optional[str] = None
@@ -117,6 +124,7 @@ class UserPreferencesModel(BaseModel):
 
 class SystemMetricModel(BaseModel):
     """System metric database model"""
+
     id: Optional[UUID] = Field(default_factory=uuid4)
     service_name: str
     metric_type: str  # latency, throughput, error, health

@@ -2,9 +2,10 @@
 Remember Command Handler
 Handles "remember" commands to store information in memory
 """
+
 import logging
 import re
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 from shared.utils.logging import setup_logging
 
@@ -42,7 +43,9 @@ class RememberHandler:
 
         return False
 
-    async def handle(self, text: str, user_id: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def handle(
+        self, text: str, user_id: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Handle a remember command
 
@@ -68,7 +71,7 @@ class RememberHandler:
             return {
                 "success": False,
                 "response": "I couldn't understand what you want me to remember.",
-                "metadata": {}
+                "metadata": {},
             }
 
         # Analyze the content to determine category and importance
@@ -82,10 +85,12 @@ class RememberHandler:
                 memory_type="fact",
                 category=category,
                 importance=importance,
-                metadata=metadata or {}
+                metadata=metadata or {},
             )
 
-            self.logger.info(f"Stored memory for user {user_id}: {content_to_remember[:50]}...")
+            self.logger.info(
+                f"Stored memory for user {user_id}: {content_to_remember[:50]}..."
+            )
 
             return {
                 "success": True,
@@ -93,8 +98,8 @@ class RememberHandler:
                 "metadata": {
                     "memory_id": memory.id,
                     "category": category,
-                    "importance": importance
-                }
+                    "importance": importance,
+                },
             }
 
         except Exception as e:
@@ -102,7 +107,7 @@ class RememberHandler:
             return {
                 "success": False,
                 "response": "I had trouble remembering that. Please try again.",
-                "metadata": {"error": str(e)}
+                "metadata": {"error": str(e)},
             }
 
     def _analyze_content(self, content: str) -> tuple[str, int]:
@@ -120,25 +125,43 @@ class RememberHandler:
         if any(word in content_lower for word in ["birthday", "anniversary", "date"]):
             category = "dates"
             importance = 8
-        elif any(word in content_lower for word in ["like", "love", "favorite", "prefer", "enjoy"]):
+        elif any(
+            word in content_lower
+            for word in ["like", "love", "favorite", "prefer", "enjoy"]
+        ):
             category = "preferences"
             importance = 7
-        elif any(word in content_lower for word in ["name", "called", "email", "phone", "address"]):
+        elif any(
+            word in content_lower
+            for word in ["name", "called", "email", "phone", "address"]
+        ):
             category = "personal_info"
             importance = 9
-        elif any(word in content_lower for word in ["work", "job", "career", "company", "office"]):
+        elif any(
+            word in content_lower
+            for word in ["work", "job", "career", "company", "office"]
+        ):
             category = "professional"
             importance = 7
-        elif any(word in content_lower for word in ["family", "friend", "spouse", "child", "parent"]):
+        elif any(
+            word in content_lower
+            for word in ["family", "friend", "spouse", "child", "parent"]
+        ):
             category = "relationships"
             importance = 8
         elif any(word in content_lower for word in ["hobby", "interest", "passion"]):
             category = "hobbies"
             importance = 6
-        elif any(word in content_lower for word in ["allergy", "allergic", "medical", "health", "medication"]):
+        elif any(
+            word in content_lower
+            for word in ["allergy", "allergic", "medical", "health", "medication"]
+        ):
             category = "health"
             importance = 9
-        elif any(word in content_lower for word in ["important", "critical", "must", "never forget"]):
+        elif any(
+            word in content_lower
+            for word in ["important", "critical", "must", "never forget"]
+        ):
             importance = 10
         else:
             importance = 5

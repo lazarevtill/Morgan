@@ -3,9 +3,11 @@ API Contract Tests for Morgan AI Assistant
 
 Ensures all API endpoints conform to their contracts
 """
+
+import base64
+
 import pytest
 from httpx import AsyncClient
-import base64
 
 
 class TestCoreServiceAPI:
@@ -14,7 +16,9 @@ class TestCoreServiceAPI:
     @pytest.mark.asyncio
     async def test_root_endpoint(self):
         """Test root endpoint returns service info"""
-        async with AsyncClient(base_url="http://localhost:8000", timeout=30.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8000", timeout=30.0
+        ) as client:
             response = await client.get("/")
 
             assert response.status_code == 200
@@ -26,7 +30,9 @@ class TestCoreServiceAPI:
     @pytest.mark.asyncio
     async def test_health_endpoint_contract(self):
         """Test /health endpoint contract"""
-        async with AsyncClient(base_url="http://localhost:8000", timeout=30.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8000", timeout=30.0
+        ) as client:
             response = await client.get("/health")
 
             assert response.status_code == 200
@@ -46,7 +52,9 @@ class TestCoreServiceAPI:
     @pytest.mark.asyncio
     async def test_status_endpoint_contract(self):
         """Test /status endpoint contract"""
-        async with AsyncClient(base_url="http://localhost:8000", timeout=30.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8000", timeout=30.0
+        ) as client:
             response = await client.get("/status")
 
             assert response.status_code == 200
@@ -66,15 +74,17 @@ class TestCoreServiceAPI:
     @pytest.mark.asyncio
     async def test_text_api_request_contract(self):
         """Test /api/text POST request contract"""
-        async with AsyncClient(base_url="http://localhost:8000", timeout=60.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8000", timeout=60.0
+        ) as client:
             # Valid request
             response = await client.post(
                 "/api/text",
                 json={
                     "text": "Hello",
                     "user_id": "test_user",
-                    "metadata": {"source": "test"}
-                }
+                    "metadata": {"source": "test"},
+                },
             )
 
             assert response.status_code == 200
@@ -87,23 +97,27 @@ class TestCoreServiceAPI:
     @pytest.mark.asyncio
     async def test_text_api_validation(self):
         """Test /api/text validation rules"""
-        async with AsyncClient(base_url="http://localhost:8000", timeout=60.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8000", timeout=60.0
+        ) as client:
             # Missing required field
             response = await client.post(
-                "/api/text",
-                json={"user_id": "test_user"}  # Missing 'text'
+                "/api/text", json={"user_id": "test_user"}  # Missing 'text'
             )
 
-            assert response.status_code in [400, 422], \
-                "Request with missing 'text' should be rejected"
+            assert response.status_code in [
+                400,
+                422,
+            ], "Request with missing 'text' should be rejected"
 
     @pytest.mark.asyncio
     async def test_conversation_reset_contract(self):
         """Test /api/conversation/reset endpoint contract"""
-        async with AsyncClient(base_url="http://localhost:8000", timeout=30.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8000", timeout=30.0
+        ) as client:
             response = await client.post(
-                "/api/conversation/reset",
-                json={"user_id": "test_user"}
+                "/api/conversation/reset", json={"user_id": "test_user"}
             )
 
             assert response.status_code == 200
@@ -113,7 +127,9 @@ class TestCoreServiceAPI:
     @pytest.mark.asyncio
     async def test_devices_audio_contract(self):
         """Test /devices/audio endpoint contract"""
-        async with AsyncClient(base_url="http://localhost:8000", timeout=30.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8000", timeout=30.0
+        ) as client:
             response = await client.get("/devices/audio")
 
             assert response.status_code == 200
@@ -132,11 +148,15 @@ class TestLLMServiceAPI:
     @pytest.mark.asyncio
     async def test_llm_health_endpoint(self):
         """Test LLM service health endpoint"""
-        async with AsyncClient(base_url="http://localhost:8001", timeout=30.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8001", timeout=30.0
+        ) as client:
             try:
                 response = await client.get("/health")
-                assert response.status_code in [200, 503], \
-                    "Health endpoint should return 200 (healthy) or 503 (unhealthy)"
+                assert response.status_code in [
+                    200,
+                    503,
+                ], "Health endpoint should return 200 (healthy) or 503 (unhealthy)"
 
                 data = response.json()
                 assert "status" in data or "detail" in data
@@ -152,7 +172,9 @@ class TestTTSServiceAPI:
     @pytest.mark.asyncio
     async def test_tts_health_endpoint(self):
         """Test TTS service health endpoint"""
-        async with AsyncClient(base_url="http://localhost:8002", timeout=30.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8002", timeout=30.0
+        ) as client:
             try:
                 response = await client.get("/health")
                 assert response.status_code in [200, 503]
@@ -170,7 +192,9 @@ class TestSTTServiceAPI:
     @pytest.mark.asyncio
     async def test_stt_health_endpoint(self):
         """Test STT service health endpoint"""
-        async with AsyncClient(base_url="http://localhost:8003", timeout=30.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8003", timeout=30.0
+        ) as client:
             try:
                 response = await client.get("/health")
                 assert response.status_code in [200, 503]
@@ -188,12 +212,11 @@ class TestErrorResponseContracts:
     @pytest.mark.asyncio
     async def test_400_error_format(self):
         """Test 400 error response format"""
-        async with AsyncClient(base_url="http://localhost:8000", timeout=30.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8000", timeout=30.0
+        ) as client:
             # Send invalid request
-            response = await client.post(
-                "/api/text",
-                json={"invalid": "data"}
-            )
+            response = await client.post("/api/text", json={"invalid": "data"})
 
             assert response.status_code in [400, 422]
 
@@ -209,7 +232,9 @@ class TestErrorResponseContracts:
     @pytest.mark.asyncio
     async def test_404_error(self):
         """Test 404 error for non-existent endpoint"""
-        async with AsyncClient(base_url="http://localhost:8000", timeout=30.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8000", timeout=30.0
+        ) as client:
             response = await client.get("/nonexistent/endpoint")
 
             assert response.status_code == 404
@@ -217,16 +242,18 @@ class TestErrorResponseContracts:
     @pytest.mark.asyncio
     async def test_request_id_in_error_responses(self):
         """Test that error responses include request ID"""
-        async with AsyncClient(base_url="http://localhost:8000", timeout=30.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8000", timeout=30.0
+        ) as client:
             # Send invalid request
             response = await client.post(
-                "/api/text",
-                json={}  # Invalid - missing required fields
+                "/api/text", json={}  # Invalid - missing required fields
             )
 
             # Should have request ID even in error responses
-            assert "X-Request-ID" in response.headers, \
-                "Error responses should include X-Request-ID header"
+            assert (
+                "X-Request-ID" in response.headers
+            ), "Error responses should include X-Request-ID header"
 
 
 class TestRateLimitHeaders:
@@ -235,10 +262,11 @@ class TestRateLimitHeaders:
     @pytest.mark.asyncio
     async def test_rate_limit_headers_present(self):
         """Test that rate limit headers are included in responses"""
-        async with AsyncClient(base_url="http://localhost:8000", timeout=30.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8000", timeout=30.0
+        ) as client:
             response = await client.post(
-                "/api/text",
-                json={"text": "test", "user_id": "test_user"}
+                "/api/text", json={"text": "test", "user_id": "test_user"}
             )
 
             # Rate limit headers should be present
@@ -255,7 +283,9 @@ class TestTimingHeaders:
     @pytest.mark.asyncio
     async def test_process_time_header(self):
         """Test that X-Process-Time header is included"""
-        async with AsyncClient(base_url="http://localhost:8000", timeout=30.0) as client:
+        async with AsyncClient(
+            base_url="http://localhost:8000", timeout=30.0
+        ) as client:
             response = await client.get("/health")
 
             # Should have process time header

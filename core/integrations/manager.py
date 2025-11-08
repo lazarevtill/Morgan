@@ -1,13 +1,14 @@
 """
 Integration manager for Morgan Core Service
 """
+
 import asyncio
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
 from shared.config.base import ServiceConfig
-from shared.utils.logging import setup_logging
 from shared.utils.http_client import service_registry
+from shared.utils.logging import setup_logging
 
 
 class IntegrationManager:
@@ -15,7 +16,9 @@ class IntegrationManager:
 
     def __init__(self, config: ServiceConfig):
         self.config = config
-        self.logger = setup_logging("integration_manager", "INFO", "logs/integrations.log")
+        self.logger = setup_logging(
+            "integration_manager", "INFO", "logs/integrations.log"
+        )
 
         # Integration configurations
         self.integrations = {}
@@ -37,7 +40,9 @@ class IntegrationManager:
             # - Media center integration
             # - IoT platform integrations
 
-            self.logger.info(f"Initialized {len(self.active_integrations)} integrations")
+            self.logger.info(
+                f"Initialized {len(self.active_integrations)} integrations"
+            )
 
         except Exception as e:
             self.logger.error(f"Failed to initialize integrations: {e}")
@@ -51,7 +56,7 @@ class IntegrationManager:
                 "type": "home_assistant",
                 "url": config.get("url"),
                 "token": config.get("token"),
-                "status": "available"
+                "status": "available",
             }
 
             self.active_integrations.add("home_assistant")
@@ -60,15 +65,16 @@ class IntegrationManager:
         except Exception as e:
             self.logger.error(f"Failed to initialize Home Assistant integration: {e}")
 
-    async def execute_integration_command(self, integration_name: str, command: str,
-                                        parameters: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute_integration_command(
+        self, integration_name: str, command: str, parameters: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Execute a command through an integration"""
         try:
             if integration_name not in self.active_integrations:
                 return {
                     "success": False,
                     "error": f"Integration '{integration_name}' is not available",
-                    "response": f"Sorry, the {integration_name} integration is not currently available."
+                    "response": f"Sorry, the {integration_name} integration is not currently available.",
                 }
 
             integration = self.integrations.get(integration_name)
@@ -76,7 +82,7 @@ class IntegrationManager:
                 return {
                     "success": False,
                     "error": f"Integration '{integration_name}' not found",
-                    "response": f"The {integration_name} integration could not be found."
+                    "response": f"The {integration_name} integration could not be found.",
                 }
 
             # Execute integration-specific command
@@ -86,7 +92,7 @@ class IntegrationManager:
                 return {
                     "success": False,
                     "error": f"Unknown integration command: {command}",
-                    "response": f"I don't know how to execute that command through {integration_name}."
+                    "response": f"I don't know how to execute that command through {integration_name}.",
                 }
 
         except Exception as e:
@@ -94,10 +100,12 @@ class IntegrationManager:
             return {
                 "success": False,
                 "error": str(e),
-                "response": "An error occurred while executing the integration command."
+                "response": "An error occurred while executing the integration command.",
             }
 
-    async def _execute_home_assistant_command(self, command: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+    async def _execute_home_assistant_command(
+        self, command: str, parameters: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Execute Home Assistant command"""
         try:
             # This is a simplified implementation
@@ -126,7 +134,7 @@ class IntegrationManager:
                 "response": response_text,
                 "integration": "home_assistant",
                 "command": command,
-                "parameters": parameters
+                "parameters": parameters,
             }
 
         except Exception as e:
@@ -134,7 +142,7 @@ class IntegrationManager:
             return {
                 "success": False,
                 "error": str(e),
-                "response": "Failed to execute Home Assistant command."
+                "response": "Failed to execute Home Assistant command.",
             }
 
     def get_integration_status(self, integration_name: str) -> Dict[str, Any]:
@@ -145,20 +153,15 @@ class IntegrationManager:
                 "name": integration_name,
                 "status": integration.get("status", "unknown"),
                 "type": integration.get("type", "unknown"),
-                "active": integration_name in self.active_integrations
+                "active": integration_name in self.active_integrations,
             }
         else:
-            return {
-                "name": integration_name,
-                "status": "not_found",
-                "active": False
-            }
+            return {"name": integration_name, "status": "not_found", "active": False}
 
     def get_all_integrations(self) -> Dict[str, Any]:
         """Get status of all integrations"""
         return {
-            name: self.get_integration_status(name)
-            for name in self.integrations.keys()
+            name: self.get_integration_status(name) for name in self.integrations.keys()
         }
 
     async def health_check(self) -> Dict[str, Any]:
@@ -171,20 +174,24 @@ class IntegrationManager:
             if ha_config and ha_config.get("enabled", True):
                 # In a real implementation, this would ping Home Assistant
                 integration_status["home_assistant"] = {
-                    "status": "healthy" if "home_assistant" in self.active_integrations else "unhealthy",
+                    "status": (
+                        "healthy"
+                        if "home_assistant" in self.active_integrations
+                        else "unhealthy"
+                    ),
                     "url": ha_config.get("url"),
-                    "available": "home_assistant" in self.active_integrations
+                    "available": "home_assistant" in self.active_integrations,
                 }
             else:
                 integration_status["home_assistant"] = {
                     "status": "disabled",
-                    "available": False
+                    "available": False,
                 }
 
             return {
                 "total_integrations": len(self.integrations),
                 "active_integrations": len(self.active_integrations),
-                "integrations": integration_status
+                "integrations": integration_status,
             }
 
         except Exception as e:
@@ -193,5 +200,5 @@ class IntegrationManager:
                 "status": "error",
                 "error": str(e),
                 "total_integrations": len(self.integrations),
-                "active_integrations": len(self.active_integrations)
+                "active_integrations": len(self.active_integrations),
             }

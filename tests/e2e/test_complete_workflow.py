@@ -10,16 +10,17 @@ Tests complete workflows from user input to response:
 - Performance under load
 """
 
-import pytest
 import asyncio
-import httpx
-from pathlib import Path
-import sys
-import os
-import time
-import struct
-import wave
 import io
+import os
+import struct
+import sys
+import time
+import wave
+from pathlib import Path
+
+import httpx
+import pytest
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -53,10 +54,7 @@ class TestTextConversationFlow:
                 # First message
                 response1 = await client.post(
                     f"{core_service_url}/api/text",
-                    json={
-                        "text": "Hello, my name is Alice",
-                        "user_id": user_id
-                    }
+                    json={"text": "Hello, my name is Alice", "user_id": user_id},
                 )
 
                 if response1.status_code != 200:
@@ -72,10 +70,7 @@ class TestTextConversationFlow:
 
                 response2 = await client.post(
                     f"{core_service_url}/api/text",
-                    json={
-                        "text": "What is my name?",
-                        "user_id": user_id
-                    }
+                    json={"text": "What is my name?", "user_id": user_id},
                 )
 
                 assert response2.status_code == 200
@@ -99,17 +94,14 @@ class TestTextConversationFlow:
             conversations = [
                 "I like pizza",
                 "What is my favorite food?",
-                "Tell me more about it"
+                "Tell me more about it",
             ]
 
             async with httpx.AsyncClient(timeout=30.0) as client:
                 for idx, text in enumerate(conversations):
                     response = await client.post(
                         f"{core_service_url}/api/text",
-                        json={
-                            "text": text,
-                            "user_id": user_id
-                        }
+                        json={"text": text, "user_id": user_id},
                     )
 
                     if response.status_code != 200:
@@ -140,34 +132,30 @@ class TestTextConversationFlow:
                 # First conversation
                 await client.post(
                     f"{core_service_url}/api/text",
-                    json={
-                        "text": "My name is Bob",
-                        "user_id": user_id
-                    }
+                    json={"text": "My name is Bob", "user_id": user_id},
                 )
 
                 # Reset conversation
                 reset_response = await client.post(
                     f"{core_service_url}/api/conversation/reset",
-                    json={"user_id": user_id}
+                    json={"user_id": user_id},
                 )
 
                 if reset_response.status_code == 200:
                     # After reset, context should be cleared
                     response = await client.post(
                         f"{core_service_url}/api/text",
-                        json={
-                            "text": "What is my name?",
-                            "user_id": user_id
-                        }
+                        json={"text": "What is my name?", "user_id": user_id},
                     )
 
                     assert response.status_code == 200
                     data = response.json()
                     # Response should not remember Bob
-                    assert "bob" not in data["text"].lower() or \
-                           "don't know" in data["text"].lower() or \
-                           "not sure" in data["text"].lower()
+                    assert (
+                        "bob" not in data["text"].lower()
+                        or "don't know" in data["text"].lower()
+                        or "not sure" in data["text"].lower()
+                    )
                 else:
                     pytest.skip("Conversation reset not implemented")
 
@@ -181,10 +169,10 @@ class TestAudioProcessingFlow:
     def create_test_audio(self, duration_seconds=1, sample_rate=16000):
         """Create a test audio file (silence)."""
         num_samples = sample_rate * duration_seconds
-        audio_data = struct.pack('<' + ('h' * num_samples), *([0] * num_samples))
+        audio_data = struct.pack("<" + ("h" * num_samples), *([0] * num_samples))
 
         wav_buffer = io.BytesIO()
-        with wave.open(wav_buffer, 'wb') as wav_file:
+        with wave.open(wav_buffer, "wb") as wav_file:
             wav_file.setnchannels(1)
             wav_file.setsampwidth(2)
             wav_file.setframerate(sample_rate)
@@ -207,7 +195,7 @@ class TestAudioProcessingFlow:
                 response = await client.post(
                     f"{core_service_url}/api/audio",
                     files={"file": ("test.wav", audio_buffer, "audio/wav")},
-                    data={"user_id": user_id}
+                    data={"user_id": user_id},
                 )
 
                 if response.status_code == 200:
@@ -224,7 +212,9 @@ class TestAudioProcessingFlow:
                     # Should have metadata
                     assert "metadata" in data
                 else:
-                    pytest.skip("Audio processing not available or services not running")
+                    pytest.skip(
+                        "Audio processing not available or services not running"
+                    )
 
         except (httpx.ConnectError, httpx.TimeoutException):
             pytest.skip("Core service not running")
@@ -240,10 +230,7 @@ class TestErrorHandling:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 # Missing required fields
-                response = await client.post(
-                    f"{core_service_url}/api/text",
-                    json={}
-                )
+                response = await client.post(f"{core_service_url}/api/text", json={})
 
                 # Should get error response, not crash
                 assert response.status_code in [400, 422, 500]
@@ -259,10 +246,7 @@ class TestErrorHandling:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(
                     f"{core_service_url}/api/text",
-                    json={
-                        "text": "",
-                        "user_id": "test_user"
-                    }
+                    json={"text": "", "user_id": "test_user"},
                 )
 
                 # Should handle gracefully
@@ -282,10 +266,7 @@ class TestErrorHandling:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     f"{core_service_url}/api/text",
-                    json={
-                        "text": long_text,
-                        "user_id": "test_user"
-                    }
+                    json={"text": long_text, "user_id": "test_user"},
                 )
 
                 # Should either process or return appropriate error
@@ -313,10 +294,7 @@ class TestPerformance:
 
                 response = await client.post(
                     f"{core_service_url}/api/text",
-                    json={
-                        "text": "Hello",
-                        "user_id": "perf_test_user"
-                    }
+                    json={"text": "Hello", "user_id": "perf_test_user"},
                 )
 
                 end_time = time.time()
@@ -325,8 +303,9 @@ class TestPerformance:
                 if response.status_code == 200:
                     # Response should be reasonably fast
                     # (adjust threshold based on your requirements)
-                    assert response_time < 30.0, \
-                        f"Response time {response_time}s exceeds threshold"
+                    assert (
+                        response_time < 30.0
+                    ), f"Response time {response_time}s exceeds threshold"
                 else:
                     pytest.skip("Core service not available")
 
@@ -346,8 +325,8 @@ class TestPerformance:
                         f"{core_service_url}/api/text",
                         json={
                             "text": f"Hello {idx}",
-                            "user_id": f"concurrent_user_{idx}"
-                        }
+                            "user_id": f"concurrent_user_{idx}",
+                        },
                     )
 
                 # Send 5 concurrent requests
@@ -355,12 +334,16 @@ class TestPerformance:
                 responses = await asyncio.gather(*tasks, return_exceptions=True)
 
                 # Most requests should succeed
-                successful = sum(1 for r in responses
-                                if not isinstance(r, Exception) and r.status_code == 200)
+                successful = sum(
+                    1
+                    for r in responses
+                    if not isinstance(r, Exception) and r.status_code == 200
+                )
 
                 if successful > 0:
-                    assert successful >= 3, \
-                        f"Only {successful}/5 concurrent requests succeeded"
+                    assert (
+                        successful >= 3
+                    ), f"Only {successful}/5 concurrent requests succeeded"
                 else:
                     pytest.skip("Core service not handling requests")
 
@@ -382,10 +365,7 @@ class TestSystemIntegration:
                 # 1. Initial greeting
                 response1 = await client.post(
                     f"{core_service_url}/api/text",
-                    json={
-                        "text": "Hi, I'm testing the system",
-                        "user_id": user_id
-                    }
+                    json={"text": "Hi, I'm testing the system", "user_id": user_id},
                 )
 
                 if response1.status_code != 200:
@@ -398,10 +378,7 @@ class TestSystemIntegration:
 
                 response2 = await client.post(
                     f"{core_service_url}/api/text",
-                    json={
-                        "text": "What can you help me with?",
-                        "user_id": user_id
-                    }
+                    json={"text": "What can you help me with?", "user_id": user_id},
                 )
 
                 assert response2.status_code == 200
@@ -411,16 +388,14 @@ class TestSystemIntegration:
                 # 3. Check health
                 await asyncio.sleep(1)
 
-                health_response = await client.get(
-                    f"{core_service_url}/health"
-                )
+                health_response = await client.get(f"{core_service_url}/health")
 
                 assert health_response.status_code == 200
 
                 # 4. Reset conversation
                 reset_response = await client.post(
                     f"{core_service_url}/api/conversation/reset",
-                    json={"user_id": user_id}
+                    json={"user_id": user_id},
                 )
 
                 # Reset might not be implemented, that's okay
@@ -430,5 +405,5 @@ class TestSystemIntegration:
             pytest.skip("Core service not running")
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '-m', 'e2e'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-m", "e2e"])

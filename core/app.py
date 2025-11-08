@@ -2,39 +2,47 @@
 Morgan AI Assistant - Core Service
 Modern orchestration service with async/await support
 """
+
 import asyncio
+import logging
+import os
 import signal
 import sys
-import os
-import logging
 import time
-from typing import Dict, Any, List, Optional
-from pathlib import Path
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 import uvicorn
-
-from shared.config.base import ServiceConfig
-from shared.models.base import Message, ConversationContext, Response, Command, ProcessingResult
-from shared.utils.logging import setup_logging, Timer
-from shared.utils.exceptions import MorganException, ErrorCategory
-from shared.utils.http_client import service_registry
 
 # Import core components (relative imports)
 from api.server import APIServer
 from conversation.manager import ConversationManager
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from handlers.registry import HandlerRegistry
 from integrations.manager import IntegrationManager
-from services.streaming_orchestrator import StreamingOrchestrator
 from memory.manager import MemoryManager
+from pydantic import BaseModel
+from services.streaming_orchestrator import StreamingOrchestrator
 from tools.mcp_manager import MCPToolsManager
+
+from shared.config.base import ServiceConfig
+from shared.models.base import (
+    Command,
+    ConversationContext,
+    Message,
+    ProcessingResult,
+    Response,
+)
+from shared.utils.exceptions import ErrorCategory, MorganException
+from shared.utils.http_client import service_registry
+from shared.utils.logging import Timer, setup_logging
 
 
 class CoreConfig(BaseModel):
     """Core service configuration"""
+
     host: str = "0.0.0.0"
     port: int = 8000
     https_port: int = 8443
@@ -67,9 +75,7 @@ class MorganCore:
     def __init__(self, config: Optional[ServiceConfig] = None):
         self.config = config or ServiceConfig("core")
         self.logger = setup_logging(
-            "morgan_core",
-            self.config.get("log_level", "INFO"),
-            "logs/core.log"
+            "morgan_core", self.config.get("log_level", "INFO"), "logs/core.log"
         )
 
         # Load configuration with proper defaults
@@ -80,7 +86,9 @@ class MorganCore:
         self.conversation_manager = None
         self.handler_registry = None
         self.integration_manager = None
-        self.streaming_orchestrator = None  # Unified streaming and non-streaming orchestrator
+        self.streaming_orchestrator = (
+            None  # Unified streaming and non-streaming orchestrator
+        )
         self.api_server = None
         self.memory_manager = None
         self.tools_manager = None
@@ -109,7 +117,7 @@ class MorganCore:
                 https_port=self.core_config.https_port,
                 use_https=self.core_config.use_https,
                 ssl_cert_path=self.core_config.ssl_cert_path,
-                ssl_key_path=self.core_config.ssl_key_path
+                ssl_key_path=self.core_config.ssl_key_path,
             )
             await self.api_server.start()
 
@@ -177,7 +185,7 @@ class MorganCore:
                 db_client=db_client,
                 redis_client=redis_client,
                 max_history=self.core_config.max_history,
-                timeout=self.core_config.conversation_timeout
+                timeout=self.core_config.conversation_timeout,
             )
 
             # Initialize handler registry
@@ -195,7 +203,7 @@ class MorganCore:
                 memory_manager=self.memory_manager,
                 tools_manager=self.tools_manager,
                 redis_client=redis_client,
-                db_client=db_client
+                db_client=db_client,
             )
 
             await self.streaming_orchestrator.start()
@@ -220,11 +228,17 @@ class MorganCore:
         postgres_port = self.config.get("postgres_port") or os.getenv("POSTGRES_PORT")
         postgres_db = self.config.get("postgres_db") or os.getenv("POSTGRES_DB")
         postgres_user = self.config.get("postgres_user") or os.getenv("POSTGRES_USER")
-        postgres_password = self.config.get("postgres_password") or os.getenv("POSTGRES_PASSWORD")
+        postgres_password = self.config.get("postgres_password") or os.getenv(
+            "POSTGRES_PASSWORD"
+        )
 
-        redis_host = self.config.get("redis_host") or os.getenv("REDIS_HOST", "localhost")
+        redis_host = self.config.get("redis_host") or os.getenv(
+            "REDIS_HOST", "localhost"
+        )
         redis_port = self.config.get("redis_port") or os.getenv("REDIS_PORT")
-        redis_password = self.config.get("redis_password") or os.getenv("REDIS_PASSWORD")
+        redis_password = self.config.get("redis_password") or os.getenv(
+            "REDIS_PASSWORD"
+        )
 
         # Initialize PostgreSQL if configured
         if postgres_host:
@@ -235,7 +249,7 @@ class MorganCore:
                     port=int(postgres_port) if postgres_port else None,
                     database=postgres_db,
                     user=postgres_user,
-                    password=postgres_password
+                    password=postgres_password,
                 )
                 await db_client.connect()
 
@@ -244,7 +258,9 @@ class MorganCore:
                     async with db_client.acquire() as conn:
                         result = await conn.fetchval("SELECT 1")
                         if result == 1:
-                            self.logger.info("PostgreSQL connection validated successfully")
+                            self.logger.info(
+                                "PostgreSQL connection validated successfully"
+                            )
                         else:
                             raise Exception("PostgreSQL connection validation failed")
                 else:
@@ -252,10 +268,14 @@ class MorganCore:
 
             except Exception as e:
                 self.logger.error(f"Failed to connect to PostgreSQL: {e}")
-                self.logger.warning("Database persistence will be disabled. Running with in-memory fallback.")
+                self.logger.warning(
+                    "Database persistence will be disabled. Running with in-memory fallback."
+                )
                 db_client = None
         else:
-            self.logger.info("PostgreSQL not configured. Using in-memory conversation storage.")
+            self.logger.info(
+                "PostgreSQL not configured. Using in-memory conversation storage."
+            )
 
         # Initialize Redis if configured
         try:
@@ -263,7 +283,7 @@ class MorganCore:
             redis_client = RedisClient(
                 host=redis_host,
                 port=int(redis_port) if redis_port else None,
-                password=redis_password
+                password=redis_password,
             )
             await redis_client.connect()
 
@@ -279,7 +299,9 @@ class MorganCore:
 
         except Exception as e:
             self.logger.error(f"Failed to connect to Redis: {e}")
-            self.logger.warning("Redis caching will be disabled. Running with in-memory fallback.")
+            self.logger.warning(
+                "Redis caching will be disabled. Running with in-memory fallback."
+            )
             redis_client = None
 
         return db_client, redis_client
@@ -291,7 +313,9 @@ class MorganCore:
         enable_tools = self.config.get("enable_tools", True)
 
         if not enable_memory and not enable_tools:
-            self.logger.info("Memory and tools disabled - skipping database initialization")
+            self.logger.info(
+                "Memory and tools disabled - skipping database initialization"
+            )
             return
 
         try:
@@ -306,7 +330,9 @@ class MorganCore:
                 postgres_port = self.config.get("postgres_port", 5432)
                 postgres_db = self.config.get("postgres_db", "morgan")
                 postgres_user = self.config.get("postgres_user", "morgan")
-                postgres_password = self.config.get("postgres_password", "morgan_secure_password")
+                postgres_password = self.config.get(
+                    "postgres_password", "morgan_secure_password"
+                )
 
                 postgres_dsn = f"postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_db}"
 
@@ -315,7 +341,7 @@ class MorganCore:
                     postgres_dsn=postgres_dsn,
                     qdrant_host=qdrant_host,
                     qdrant_port=qdrant_port,
-                    embedding_dimension=embedding_dim
+                    embedding_dimension=embedding_dim,
                 )
                 await self.memory_manager.start()
                 self.logger.info("Memory Manager initialized")
@@ -327,7 +353,9 @@ class MorganCore:
                 self.logger.info("MCP Tools Manager initialized")
 
         except Exception as e:
-            self.logger.error(f"Failed to initialize database managers: {e}", exc_info=True)
+            self.logger.error(
+                f"Failed to initialize database managers: {e}", exc_info=True
+            )
             raise
 
     async def _register_services(self):
@@ -335,26 +363,17 @@ class MorganCore:
         try:
             # Register LLM service
             service_registry.register_service(
-                "llm",
-                self.core_config.llm_service_url,
-                timeout=30.0,
-                max_retries=3
+                "llm", self.core_config.llm_service_url, timeout=30.0, max_retries=3
             )
 
             # Register TTS service
             service_registry.register_service(
-                "tts",
-                self.core_config.tts_service_url,
-                timeout=30.0,
-                max_retries=3
+                "tts", self.core_config.tts_service_url, timeout=30.0, max_retries=3
             )
 
             # Register STT service
             service_registry.register_service(
-                "stt",
-                self.core_config.stt_service_url,
-                timeout=30.0,
-                max_retries=3
+                "stt", self.core_config.stt_service_url, timeout=30.0, max_retries=3
             )
 
             self.logger.info("Services registered successfully")
@@ -363,8 +382,12 @@ class MorganCore:
             self.logger.error(f"Failed to register services: {e}")
             raise
 
-    async def process_text_request(self, text: str, user_id: str = "default",
-                                 metadata: Optional[Dict[str, Any]] = None) -> Response:
+    async def process_text_request(
+        self,
+        text: str,
+        user_id: str = "default",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Response:
         """Process text input request"""
         with Timer(self.logger, f"Text processing for user {user_id}"):
             try:
@@ -374,21 +397,21 @@ class MorganCore:
                 context = await self.conversation_manager.get_context(user_id)
 
                 # Add user message (async)
-                user_message = Message(
-                    role="user",
-                    content=text,
-                    metadata=metadata
-                )
+                user_message = Message(role="user", content=text, metadata=metadata)
                 await self.conversation_manager.add_message(user_id, user_message)
 
                 # Process through streaming orchestrator
-                response = await self.streaming_orchestrator.process_request(context, metadata)
+                response = await self.streaming_orchestrator.process_request(
+                    context, metadata
+                )
 
                 # Add assistant response to context (async)
                 assistant_message = Message(
                     role="assistant",
                     content=response.text,
-                    metadata={"actions": len(response.actions) if response.actions else 0}
+                    metadata={
+                        "actions": len(response.actions) if response.actions else 0
+                    },
                 )
                 await self.conversation_manager.add_message(user_id, assistant_message)
 
@@ -398,11 +421,15 @@ class MorganCore:
                 self.logger.error(f"Error processing text request: {e}")
                 return Response(
                     text="I'm sorry, I'm having trouble processing your request. Please try again.",
-                    metadata={"error": True, "error_message": str(e)}
+                    metadata={"error": True, "error_message": str(e)},
                 )
 
-    async def process_audio_request(self, audio_data: bytes, user_id: str = "default",
-                                  metadata: Optional[Dict[str, Any]] = None) -> Response:
+    async def process_audio_request(
+        self,
+        audio_data: bytes,
+        user_id: str = "default",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Response:
         """Process audio input request"""
         with Timer(self.logger, f"Audio processing for user {user_id}"):
             try:
@@ -420,7 +447,7 @@ class MorganCore:
                 assistant_message = Message(
                     role="assistant",
                     content=response.text,
-                    metadata={"audio_processed": True}
+                    metadata={"audio_processed": True},
                 )
                 await self.conversation_manager.add_message(user_id, assistant_message)
 
@@ -430,7 +457,7 @@ class MorganCore:
                 self.logger.error(f"Error processing audio request: {e}")
                 return Response(
                     text="I'm sorry, I couldn't process the audio. Please try again.",
-                    metadata={"error": True, "error_message": str(e)}
+                    metadata={"error": True, "error_message": str(e)},
                 )
 
     async def get_system_status(self) -> Dict[str, Any]:
@@ -459,7 +486,7 @@ class MorganCore:
                 "services": service_health,
                 "orchestrator": orchestrator_status,
                 "conversations": conversation_status,
-                "timestamp": time.time()
+                "timestamp": time.time(),
             }
 
         except Exception as e:
@@ -468,7 +495,7 @@ class MorganCore:
                 "version": "0.2.0",
                 "status": "unhealthy",
                 "error": str(e),
-                "timestamp": time.time()
+                "timestamp": time.time(),
             }
 
     async def _periodic_cleanup(self):
@@ -496,7 +523,9 @@ class MorganCore:
                 # Log current status periodically
                 if self.request_count > 0 and self.request_count % 100 == 0:
                     status = await self.get_system_status()
-                    self.logger.info(f"System status: {status['status']}, requests: {status['request_count']}")
+                    self.logger.info(
+                        f"System status: {status['status']}, requests: {status['request_count']}"
+                    )
 
                 await asyncio.sleep(30)  # Check every 30 seconds
 
@@ -532,10 +561,7 @@ async def main():
     config_data = config.all()
 
     # Setup logging
-    logger = setup_logging(
-        "morgan_core_main",
-        config.get("log_level", "INFO")
-    )
+    logger = setup_logging("morgan_core_main", config.get("log_level", "INFO"))
 
     logger.info("Starting Morgan Core Service...")
 
