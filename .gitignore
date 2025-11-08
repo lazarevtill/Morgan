@@ -1,90 +1,12 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+/.pytest_cache
+/morgan-venv
+/data/cache
 *.pyc
-
-# Virtual environments
-.venv/
-venv/
-ENV/
-env/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# Logs
-*.log
-logs/
-*.log.*
-
-# Data and models
-data/
-!data/.gitkeep
-data/models/
-data/conversations/
-data/voices/
-
-# Model cache (specific ignores)
-data/models/stt/whisper/models--*/blobs/*
-data/models/stt/whisper/.locks/*
-data/models/stt/whisper/models--*/snapshots/*
-*.bin
-*.onnx
-*.pt
-*.pth
-*.safetensors
-
-# Docker volumes
-postgres-data/
-qdrant-data/
-
-# Environment
+/morgan-rag/data/cache/
+*.meta
+*.cache
+/.env
 .env
-.env.local
-.env.*.local
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.hypothesis/
-*.cover
-.cache
-nosetests.xml
-coverage.xml
-*.coveragerc
-
-# OS
-.DS_Store
-Thumbs.db
-Desktop.ini
-
-# Temporary files
-*.tmp
-*.temp
-tmp/
-temp/
+data/
+logs/
+*.logs
