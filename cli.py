@@ -203,7 +203,7 @@ class MorganCLI:
         """Get conversation memory statistics"""
         try:
             async with self.session.get(
-                f"{self.base_url}/status",
+                f"{self.base_url}/api/status",
                 timeout=self.timeout
             ) as resp:
                 if resp.status == 200:

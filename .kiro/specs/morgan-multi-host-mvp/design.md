@@ -1259,13 +1259,13 @@ class PodAllocator:
             }
         ))
 
-    def _allocate_arm_services(self, arm_hosts: List[HostCapabilities]):
+    def _allocate_arm_pods(self, arm_nodes: List[NodeCapabilities]):
         """Allocate ARM64 services (macOS M1)"""
 
-        if not arm_hosts:
+        if not arm_nodes:
             return  # Optional
 
-        arm_host = arm_hosts[0]
+        arm_node = arm_nodes[0]
 
         # Core proxy (ARM64-compatible)
         self.allocations.append(PodAllocation(
@@ -2068,39 +2068,50 @@ flowchart TD
     Q -->|No| R[Complete ingestion]
 ```
 
-### Process 3: Dynamic Service Failover
+### Process 3: Dynamic Service Failover (Kubernetes-Native)
 
 ```mermaid
 flowchart TD
-    A[Service Running] --> B[Health Check Fails 3x]
-    B --> C[Consul marks service unhealthy]
-    C --> D[Consul removes from service registry]
+    A[Pod Running] --> B[Liveness Probe Fails 3x]
+    B --> C[Kubelet terminates pod]
+    C --> D[Deployment controller creates new pod]
 
-    D --> E[Core RAG Orchestrator detects failure]
-    E --> F[Query Consul for remaining healthy instances]
-    F --> G{Healthy instances available?}
+    A --> E[Readiness Probe Fails]
+    E --> F[Kubernetes removes pod from Service endpoints]
+    F --> G[Service routes traffic to other ready pods]
 
-    G -->|Yes| H[Route to next healthy instance]
-    G -->|No| I{Service type?}
+    G --> H{Other ready pods available?}
 
-    I -->|GPU LLM| J[Fall back to CPU LLM or queue]
-    I -->|Embedding| K[Fall back to CPU embedding degraded]
-    I -->|Qdrant| L[Use PostgreSQL full-text search fallback]
+    H -->|Yes| I[Traffic continues via healthy pods]
+    H -->|No| J{Service type?}
 
-    H --> M[Continue processing requests]
-    J --> M
-    K --> M
-    L --> M
+    J -->|GPU LLM| K[Fall back to CPU LLM or queue]
+    J -->|Embedding| L[Fall back to CPU embedding degraded]
+    J -->|Qdrant| M[Use PostgreSQL full-text search fallback]
 
-    M --> N[Docker Swarm restarts failed container]
-    N --> O{Restart successful?}
+    I --> N[Continue processing requests]
+    K --> N
+    L --> N
+    M --> N
 
-    O -->|Yes| P[Service re-registers with Consul]
-    P --> Q[Service returns to healthy pool]
+    D --> O{New pod starts successfully?}
 
-    O -->|No| R[Alert administrator]
-    R --> S[Manual intervention required]
+    O -->|Yes| P[Readiness probe passes]
+    P --> Q[Pod added to Service endpoints]
+    Q --> R[Pod joins healthy pool]
+
+    O -->|No - CrashLoopBackOff| S[Alert via Prometheus/Grafana]
+    S --> T[Manual intervention required]
+
+    R --> N
 ```
+
+**Key Kubernetes Mechanisms:**
+- **Liveness Probes**: Kubelet automatically restarts failed pods
+- **Readiness Probes**: Service only routes to pods passing readiness checks
+- **Deployments**: Maintain desired replica count, auto-restart failed pods
+- **Service Discovery**: Native DNS (service-name.namespace.svc.cluster.local)
+- **Load Balancing**: Built-in via Service resources across healthy pods
 
 ---
 
