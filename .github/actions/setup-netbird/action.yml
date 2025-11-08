@@ -41,3 +41,21 @@ runs:
           echo "Failing the action to prevent masked errors in subsequent steps"
           exit 1
         fi
+
+    - name: Cleanup NetBird VPN
+      if: always()
+      shell: bash
+      run: |
+        echo "Cleaning up NetBird VPN connection..."
+
+        # Disconnect from VPN
+        sudo netbird down 2>/dev/null || true
+
+        # Stop NetBird service
+        sudo netbird service stop 2>/dev/null || true
+        sudo netbird service uninstall 2>/dev/null || true
+
+        # Clean up any leftover processes
+        sudo pkill -f netbird 2>/dev/null || true
+
+        echo "✓ NetBird VPN cleanup completed"
