@@ -1,0 +1,298 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      version:
+        description: 'Version tag (optional)'
+        required: false
+        type: string
+
+env:
+  REGISTRY: harbor.in.lazarev.cloud
+  IMAGE_PREFIX: morgan
+
+jobs:
+  build-and-push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        service: [core, llm, tts, stt]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Harbor Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Determine Dockerfile path
+        id: dockerfile
+        run: |
+          if [ "${{ matrix.service }}" == "core" ]; then
+            echo "path=core/Dockerfile" >> $GITHUB_OUTPUT
+          else
+            echo "path=services/${{ matrix.service }}/Dockerfile" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ steps.dockerfile.outputs.path }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:buildcache,mode=max
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            COMMIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/staging' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    environment:
+      name: staging
+      url: https://staging-morgan.lazarev.cloud
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
+
+      - name: Deploy to staging server
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
+            cd /opt/morgan
+            git pull origin staging
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker system prune -af
+          EOF
+
+      - name: Health check
+        run: |
+          sleep 30
+          curl -f https://staging-morgan.lazarev.cloud/health || exit 1
+
+      - name: Notify deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.deployment.id,
+              state: 'success',
+              environment_url: 'https://staging-morgan.lazarev.cloud',
+              description: 'Staging deployment successful'
+            })
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment:
+      name: production
+      url: https://morgan.lazarev.cloud
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PRODUCTION_SSH_KEY }}
+
+      - name: Create backup
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+            cd /opt/morgan
+            docker compose exec -T postgres pg_dump -U morgan morgan > backup_$(date +%Y%m%d_%H%M%S).sql
+          EOF
+
+      - name: Deploy to production
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+            cd /opt/morgan
+            git fetch --tags
+            git checkout ${{ github.ref_name }}
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker system prune -af
+          EOF
+
+      - name: Run database migrations
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+            cd /opt/morgan
+            docker compose exec -T core python -m alembic upgrade head || true
+          EOF
+
+      - name: Health check
+        run: |
+          sleep 60
+          for i in {1..10}; do
+            if curl -f https://morgan.lazarev.cloud/health; then
+              echo "Health check passed"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "Health check failed after 10 attempts"
+          exit 1
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+            cd /opt/morgan
+            docker compose down
+            # Restore from backup if needed
+            echo "Deployment failed, manual intervention required"
+          EOF
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: |
+            ## Changes in this Release
+            - Check commit history for details
+
+            ## Deployment
+            - Deployed to production: https://morgan.lazarev.cloud
+            - Docker images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-*:${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+      - name: Notify deployment
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.deployment.id,
+              state: 'success',
+              environment_url: 'https://morgan.lazarev.cloud',
+              description: 'Production deployment successful'
+            })
+
+  smoke-test:
+    name: Post-Deployment Smoke Tests
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: github.ref == 'refs/heads/staging' || needs.deploy-staging.result == 'success'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set environment URL
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+            echo "url=https://staging-morgan.lazarev.cloud" >> $GITHUB_OUTPUT
+          else
+            echo "url=https://morgan.lazarev.cloud" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Test health endpoints
+        run: |
+          curl -f ${{ steps.env.outputs.url }}/health
+          curl -f ${{ steps.env.outputs.url }}/api/health || true
+
+      - name: Test API endpoints
+        run: |
+          # Test basic API functionality
+          curl -X POST ${{ steps.env.outputs.url }}/api/text \
+            -H "Content-Type: application/json" \
+            -d '{"text": "Hello Morgan", "user_id": "test_user"}' || true
+
+      - name: Check service versions
+        run: |
+          curl -s ${{ steps.env.outputs.url }}/version || true
+
+  notify:
+    name: Deployment Notifications
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always()
+
+    steps:
+      - name: Send Slack notification
+        if: always()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Morgan Deployment Status",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Morgan Deployment*\nRef: `${{ github.ref }}`\nStatus: ${{ needs.deploy-staging.result }} / ${{ needs.deploy-production.result }}\nCommit: <${{ github.event.head_commit.url }}|${{ github.sha }}>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true

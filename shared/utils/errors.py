@@ -1,15 +1,48 @@
 """
 Error handling utilities for Morgan AI Assistant
+
+DEPRECATED: This module is maintained for backward compatibility only.
+New code should use:
+- shared.utils.exceptions for exception classes
+- shared.utils.error_handling for error handling utilities
+- shared.utils.error_decorators for error decorators
 """
 import logging
+import warnings
 from typing import Dict, Any, Optional
 from enum import Enum
+
+# Import new exception system
+from shared.utils.exceptions import (
+    MorganException,
+    ErrorCategory,
+    ServiceException,
+    ModelException as NewModelException,
+    AudioException as NewAudioException,
+    ConfigurationException,
+    ValidationException,
+    ServiceUnavailableError,
+    ServiceTimeoutError,
+    ModelNotFoundError,
+    ModelLoadError,
+    ModelInferenceError,
+    AudioProcessingError,
+    AudioFormatError,
+    ConfigMissingError,
+    ConfigInvalidError,
+    InvalidInputError,
+    ValidationError as NewValidationError
+)
 
 logger = logging.getLogger(__name__)
 
 
 class ErrorCode(Enum):
-    """Standard error codes"""
+    """
+    Standard error codes (DEPRECATED)
+
+    Use ErrorCategory from shared.utils.exceptions instead
+    """
     # Service errors
     SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
     SERVICE_TIMEOUT = "SERVICE_TIMEOUT"
@@ -52,7 +85,11 @@ class ErrorCode(Enum):
 
 
 class MorganError(Exception):
-    """Base exception for Morgan AI Assistant"""
+    """
+    Base exception for Morgan AI Assistant (DEPRECATED)
+
+    Use MorganException from shared.utils.exceptions instead
+    """
 
     def __init__(self, message: str, error_code: ErrorCode = ErrorCode.UNKNOWN_ERROR,
                  details: Optional[Dict[str, Any]] = None):
@@ -60,6 +97,13 @@ class MorganError(Exception):
         self.error_code = error_code
         self.details = details or {}
         self.timestamp = None  # Will be set when logged
+
+        # Issue deprecation warning
+        warnings.warn(
+            "MorganError is deprecated. Use MorganException from shared.utils.exceptions instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert error to dictionary"""
@@ -72,35 +116,47 @@ class MorganError(Exception):
 
 
 class ServiceError(MorganError):
-    """Error related to external services"""
+    """Error related to external services (DEPRECATED)"""
     pass
 
 
 class ModelError(MorganError):
-    """Error related to AI models"""
+    """Error related to AI models (DEPRECATED)"""
     pass
 
 
 class AudioError(MorganError):
-    """Error related to audio processing"""
+    """Error related to audio processing (DEPRECATED)"""
     pass
 
 
 class ConfigurationError(MorganError):
-    """Error related to configuration"""
+    """Error related to configuration (DEPRECATED)"""
     pass
 
 
 class ValidationError(MorganError):
-    """Error related to input validation"""
+    """Error related to input validation (DEPRECATED)"""
     pass
 
 
 class ErrorHandler:
-    """Central error handling and logging"""
+    """
+    Central error handling and logging (DEPRECATED)
+
+    Use ErrorHandler from shared.utils.error_handling instead
+    """
 
     def __init__(self, logger: Optional[logging.Logger] = None):
         self.logger = logger or logging.getLogger(__name__)
+
+        # Issue deprecation warning
+        warnings.warn(
+            "ErrorHandler from shared.utils.errors is deprecated. "
+            "Use ErrorHandler from shared.utils.error_handling instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
 
     def handle_error(self, error: Exception, context: Optional[str] = None) -> MorganError:
         """Handle and convert errors to MorganError"""
@@ -151,7 +207,18 @@ class ErrorHandler:
 
 
 def handle_async_errors(logger: Optional[logging.Logger] = None):
-    """Decorator to handle async function errors"""
+    """
+    Decorator to handle async function errors (DEPRECATED)
+
+    Use decorators from shared.utils.error_decorators instead
+    """
+    warnings.warn(
+        "handle_async_errors from shared.utils.errors is deprecated. "
+        "Use decorators from shared.utils.error_decorators instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     def decorator(func):
         async def wrapper(*args, **kwargs):
             try:

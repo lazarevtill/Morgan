@@ -304,15 +304,15 @@ curl http://localhost:11434/api/tags
 ### Pull Models
 ```bash
 # LLM model
-docker exec -it morgan-ollama ollama pull qwen2.5:7b
+docker exec -it ollama ollama pull qwen2.5:7b
 # or for more capable (requires more VRAM)
-docker exec -it morgan-ollama ollama pull qwen2.5:32b
+docker exec -it ollama ollama pull qwen2.5:32b
 
 # Embedding model
-docker exec -it morgan-ollama ollama pull qwen3-embedding:latest
+docker exec -it ollama ollama pull qwen3-embedding:latest
 
 # Verify models
-docker exec -it morgan-ollama ollama list
+docker exec -it ollama ollama list
 ```
 
 ### Setup Qdrant Collections

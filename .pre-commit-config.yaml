@@ -1,0 +1,158 @@
+# Pre-commit hooks configuration for Morgan v2-0.0.1
+# Install: pre-commit install
+# Run manually: pre-commit run --all-files
+# Update hooks: pre-commit autoupdate
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(.*\.md|.*\.txt)$
+      - id: end-of-file-fixer
+        exclude: ^(.*\.md|.*\.txt)$
+      - id: check-yaml
+        args: ['--safe']
+        exclude: ^(.*\.template\.ya?ml)$
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+  # Python code formatting with Black
+  - repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+      - id: black
+        language_version: python3.11
+        args: ['--line-length=100']
+        exclude: ^(morgan-rag/|scripts/refactor|scripts/run_refactoring)
+
+  # Import sorting with isort
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ['--profile=black', '--line-length=100']
+        exclude: ^(morgan-rag/|scripts/refactor|scripts/run_refactoring)
+
+  # Linting with Ruff (faster than flake8)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.2.0
+    hooks:
+      - id: ruff
+        args:
+          - --fix
+          - --line-length=100
+          - --select=E,F,W,I,N,UP,YTT,ASYNC,BLE,B,A,COM,C4,DTZ,T10,ISC,ICN,G,PIE,PYI,PT,Q,RSE,RET,SLF,SIM,TID,TCH,ARG,PTH,ERA,PD,PGH,PL,TRY,NPY,RUF
+        exclude: ^(morgan-rag/|scripts/refactor|scripts/run_refactoring)
+
+  # Type checking with mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        args:
+          - --ignore-missing-imports
+          - --no-strict-optional
+          - --warn-redundant-casts
+          - --warn-unused-ignores
+        additional_dependencies:
+          - types-PyYAML
+          - types-redis
+          - types-aiofiles
+        exclude: ^(morgan-rag/|tests/|scripts/refactor|scripts/run_refactoring)
+
+  # Security checks with bandit
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.6
+    hooks:
+      - id: bandit
+        args: ['-c', 'pyproject.toml']
+        additional_dependencies: ['bandit[toml]']
+        exclude: ^(tests/|morgan-rag/)
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.33.0
+    hooks:
+      - id: yamllint
+        args: ['-c', '.yamllint.yml']
+        exclude: ^(.*\.template\.ya?ml)$
+
+  # Dockerfile linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        args: ['--ignore', 'DL3008', '--ignore', 'DL3013', '--ignore', 'DL3015']
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        args: ['--severity=warning']
+
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.39.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix']
+        exclude: ^(morgan-rag/|docs/archive/)
+
+  # Check for secrets
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: ^(\.env\.example|.*\.md)$
+
+  # Python docstring formatter
+  - repo: https://github.com/pycqa/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        args: ['--convention=google', '--add-ignore=D100,D101,D102,D103,D104,D105,D107']
+        exclude: ^(tests/|morgan-rag/|scripts/)
+
+# Configuration for local hooks
+default_language_version:
+  python: python3.11
+
+# Skip hooks for specific file patterns
+exclude: |
+  (?x)^(
+    morgan-rag/.*|
+    data/.*|
+    logs/.*|
+    \.git/.*|
+    \.venv/.*|
+    __pycache__/.*|
+    .*\.pyc|
+    .*\.pyo|
+    .*\.egg-info/.*
+  )$
+
+# CI mode settings
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit hooks
+
+    For more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: [mypy, bandit]
+  submodules: false
