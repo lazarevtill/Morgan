@@ -1,5 +1,0 @@
-# LLM service requirements
--r requirements-base.txt
-openai==1.54.4
-httpx==0.28.1
-

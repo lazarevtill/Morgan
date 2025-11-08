@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .preference-section {
+            margin-bottom: 30px;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .preference-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .preference-section p {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        
+        .topics-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .topic-tag {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .topic-tag .remove {
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .add-topic {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .add-topic input {
+            flex: 1;
+        }
+        
+        .add-topic button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        .add-topic button:hover {
+            background: #218838;
+        }
+        
+        .profile-summary {
+            background: linear-gradient(135deg, #ffeaa7, #fab1a0);
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .profile-summary h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .profile-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            background: rgba(255,255,255,0.7);
+            padding: 15px;
+            border-radius: 10px;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎛️ Preferences</h1>
+            <div class="subtitle">Customize your Morgan experience</div>
+        </div>
+        
+        <div class="content">
+            <div class="success-message" id="successMessage">
+                Preferences updated successfully! 🎉
+            </div>
+            
+            <div class="error-message" id="errorMessage">
+                Failed to update preferences. Please try again.
+            </div>
+            
+            {% if profile %}
+            <div class="profile-summary">
+                <h3>👤 Your Relationship with Morgan</h3>
+                <div class="profile-stats">
+                    <div class="stat-item">
+                        <div class="stat-value">{{ profile.get_relationship_age_days() }}</div>
+                        <div class="stat-label">Days Together</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{{ profile.interaction_count }}</div>
+                        <div class="stat-label">Conversations</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{{ "%.0f"|format(profile.trust_level * 100) }}%</div>
+                        <div class="stat-label">Trust Level</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{{ "%.0f"|format(profile.engagement_score * 100) }}%</div>
+                        <div class="stat-label">Engagement</div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <form id="preferencesForm">
+                <div class="preference-section">
+                    <h3>🏷️ Personal Information</h3>
+                    <p>Help Morgan personalize your interactions by sharing how you'd like to be addressed.</p>
+                    
+                    <div class="form-group">
+                        <label for="preferredName">What should Morgan call you?</label>
+                        <input type="text" id="preferredName" name="preferredName" 
+                               value="{% if profile %}{{ profile.preferred_name }}{% endif %}"
+                               placeholder="Your preferred name">
+                    </div>
+                </div>
+                
+                <div class="preference-section">
+                    <h3>💬 Communication Style</h3>
+                    <p>Choose how you prefer Morgan to communicate with you.</p>
+                    
+                    <div class="form-group">
+                        <label for="communicationStyle">Communication Style</label>
+                        <select id="communicationStyle" name="communicationStyle">
+                            <option value="friendly" {% if profile and profile.communication_preferences.communication_style.value == 'friendly' %}selected{% endif %}>Friendly & Warm</option>
+                            <option value="casual" {% if profile and profile.communication_preferences.communication_style.value == 'casual' %}selected{% endif %}>Casual & Relaxed</option>
+                            <option value="professional" {% if profile and profile.communication_preferences.communication_style.value == 'professional' %}selected{% endif %}>Professional</option>
+                            <option value="technical" {% if profile and profile.communication_preferences.communication_style.value == 'technical' %}selected{% endif %}>Technical & Detailed</option>
+                            <option value="formal" {% if profile and profile.communication_preferences.communication_style.value == 'formal' %}selected{% endif %}>Formal</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="responseLength">Preferred Response Length</label>
+                        <select id="responseLength" name="responseLength">
+                            <option value="brief" {% if profile and profile.communication_preferences.preferred_response_length.value == 'brief' %}selected{% endif %}>Brief & Concise</option>
+                            <option value="detailed" {% if profile and profile.communication_preferences.preferred_response_length.value == 'detailed' %}selected{% endif %}>Detailed</option>
+                            <option value="comprehensive" {% if profile and profile.communication_preferences.preferred_response_length.value == 'comprehensive' %}selected{% endif %}>Comprehensive</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="preference-section">
+                    <h3>🎯 Topics of Interest</h3>
+                    <p>Tell Morgan about your interests so conversations can be more relevant and engaging.</p>
+                    
+                    <div class="topics-container" id="topicsContainer">
+                        {% if profile and profile.communication_preferences.topics_of_interest %}
+                            {% for topic in profile.communication_preferences.topics_of_interest %}
+                            <div class="topic-tag">
+                                {{ topic }}
+                                <span class="remove" onclick="removeTopic(this)">×</span>
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                    
+                    <div class="add-topic">
+                        <input type="text" id="newTopic" placeholder="Add a topic of interest...">
+                        <button type="button" onclick="addTopic()">Add Topic</button>
+                    </div>
+                </div>
+            </form>
+            
+            <div class="actions">
+                <button class="btn btn-primary" onclick="savePreferences()">💾 Save Preferences</button>
+                <a href="/" class="btn btn-secondary">🔙 Back to Chat</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const userId = '{{ user_id }}';
+        
+        function addTopic() {
+            const input = document.getElementById('newTopic');
+            const topic = input.value.trim();
+            
+            if (topic) {
+                const container = document.getElementById('topicsContainer');
+                const topicTag = document.createElement('div');
+                topicTag.className = 'topic-tag';
+                topicTag.innerHTML = `
+                    ${topic}
+                    <span class="remove" onclick="removeTopic(this)">×</span>
+                `;
+                container.appendChild(topicTag);
+                input.value = '';
+            }
+        }
+        
+        function removeTopic(element) {
+            element.parentElement.remove();
+        }
+        
+        function getTopics() {
+            const topicTags = document.querySelectorAll('.topic-tag');
+            return Array.from(topicTags).map(tag => 
+                tag.textContent.replace('×', '').trim()
+            );
+        }
+        
+        async function savePreferences() {
+            const preferences = {
+                user_id: userId,
+                preferred_name: document.getElementById('preferredName').value,
+                communication_style: document.getElementById('communicationStyle').value,
+                response_length: document.getElementById('responseLength').value,
+                topics_of_interest: getTopics()
+            };
+            
+            try {
+                const response = await fetch('/api/preferences', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(preferences)
+                });
+                
+                if (response.ok) {
+                    showMessage('successMessage');
+                } else {
+                    showMessage('errorMessage');
+                }
+            } catch (error) {
+                console.error('Error saving preferences:', error);
+                showMessage('errorMessage');
+            }
+        }
+        
+        function showMessage(messageId) {
+            const message = document.getElementById(messageId);
+            message.style.display = 'block';
+            setTimeout(() => {
+                message.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Allow adding topics with Enter key
+        document.getElementById('newTopic').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                addTopic();
+            }
+        });
+    </script>
+</body>
+</html>
