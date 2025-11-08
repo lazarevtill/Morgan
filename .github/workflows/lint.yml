@@ -9,6 +9,8 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
+  UV_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
+  PIP_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
 
 jobs:
   lint:
@@ -25,37 +27,10 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
-      - name: Install and configure NetBird VPN
-        env:
-          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
-        run: |
-          # Install NetBird
-          curl -fsSL https://pkgs.netbird.io/install.sh | sh
-
-          # Start NetBird service (required for daemon mode)
-          sudo netbird service install 2>/dev/null || true
-          sudo netbird service start
-
-          # Wait for daemon to be ready
-          sleep 3
-
-          # Connect to NetBird VPN (required for private Nexus access)
-          sudo netbird up \
-            --management-url https://vpn.lazarev.cloud \
-            --setup-key "$NETBIRD_SETUP_KEY" \
-            --log-level info
-
-          # Wait for connection to establish
-          sleep 5
-
-          # Verify connection
-          if sudo netbird status | grep -q "Connected"; then
-            echo "✓ NetBird VPN connected successfully"
-            sudo netbird status
-          else
-            echo "⚠ NetBird connection status unclear, continuing anyway"
-            sudo netbird status || true
-          fi
+      - name: Setup NetBird VPN
+        uses: ./.github/actions/setup-netbird
+        with:
+          setup-key: ${{ secrets.NETBIRD_SETUP_KEY }}
 
       - name: Install uv
         run: |
@@ -63,8 +38,6 @@ jobs:
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install linting tools
-        env:
-          UV_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
         run: |
           uv pip install --system black isort ruff mypy types-PyYAML types-redis
           uv pip install --system -r requirements-base.txt
@@ -108,37 +81,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install and configure NetBird VPN
-        env:
-          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
-        run: |
-          # Install NetBird
-          curl -fsSL https://pkgs.netbird.io/install.sh | sh
-
-          # Start NetBird service (required for daemon mode)
-          sudo netbird service install 2>/dev/null || true
-          sudo netbird service start
-
-          # Wait for daemon to be ready
-          sleep 3
-
-          # Connect to NetBird VPN (required for private Nexus access)
-          sudo netbird up \
-            --management-url https://vpn.lazarev.cloud \
-            --setup-key "$NETBIRD_SETUP_KEY" \
-            --log-level info
-
-          # Wait for connection to establish
-          sleep 5
-
-          # Verify connection
-          if sudo netbird status | grep -q "Connected"; then
-            echo "✓ NetBird VPN connected successfully"
-            sudo netbird status
-          else
-            echo "⚠ NetBird connection status unclear, continuing anyway"
-            sudo netbird status || true
-          fi
+      - name: Setup NetBird VPN
+        uses: ./.github/actions/setup-netbird
+        with:
+          setup-key: ${{ secrets.NETBIRD_SETUP_KEY }}
 
       - name: Install uv
         run: |
@@ -146,8 +92,6 @@ jobs:
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install Black
-        env:
-          UV_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
         run: |
           uv pip install --system black
 
@@ -177,47 +121,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install and configure NetBird VPN
-        env:
-          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
-        run: |
-          # Install NetBird
-          curl -fsSL https://pkgs.netbird.io/install.sh | sh
-
-          # Start NetBird service (required for daemon mode)
-          sudo netbird service install 2>/dev/null || true
-          sudo netbird service start
-
-          # Wait for daemon to be ready
-          sleep 3
-
-          # Connect to NetBird VPN (required for private Nexus access)
-          sudo netbird up \
-            --management-url https://vpn.lazarev.cloud \
-            --setup-key "$NETBIRD_SETUP_KEY" \
-            --log-level info
-
-          # Wait for connection to establish
-          sleep 5
-
-          # Verify connection
-          if sudo netbird status | grep -q "Connected"; then
-            echo "✓ NetBird VPN connected successfully"
-            sudo netbird status
-          else
-            echo "⚠ NetBird connection status unclear, continuing anyway"
-            sudo netbird status || true
-          fi
+      - name: Setup NetBird VPN
+        uses: ./.github/actions/setup-netbird
+        with:
+          setup-key: ${{ secrets.NETBIRD_SETUP_KEY }}
 
       - name: Install yamllint
-        env:
-          PIP_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
         run: |
           pip install yamllint
 
       - name: Lint YAML files
         run: |
-          yamllint -c .yamllint.yml config/ .github/workflows/ docker-compose.yml || true
+          yamllint -c .yamllint.yml config/ .github/workflows/ docker-compose.yml
+        continue-on-error: true
 
   dockerfile-lint:
     name: Dockerfile Linting
