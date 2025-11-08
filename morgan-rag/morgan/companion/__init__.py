@@ -7,17 +7,17 @@ adaptation, milestone tracking, and personalized interactions.
 """
 
 from .relationship_manager import CompanionRelationshipManager
-from .storage import CompanionStorage
 from .schema import (
     CompanionDatabaseSchema,
     validate_companion_payload,
-    validate_emotion_payload
+    validate_emotion_payload,
 )
+from .storage import CompanionStorage
 
 __all__ = [
-    'CompanionRelationshipManager',
-    'CompanionStorage',
-    'CompanionDatabaseSchema',
-    'validate_companion_payload',
-    'validate_emotion_payload'
+    "CompanionRelationshipManager",
+    "CompanionStorage",
+    "CompanionDatabaseSchema",
+    "validate_companion_payload",
+    "validate_emotion_payload",
 ]

@@ -9,21 +9,24 @@ Provides performance optimizations including:
 - Comprehensive batch optimization for all components
 """
 
-from .batch_processor import BatchProcessor, get_batch_processor
-from .connection_pool import ConnectionPoolManager, get_connection_pool_manager
 from .async_processor import AsyncProcessor, get_async_processor
+from .batch_processor import BatchProcessor, get_batch_processor
+from .comprehensive_batch_optimizer import (
+    ComprehensiveBatchOptimizer,
+    get_comprehensive_batch_optimizer,
+)
+from .connection_pool import ConnectionPoolManager, get_connection_pool_manager
 from .emotional_optimizer import EmotionalProcessingOptimizer, get_emotional_optimizer
-from .comprehensive_batch_optimizer import ComprehensiveBatchOptimizer, get_comprehensive_batch_optimizer
 
 __all__ = [
     "BatchProcessor",
-    "get_batch_processor", 
+    "get_batch_processor",
     "ConnectionPoolManager",
     "get_connection_pool_manager",
-    "AsyncProcessor", 
+    "AsyncProcessor",
     "get_async_processor",
     "EmotionalProcessingOptimizer",
     "get_emotional_optimizer",
     "ComprehensiveBatchOptimizer",
-    "get_comprehensive_batch_optimizer"
+    "get_comprehensive_batch_optimizer",
 ]

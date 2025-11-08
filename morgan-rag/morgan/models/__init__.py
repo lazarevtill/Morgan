@@ -14,16 +14,16 @@ Components:
 Requirements addressed: 23.1, 23.2, 23.3
 """
 
-from .manager import ModelManager
-from .local import LocalModelManager
-from .lazarev import LazarevModelManager
 from .cache import ModelCache
+from .lazarev import LazarevModelManager
+from .local import LocalModelManager
+from .manager import ModelManager
 from .selector import ModelSelector
 
 __all__ = [
-    'ModelManager',
-    'LocalModelManager',
-    'LazarevModelManager',
-    'ModelCache',
-    'ModelSelector'
+    "ModelManager",
+    "LocalModelManager",
+    "LazarevModelManager",
+    "ModelCache",
+    "ModelSelector",
 ]

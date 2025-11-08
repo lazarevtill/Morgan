@@ -23,18 +23,18 @@ Components:
 
 from morgan.infrastructure.distributed_llm import (
     DistributedLLMClient,
+    LoadBalancingStrategy,
     get_distributed_llm_client,
-    LoadBalancingStrategy
 )
-from morgan.infrastructure.multi_gpu_manager import MultiGPUManager
 from morgan.infrastructure.local_embeddings import (
     LocalEmbeddingService,
-    get_local_embedding_service
+    get_local_embedding_service,
 )
 from morgan.infrastructure.local_reranking import (
     LocalRerankingService,
-    get_local_reranking_service
+    get_local_reranking_service,
 )
+from morgan.infrastructure.multi_gpu_manager import MultiGPUManager
 
 __all__ = [
     # Distributed LLM

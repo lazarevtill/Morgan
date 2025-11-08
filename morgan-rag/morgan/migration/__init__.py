@@ -9,11 +9,7 @@ Implements requirements R10.4 and R10.5 for migration safety and rollback.
 """
 
 from .migrator import KnowledgeBaseMigrator
-from .validator import MigrationValidator
 from .rollback import RollbackManager
+from .validator import MigrationValidator
 
-__all__ = [
-    "KnowledgeBaseMigrator",
-    "MigrationValidator", 
-    "RollbackManager"
-]
+__all__ = ["KnowledgeBaseMigrator", "MigrationValidator", "RollbackManager"]
