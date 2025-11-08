@@ -7,6 +7,7 @@ This module provides a comprehensive exception system with:
 - Rich error context and metadata
 - Structured error responses
 """
+
 import uuid
 import traceback
 from typing import Dict, Any, Optional, List
@@ -16,6 +17,7 @@ from datetime import datetime
 
 class ErrorSeverity(Enum):
     """Error severity levels"""
+
     DEBUG = "debug"
     INFO = "info"
     WARNING = "warning"
@@ -25,6 +27,7 @@ class ErrorSeverity(Enum):
 
 class ErrorCategory(Enum):
     """Error categories for classification"""
+
     # Service errors
     SERVICE_UNAVAILABLE = "service_unavailable"
     SERVICE_TIMEOUT = "service_timeout"
@@ -107,7 +110,7 @@ class MorganException(Exception):
         correlation_id: Optional[str] = None,
         cause: Optional[Exception] = None,
         user_message: Optional[str] = None,
-        recovery_suggestions: Optional[List[str]] = None
+        recovery_suggestions: Optional[List[str]] = None,
     ):
         super().__init__(message)
 
@@ -119,7 +122,9 @@ class MorganException(Exception):
         self.context = context or {}
         self.correlation_id = correlation_id or str(uuid.uuid4())
         self.cause = cause
-        self.user_message = user_message or "An error occurred while processing your request"
+        self.user_message = (
+            user_message or "An error occurred while processing your request"
+        )
         self.recovery_suggestions = recovery_suggestions or []
         self.timestamp = datetime.utcnow()
         self.stack_trace = traceback.format_exc()
@@ -138,7 +143,7 @@ class MorganException(Exception):
                 "timestamp": self.timestamp.isoformat(),
                 "context": self.context,
                 "recovery_suggestions": self.recovery_suggestions,
-                "caused_by": str(self.cause) if self.cause else None
+                "caused_by": str(self.cause) if self.cause else None,
             }
         }
 
@@ -149,7 +154,7 @@ class MorganException(Exception):
                 "message": self.user_message,
                 "correlation_id": self.correlation_id,
                 "recovery_suggestions": self.recovery_suggestions,
-                "timestamp": self.timestamp.isoformat()
+                "timestamp": self.timestamp.isoformat(),
             }
         }
 
@@ -158,8 +163,10 @@ class MorganException(Exception):
 # Service Exceptions
 # ============================================================================
 
+
 class ServiceException(MorganException):
     """Base exception for service-related errors"""
+
     def __init__(self, message: str, service_name: str, **kwargs):
         super().__init__(message, **kwargs)
         self.context["service_name"] = service_name
@@ -168,6 +175,7 @@ class ServiceException(MorganException):
 
 class ServiceUnavailableError(ServiceException):
     """Service is unavailable or unreachable"""
+
     def __init__(self, service_name: str, message: Optional[str] = None, **kwargs):
         message = message or f"Service '{service_name}' is unavailable"
         super().__init__(
@@ -178,13 +186,17 @@ class ServiceUnavailableError(ServiceException):
             is_transient=True,
             is_retryable=True,
             user_message=f"The {service_name} service is temporarily unavailable. Please try again.",
-            recovery_suggestions=["Wait a few moments and try again", "Check service status"],
-            **kwargs
+            recovery_suggestions=[
+                "Wait a few moments and try again",
+                "Check service status",
+            ],
+            **kwargs,
         )
 
 
 class ServiceTimeoutError(ServiceException):
     """Service request timed out"""
+
     def __init__(self, service_name: str, timeout_seconds: float, **kwargs):
         super().__init__(
             message=f"Service '{service_name}' timed out after {timeout_seconds}s",
@@ -194,14 +206,18 @@ class ServiceTimeoutError(ServiceException):
             is_transient=True,
             is_retryable=True,
             user_message="The request took too long to process. Please try again.",
-            recovery_suggestions=["Try again with a simpler request", "Wait a moment and retry"],
-            **kwargs
+            recovery_suggestions=[
+                "Try again with a simpler request",
+                "Wait a moment and retry",
+            ],
+            **kwargs,
         )
         self.context["timeout_seconds"] = timeout_seconds
 
 
 class ServiceDegradedError(ServiceException):
     """Service is degraded but partially functional"""
+
     def __init__(self, service_name: str, message: str, **kwargs):
         super().__init__(
             message=message,
@@ -211,7 +227,7 @@ class ServiceDegradedError(ServiceException):
             is_transient=True,
             is_retryable=False,
             user_message=f"The {service_name} service is running with reduced capacity.",
-            **kwargs
+            **kwargs,
         )
 
 
@@ -219,8 +235,10 @@ class ServiceDegradedError(ServiceException):
 # Model Exceptions
 # ============================================================================
 
+
 class ModelException(MorganException):
     """Base exception for model-related errors"""
+
     def __init__(self, message: str, model_name: Optional[str] = None, **kwargs):
         super().__init__(message, **kwargs)
         if model_name:
@@ -230,6 +248,7 @@ class ModelException(MorganException):
 
 class ModelNotFoundError(ModelException):
     """Model not found or not loaded"""
+
     def __init__(self, model_name: str, **kwargs):
         super().__init__(
             message=f"Model '{model_name}' not found or not loaded",
@@ -239,13 +258,18 @@ class ModelNotFoundError(ModelException):
             is_transient=False,
             is_retryable=False,
             user_message="The requested AI model is not available.",
-            recovery_suggestions=["Check model name", "Load the model first", "Use a different model"],
-            **kwargs
+            recovery_suggestions=[
+                "Check model name",
+                "Load the model first",
+                "Use a different model",
+            ],
+            **kwargs,
         )
 
 
 class ModelLoadError(ModelException):
     """Failed to load model"""
+
     def __init__(self, model_name: str, reason: str, **kwargs):
         super().__init__(
             message=f"Failed to load model '{model_name}': {reason}",
@@ -255,14 +279,19 @@ class ModelLoadError(ModelException):
             is_transient=False,
             is_retryable=False,
             user_message="Failed to load the AI model.",
-            recovery_suggestions=["Check model availability", "Verify system resources", "Contact support"],
-            **kwargs
+            recovery_suggestions=[
+                "Check model availability",
+                "Verify system resources",
+                "Contact support",
+            ],
+            **kwargs,
         )
         self.context["load_failure_reason"] = reason
 
 
 class ModelInferenceError(ModelException):
     """Model inference failed"""
+
     def __init__(self, model_name: str, reason: str, **kwargs):
         super().__init__(
             message=f"Model inference failed for '{model_name}': {reason}",
@@ -272,15 +301,22 @@ class ModelInferenceError(ModelException):
             is_transient=True,
             is_retryable=True,
             user_message="Failed to process your request with the AI model.",
-            recovery_suggestions=["Try again", "Simplify your request", "Try a different model"],
-            **kwargs
+            recovery_suggestions=[
+                "Try again",
+                "Simplify your request",
+                "Try a different model",
+            ],
+            **kwargs,
         )
         self.context["inference_failure_reason"] = reason
 
 
 class ModelOutOfMemoryError(ModelException):
     """Model ran out of memory during inference"""
-    def __init__(self, model_name: str, memory_required: Optional[int] = None, **kwargs):
+
+    def __init__(
+        self, model_name: str, memory_required: Optional[int] = None, **kwargs
+    ):
         super().__init__(
             message=f"Out of memory during inference with model '{model_name}'",
             model_name=model_name,
@@ -289,8 +325,12 @@ class ModelOutOfMemoryError(ModelException):
             is_transient=True,
             is_retryable=True,
             user_message="Insufficient memory to process your request.",
-            recovery_suggestions=["Try a smaller input", "Use a smaller model", "Free up system memory"],
-            **kwargs
+            recovery_suggestions=[
+                "Try a smaller input",
+                "Use a smaller model",
+                "Free up system memory",
+            ],
+            **kwargs,
         )
         if memory_required:
             self.context["memory_required_mb"] = memory_required
@@ -300,13 +340,16 @@ class ModelOutOfMemoryError(ModelException):
 # Audio Exceptions
 # ============================================================================
 
+
 class AudioException(MorganException):
     """Base exception for audio-related errors"""
+
     pass
 
 
 class AudioFormatError(AudioException):
     """Invalid audio format"""
+
     def __init__(self, message: str, expected_format: Optional[str] = None, **kwargs):
         super().__init__(
             message=message,
@@ -315,8 +358,12 @@ class AudioFormatError(AudioException):
             is_transient=False,
             is_retryable=False,
             user_message="The audio format is not supported.",
-            recovery_suggestions=["Use WAV or MP3 format", "Check audio encoding", "Re-encode the audio"],
-            **kwargs
+            recovery_suggestions=[
+                "Use WAV or MP3 format",
+                "Check audio encoding",
+                "Re-encode the audio",
+            ],
+            **kwargs,
         )
         if expected_format:
             self.context["expected_format"] = expected_format
@@ -324,6 +371,7 @@ class AudioFormatError(AudioException):
 
 class AudioProcessingError(AudioException):
     """Audio processing failed"""
+
     def __init__(self, message: str, operation: Optional[str] = None, **kwargs):
         super().__init__(
             message=message,
@@ -332,8 +380,12 @@ class AudioProcessingError(AudioException):
             is_transient=True,
             is_retryable=True,
             user_message="Failed to process the audio.",
-            recovery_suggestions=["Try again", "Check audio quality", "Use a different audio file"],
-            **kwargs
+            recovery_suggestions=[
+                "Try again",
+                "Check audio quality",
+                "Use a different audio file",
+            ],
+            **kwargs,
         )
         if operation:
             self.context["failed_operation"] = operation
@@ -341,6 +393,7 @@ class AudioProcessingError(AudioException):
 
 class AudioEncodingError(AudioException):
     """Audio encoding failed"""
+
     def __init__(self, message: str, target_format: Optional[str] = None, **kwargs):
         super().__init__(
             message=message,
@@ -349,7 +402,7 @@ class AudioEncodingError(AudioException):
             is_transient=True,
             is_retryable=True,
             user_message="Failed to encode the audio.",
-            **kwargs
+            **kwargs,
         )
         if target_format:
             self.context["target_format"] = target_format
@@ -357,6 +410,7 @@ class AudioEncodingError(AudioException):
 
 class AudioDecodingError(AudioException):
     """Audio decoding failed"""
+
     def __init__(self, message: str, source_format: Optional[str] = None, **kwargs):
         super().__init__(
             message=message,
@@ -365,7 +419,7 @@ class AudioDecodingError(AudioException):
             is_transient=True,
             is_retryable=True,
             user_message="Failed to decode the audio.",
-            **kwargs
+            **kwargs,
         )
         if source_format:
             self.context["source_format"] = source_format
@@ -375,14 +429,23 @@ class AudioDecodingError(AudioException):
 # Network Exceptions
 # ============================================================================
 
+
 class NetworkException(MorganException):
     """Base exception for network-related errors"""
+
     pass
 
 
 class NetworkConnectionError(NetworkException):
     """Network connection failed"""
-    def __init__(self, message: str, host: Optional[str] = None, port: Optional[int] = None, **kwargs):
+
+    def __init__(
+        self,
+        message: str,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        **kwargs,
+    ):
         super().__init__(
             message=message,
             category=ErrorCategory.NETWORK_CONNECTION_FAILED,
@@ -390,8 +453,12 @@ class NetworkConnectionError(NetworkException):
             is_transient=True,
             is_retryable=True,
             user_message="Failed to establish network connection.",
-            recovery_suggestions=["Check network connectivity", "Verify service is running", "Retry in a moment"],
-            **kwargs
+            recovery_suggestions=[
+                "Check network connectivity",
+                "Verify service is running",
+                "Retry in a moment",
+            ],
+            **kwargs,
         )
         if host:
             self.context["host"] = host
@@ -401,6 +468,7 @@ class NetworkConnectionError(NetworkException):
 
 class NetworkTimeoutError(NetworkException):
     """Network request timed out"""
+
     def __init__(self, message: str, timeout_seconds: float, **kwargs):
         super().__init__(
             message=message,
@@ -410,7 +478,7 @@ class NetworkTimeoutError(NetworkException):
             is_retryable=True,
             user_message="Network request timed out.",
             recovery_suggestions=["Check network connectivity", "Retry the request"],
-            **kwargs
+            **kwargs,
         )
         self.context["timeout_seconds"] = timeout_seconds
 
@@ -419,13 +487,16 @@ class NetworkTimeoutError(NetworkException):
 # Configuration Exceptions
 # ============================================================================
 
+
 class ConfigurationException(MorganException):
     """Base exception for configuration errors"""
+
     pass
 
 
 class ConfigMissingError(ConfigurationException):
     """Required configuration is missing"""
+
     def __init__(self, config_key: str, **kwargs):
         super().__init__(
             message=f"Missing required configuration: {config_key}",
@@ -434,14 +505,18 @@ class ConfigMissingError(ConfigurationException):
             is_transient=False,
             is_retryable=False,
             user_message="System configuration is incomplete.",
-            recovery_suggestions=[f"Set the '{config_key}' configuration", "Contact administrator"],
-            **kwargs
+            recovery_suggestions=[
+                f"Set the '{config_key}' configuration",
+                "Contact administrator",
+            ],
+            **kwargs,
         )
         self.context["missing_config_key"] = config_key
 
 
 class ConfigInvalidError(ConfigurationException):
     """Configuration value is invalid"""
+
     def __init__(self, config_key: str, invalid_value: Any, reason: str, **kwargs):
         super().__init__(
             message=f"Invalid configuration for '{config_key}': {reason}",
@@ -450,27 +525,35 @@ class ConfigInvalidError(ConfigurationException):
             is_transient=False,
             is_retryable=False,
             user_message="System configuration is invalid.",
-            recovery_suggestions=[f"Fix the '{config_key}' configuration", "Contact administrator"],
-            **kwargs
+            recovery_suggestions=[
+                f"Fix the '{config_key}' configuration",
+                "Contact administrator",
+            ],
+            **kwargs,
         )
-        self.context.update({
-            "config_key": config_key,
-            "invalid_value": str(invalid_value),
-            "reason": reason
-        })
+        self.context.update(
+            {
+                "config_key": config_key,
+                "invalid_value": str(invalid_value),
+                "reason": reason,
+            }
+        )
 
 
 # ============================================================================
 # Validation Exceptions
 # ============================================================================
 
+
 class ValidationException(MorganException):
     """Base exception for validation errors"""
+
     pass
 
 
 class ValidationError(ValidationException):
     """Input validation failed"""
+
     def __init__(self, message: str, field_name: Optional[str] = None, **kwargs):
         super().__init__(
             message=message,
@@ -480,7 +563,7 @@ class ValidationError(ValidationException):
             is_retryable=False,
             user_message="Input validation failed.",
             recovery_suggestions=["Check input format", "Review validation rules"],
-            **kwargs
+            **kwargs,
         )
         if field_name:
             self.context["field_name"] = field_name
@@ -488,6 +571,7 @@ class ValidationError(ValidationException):
 
 class InvalidInputError(ValidationException):
     """Input is invalid"""
+
     def __init__(self, message: str, input_name: str, **kwargs):
         super().__init__(
             message=message,
@@ -497,13 +581,14 @@ class InvalidInputError(ValidationException):
             is_retryable=False,
             user_message=f"Invalid input: {input_name}",
             recovery_suggestions=["Correct the input", "Check input requirements"],
-            **kwargs
+            **kwargs,
         )
         self.context["input_name"] = input_name
 
 
 class MissingRequiredFieldError(ValidationException):
     """Required field is missing"""
+
     def __init__(self, field_name: str, **kwargs):
         super().__init__(
             message=f"Missing required field: {field_name}",
@@ -513,7 +598,7 @@ class MissingRequiredFieldError(ValidationException):
             is_retryable=False,
             user_message=f"Required field '{field_name}' is missing.",
             recovery_suggestions=[f"Provide the '{field_name}' field"],
-            **kwargs
+            **kwargs,
         )
         self.context["field_name"] = field_name
 
@@ -522,13 +607,16 @@ class MissingRequiredFieldError(ValidationException):
 # Resource Exceptions
 # ============================================================================
 
+
 class ResourceException(MorganException):
     """Base exception for resource-related errors"""
+
     pass
 
 
 class ResourceExhaustedError(ResourceException):
     """Resource exhausted"""
+
     def __init__(self, resource_name: str, **kwargs):
         super().__init__(
             message=f"Resource exhausted: {resource_name}",
@@ -537,14 +625,19 @@ class ResourceExhaustedError(ResourceException):
             is_transient=True,
             is_retryable=True,
             user_message="System resources are exhausted.",
-            recovery_suggestions=["Wait and try again", "Reduce request size", "Contact administrator"],
-            **kwargs
+            recovery_suggestions=[
+                "Wait and try again",
+                "Reduce request size",
+                "Contact administrator",
+            ],
+            **kwargs,
         )
         self.context["resource_name"] = resource_name
 
 
 class QuotaExceededError(ResourceException):
     """Quota exceeded"""
+
     def __init__(self, quota_name: str, limit: int, current: int, **kwargs):
         super().__init__(
             message=f"Quota exceeded for '{quota_name}': {current}/{limit}",
@@ -553,18 +646,21 @@ class QuotaExceededError(ResourceException):
             is_transient=False,
             is_retryable=False,
             user_message=f"You have exceeded the {quota_name} quota.",
-            recovery_suggestions=["Wait for quota reset", "Upgrade quota", "Contact support"],
-            **kwargs
+            recovery_suggestions=[
+                "Wait for quota reset",
+                "Upgrade quota",
+                "Contact support",
+            ],
+            **kwargs,
         )
-        self.context.update({
-            "quota_name": quota_name,
-            "limit": limit,
-            "current": current
-        })
+        self.context.update(
+            {"quota_name": quota_name, "limit": limit, "current": current}
+        )
 
 
 class GPUOutOfMemoryError(ResourceException):
     """GPU out of memory"""
+
     def __init__(self, required_memory_mb: Optional[int] = None, **kwargs):
         super().__init__(
             message="GPU out of memory",
@@ -573,8 +669,12 @@ class GPUOutOfMemoryError(ResourceException):
             is_transient=True,
             is_retryable=True,
             user_message="Insufficient GPU memory to process your request.",
-            recovery_suggestions=["Try a smaller input", "Use a smaller model", "Free up GPU memory"],
-            **kwargs
+            recovery_suggestions=[
+                "Try a smaller input",
+                "Use a smaller model",
+                "Free up GPU memory",
+            ],
+            **kwargs,
         )
         if required_memory_mb:
             self.context["required_memory_mb"] = required_memory_mb
@@ -584,13 +684,16 @@ class GPUOutOfMemoryError(ResourceException):
 # Database Exceptions
 # ============================================================================
 
+
 class DatabaseException(MorganException):
     """Base exception for database errors"""
+
     pass
 
 
 class DatabaseConnectionError(DatabaseException):
     """Database connection failed"""
+
     def __init__(self, message: str, **kwargs):
         super().__init__(
             message=message,
@@ -599,13 +702,18 @@ class DatabaseConnectionError(DatabaseException):
             is_transient=True,
             is_retryable=True,
             user_message="Failed to connect to database.",
-            recovery_suggestions=["Check database connectivity", "Verify credentials", "Contact administrator"],
-            **kwargs
+            recovery_suggestions=[
+                "Check database connectivity",
+                "Verify credentials",
+                "Contact administrator",
+            ],
+            **kwargs,
         )
 
 
 class DatabaseQueryError(DatabaseException):
     """Database query failed"""
+
     def __init__(self, message: str, query: Optional[str] = None, **kwargs):
         super().__init__(
             message=message,
@@ -614,26 +722,40 @@ class DatabaseQueryError(DatabaseException):
             is_transient=True,
             is_retryable=True,
             user_message="Database query failed.",
-            recovery_suggestions=["Retry the operation", "Contact support if issue persists"],
-            **kwargs
+            recovery_suggestions=[
+                "Retry the operation",
+                "Contact support if issue persists",
+            ],
+            **kwargs,
         )
         if query:
             # Sanitize query before storing (remove sensitive data)
-            self.context["query_preview"] = query[:100] + "..." if len(query) > 100 else query
+            self.context["query_preview"] = (
+                query[:100] + "..." if len(query) > 100 else query
+            )
 
 
 # ============================================================================
 # External Integration Exceptions
 # ============================================================================
 
+
 class ExternalIntegrationException(MorganException):
     """Base exception for external integration errors"""
+
     pass
 
 
 class ExternalAPIError(ExternalIntegrationException):
     """External API returned an error"""
-    def __init__(self, api_name: str, status_code: Optional[int] = None, message: Optional[str] = None, **kwargs):
+
+    def __init__(
+        self,
+        api_name: str,
+        status_code: Optional[int] = None,
+        message: Optional[str] = None,
+        **kwargs,
+    ):
         msg = f"External API error from '{api_name}'"
         if status_code:
             msg += f" (status {status_code})"
@@ -647,10 +769,10 @@ class ExternalAPIError(ExternalIntegrationException):
             is_transient=True,
             is_retryable=True,
             user_message=f"External service '{api_name}' returned an error.",
-            recovery_suggestions=["Try again later", "Contact support if issue persists"],
-            **kwargs
+            recovery_suggestions=[
+                "Try again later",
+                "Contact support if issue persists",
+            ],
+            **kwargs,
         )
-        self.context.update({
-            "api_name": api_name,
-            "status_code": status_code
-        })
+        self.context.update({"api_name": api_name, "status_code": status_code})

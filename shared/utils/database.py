@@ -1,6 +1,7 @@
 """
 PostgreSQL database utilities for Morgan AI Assistant
 """
+
 import asyncio
 import json
 import logging
@@ -18,7 +19,7 @@ from shared.models.database import (
     AudioTranscriptionModel,
     TTSGenerationModel,
     UserPreferencesModel,
-    SystemMetricModel
+    SystemMetricModel,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,19 +36,22 @@ class DatabaseClient:
         user: Optional[str] = None,
         password: Optional[str] = None,
         min_size: int = 10,
-        max_size: int = 20
+        max_size: int = 20,
     ):
         import os
+
         # Load from environment variables with fallback to parameters
         self.host = host or os.getenv("POSTGRES_HOST", "localhost")
         self.port = port or int(os.getenv("POSTGRES_PORT", "5432"))
         self.database = database or os.getenv("POSTGRES_DB", "morgan")
         self.user = user or os.getenv("POSTGRES_USER", "morgan")
         self.password = password or os.getenv("POSTGRES_PASSWORD")
-        
+
         if not self.password:
-            raise ValueError("PostgreSQL password must be provided via POSTGRES_PASSWORD environment variable or password parameter")
-        
+            raise ValueError(
+                "PostgreSQL password must be provided via POSTGRES_PASSWORD environment variable or password parameter"
+            )
+
         self.min_size = min_size
         self.max_size = max_size
         self.pool: Optional[Pool] = None
@@ -64,9 +68,11 @@ class DatabaseClient:
                 password=self.password,
                 min_size=self.min_size,
                 max_size=self.max_size,
-                command_timeout=60
+                command_timeout=60,
             )
-            self.logger.info(f"Connected to PostgreSQL at {self.host}:{self.port}/{self.database}")
+            self.logger.info(
+                f"Connected to PostgreSQL at {self.host}:{self.port}/{self.database}"
+            )
         except Exception as e:
             self.logger.error(f"Failed to connect to PostgreSQL: {e}")
             raise
@@ -82,7 +88,7 @@ class DatabaseClient:
         """Acquire a connection from the pool"""
         if not self.pool:
             raise RuntimeError("Database pool not initialized. Call connect() first.")
-        
+
         async with self.pool.acquire() as conn:
             yield conn
 
@@ -101,7 +107,9 @@ class DatabaseClient:
         """Create a new conversation"""
         async with self.acquire() as conn:
             # Convert metadata dict to JSON string for PostgreSQL
-            metadata_json = json.dumps(conversation.metadata) if conversation.metadata else '{}'
+            metadata_json = (
+                json.dumps(conversation.metadata) if conversation.metadata else "{}"
+            )
 
             row = await conn.fetchrow(
                 """
@@ -112,28 +120,32 @@ class DatabaseClient:
                 conversation.conversation_id,
                 conversation.user_id,
                 conversation.title,
-                metadata_json
+                metadata_json,
             )
-            return row['id']
+            return row["id"]
 
-    async def get_conversation(self, conversation_id: str) -> Optional[ConversationModel]:
+    async def get_conversation(
+        self, conversation_id: str
+    ) -> Optional[ConversationModel]:
         """Get conversation by conversation_id"""
         async with self.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT * FROM conversations WHERE conversation_id = $1",
-                conversation_id
+                conversation_id,
             )
             if not row:
                 return None
 
             # Convert row to dict and parse JSON metadata
             row_dict = dict(row)
-            if isinstance(row_dict.get('metadata'), str):
+            if isinstance(row_dict.get("metadata"), str):
                 try:
-                    row_dict['metadata'] = json.loads(row_dict['metadata'])
+                    row_dict["metadata"] = json.loads(row_dict["metadata"])
                 except (json.JSONDecodeError, ValueError) as e:
-                    logger.error(f"Failed to parse metadata JSON for conversation {conversation_id}: {e}")
-                    row_dict['metadata'] = {}
+                    logger.error(
+                        f"Failed to parse metadata JSON for conversation {conversation_id}: {e}"
+                    )
+                    row_dict["metadata"] = {}
 
             return ConversationModel(**row_dict)
 
@@ -141,19 +153,17 @@ class DatabaseClient:
         """Update conversation fields"""
         if not kwargs:
             return
-        
-        set_clause = ", ".join([f"{key} = ${i+2}" for i, key in enumerate(kwargs.keys())])
+
+        set_clause = ", ".join(
+            [f"{key} = ${i+2}" for i, key in enumerate(kwargs.keys())]
+        )
         query = f"UPDATE conversations SET {set_clause} WHERE conversation_id = $1"
-        
+
         async with self.acquire() as conn:
             await conn.execute(query, conversation_id, *kwargs.values())
 
     async def get_user_conversations(
-        self, 
-        user_id: str, 
-        limit: int = 50,
-        offset: int = 0,
-        active_only: bool = True
+        self, user_id: str, limit: int = 50, offset: int = 0, active_only: bool = True
     ) -> List[ConversationModel]:
         """Get user's conversations"""
         query = """
@@ -163,19 +173,21 @@ class DatabaseClient:
         if active_only:
             query += " AND is_active = TRUE"
         query += " ORDER BY updated_at DESC LIMIT $2 OFFSET $3"
-        
+
         async with self.acquire() as conn:
             rows = await conn.fetch(query, user_id, limit, offset)
             conversations = []
             for row in rows:
                 row_dict = dict(row)
                 # Parse JSON metadata string to dict
-                if isinstance(row_dict.get('metadata'), str):
+                if isinstance(row_dict.get("metadata"), str):
                     try:
-                        row_dict['metadata'] = json.loads(row_dict['metadata'])
+                        row_dict["metadata"] = json.loads(row_dict["metadata"])
                     except (json.JSONDecodeError, ValueError) as e:
-                        logger.error(f"Failed to parse metadata JSON for conversation: {e}")
-                        row_dict['metadata'] = {}
+                        logger.error(
+                            f"Failed to parse metadata JSON for conversation: {e}"
+                        )
+                        row_dict["metadata"] = {}
                 conversations.append(ConversationModel(**row_dict))
             return conversations
 
@@ -184,7 +196,7 @@ class DatabaseClient:
         """Add a message to conversation"""
         async with self.acquire() as conn:
             # Convert metadata dict to JSON string for PostgreSQL
-            metadata_json = json.dumps(message.metadata) if message.metadata else '{}'
+            metadata_json = json.dumps(message.metadata) if message.metadata else "{}"
 
             row = await conn.fetchrow(
                 """
@@ -201,15 +213,12 @@ class DatabaseClient:
                 message.sequence_number,
                 metadata_json,
                 message.tokens_used,
-                message.processing_time_ms
+                message.processing_time_ms,
             )
-            return row['id']
+            return row["id"]
 
     async def get_conversation_messages(
-        self,
-        conversation_id: UUID,
-        limit: int = 100,
-        offset: int = 0
+        self, conversation_id: UUID, limit: int = 100, offset: int = 0
     ) -> List[MessageModel]:
         """Get messages for a conversation"""
         async with self.acquire() as conn:
@@ -222,14 +231,12 @@ class DatabaseClient:
                 """,
                 conversation_id,
                 limit,
-                offset
+                offset,
             )
             return [MessageModel(**dict(row)) for row in rows]
 
     async def get_recent_messages(
-        self,
-        conversation_id: UUID,
-        count: int = 10
+        self, conversation_id: UUID, count: int = 10
     ) -> List[MessageModel]:
         """Get recent messages from conversation"""
         async with self.acquire() as conn:
@@ -241,7 +248,7 @@ class DatabaseClient:
                 LIMIT $2
                 """,
                 conversation_id,
-                count
+                count,
             )
             return [MessageModel(**dict(row)) for row in reversed(rows)]
 
@@ -263,30 +270,34 @@ class DatabaseClient:
                 session.conversation_id,
                 session.status,
                 session.session_type,
-                session.metadata
+                session.metadata,
             )
-            return row['id']
+            return row["id"]
 
     async def update_streaming_session(self, session_id: str, **kwargs):
         """Update streaming session"""
         if not kwargs:
             return
-        
-        set_clause = ", ".join([f"{key} = ${i+2}" for i, key in enumerate(kwargs.keys())])
+
+        set_clause = ", ".join(
+            [f"{key} = ${i+2}" for i, key in enumerate(kwargs.keys())]
+        )
         query = f"UPDATE streaming_sessions SET {set_clause} WHERE session_id = $1"
-        
+
         async with self.acquire() as conn:
             await conn.execute(query, session_id, *kwargs.values())
 
-    async def get_active_sessions(self, user_id: Optional[str] = None) -> List[StreamingSessionModel]:
+    async def get_active_sessions(
+        self, user_id: Optional[str] = None
+    ) -> List[StreamingSessionModel]:
         """Get active streaming sessions"""
         query = "SELECT * FROM streaming_sessions WHERE status = 'active'"
         params = []
-        
+
         if user_id:
             query += " AND user_id = $1"
             params.append(user_id)
-        
+
         async with self.acquire() as conn:
             rows = await conn.fetch(query, *params)
             return [StreamingSessionModel(**dict(row)) for row in rows]
@@ -312,9 +323,9 @@ class DatabaseClient:
                 transcription.duration_ms,
                 transcription.audio_format,
                 transcription.sample_rate,
-                transcription.metadata
+                transcription.metadata,
             )
-            return row['id']
+            return row["id"]
 
     # TTS cache operations
     async def get_tts_cache(self, text_hash: str) -> Optional[TTSGenerationModel]:
@@ -328,7 +339,7 @@ class DatabaseClient:
                 ORDER BY created_at DESC
                 LIMIT 1
                 """,
-                text_hash
+                text_hash,
             )
             return TTSGenerationModel(**dict(row)) if row else None
 
@@ -351,17 +362,18 @@ class DatabaseClient:
                 generation.audio_format,
                 generation.sample_rate,
                 generation.duration_ms,
-                generation.metadata
+                generation.metadata,
             )
-            return row['id']
+            return row["id"]
 
     # User preferences operations
-    async def get_user_preferences(self, user_id: str) -> Optional[UserPreferencesModel]:
+    async def get_user_preferences(
+        self, user_id: str
+    ) -> Optional[UserPreferencesModel]:
         """Get user preferences"""
         async with self.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT * FROM user_preferences WHERE user_id = $1",
-                user_id
+                "SELECT * FROM user_preferences WHERE user_id = $1", user_id
             )
             return UserPreferencesModel(**dict(row)) if row else None
 
@@ -369,10 +381,12 @@ class DatabaseClient:
         """Update user preferences"""
         if not kwargs:
             return
-        
-        set_clause = ", ".join([f"{key} = ${i+2}" for i, key in enumerate(kwargs.keys())])
+
+        set_clause = ", ".join(
+            [f"{key} = ${i+2}" for i, key in enumerate(kwargs.keys())]
+        )
         query = f"UPDATE user_preferences SET {set_clause} WHERE user_id = $1"
-        
+
         async with self.acquire() as conn:
             await conn.execute(query, user_id, *kwargs.values())
 
@@ -388,7 +402,7 @@ class DatabaseClient:
                 metric.metric_type,
                 metric.metric_value,
                 metric.service_name,
-                metric.metadata
+                metric.metadata,
             )
 
 
@@ -400,7 +414,9 @@ def get_db_client() -> DatabaseClient:
     """Get global database client instance"""
     global db_client
     if db_client is None:
-        raise RuntimeError("Database client not initialized. Call init_db_client() first.")
+        raise RuntimeError(
+            "Database client not initialized. Call init_db_client() first."
+        )
     return db_client
 
 

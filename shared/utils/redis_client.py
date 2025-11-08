@@ -1,6 +1,7 @@
 """
 Redis client utilities for Morgan AI Assistant
 """
+
 import json
 import logging
 from typing import Optional, Any, Dict, List
@@ -22,9 +23,10 @@ class RedisClient:
         db: Optional[int] = None,
         password: Optional[str] = None,
         decode_responses: bool = True,
-        max_connections: int = 50
+        max_connections: int = 50,
     ):
         import os
+
         # Load from environment variables with fallback to parameters
         self.host = host or os.getenv("REDIS_HOST", "localhost")
         self.port = port or int(os.getenv("REDIS_PORT", "6379"))
@@ -44,7 +46,7 @@ class RedisClient:
                 db=self.db,
                 password=self.password,
                 decode_responses=self.decode_responses,
-                max_connections=self.max_connections
+                max_connections=self.max_connections,
             )
             # Test connection
             await self.client.ping()
@@ -79,12 +81,7 @@ class RedisClient:
             self.logger.error(f"Redis GET failed for key {key}: {e}")
             return None
 
-    async def set(
-        self,
-        key: str,
-        value: str,
-        expire: Optional[int] = None
-    ) -> bool:
+    async def set(self, key: str, value: str, expire: Optional[int] = None) -> bool:
         """Set key-value pair with optional expiration (seconds)"""
         try:
             if expire:
@@ -138,10 +135,7 @@ class RedisClient:
             return None
 
     async def set_json(
-        self,
-        key: str,
-        value: Dict[str, Any],
-        expire: Optional[int] = None
+        self, key: str, value: Dict[str, Any], expire: Optional[int] = None
     ) -> bool:
         """Set JSON value with optional expiration"""
         try:
@@ -223,10 +217,7 @@ class RedisClient:
         return await self.get_json(f"session:{session_id}")
 
     async def set_session(
-        self,
-        session_id: str,
-        data: Dict[str, Any],
-        expire: int = 3600
+        self, session_id: str, data: Dict[str, Any], expire: int = 3600
     ) -> bool:
         """Set streaming session state with expiration"""
         return await self.set_json(f"session:{session_id}", data, expire)
@@ -235,11 +226,7 @@ class RedisClient:
         """Delete streaming session state"""
         return await self.delete(f"session:{session_id}")
 
-    async def update_session(
-        self,
-        session_id: str,
-        **kwargs
-    ) -> bool:
+    async def update_session(self, session_id: str, **kwargs) -> bool:
         """Update session state fields"""
         session = await self.get_session(session_id)
         if session:
@@ -249,21 +236,15 @@ class RedisClient:
 
     # Conversation cache operations
     async def cache_conversation_messages(
-        self,
-        conversation_id: str,
-        messages: List[Dict[str, Any]],
-        expire: int = 1800
+        self, conversation_id: str, messages: List[Dict[str, Any]], expire: int = 1800
     ) -> bool:
         """Cache conversation messages"""
         return await self.set_json(
-            f"conv:messages:{conversation_id}",
-            {"messages": messages},
-            expire
+            f"conv:messages:{conversation_id}", {"messages": messages}, expire
         )
 
     async def get_cached_messages(
-        self,
-        conversation_id: str
+        self, conversation_id: str
     ) -> Optional[List[Dict[str, Any]]]:
         """Get cached conversation messages"""
         data = await self.get_json(f"conv:messages:{conversation_id}")
@@ -271,10 +252,7 @@ class RedisClient:
 
     # Audio chunk buffering
     async def buffer_audio_chunk(
-        self,
-        session_id: str,
-        chunk_data: str,
-        max_chunks: int = 100
+        self, session_id: str, chunk_data: str, max_chunks: int = 100
     ) -> bool:
         """Buffer audio chunk for session"""
         try:
@@ -288,10 +266,7 @@ class RedisClient:
             self.logger.error(f"Failed to buffer audio chunk: {e}")
             return False
 
-    async def get_audio_buffer(
-        self,
-        session_id: str
-    ) -> List[str]:
+    async def get_audio_buffer(self, session_id: str) -> List[str]:
         """Get all buffered audio chunks for session"""
         return await self.lrange(f"audio:buffer:{session_id}", 0, -1)
 
@@ -300,12 +275,7 @@ class RedisClient:
         return await self.delete(f"audio:buffer:{session_id}")
 
     # Rate limiting
-    async def check_rate_limit(
-        self,
-        key: str,
-        limit: int,
-        window: int
-    ) -> bool:
+    async def check_rate_limit(self, key: str, limit: int, window: int) -> bool:
         """Check if rate limit is exceeded"""
         try:
             count = await self.client.incr(key)
@@ -317,11 +287,7 @@ class RedisClient:
             return True  # Allow on error
 
     # Metrics
-    async def increment_metric(
-        self,
-        metric_name: str,
-        value: int = 1
-    ) -> int:
+    async def increment_metric(self, metric_name: str, value: int = 1) -> int:
         """Increment metric counter"""
         try:
             return await self.client.incrby(f"metric:{metric_name}", value)
@@ -347,7 +313,9 @@ def get_redis_client() -> RedisClient:
     """Get global Redis client instance"""
     global redis_client
     if redis_client is None:
-        raise RuntimeError("Redis client not initialized. Call init_redis_client() first.")
+        raise RuntimeError(
+            "Redis client not initialized. Call init_redis_client() first."
+        )
     return redis_client
 
 

@@ -7,6 +7,7 @@ Demonstrates the new production-quality patterns:
 - Enhanced HTTP client
 - Health monitoring
 """
+
 import asyncio
 import time
 from typing import Dict, Any
@@ -20,8 +21,9 @@ try:
         TokenBucketRateLimiter,
         RateLimitConfig,
         HealthMonitor,
-        HealthStatus
+        HealthStatus,
     )
+
     INFRASTRUCTURE_AVAILABLE = True
 except ImportError:
     INFRASTRUCTURE_AVAILABLE = False
@@ -33,14 +35,12 @@ class TestProductionInfrastructure:
 
     async def test_circuit_breaker(self):
         """Test circuit breaker pattern"""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("Testing Circuit Breaker Pattern")
-        print("="*60)
+        print("=" * 60)
 
         config = CircuitBreakerConfig(
-            failure_threshold=3,
-            success_threshold=2,
-            timeout=2.0
+            failure_threshold=3, success_threshold=2, timeout=2.0
         )
         cb = CircuitBreaker(config)
 
@@ -69,6 +69,7 @@ class TestProductionInfrastructure:
         # Try to call while OPEN
         try:
             from shared.infrastructure.circuit_breaker import CircuitBreakerError
+
             await cb.call(success_func)
             assert False, "Should have raised CircuitBreakerError"
         except CircuitBreakerError:
@@ -91,14 +92,11 @@ class TestProductionInfrastructure:
 
     async def test_rate_limiter(self):
         """Test rate limiting"""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("Testing Rate Limiter")
-        print("="*60)
+        print("=" * 60)
 
-        config = RateLimitConfig(
-            requests_per_second=5.0,
-            burst_size=10
-        )
+        config = RateLimitConfig(requests_per_second=5.0, burst_size=10)
         limiter = TokenBucketRateLimiter(config)
 
         # Test burst
@@ -125,15 +123,15 @@ class TestProductionInfrastructure:
 
     async def test_health_monitor(self):
         """Test health monitoring"""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("Testing Health Monitor")
-        print("="*60)
+        print("=" * 60)
 
         monitor = HealthMonitor(
             name="test_service",
             check_interval=1.0,
             degraded_threshold=2,
-            unhealthy_threshold=3
+            unhealthy_threshold=3,
         )
 
         # Test healthy checks
@@ -167,9 +165,9 @@ class TestProductionInfrastructure:
 
     async def test_integration(self):
         """Test integration of components"""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("Testing Component Integration")
-        print("="*60)
+        print("=" * 60)
 
         # Create a mock service with all components
         class MockService:
@@ -181,8 +179,7 @@ class TestProductionInfrastructure:
                     RateLimitConfig(requests_per_second=10)
                 )
                 self.health_monitor = HealthMonitor(
-                    name="mock_service",
-                    check_interval=30.0
+                    name="mock_service", check_interval=30.0
                 )
                 self.request_count = 0
 
@@ -191,9 +188,7 @@ class TestProductionInfrastructure:
                 await self.rate_limiter.acquire()
 
                 # Use circuit breaker
-                result = await self.circuit_breaker.call(
-                    self._execute_request
-                )
+                result = await self.circuit_breaker.call(self._execute_request)
 
                 return result
 
@@ -204,9 +199,7 @@ class TestProductionInfrastructure:
                 return {"status": "success", "count": self.request_count}
 
             async def health_check(self):
-                return await self.health_monitor.check_health(
-                    self._health_check_impl
-                )
+                return await self.health_monitor.check_health(self._health_check_impl)
 
             async def _health_check_impl(self):
                 # Service is healthy if circuit is not open
@@ -234,9 +227,9 @@ class TestProductionInfrastructure:
 
     async def run_all_tests(self):
         """Run all tests"""
-        print("\n" + "🧪 " + "="*58)
+        print("\n" + "🧪 " + "=" * 58)
         print("Production Infrastructure Test Suite")
-        print("="*60 + "\n")
+        print("=" * 60 + "\n")
 
         if not INFRASTRUCTURE_AVAILABLE:
             print("❌ Infrastructure components not available")
@@ -249,9 +242,9 @@ class TestProductionInfrastructure:
             await self.test_health_monitor()
             await self.test_integration()
 
-            print("\n" + "="*60)
+            print("\n" + "=" * 60)
             print("✅ All tests passed!")
-            print("="*60 + "\n")
+            print("=" * 60 + "\n")
 
         except AssertionError as e:
             print(f"\n❌ Test failed: {e}")

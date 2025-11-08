@@ -150,10 +150,7 @@ class TestLLMServiceIntegration:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     f"{service_urls['llm']}/api/generate",
-                    json={
-                        "prompt": "Say hello",
-                        "max_tokens": 50
-                    }
+                    json={"prompt": "Say hello", "max_tokens": 50},
                 )
 
                 if response.status_code == 200:
@@ -183,8 +180,8 @@ class TestLLMServiceIntegration:
                     json={
                         "prompt": "What is my name?",
                         "context": context,
-                        "max_tokens": 50
-                    }
+                        "max_tokens": 50,
+                    },
                 )
 
                 if response.status_code == 200:
@@ -192,7 +189,10 @@ class TestLLMServiceIntegration:
                     data = response.json()
                     assert "text" in data
                     # LLM should remember context
-                    assert "alice" in data["text"].lower() or "name" in data["text"].lower()
+                    assert (
+                        "alice" in data["text"].lower()
+                        or "name" in data["text"].lower()
+                    )
                 else:
                     pytest.skip("LLM service not available")
 
@@ -211,10 +211,7 @@ class TestTTSServiceIntegration:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     f"{service_urls['tts']}/api/synthesize",
-                    json={
-                        "text": "Hello world",
-                        "output_format": "wav"
-                    }
+                    json={"text": "Hello world", "output_format": "wav"},
                 )
 
                 if response.status_code == 200:
@@ -222,7 +219,9 @@ class TestTTSServiceIntegration:
                     # Check that we got audio data
                     assert len(response.content) > 0
                     # WAV files start with "RIFF"
-                    assert response.content[:4] == b"RIFF" or len(response.content) > 100
+                    assert (
+                        response.content[:4] == b"RIFF" or len(response.content) > 100
+                    )
                 else:
                     pytest.skip("TTS service not available")
 
@@ -240,8 +239,8 @@ class TestTTSServiceIntegration:
                     json={
                         "text": "Testing voice synthesis",
                         "voice": "default",
-                        "output_format": "wav"
-                    }
+                        "output_format": "wav",
+                    },
                 )
 
                 if response.status_code == 200:
@@ -274,11 +273,13 @@ class TestSTTServiceIntegration:
                 sample_rate = 16000
                 duration = 1
                 num_samples = sample_rate * duration
-                audio_data = struct.pack('<' + ('h' * num_samples), *([0] * num_samples))
+                audio_data = struct.pack(
+                    "<" + ("h" * num_samples), *([0] * num_samples)
+                )
 
                 # Create WAV file
                 wav_buffer = io.BytesIO()
-                with wave.open(wav_buffer, 'wb') as wav_file:
+                with wave.open(wav_buffer, "wb") as wav_file:
                     wav_file.setnchannels(1)
                     wav_file.setsampwidth(2)
                     wav_file.setframerate(sample_rate)
@@ -288,7 +289,7 @@ class TestSTTServiceIntegration:
 
                 response = await client.post(
                     f"{service_urls['stt']}/api/transcribe",
-                    files={"file": ("test.wav", wav_buffer, "audio/wav")}
+                    files={"file": ("test.wav", wav_buffer, "audio/wav")},
                 )
 
                 if response.status_code == 200:
@@ -314,10 +315,7 @@ class TestCoreServiceIntegration:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     f"{service_urls['core']}/api/text",
-                    json={
-                        "text": "Hello, how are you?",
-                        "user_id": "test_user"
-                    }
+                    json={"text": "Hello, how are you?", "user_id": "test_user"},
                 )
 
                 if response.status_code == 200:
@@ -372,8 +370,9 @@ class TestServiceOrchestration:
 
                         # At least some services should be available
                         available_services = sum(1 for v in services.values() if v)
-                        assert available_services > 0, \
-                            "At least one service should be available"
+                        assert (
+                            available_services > 0
+                        ), "At least one service should be available"
                 else:
                     pytest.skip("Core service not available")
 
@@ -381,5 +380,5 @@ class TestServiceOrchestration:
             pytest.skip("Core service not running")
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '-m', 'integration'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-m", "integration"])
