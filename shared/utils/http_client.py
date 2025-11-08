@@ -50,9 +50,15 @@ class MorganHTTPClient:
             await self.session.close()
             self.session = None
 
-    async def _make_request(self, method: str, endpoint: str, **kwargs) -> ProcessingResult:
-        """Make HTTP request with retries and error handling"""
+    async def _make_request(self, method: str, endpoint: str, request_id: Optional[str] = None, **kwargs) -> ProcessingResult:
+        """Make HTTP request with retries, error handling, and request ID propagation"""
         url = urljoin(self.base_url, endpoint)
+
+        # Add request ID to headers if provided
+        headers = kwargs.get('headers', {})
+        if request_id:
+            headers['X-Request-ID'] = request_id
+            kwargs['headers'] = headers
 
         for attempt in range(self.max_retries):
             try:
@@ -113,25 +119,25 @@ class MorganHTTPClient:
             {"url": url, "max_retries": self.max_retries}
         )
 
-    async def get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> ProcessingResult:
-        """Make GET request"""
-        return await self._make_request("GET", endpoint, params=params)
+    async def get(self, endpoint: str, params: Optional[Dict[str, Any]] = None, request_id: Optional[str] = None) -> ProcessingResult:
+        """Make GET request with optional request ID propagation"""
+        return await self._make_request("GET", endpoint, request_id=request_id, params=params)
 
     async def post(self, endpoint: str, data: Optional[Union[Dict[str, Any], str]] = None,
-                   json_data: Optional[Dict[str, Any]] = None) -> ProcessingResult:
-        """Make POST request"""
+                   json_data: Optional[Dict[str, Any]] = None, request_id: Optional[str] = None) -> ProcessingResult:
+        """Make POST request with optional request ID propagation"""
         if json_data:
-            return await self._make_request("POST", endpoint, json=json_data)
+            return await self._make_request("POST", endpoint, request_id=request_id, json=json_data)
         else:
-            return await self._make_request("POST", endpoint, data=data)
+            return await self._make_request("POST", endpoint, request_id=request_id, data=data)
 
-    async def put(self, endpoint: str, data: Optional[Dict[str, Any]] = None) -> ProcessingResult:
-        """Make PUT request"""
-        return await self._make_request("PUT", endpoint, json=data)
+    async def put(self, endpoint: str, data: Optional[Dict[str, Any]] = None, request_id: Optional[str] = None) -> ProcessingResult:
+        """Make PUT request with optional request ID propagation"""
+        return await self._make_request("PUT", endpoint, request_id=request_id, json=data)
 
-    async def delete(self, endpoint: str) -> ProcessingResult:
-        """Make DELETE request"""
-        return await self._make_request("DELETE", endpoint)
+    async def delete(self, endpoint: str, request_id: Optional[str] = None) -> ProcessingResult:
+        """Make DELETE request with optional request ID propagation"""
+        return await self._make_request("DELETE", endpoint, request_id=request_id)
 
     async def health_check(self) -> bool:
         """Check if service is healthy"""

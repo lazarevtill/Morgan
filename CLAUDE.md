@@ -1481,47 +1481,85 @@ pytest-watch
 
 ---
 
-## Known Issues & Technical Debt
+## Recent Improvements & Security Enhancements
 
-### Critical Issues
+### ✅ Security & Reliability Fixes (2025-11-08)
 
-#### 1. Service API Server Initialization
+The following critical issues have been resolved:
 
-**Status**: HIGH PRIORITY
+#### 1. Import Path Error ✅ FIXED
+- **File**: `core/main.py` (Line 10)
+- **Issue**: Relative import breaking when running from project root
+- **Fix**: Changed `from app import main` to `from core.app import main`
+- **Status**: ✅ **RESOLVED**
 
-**Issue**: Service API servers ([services/*/api/server.py](services/llm/api/server.py)) are not properly initialized in service entry points.
+#### 2. Rate Limiting ✅ IMPLEMENTED
+- **Coverage**: All API endpoints (Core, LLM, TTS, STT services)
+- **Implementation**: Token bucket algorithm with per-IP tracking
+- **Configuration**: Configurable via `core.yaml` (10 req/s default, 20 burst)
+- **Features**:
+  - Per-IP rate limiting
+  - Configurable burst size
+  - Exempt paths (/health, /docs, /redoc)
+  - X-RateLimit headers in responses
+- **Status**: ✅ **FULLY IMPLEMENTED**
 
-**Current Code**:
-```python
-# services/llm/main.py
-async def main():
-    await server_main()  # Calls api/server.py:main()
-    # BUT server.py doesn't have a main() function!
-```
+#### 3. CORS Configuration ✅ SECURED
+- **Issue**: Wildcard CORS allowing any origin with credentials
+- **Fix**: Configurable whitelist via `core.yaml`
+- **Features**:
+  - Whitelisted origins (localhost by default)
+  - Environment variable support
+  - Comma-separated origin lists
+  - Proper method restrictions
+- **Status**: ✅ **SECURED**
 
-**Impact**: Services may not be exposing their API endpoints correctly.
+#### 4. Input Validation ✅ IMPLEMENTED
+- **Coverage**: All file uploads and base64 decoding
+- **Features**:
+  - Size validation (10MB max default)
+  - Format validation (magic byte detection)
+  - Base64 character validation
+  - Audio format whitelisting
+- **Functions**: `safe_base64_decode()`, `validate_audio_file()`
+- **Status**: ✅ **FULLY IMPLEMENTED**
 
-**Fix Required**: Add proper FastAPI initialization in service API server files:
-```python
-# services/llm/api/server.py
-from fastapi import FastAPI
-import uvicorn
+#### 5. Request Size Limits ✅ IMPLEMENTED
+- **Limit**: 10MB maximum request body
+- **Enforcement**: Middleware-level validation
+- **Response**: HTTP 413 for oversized requests
+- **Status**: ✅ **IMPLEMENTED**
 
-def create_app() -> FastAPI:
-    app = FastAPI(title="LLM Service")
-    # Add routes
-    return app
+#### 6. Database Connection Validation ✅ IMPLEMENTED
+- **Features**:
+  - PostgreSQL connection validation (SELECT 1 test)
+  - Redis connection validation (PING test)
+  - Graceful fallback to in-memory
+  - Clear error logging
+  - Optional database support
+- **Status**: ✅ **IMPLEMENTED**
 
-async def main():
-    app = create_app()
-    config = uvicorn.Config(app, host="0.0.0.0", port=8001)
-    server = uvicorn.Server(config)
-    await server.serve()
-```
+#### 7. Request ID Propagation ✅ IMPLEMENTED
+- **Features**:
+  - Request ID generation via middleware
+  - Propagation through service calls
+  - X-Request-ID header support
+  - HTTP client integration
+- **Status**: ✅ **IMPLEMENTED**
 
-#### 2. Data Model Inconsistency
+#### 8. JSON Validation in WebSockets ✅ IMPLEMENTED
+- **Coverage**: All WebSocket handlers
+- **Features**:
+  - JSON parse error handling
+  - Message structure validation
+  - Type validation
+  - Clear error messages to clients
+- **Status**: ✅ **IMPLEMENTED**
 
-**Status**: MEDIUM PRIORITY
+### Remaining Technical Debt
+
+#### 1. Data Model Inconsistency
+**Status**: LOW PRIORITY
 
 **Issue**: Mix of `@dataclass` and Pydantic `BaseModel` across codebase.
 
@@ -1529,119 +1567,30 @@ async def main():
 - [shared/models/base.py](shared/models/base.py): Uses `@dataclass`
 - Service request/response models: Use Pydantic `BaseModel`
 
-**Impact**: Inconsistent serialization, validation, and type checking.
+**Impact**: Inconsistent serialization and validation.
 
-**Fix Required**: Standardize on Pydantic `BaseModel` throughout:
-```python
-# Convert all models to Pydantic
-from pydantic import BaseModel, Field
+**Future Enhancement**: Standardize on Pydantic `BaseModel` throughout.
 
-class Message(BaseModel):
-    role: str = Field(..., description="Message role")
-    content: str = Field(..., description="Message content")
-    timestamp: str
-    metadata: dict = Field(default_factory=dict)
-```
-
-### Missing Features
-
-#### 1. Rate Limiting
-
-**Status**: MEDIUM PRIORITY
-
-**Requirement** (.cursorrules): "All endpoints must implement rate limiting"
-
-**Current**: No rate limiting implemented
-
-**Fix Required**: Add FastAPI rate limiting middleware:
-```python
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-
-limiter = Limiter(key_func=get_remote_address)
-
-@app.post("/api/text")
-@limiter.limit("10/minute")
-async def process_text(request: Request, data: TextRequest):
-    ...
-```
-
-#### 2. Request Tracing
-
-**Status**: MEDIUM PRIORITY
-
-**Requirement** (.cursorrules): "Include request IDs in all log entries"
-
-**Current**: No request ID propagation
-
-**Fix Required**: Add request ID middleware and propagate through service calls:
-```python
-import uuid
-from fastapi import Request
-
-@app.middleware("http")
-async def add_request_id(request: Request, call_next):
-    request_id = str(uuid.uuid4())
-    request.state.request_id = request_id
-    response = await call_next(request)
-    response.headers["X-Request-ID"] = request_id
-    return response
-```
-
-#### 3. Database Persistence
-
+#### 2. JSON Structured Logging
 **Status**: LOW PRIORITY
 
-**Requirement** (.cursorrules): "Redis/PostgreSQL optional services"
+**Current**: Standard Python logging
+**Future**: Implement structured JSON logging with `structlog`
 
-**Current**: Services defined in docker-compose but no code integration
-
-**Fix Required**: Implement conversation persistence:
-```python
-# Use Redis for conversation cache
-import redis.asyncio as redis
-
-class ConversationManager:
-    def __init__(self, redis_url: str):
-        self.redis = redis.from_url(redis_url)
-
-    async def save_conversation(self, conv: ConversationContext):
-        await self.redis.set(
-            f"conv:{conv.conversation_id}",
-            conv.to_json(),
-            ex=3600
-        )
-```
-
-#### 4. Streaming Support
-
+#### 3. Modern HTTP Client Migration
 **Status**: LOW PRIORITY
 
-**Requirement** (.cursorrules): "Implement both streaming and non-streaming responses"
+**Current**: Using older `aiohttp` client
+**Future**: Migrate to modern infrastructure HTTP client with circuit breakers
 
-**Current**: Only non-streaming endpoints exist
+#### 4. Enhanced Monitoring
+**Status**: LOW PRIORITY
 
-**Fix Required**: Add streaming endpoints:
-```python
-from fastapi.responses import StreamingResponse
-
-@app.post("/api/stream")
-async def stream_text(request: TextRequest):
-    async def generate():
-        async for chunk in llm_service.stream(request.text):
-            yield f"data: {chunk}\n\n"
-
-    return StreamingResponse(generate(), media_type="text/event-stream")
-```
-
-### Technical Debt
-
-1. **JSON Structured Logging**: Convert to JSON output format
-2. **Connection Pooling Limits**: Add TCPConnector limits to aiohttp
-3. **Model Entry Point**: Complex nested async main() calls could be simplified
-4. **OpenAPI Documentation**: Add comprehensive API documentation
-5. **Security Headers**: Add CORS configuration, security headers
-6. **Metrics Endpoint**: Add Prometheus `/metrics` endpoint
+**Future Enhancements**:
+- Prometheus `/metrics` endpoint
+- OpenAPI documentation improvements
+- Connection pooling limits
+- Request tracing enhancements
 
 ---
 

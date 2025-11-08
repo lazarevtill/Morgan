@@ -8,8 +8,118 @@ import asyncio
 import logging
 from typing import Tuple, Optional, Union, AsyncGenerator, List, Dict, Any
 import base64
+import binascii
 
 logger = logging.getLogger(__name__)
+
+
+class AudioValidationError(Exception):
+    """Raised when audio validation fails"""
+    pass
+
+
+def safe_base64_decode(encoded_data: str, max_size_mb: int = 10) -> bytes:
+    """
+    Safely decode base64 data with validation
+
+    Args:
+        encoded_data: Base64 encoded string
+        max_size_mb: Maximum allowed size in megabytes
+
+    Returns:
+        Decoded bytes
+
+    Raises:
+        AudioValidationError: If validation fails
+    """
+    if not encoded_data:
+        raise AudioValidationError("Empty base64 data provided")
+
+    if not isinstance(encoded_data, str):
+        raise AudioValidationError(f"Base64 data must be string, got {type(encoded_data)}")
+
+    # Remove whitespace and newlines
+    cleaned_data = encoded_data.strip().replace("\n", "").replace("\r", "")
+
+    # Validate base64 characters
+    import string
+    valid_chars = set(string.ascii_letters + string.digits + '+/=')
+    if not all(c in valid_chars for c in cleaned_data):
+        raise AudioValidationError("Invalid characters in base64 data")
+
+    # Check estimated size before decoding
+    estimated_size = (len(cleaned_data) * 3) // 4
+    max_size_bytes = max_size_mb * 1024 * 1024
+
+    if estimated_size > max_size_bytes:
+        raise AudioValidationError(
+            f"Base64 data too large: {estimated_size / 1024 / 1024:.2f}MB > {max_size_mb}MB"
+        )
+
+    try:
+        decoded = base64.b64decode(cleaned_data, validate=True)
+    except binascii.Error as e:
+        raise AudioValidationError(f"Invalid base64 encoding: {e}")
+    except Exception as e:
+        raise AudioValidationError(f"Failed to decode base64: {e}")
+
+    # Validate actual decoded size
+    if len(decoded) > max_size_bytes:
+        raise AudioValidationError(
+            f"Decoded data too large: {len(decoded) / 1024 / 1024:.2f}MB > {max_size_mb}MB"
+        )
+
+    return decoded
+
+
+def validate_audio_file(file_bytes: bytes, max_size_mb: int = 10, allowed_formats: Optional[List[str]] = None) -> dict:
+    """
+    Validate audio file data
+
+    Args:
+        file_bytes: Audio file bytes
+        max_size_mb: Maximum allowed size in megabytes
+        allowed_formats: List of allowed formats (e.g., ['wav', 'mp3', 'webm'])
+
+    Returns:
+        Dict with validation results
+
+    Raises:
+        AudioValidationError: If validation fails
+    """
+    if not file_bytes:
+        raise AudioValidationError("Empty audio file provided")
+
+    max_size_bytes = max_size_mb * 1024 * 1024
+    if len(file_bytes) > max_size_bytes:
+        raise AudioValidationError(
+            f"Audio file too large: {len(file_bytes) / 1024 / 1024:.2f}MB > {max_size_mb}MB"
+        )
+
+    # Detect format by magic bytes
+    detected_format = None
+    if len(file_bytes) >= 12:
+        if file_bytes[:4] == b'RIFF' and file_bytes[8:12] == b'WAVE':
+            detected_format = 'wav'
+        elif file_bytes[:3] == b'ID3' or (len(file_bytes) >= 2 and file_bytes[:2] == b'\xff\xfb'):
+            detected_format = 'mp3'
+        elif file_bytes[:4] == b'\x1a\x45\xdf\xa3':  # WebM/MKV
+            detected_format = 'webm'
+        elif file_bytes[:4] == b'fLaC':
+            detected_format = 'flac'
+        elif file_bytes[:4] == b'OggS':
+            detected_format = 'ogg'
+
+    if allowed_formats and detected_format not in allowed_formats:
+        raise AudioValidationError(
+            f"Unsupported audio format: {detected_format}. Allowed: {allowed_formats}"
+        )
+
+    return {
+        "size": len(file_bytes),
+        "format": detected_format,
+        "valid": True
+    }
 
 
 class AudioUtils:
