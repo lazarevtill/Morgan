@@ -118,9 +118,24 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
 
+      - name: Add staging host key to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          touch ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+          # Fetch and add the staging host key
+          echo "Fetching host key for ${{ secrets.STAGING_HOST }}..."
+          ssh-keyscan -H "${{ secrets.STAGING_HOST }}" >> ~/.ssh/known_hosts
+
+          # Verify the key was added
+          echo "✓ Host key added to known_hosts"
+          grep -c "${{ secrets.STAGING_HOST }}" ~/.ssh/known_hosts || echo "Warning: Host key may not have been added"
+
       - name: Deploy to staging server
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
+          ssh ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
             cd /opt/morgan
             git pull origin staging
             docker compose pull
@@ -164,16 +179,64 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.PRODUCTION_SSH_KEY }}
 
+      - name: Add production host key to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          touch ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+          # Fetch and add the production host key
+          echo "Fetching host key for ${{ secrets.PRODUCTION_HOST }}..."
+          ssh-keyscan -H "${{ secrets.PRODUCTION_HOST }}" >> ~/.ssh/known_hosts
+
+          # Verify the key was added
+          echo "✓ Host key added to known_hosts"
+          grep -c "${{ secrets.PRODUCTION_HOST }}" ~/.ssh/known_hosts || echo "Warning: Host key may not have been added"
+
       - name: Create backup
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+          ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+            set -e  # Exit on any error
             cd /opt/morgan
-            docker compose exec -T postgres pg_dump -U morgan morgan > backup_$(date +%Y%m%d_%H%M%S).sql
+
+            # Create backup directory with timestamp
+            BACKUP_DIR="/opt/morgan/backups"
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            BACKUP_PATH="${BACKUP_DIR}/backup_${TIMESTAMP}"
+            mkdir -p "${BACKUP_PATH}"
+
+            echo "Creating backup at ${BACKUP_PATH}..."
+
+            # 1. Save current git state
+            echo "Backing up git state..."
+            git rev-parse HEAD > "${BACKUP_PATH}/git_commit.txt"
+            git branch --show-current > "${BACKUP_PATH}/git_branch.txt"
+
+            # 2. Backup database
+            echo "Backing up database..."
+            docker compose exec -T postgres pg_dump -U morgan morgan > "${BACKUP_PATH}/database.sql"
+
+            # 3. Save docker-compose.yml and environment
+            echo "Backing up configuration..."
+            cp docker-compose.yml "${BACKUP_PATH}/"
+            cp .env "${BACKUP_PATH}/" 2>/dev/null || echo "No .env file to backup"
+
+            # 4. Create archive
+            echo "Creating backup archive..."
+            cd "${BACKUP_DIR}"
+            tar -czf "backup_${TIMESTAMP}.tar.gz" "backup_${TIMESTAMP}/"
+            rm -rf "backup_${TIMESTAMP}/"
+
+            # 5. Save backup path for rollback
+            echo "${BACKUP_DIR}/backup_${TIMESTAMP}.tar.gz" > /opt/morgan/LAST_BACKUP_PATH
+
+            echo "✓ Backup created successfully: ${BACKUP_DIR}/backup_${TIMESTAMP}.tar.gz"
           EOF
 
       - name: Deploy to production
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+          ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
             cd /opt/morgan
             git fetch --tags
             git checkout ${{ github.ref_name }}
@@ -184,7 +247,7 @@ jobs:
 
       - name: Run database migrations
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+          ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
             cd /opt/morgan
             docker compose exec -T core python -m alembic upgrade head || true
           EOF
@@ -206,11 +269,136 @@ jobs:
       - name: Rollback on failure
         if: failure()
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+          ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+            set -e  # Exit on any error during rollback
+
+            echo "========================================="
+            echo "INITIATING ROLLBACK"
+            echo "========================================="
+
             cd /opt/morgan
-            docker compose down
-            # Restore from backup if needed
-            echo "Deployment failed, manual intervention required"
+
+            # 1. Stop all services
+            echo "Step 1: Stopping services..."
+            docker compose down || {
+              echo "✗ ERROR: Failed to stop services"
+              exit 1
+            }
+            echo "✓ Services stopped"
+
+            # 2. Verify backup exists
+            echo "Step 2: Verifying backup..."
+            if [ ! -f "/opt/morgan/LAST_BACKUP_PATH" ]; then
+              echo "✗ ERROR: No backup path file found at /opt/morgan/LAST_BACKUP_PATH"
+              echo "Cannot proceed with rollback - manual intervention required"
+              exit 1
+            fi
+
+            BACKUP_FILE=$(cat /opt/morgan/LAST_BACKUP_PATH)
+            if [ ! -f "${BACKUP_FILE}" ]; then
+              echo "✗ ERROR: Backup file not found: ${BACKUP_FILE}"
+              echo "Cannot proceed with rollback - manual intervention required"
+              exit 1
+            fi
+            echo "✓ Backup found: ${BACKUP_FILE}"
+
+            # 3. Extract backup
+            echo "Step 3: Extracting backup..."
+            RESTORE_DIR=$(mktemp -d)
+            tar -xzf "${BACKUP_FILE}" -C "${RESTORE_DIR}" || {
+              echo "✗ ERROR: Failed to extract backup"
+              rm -rf "${RESTORE_DIR}"
+              exit 1
+            }
+            echo "✓ Backup extracted to ${RESTORE_DIR}"
+
+            # Find the backup directory (it's the only directory in RESTORE_DIR)
+            BACKUP_CONTENT_DIR=$(find "${RESTORE_DIR}" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+
+            # 4. Restore git state
+            echo "Step 4: Restoring git state..."
+            if [ -f "${BACKUP_CONTENT_DIR}/git_commit.txt" ]; then
+              GIT_COMMIT=$(cat "${BACKUP_CONTENT_DIR}/git_commit.txt")
+              git checkout "${GIT_COMMIT}" || {
+                echo "✗ ERROR: Failed to checkout commit ${GIT_COMMIT}"
+                rm -rf "${RESTORE_DIR}"
+                exit 1
+              }
+              echo "✓ Git restored to commit ${GIT_COMMIT}"
+            else
+              echo "⚠ Warning: No git commit info in backup"
+            fi
+
+            # 5. Restore configuration files
+            echo "Step 5: Restoring configuration..."
+            if [ -f "${BACKUP_CONTENT_DIR}/docker-compose.yml" ]; then
+              cp "${BACKUP_CONTENT_DIR}/docker-compose.yml" ./docker-compose.yml
+              echo "✓ docker-compose.yml restored"
+            fi
+            if [ -f "${BACKUP_CONTENT_DIR}/.env" ]; then
+              cp "${BACKUP_CONTENT_DIR}/.env" ./.env
+              echo "✓ .env restored"
+            fi
+
+            # 6. Restore database
+            echo "Step 6: Restoring database..."
+            if [ -f "${BACKUP_CONTENT_DIR}/database.sql" ]; then
+              # Start only postgres for restoration
+              docker compose up -d postgres
+              sleep 10  # Wait for postgres to be ready
+
+              # Drop and recreate database
+              docker compose exec -T postgres psql -U morgan -c "DROP DATABASE IF EXISTS morgan;"
+              docker compose exec -T postgres psql -U morgan -c "CREATE DATABASE morgan;"
+
+              # Restore from backup
+              docker compose exec -T postgres psql -U morgan morgan < "${BACKUP_CONTENT_DIR}/database.sql" || {
+                echo "✗ ERROR: Failed to restore database"
+                rm -rf "${RESTORE_DIR}"
+                exit 1
+              }
+              echo "✓ Database restored"
+            else
+              echo "⚠ Warning: No database backup found"
+            fi
+
+            # 7. Restart all services
+            echo "Step 7: Restarting all services..."
+            docker compose up -d --remove-orphans || {
+              echo "✗ ERROR: Failed to restart services"
+              rm -rf "${RESTORE_DIR}"
+              exit 1
+            }
+            echo "✓ Services restarted"
+
+            # 8. Wait for services to be ready
+            echo "Step 8: Waiting for services to be ready..."
+            sleep 30
+
+            # 9. Health check
+            echo "Step 9: Performing health check..."
+            for i in {1..5}; do
+              if docker compose ps | grep -q "Up"; then
+                echo "✓ Services are up"
+                break
+              fi
+              if [ $i -eq 5 ]; then
+                echo "⚠ Warning: Services may not be fully healthy"
+              fi
+              sleep 5
+            done
+
+            # Cleanup
+            rm -rf "${RESTORE_DIR}"
+
+            echo "========================================="
+            echo "✓ ROLLBACK COMPLETED SUCCESSFULLY"
+            echo "Restored from: ${BACKUP_FILE}"
+            echo "========================================="
+
+            # NOTE: Exit 1 to mark the job as failed even though rollback succeeded
+            # This ensures the deployment is marked as failed in GitHub Actions
+            exit 1
           EOF
 
       - name: Create GitHub Release
