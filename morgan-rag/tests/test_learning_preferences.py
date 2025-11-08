@@ -12,11 +12,18 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
 from morgan.learning.preferences import (
-    PreferenceExtractor, PreferenceStorage, UserPreferenceProfile,
-    PreferenceCategory, PreferenceSource, PreferenceUpdate
+    PreferenceExtractor,
+    PreferenceStorage,
+    UserPreferenceProfile,
+    PreferenceCategory,
+    PreferenceSource,
+    PreferenceUpdate,
 )
 from morgan.emotional.models import (
-    InteractionData, ConversationContext, EmotionalState, EmotionType
+    InteractionData,
+    ConversationContext,
+    EmotionalState,
+    EmotionType,
 )
 
 
@@ -37,7 +44,7 @@ class TestPreferenceExtractor:
             "I prefer brief and simple explanations",
             "Can you provide examples?",
             "I'm interested in learning about machine learning",
-            "Thank you for the detailed explanation"
+            "Thank you for the detailed explanation",
         ]
 
         for i, msg in enumerate(messages):
@@ -45,7 +52,7 @@ class TestPreferenceExtractor:
                 user_id="test_user",
                 conversation_id="test_conv",
                 message_text=msg,
-                timestamp=datetime.utcnow() - timedelta(hours=i)
+                timestamp=datetime.utcnow() - timedelta(hours=i),
             )
             interaction = InteractionData(
                 interaction_id=f"test_{i}",
@@ -55,9 +62,9 @@ class TestPreferenceExtractor:
                     primary_emotion=EmotionType.NEUTRAL,
                     intensity=0.5,
                     confidence=0.7,
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.utcnow(),
                 ),
-                timestamp=datetime.utcnow() - timedelta(hours=i)
+                timestamp=datetime.utcnow() - timedelta(hours=i),
             )
             interactions.append(interaction)
 
@@ -78,18 +85,20 @@ class TestPreferenceExtractor:
                 user_id="test_user",
                 conversation_id="test_conv",
                 message_text="Please kindly assist me with this matter. Thank you.",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
             interaction = InteractionData(
                 interaction_id=f"test_{i}",
                 user_id="test_user",
                 conversation_context=context,
                 emotional_state=None,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
             formal_interactions.append(interaction)
 
-        updates = extractor._extract_communication_preferences("test_user", formal_interactions)
+        updates = extractor._extract_communication_preferences(
+            "test_user", formal_interactions
+        )
 
         assert isinstance(updates, list)
 
@@ -101,24 +110,28 @@ class TestPreferenceExtractor:
                 user_id="test_user",
                 conversation_id="test_conv",
                 message_text="Hey! Yeah, that's awesome! Cool!",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
             interaction = InteractionData(
                 interaction_id=f"test_{i}",
                 user_id="test_user",
                 conversation_context=context,
                 emotional_state=None,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
             casual_interactions.append(interaction)
 
-        updates = extractor._extract_communication_preferences("test_user", casual_interactions)
+        updates = extractor._extract_communication_preferences(
+            "test_user", casual_interactions
+        )
 
         assert isinstance(updates, list)
 
     def test_extract_content_preferences(self, extractor, sample_interactions):
         """Test extracting content preferences."""
-        updates = extractor._extract_content_preferences("test_user", sample_interactions)
+        updates = extractor._extract_content_preferences(
+            "test_user", sample_interactions
+        )
 
         assert isinstance(updates, list)
 
@@ -130,13 +143,17 @@ class TestPreferenceExtractor:
 
     def test_extract_learning_preferences(self, extractor, sample_interactions):
         """Test extracting learning preferences."""
-        updates = extractor._extract_learning_preferences("test_user", sample_interactions)
+        updates = extractor._extract_learning_preferences(
+            "test_user", sample_interactions
+        )
 
         assert isinstance(updates, list)
 
     def test_extract_interaction_preferences(self, extractor, sample_interactions):
         """Test extracting interaction preferences."""
-        updates = extractor._extract_interaction_preferences("test_user", sample_interactions)
+        updates = extractor._extract_interaction_preferences(
+            "test_user", sample_interactions
+        )
 
         assert isinstance(updates, list)
 
@@ -148,7 +165,7 @@ class TestPreferenceExtractor:
                 user_id="test_user",
                 conversation_id="test_conv",
                 message_text="Test message",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
             interaction = InteractionData(
                 interaction_id=f"test_{i}",
@@ -158,9 +175,9 @@ class TestPreferenceExtractor:
                     primary_emotion=EmotionType.JOY,
                     intensity=0.7,
                     confidence=0.8,
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.utcnow(),
                 ),
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
             interactions.append(interaction)
 
@@ -171,7 +188,7 @@ class TestPreferenceExtractor:
     def test_calculate_pattern_score(self, extractor):
         """Test calculating pattern match score."""
         messages = ["Please help me", "Thank you", "I appreciate your assistance"]
-        patterns = [r'\b(please|thank you|appreciate)\b']
+        patterns = [r"\b(please|thank you|appreciate)\b"]
 
         score = extractor._calculate_pattern_score(messages, patterns)
 
@@ -185,7 +202,7 @@ class TestPreferenceStorage:
     @pytest.fixture
     def storage(self, tmp_path):
         """Create preference storage with temporary directory."""
-        with patch('morgan.learning.preferences.get_settings') as mock_settings:
+        with patch("morgan.learning.preferences.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(data_dir=str(tmp_path))
             return PreferenceStorage()
 
@@ -197,16 +214,13 @@ class TestPreferenceStorage:
             preferences={
                 "communication": {
                     "formality_level": "casual",
-                    "technical_depth": "high"
+                    "technical_depth": "high",
                 }
             },
             confidence_scores={
-                "communication": {
-                    "formality_level": 0.8,
-                    "technical_depth": 0.75
-                }
+                "communication": {"formality_level": 0.8, "technical_depth": 0.75}
             },
-            preference_sources={}
+            preference_sources={},
         )
         return profile
 
@@ -227,7 +241,9 @@ class TestPreferenceStorage:
         loaded_profile = storage.get_user_preferences("test_user")
 
         assert loaded_profile.user_id == "test_user"
-        assert loaded_profile.preferences["communication"]["formality_level"] == "casual"
+        assert (
+            loaded_profile.preferences["communication"]["formality_level"] == "casual"
+        )
 
     def test_update_preference(self, storage):
         """Test updating a user preference."""
@@ -239,13 +255,16 @@ class TestPreferenceStorage:
             preference_value="formal",
             confidence_score=0.8,
             source=PreferenceSource.EXPLICIT_FEEDBACK,
-            evidence=["User stated preference"]
+            evidence=["User stated preference"],
         )
 
         storage.update_preference("test_user", update)
 
         profile = storage.get_user_preferences("test_user")
-        assert profile.get_preference(PreferenceCategory.COMMUNICATION, "formality_level") == "formal"
+        assert (
+            profile.get_preference(PreferenceCategory.COMMUNICATION, "formality_level")
+            == "formal"
+        )
 
     def test_get_preference_history(self, storage):
         """Test getting preference update history."""
@@ -257,7 +276,7 @@ class TestPreferenceStorage:
             preference_value="brief",
             confidence_score=0.7,
             source=PreferenceSource.CONVERSATION_ANALYSIS,
-            evidence=["Brief response pattern detected"]
+            evidence=["Brief response pattern detected"],
         )
 
         storage.update_preference("test_user", update)
@@ -290,45 +309,46 @@ class TestUserPreferenceProfile:
             preferences={
                 "communication": {
                     "formality_level": "casual",
-                    "technical_depth": "high"
+                    "technical_depth": "high",
                 },
-                "content": {
-                    "response_length": "brief"
-                }
+                "content": {"response_length": "brief"},
             },
             confidence_scores={
-                "communication": {
-                    "formality_level": 0.8,
-                    "technical_depth": 0.75
-                },
-                "content": {
-                    "response_length": 0.7
-                }
+                "communication": {"formality_level": 0.8, "technical_depth": 0.75},
+                "content": {"response_length": 0.7},
             },
-            preference_sources={}
+            preference_sources={},
         )
 
     def test_get_preference_existing(self, profile):
         """Test getting existing preference."""
-        value = profile.get_preference(PreferenceCategory.COMMUNICATION, "formality_level")
+        value = profile.get_preference(
+            PreferenceCategory.COMMUNICATION, "formality_level"
+        )
 
         assert value == "casual"
 
     def test_get_preference_missing(self, profile):
         """Test getting missing preference with default."""
-        value = profile.get_preference(PreferenceCategory.TOPICS, "interest_python", default="unknown")
+        value = profile.get_preference(
+            PreferenceCategory.TOPICS, "interest_python", default="unknown"
+        )
 
         assert value == "unknown"
 
     def test_get_confidence_existing(self, profile):
         """Test getting confidence for existing preference."""
-        confidence = profile.get_confidence(PreferenceCategory.COMMUNICATION, "formality_level")
+        confidence = profile.get_confidence(
+            PreferenceCategory.COMMUNICATION, "formality_level"
+        )
 
         assert confidence == 0.8
 
     def test_get_confidence_missing(self, profile):
         """Test getting confidence for missing preference."""
-        confidence = profile.get_confidence(PreferenceCategory.TOPICS, "interest_python")
+        confidence = profile.get_confidence(
+            PreferenceCategory.TOPICS, "interest_python"
+        )
 
         assert confidence == 0.0
 
@@ -339,11 +359,15 @@ class TestUserPreferenceProfile:
             "interest_python",
             0.9,
             0.85,
-            PreferenceSource.IMPLICIT_BEHAVIOR
+            PreferenceSource.IMPLICIT_BEHAVIOR,
         )
 
-        assert profile.get_preference(PreferenceCategory.TOPICS, "interest_python") == 0.9
-        assert profile.get_confidence(PreferenceCategory.TOPICS, "interest_python") == 0.85
+        assert (
+            profile.get_preference(PreferenceCategory.TOPICS, "interest_python") == 0.9
+        )
+        assert (
+            profile.get_confidence(PreferenceCategory.TOPICS, "interest_python") == 0.85
+        )
 
     def test_set_preference_update_existing(self, profile):
         """Test updating existing preference."""
@@ -352,11 +376,17 @@ class TestUserPreferenceProfile:
             "formality_level",
             "formal",
             0.9,
-            PreferenceSource.EXPLICIT_FEEDBACK
+            PreferenceSource.EXPLICIT_FEEDBACK,
         )
 
-        assert profile.get_preference(PreferenceCategory.COMMUNICATION, "formality_level") == "formal"
-        assert profile.get_confidence(PreferenceCategory.COMMUNICATION, "formality_level") == 0.9
+        assert (
+            profile.get_preference(PreferenceCategory.COMMUNICATION, "formality_level")
+            == "formal"
+        )
+        assert (
+            profile.get_confidence(PreferenceCategory.COMMUNICATION, "formality_level")
+            == 0.9
+        )
 
 
 class TestPreferenceUpdate:
@@ -372,7 +402,7 @@ class TestPreferenceUpdate:
             preference_value="casual",
             confidence_score=0.8,
             source=PreferenceSource.CONVERSATION_ANALYSIS,
-            evidence=["Casual language detected"]
+            evidence=["Casual language detected"],
         )
 
         assert update.update_id == "test"
@@ -388,7 +418,7 @@ class TestPreferenceUpdate:
             preference_value="brief",
             confidence_score=0.7,
             source=PreferenceSource.IMPLICIT_BEHAVIOR,
-            evidence=[]
+            evidence=[],
         )
 
         assert update.update_id is not None

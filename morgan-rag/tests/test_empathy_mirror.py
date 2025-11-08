@@ -10,9 +10,7 @@ from datetime import datetime
 from unittest.mock import Mock, patch
 
 from morgan.empathy.mirror import EmotionalMirror
-from morgan.emotional.models import (
-    EmotionalState, EmotionType, ConversationContext
-)
+from morgan.emotional.models import EmotionalState, EmotionType, ConversationContext
 
 
 class TestEmotionalMirror:
@@ -21,8 +19,8 @@ class TestEmotionalMirror:
     @pytest.fixture
     def mirror(self):
         """Create emotional mirror for testing."""
-        with patch('morgan.empathy.mirror.get_llm_service'):
-            with patch('morgan.empathy.mirror.get_settings'):
+        with patch("morgan.empathy.mirror.get_llm_service"):
+            with patch("morgan.empathy.mirror.get_settings"):
                 return EmotionalMirror()
 
     @pytest.fixture
@@ -32,7 +30,7 @@ class TestEmotionalMirror:
             primary_emotion=EmotionType.JOY,
             intensity=0.8,
             confidence=0.9,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
     @pytest.fixture
@@ -42,7 +40,7 @@ class TestEmotionalMirror:
             primary_emotion=EmotionType.ANGER,
             intensity=0.75,
             confidence=0.8,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
     @pytest.fixture
@@ -52,12 +50,16 @@ class TestEmotionalMirror:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="I'm so frustrated with this situation!",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
-    def test_mirror_emotion_high_intensity(self, mirror, emotional_state_joy, conversation_context):
+    def test_mirror_emotion_high_intensity(
+        self, mirror, emotional_state_joy, conversation_context
+    ):
         """Test mirroring emotion with high intensity."""
-        response = mirror.mirror_emotion(emotional_state_joy, conversation_context, mirroring_intensity=0.8)
+        response = mirror.mirror_emotion(
+            emotional_state_joy, conversation_context, mirroring_intensity=0.8
+        )
 
         assert response is not None
         assert len(response) > 0
@@ -69,10 +71,12 @@ class TestEmotionalMirror:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.3,
             confidence=0.6,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
-        response = mirror.mirror_emotion(low_intensity_state, conversation_context, mirroring_intensity=0.5)
+        response = mirror.mirror_emotion(
+            low_intensity_state, conversation_context, mirroring_intensity=0.5
+        )
 
         assert response is not None
         assert len(response) > 0
@@ -83,23 +87,29 @@ class TestEmotionalMirror:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.7,
             confidence=0.85,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
         prompt = mirror.create_reflection_prompt(sadness_state, conversation_context)
 
         assert prompt is not None
         assert len(prompt) > 0
-        assert '?' in prompt  # Should be a question
+        assert "?" in prompt  # Should be a question
 
-    def test_create_reflection_prompt_joy(self, mirror, emotional_state_joy, conversation_context):
+    def test_create_reflection_prompt_joy(
+        self, mirror, emotional_state_joy, conversation_context
+    ):
         """Test creating reflection prompt for joy."""
-        prompt = mirror.create_reflection_prompt(emotional_state_joy, conversation_context)
+        prompt = mirror.create_reflection_prompt(
+            emotional_state_joy, conversation_context
+        )
 
         assert prompt is not None
         assert isinstance(prompt, str)
 
-    def test_generate_emotional_reflection_light(self, mirror, emotional_state_anger, conversation_context):
+    def test_generate_emotional_reflection_light(
+        self, mirror, emotional_state_anger, conversation_context
+    ):
         """Test generating light emotional reflection."""
         reflection = mirror.generate_emotional_reflection(
             emotional_state_anger, conversation_context, reflection_depth="light"
@@ -110,7 +120,9 @@ class TestEmotionalMirror:
         assert "reflection_prompt" in reflection
         assert "emotional_patterns" in reflection
 
-    def test_generate_emotional_reflection_medium(self, mirror, emotional_state_anger, conversation_context):
+    def test_generate_emotional_reflection_medium(
+        self, mirror, emotional_state_anger, conversation_context
+    ):
         """Test generating medium emotional reflection."""
         reflection = mirror.generate_emotional_reflection(
             emotional_state_anger, conversation_context, reflection_depth="medium"
@@ -121,7 +133,9 @@ class TestEmotionalMirror:
         assert "emotional_needs" in reflection
         assert "relationship_impact" in reflection
 
-    def test_generate_emotional_reflection_deep(self, mirror, emotional_state_joy, conversation_context):
+    def test_generate_emotional_reflection_deep(
+        self, mirror, emotional_state_joy, conversation_context
+    ):
         """Test generating deep emotional reflection."""
         reflection = mirror.generate_emotional_reflection(
             emotional_state_joy, conversation_context, reflection_depth="deep"
@@ -141,16 +155,20 @@ class TestEmotionalMirror:
         assert echo is not None
         assert len(echo) > 0
 
-    def test_identify_emotional_patterns_high_intensity(self, mirror, conversation_context):
+    def test_identify_emotional_patterns_high_intensity(
+        self, mirror, conversation_context
+    ):
         """Test identifying emotional patterns for high intensity."""
         high_intensity_state = EmotionalState(
             primary_emotion=EmotionType.FEAR,
             intensity=0.85,
             confidence=0.9,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
-        patterns = mirror._identify_emotional_patterns(high_intensity_state, conversation_context)
+        patterns = mirror._identify_emotional_patterns(
+            high_intensity_state, conversation_context
+        )
 
         assert isinstance(patterns, list)
         assert "high_emotional_intensity" in patterns
@@ -161,7 +179,7 @@ class TestEmotionalMirror:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.7,
             confidence=0.8,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
         opportunities = mirror._identify_growth_opportunities(sadness_state)
@@ -202,16 +220,20 @@ class TestEmotionalMirror:
             primary_emotion=EmotionType.FEAR,
             intensity=0.7,
             confidence=0.8,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
         needs = mirror._identify_emotional_needs(fear_state)
 
         assert "safety" in needs or "reassurance" in needs or "control" in needs
 
-    def test_analyze_relationship_impact(self, mirror, emotional_state_anger, conversation_context):
+    def test_analyze_relationship_impact(
+        self, mirror, emotional_state_anger, conversation_context
+    ):
         """Test analyzing relationship impact of emotions."""
-        impact = mirror._analyze_relationship_impact(emotional_state_anger, conversation_context)
+        impact = mirror._analyze_relationship_impact(
+            emotional_state_anger, conversation_context
+        )
 
         assert isinstance(impact, dict)
         assert "communication_style" in impact

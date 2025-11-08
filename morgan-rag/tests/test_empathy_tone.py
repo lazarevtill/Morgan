@@ -11,7 +11,10 @@ from unittest.mock import Mock, patch
 
 from morgan.empathy.tone import EmotionalToneManager, ToneType, ToneIntensity
 from morgan.emotional.models import (
-    EmotionalState, EmotionType, ConversationContext, CommunicationStyle
+    EmotionalState,
+    EmotionType,
+    ConversationContext,
+    CommunicationStyle,
 )
 
 
@@ -21,8 +24,8 @@ class TestEmotionalToneManager:
     @pytest.fixture
     def tone_manager(self):
         """Create emotional tone manager for testing."""
-        with patch('morgan.empathy.tone.get_llm_service'):
-            with patch('morgan.empathy.tone.get_settings'):
+        with patch("morgan.empathy.tone.get_llm_service"):
+            with patch("morgan.empathy.tone.get_settings"):
                 return EmotionalToneManager()
 
     @pytest.fixture
@@ -32,7 +35,7 @@ class TestEmotionalToneManager:
             primary_emotion=EmotionType.JOY,
             intensity=0.8,
             confidence=0.9,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
     @pytest.fixture
@@ -42,7 +45,7 @@ class TestEmotionalToneManager:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.7,
             confidence=0.85,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
     @pytest.fixture
@@ -52,12 +55,16 @@ class TestEmotionalToneManager:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="I'm having a great day!",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
-    def test_match_emotional_tone_joy(self, tone_manager, emotional_state_joy, conversation_context):
+    def test_match_emotional_tone_joy(
+        self, tone_manager, emotional_state_joy, conversation_context
+    ):
         """Test matching emotional tone for joy."""
-        tone_config = tone_manager.match_emotional_tone(emotional_state_joy, conversation_context)
+        tone_config = tone_manager.match_emotional_tone(
+            emotional_state_joy, conversation_context
+        )
 
         assert isinstance(tone_config, dict)
         assert "primary_tone" in tone_config
@@ -65,18 +72,25 @@ class TestEmotionalToneManager:
         assert "emotional_resonance" in tone_config
         assert tone_config["primary_tone"] == ToneType.ENERGETIC_ENTHUSIASTIC
 
-    def test_match_emotional_tone_sadness(self, tone_manager, emotional_state_sadness, conversation_context):
+    def test_match_emotional_tone_sadness(
+        self, tone_manager, emotional_state_sadness, conversation_context
+    ):
         """Test matching emotional tone for sadness."""
-        tone_config = tone_manager.match_emotional_tone(emotional_state_sadness, conversation_context)
+        tone_config = tone_manager.match_emotional_tone(
+            emotional_state_sadness, conversation_context
+        )
 
         assert tone_config["primary_tone"] == ToneType.GENTLE_CALMING
         assert isinstance(tone_config["tone_intensity"], ToneIntensity)
 
-    def test_match_emotional_tone_with_communication_style(self, tone_manager, emotional_state_joy, conversation_context):
+    def test_match_emotional_tone_with_communication_style(
+        self, tone_manager, emotional_state_joy, conversation_context
+    ):
         """Test matching tone with user communication style."""
         tone_config = tone_manager.match_emotional_tone(
-            emotional_state_joy, conversation_context,
-            user_communication_style=CommunicationStyle.FORMAL
+            emotional_state_joy,
+            conversation_context,
+            user_communication_style=CommunicationStyle.FORMAL,
         )
 
         assert tone_config is not None
@@ -88,10 +102,12 @@ class TestEmotionalToneManager:
         tone_config = {
             "primary_tone": ToneType.WARM_SUPPORTIVE,
             "tone_intensity": ToneIntensity.MODERATE,
-            "tone_characteristics": {}
+            "tone_characteristics": {},
         }
 
-        adapted = tone_manager.adapt_response_tone(response_text, tone_config, adaptation_strength=0.2)
+        adapted = tone_manager.adapt_response_tone(
+            response_text, tone_config, adaptation_strength=0.2
+        )
 
         assert adapted is not None
         assert isinstance(adapted, str)
@@ -104,15 +120,19 @@ class TestEmotionalToneManager:
             "tone_intensity": ToneIntensity.STRONG,
             "tone_characteristics": {
                 "punctuation_style": "expressive",
-                "sentence_starters": ["Wow!", "That's incredible!"]
-            }
+                "sentence_starters": ["Wow!", "That's incredible!"],
+            },
         }
 
-        adapted = tone_manager.adapt_response_tone(response_text, tone_config, adaptation_strength=0.9)
+        adapted = tone_manager.adapt_response_tone(
+            response_text, tone_config, adaptation_strength=0.9
+        )
 
         assert adapted is not None
 
-    def test_create_tone_matched_response(self, tone_manager, emotional_state_joy, conversation_context):
+    def test_create_tone_matched_response(
+        self, tone_manager, emotional_state_joy, conversation_context
+    ):
         """Test creating tone-matched response."""
         content = "That's wonderful news about your success"
 
@@ -129,12 +149,16 @@ class TestEmotionalToneManager:
 
         assert analysis["preferences"] == "insufficient_data"
 
-    def test_analyze_user_tone_preferences_with_data(self, tone_manager, conversation_context):
+    def test_analyze_user_tone_preferences_with_data(
+        self, tone_manager, conversation_context
+    ):
         """Test analyzing tone preferences with conversation data."""
         conversation_history = [conversation_context] * 5
         feedback_history = [{"rating": 4}, {"rating": 5}]
 
-        analysis = tone_manager.analyze_user_tone_preferences(conversation_history, feedback_history)
+        analysis = tone_manager.analyze_user_tone_preferences(
+            conversation_history, feedback_history
+        )
 
         assert "preferred_tones" in analysis
         assert "communication_style" in analysis
@@ -166,9 +190,13 @@ class TestEmotionalToneManager:
         assert resonance >= 0.0
         assert resonance <= 1.0
 
-    def test_calculate_adaptation_confidence(self, tone_manager, emotional_state_joy, conversation_context):
+    def test_calculate_adaptation_confidence(
+        self, tone_manager, emotional_state_joy, conversation_context
+    ):
         """Test calculating adaptation confidence."""
-        confidence = tone_manager._calculate_adaptation_confidence(emotional_state_joy, conversation_context)
+        confidence = tone_manager._calculate_adaptation_confidence(
+            emotional_state_joy, conversation_context
+        )
 
         assert confidence >= 0.0
         assert confidence <= 1.0
@@ -176,7 +204,9 @@ class TestEmotionalToneManager:
     def test_get_combined_tone_characteristics(self, tone_manager):
         """Test getting combined tone characteristics."""
         combined = tone_manager._get_combined_tone_characteristics(
-            ToneType.WARM_SUPPORTIVE, ToneType.ENCOURAGING_UPLIFTING, ToneIntensity.MODERATE
+            ToneType.WARM_SUPPORTIVE,
+            ToneType.ENCOURAGING_UPLIFTING,
+            ToneIntensity.MODERATE,
         )
 
         assert isinstance(combined, dict)
@@ -206,7 +236,7 @@ class TestEmotionalToneManager:
         feedback_history = [
             {"rating": 4, "text": "helpful and clear"},
             {"rating": 5, "text": "very friendly"},
-            {"rating": 2, "text": "too technical"}
+            {"rating": 2, "text": "too technical"},
         ]
 
         analysis = tone_manager._analyze_feedback_patterns(feedback_history)
@@ -217,16 +247,12 @@ class TestEmotionalToneManager:
 
     def test_determine_preferred_tones(self, tone_manager):
         """Test determining preferred tones from analysis."""
-        message_analysis = {
-            "formality": "casual",
-            "expressiveness": "high"
-        }
-        feedback_analysis = {
-            "feedback_available": True,
-            "avg_rating": 4.5
-        }
+        message_analysis = {"formality": "casual", "expressiveness": "high"}
+        feedback_analysis = {"feedback_available": True, "avg_rating": 4.5}
 
-        preferred_tones = tone_manager._determine_preferred_tones(message_analysis, feedback_analysis)
+        preferred_tones = tone_manager._determine_preferred_tones(
+            message_analysis, feedback_analysis
+        )
 
         assert isinstance(preferred_tones, list)
         assert len(preferred_tones) > 0
@@ -240,7 +266,9 @@ class TestEmotionalToneManager:
         assert confidence >= 0.0
         assert confidence <= 1.0
 
-    def test_select_secondary_tone_with_user_style(self, tone_manager, conversation_context):
+    def test_select_secondary_tone_with_user_style(
+        self, tone_manager, conversation_context
+    ):
         """Test selecting secondary tone with user communication style."""
         secondary_tones = [ToneType.WARM_SUPPORTIVE, ToneType.RESPECTFUL_NEUTRAL]
 
@@ -250,10 +278,14 @@ class TestEmotionalToneManager:
 
         assert tone == ToneType.RESPECTFUL_NEUTRAL
 
-    def test_select_secondary_tone_without_user_style(self, tone_manager, conversation_context):
+    def test_select_secondary_tone_without_user_style(
+        self, tone_manager, conversation_context
+    ):
         """Test selecting secondary tone without user style."""
         secondary_tones = [ToneType.COMPASSIONATE_CARING, ToneType.WARM_SUPPORTIVE]
 
-        tone = tone_manager._select_secondary_tone(secondary_tones, conversation_context, None)
+        tone = tone_manager._select_secondary_tone(
+            secondary_tones, conversation_context, None
+        )
 
         assert tone in secondary_tones

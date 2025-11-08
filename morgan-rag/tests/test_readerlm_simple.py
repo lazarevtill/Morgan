@@ -15,7 +15,7 @@ from morgan.jina.models.reader_lm import JinaReaderLM
 def test_readerlm_simple():
     """Test ReaderLM with a simple HTML example."""
     print("Testing ReaderLM with simple HTML...")
-    
+
     # Simple HTML content for testing
     test_html = """
     <html>
@@ -29,11 +29,11 @@ def test_readerlm_simple():
     </body>
     </html>
     """
-    
+
     try:
         # Initialize ReaderLM
         reader = JinaReaderLM()
-        
+
         # Test model loading
         print("Loading ReaderLM model...")
         if reader.load_model(use_pipeline=True):
@@ -41,27 +41,27 @@ def test_readerlm_simple():
         else:
             print("✗ Model loading failed")
             return
-        
+
         # Test content extraction with HTML content
         print("Extracting content from HTML...")
         result = reader.extract_content(
-            url="http://test.example", 
-            html_content=test_html
+            url="http://test.example", html_content=test_html
         )
-        
+
         print(f"Title: {result.title}")
         print(f"Content Length: {len(result.content)} chars")
         print(f"Quality Score: {result.quality_score:.2f}")
         print(f"Processing Time: {result.processing_time:.2f}s")
         print(f"Content Preview: {result.content[:200]}...")
-        
+
         # Clean up
         reader.unload_model()
         print("✓ Test completed successfully")
-        
+
     except Exception as e:
         print(f"✗ Test failed: {str(e)}")
         import traceback
+
         traceback.print_exc()
 
 
