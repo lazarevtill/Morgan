@@ -12,7 +12,11 @@ from unittest.mock import Mock, patch
 from morgan.learning.engine import LearningEngine, LearningSession, LearningMetrics
 from morgan.learning.feedback import UserFeedback, FeedbackType, FeedbackSentiment
 from morgan.emotional.models import (
-    InteractionData, ConversationContext, CompanionProfile, EmotionalState, EmotionType
+    InteractionData,
+    ConversationContext,
+    CompanionProfile,
+    EmotionalState,
+    EmotionType,
 )
 
 
@@ -36,15 +40,15 @@ class TestLearningEngine:
                     user_id="test_user",
                     conversation_id="test_conv",
                     message_text=f"Test message {i}",
-                    timestamp=datetime.utcnow() - timedelta(days=i)
+                    timestamp=datetime.utcnow() - timedelta(days=i),
                 ),
                 emotional_state=EmotionalState(
                     primary_emotion=EmotionType.NEUTRAL,
                     intensity=0.5,
                     confidence=0.7,
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.utcnow(),
                 ),
-                timestamp=datetime.utcnow() - timedelta(days=i)
+                timestamp=datetime.utcnow() - timedelta(days=i),
             )
             interactions.append(interaction)
         return interactions
@@ -58,7 +62,7 @@ class TestLearningEngine:
             relationship_duration=timedelta(days=30),
             interaction_count=15,
             trust_level=0.7,
-            engagement_score=0.75
+            engagement_score=0.75,
         )
 
     @pytest.fixture
@@ -68,7 +72,7 @@ class TestLearningEngine:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="This is a test message",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
     @pytest.fixture
@@ -79,7 +83,7 @@ class TestLearningEngine:
             user_id="test_user",
             feedback_type=FeedbackType.EXPLICIT_RATING,
             satisfaction_rating=0.8,
-            sentiment=FeedbackSentiment.POSITIVE
+            sentiment=FeedbackSentiment.POSITIVE,
         )
 
     def test_analyze_interaction_patterns(self, engine, sample_interactions):
@@ -101,10 +105,10 @@ class TestLearningEngine:
                     user_id="test_user",
                     conversation_id="test_conv",
                     message_text="Test",
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.utcnow(),
                 ),
                 emotional_state=None,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
         ]
 
@@ -115,7 +119,9 @@ class TestLearningEngine:
 
     def test_learn_from_feedback(self, engine, user_feedback, conversation_context):
         """Test learning from user feedback."""
-        learning_update = engine.learn_from_feedback("test_user", user_feedback, conversation_context)
+        learning_update = engine.learn_from_feedback(
+            "test_user", user_feedback, conversation_context
+        )
 
         assert learning_update is not None
         assert learning_update.user_id == "test_user"
@@ -123,7 +129,9 @@ class TestLearningEngine:
 
     def test_adapt_behavior(self, engine, user_profile, conversation_context):
         """Test adapting behavior."""
-        adaptation_result = engine.adapt_behavior("test_user", conversation_context, user_profile)
+        adaptation_result = engine.adapt_behavior(
+            "test_user", conversation_context, user_profile
+        )
 
         assert adaptation_result is not None
         assert adaptation_result.user_id == "test_user"
@@ -131,7 +139,9 @@ class TestLearningEngine:
 
     def test_extract_preferences(self, engine, sample_interactions):
         """Test extracting preferences from interactions."""
-        preference_profile = engine.extract_preferences("test_user", sample_interactions)
+        preference_profile = engine.extract_preferences(
+            "test_user", sample_interactions
+        )
 
         assert preference_profile is not None
         assert preference_profile.user_id == "test_user"
@@ -174,7 +184,7 @@ class TestLearningEngine:
             "test_user",
             interactions_processed=5,
             patterns_identified=3,
-            user_satisfaction=0.8
+            user_satisfaction=0.8,
         )
 
         metrics = engine.get_learning_metrics("test_user")
@@ -192,7 +202,7 @@ class TestLearningEngine:
             patterns_identified=8,
             preferences_updated=5,
             adaptations_applied=3,
-            feedback_processed=2
+            feedback_processed=2,
         )
 
         score = engine._calculate_learning_score(session)
@@ -206,7 +216,7 @@ class TestLearningEngine:
             session_id="test_session",
             user_id="test_user",
             start_time=datetime.utcnow(),
-            interactions_processed=0
+            interactions_processed=0,
         )
 
         score = engine._calculate_learning_score(session)
@@ -225,7 +235,7 @@ class TestLearningMetrics:
             user_satisfaction_trend=0.75,
             preference_stability=0.8,
             learning_velocity=0.15,
-            personalization_accuracy=0.85
+            personalization_accuracy=0.85,
         )
 
         assert metrics.total_interactions == 100
@@ -239,9 +249,7 @@ class TestLearningSession:
     def test_learning_session_creation(self):
         """Test creating learning session."""
         session = LearningSession(
-            session_id="test_session",
-            user_id="test_user",
-            start_time=datetime.utcnow()
+            session_id="test_session", user_id="test_user", start_time=datetime.utcnow()
         )
 
         assert session.session_id == "test_session"
@@ -251,9 +259,7 @@ class TestLearningSession:
     def test_learning_session_auto_id(self):
         """Test learning session with auto-generated ID."""
         session = LearningSession(
-            session_id="",
-            user_id="test_user",
-            start_time=datetime.utcnow()
+            session_id="", user_id="test_user", start_time=datetime.utcnow()
         )
 
         assert session.session_id is not None

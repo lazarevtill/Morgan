@@ -17,8 +17,7 @@ from morgan.jina.scraping.service import JinaWebScrapingService
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ def test_huggingface_urls():
         "https://huggingface.co/jinaai/jina-clip-v2",
         "https://huggingface.co/jinaai/jina-reranker-v3",
         "https://huggingface.co/jinaai/jina-reranker-v2-base-multilingual",
-        "https://huggingface.co/jinaai/ReaderLM-v2"
+        "https://huggingface.co/jinaai/ReaderLM-v2",
     ]
 
     scraper = JinaWebScrapingService()
@@ -63,12 +62,12 @@ def test_huggingface_urls():
                 print(f"   Author: {content.author}")
 
             # Show first 200 characters of content
-            preview = content.content[:200].replace('\n', ' ')
+            preview = content.content[:200].replace("\n", " ")
             print(f"   Preview: {preview}...")
 
             # Show quality assessment if available
-            if 'quality_assessment' in content.metadata:
-                qa = content.metadata['quality_assessment']
+            if "quality_assessment" in content.metadata:
+                qa = content.metadata["quality_assessment"]
                 print("   Quality Details:")
                 print(f"     Readability: {qa['readability_score']:.2f}")
                 print(f"     Completeness: {qa['completeness_score']:.2f}")
@@ -90,7 +89,7 @@ def test_batch_scraping_huggingface():
     batch_urls = [
         "https://huggingface.co/jinaai/jina-embeddings-v4",
         "https://huggingface.co/jinaai/jina-reranker-v3",
-        "https://huggingface.co/jinaai/ReaderLM-v2"
+        "https://huggingface.co/jinaai/ReaderLM-v2",
     ]
 
     scraper = JinaWebScrapingService()
@@ -98,9 +97,7 @@ def test_batch_scraping_huggingface():
     try:
         print(f"Batch scraping {len(batch_urls)} URLs...")
         results = scraper.batch_scrape(
-            batch_urls,
-            max_concurrent=2,
-            extract_images=True
+            batch_urls, max_concurrent=2, extract_images=True
         )
 
         print(f"\nBatch Results ({len(results)} URLs processed):")
@@ -114,7 +111,7 @@ def test_batch_scraping_huggingface():
             print(f"   Images: {len(content.images)}")
 
             # Show brief content preview
-            preview = content.content[:150].replace('\n', ' ')
+            preview = content.content[:150].replace("\n", " ")
             print(f"   Preview: {preview}...")
 
     except Exception as e:
@@ -137,21 +134,18 @@ def test_extraction_methods():
     # Test: Local ReaderLM with HTML fallback
     print("\n1. Testing local ReaderLM extraction (with HTML fallback):")
     try:
-        content = scraper.scrape_url(
-            test_url,
-            extract_images=True
-        )
+        content = scraper.scrape_url(test_url, extract_images=True)
         print(f"   Method: {content.extraction_method}")
         print(f"   Quality: {content.extraction_quality:.2f}")
         print(f"   Time: {content.processing_time:.2f}s")
         print(f"   Content Length: {len(content.content)} chars")
-        
+
         # Show which method was actually used
         if content.extraction_method == "readerlm-v2-local":
             print("   ✓ Successfully used local ReaderLM")
         elif content.extraction_method == "html_parsing":
             print("   ⚠ Fell back to HTML parsing")
-        
+
     except Exception as e:
         print(f"   Extraction failed: {str(e)}")
 
@@ -169,7 +163,7 @@ def test_url_validation():
         "https://huggingface.co/jinaai/jina-reranker-v3",
         "invalid-url",
         "http://example.com",
-        "https://github.com/jina-ai/jina"
+        "https://github.com/jina-ai/jina",
     ]
 
     for url in test_urls:
@@ -179,7 +173,7 @@ def test_url_validation():
         print(f"  Domain: {result['domain']}")
         print(f"  Supported: {result['is_supported']}")
         print(f"  Estimated Quality: {result['estimated_quality']}")
-        if result['warnings']:
+        if result["warnings"]:
             print(f"  Warnings: {', '.join(result['warnings'])}")
 
     scraper.close()

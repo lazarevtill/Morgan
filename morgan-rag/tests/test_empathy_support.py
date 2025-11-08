@@ -10,9 +10,7 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 from morgan.empathy.support import CrisisSupport, CrisisLevel, SupportType
-from morgan.emotional.models import (
-    EmotionalState, EmotionType, ConversationContext
-)
+from morgan.emotional.models import EmotionalState, EmotionType, ConversationContext
 
 
 class TestCrisisSupport:
@@ -21,8 +19,8 @@ class TestCrisisSupport:
     @pytest.fixture
     def crisis_support(self):
         """Create crisis support system for testing."""
-        with patch('morgan.empathy.support.get_llm_service'):
-            with patch('morgan.empathy.support.get_settings'):
+        with patch("morgan.empathy.support.get_llm_service"):
+            with patch("morgan.empathy.support.get_settings"):
                 return CrisisSupport()
 
     @pytest.fixture
@@ -32,7 +30,7 @@ class TestCrisisSupport:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.9,
             confidence=0.85,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
     @pytest.fixture
@@ -42,10 +40,12 @@ class TestCrisisSupport:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="I'm having a really hard time dealing with everything",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
-    def test_detect_crisis_none(self, crisis_support, emotional_state_sadness, conversation_context):
+    def test_detect_crisis_none(
+        self, crisis_support, emotional_state_sadness, conversation_context
+    ):
         """Test crisis detection with no crisis."""
         normal_text = "I'm feeling a bit down but I'll be okay"
 
@@ -63,7 +63,7 @@ class TestCrisisSupport:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.95,
             confidence=0.9,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
         crisis_level, crisis_types = crisis_support.detect_crisis(
@@ -73,7 +73,9 @@ class TestCrisisSupport:
         assert crisis_level in [CrisisLevel.HIGH, CrisisLevel.CRITICAL]
         assert len(crisis_types) > 0
 
-    def test_detect_crisis_moderate_risk(self, crisis_support, emotional_state_sadness, conversation_context):
+    def test_detect_crisis_moderate_risk(
+        self, crisis_support, emotional_state_sadness, conversation_context
+    ):
         """Test detection of moderate-risk crisis."""
         moderate_text = "I feel so worthless and hopeless about my situation"
 
@@ -83,7 +85,9 @@ class TestCrisisSupport:
 
         assert crisis_level in [CrisisLevel.LOW, CrisisLevel.MEDIUM, CrisisLevel.HIGH]
 
-    def test_generate_crisis_response_none(self, crisis_support, emotional_state_sadness, conversation_context):
+    def test_generate_crisis_response_none(
+        self, crisis_support, emotional_state_sadness, conversation_context
+    ):
         """Test generating response for non-crisis situation."""
         response = crisis_support.generate_crisis_response(
             CrisisLevel.NONE, [], emotional_state_sadness, conversation_context
@@ -93,10 +97,15 @@ class TestCrisisSupport:
         assert "support_message" in response
         assert response["crisis_level"] == "none"
 
-    def test_generate_crisis_response_critical(self, crisis_support, emotional_state_sadness, conversation_context):
+    def test_generate_crisis_response_critical(
+        self, crisis_support, emotional_state_sadness, conversation_context
+    ):
         """Test generating response for critical crisis."""
         response = crisis_support.generate_crisis_response(
-            CrisisLevel.CRITICAL, ["suicide_risk"], emotional_state_sadness, conversation_context
+            CrisisLevel.CRITICAL,
+            ["suicide_risk"],
+            emotional_state_sadness,
+            conversation_context,
         )
 
         assert response["crisis_level"] == "critical"
@@ -105,10 +114,15 @@ class TestCrisisSupport:
         assert response["follow_up_needed"] is True
         assert response["professional_help_recommended"] is True
 
-    def test_generate_crisis_response_medium(self, crisis_support, emotional_state_sadness, conversation_context):
+    def test_generate_crisis_response_medium(
+        self, crisis_support, emotional_state_sadness, conversation_context
+    ):
         """Test generating response for medium crisis."""
         response = crisis_support.generate_crisis_response(
-            CrisisLevel.MEDIUM, ["severe_depression"], emotional_state_sadness, conversation_context
+            CrisisLevel.MEDIUM,
+            ["severe_depression"],
+            emotional_state_sadness,
+            conversation_context,
         )
 
         assert response["crisis_level"] == "medium"
@@ -174,9 +188,13 @@ class TestCrisisSupport:
         assert isinstance(contacts, dict)
         assert len(contacts) > 0
 
-    def test_assess_crisis_level_no_detection(self, crisis_support, emotional_state_sadness):
+    def test_assess_crisis_level_no_detection(
+        self, crisis_support, emotional_state_sadness
+    ):
         """Test assessing crisis level with no detected crisis."""
-        level = crisis_support._assess_crisis_level([], {}, emotional_state_sadness, "normal text")
+        level = crisis_support._assess_crisis_level(
+            [], {}, emotional_state_sadness, "normal text"
+        )
 
         assert level in [CrisisLevel.NONE, CrisisLevel.LOW]
 
@@ -189,7 +207,9 @@ class TestCrisisSupport:
 
     def test_suggest_coping_strategies(self, crisis_support):
         """Test suggesting coping strategies."""
-        strategies = crisis_support._suggest_coping_strategies(["panic_crisis", "severe_depression"])
+        strategies = crisis_support._suggest_coping_strategies(
+            ["panic_crisis", "severe_depression"]
+        )
 
         assert isinstance(strategies, list)
         assert len(strategies) > 0
@@ -208,16 +228,24 @@ class TestCrisisSupport:
         assert isinstance(plan, list)
         assert len(plan) > 0
 
-    def test_general_support_message_generation(self, crisis_support, emotional_state_sadness):
+    def test_general_support_message_generation(
+        self, crisis_support, emotional_state_sadness
+    ):
         """Test generating general support message."""
-        message = crisis_support._generate_general_support_message(emotional_state_sadness)
+        message = crisis_support._generate_general_support_message(
+            emotional_state_sadness
+        )
 
         assert message is not None
         assert len(message) > 0
 
-    def test_get_general_coping_suggestions(self, crisis_support, emotional_state_sadness):
+    def test_get_general_coping_suggestions(
+        self, crisis_support, emotional_state_sadness
+    ):
         """Test getting general coping suggestions."""
-        suggestions = crisis_support._get_general_coping_suggestions(emotional_state_sadness)
+        suggestions = crisis_support._get_general_coping_suggestions(
+            emotional_state_sadness
+        )
 
         assert isinstance(suggestions, list)
         assert len(suggestions) > 0

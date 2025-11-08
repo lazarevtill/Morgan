@@ -10,12 +10,19 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 from morgan.learning.adaptation import (
-    BehavioralAdaptationEngine, ResponseStyleAdapter, ContentSelectionAdapter,
-    AdaptationType, AdaptationStrategy, Adaptation
+    BehavioralAdaptationEngine,
+    ResponseStyleAdapter,
+    ContentSelectionAdapter,
+    AdaptationType,
+    AdaptationStrategy,
+    Adaptation,
 )
 from morgan.learning.preferences import UserPreferenceProfile, PreferenceCategory
 from morgan.emotional.models import (
-    ConversationContext, CompanionProfile, CommunicationStyle, ResponseLength
+    ConversationContext,
+    CompanionProfile,
+    CommunicationStyle,
+    ResponseLength,
 )
 
 
@@ -36,7 +43,7 @@ class TestResponseStyleAdapter:
             relationship_duration=timedelta(days=30),
             interaction_count=15,
             trust_level=0.7,
-            engagement_score=0.75
+            engagement_score=0.75,
         )
 
     @pytest.fixture
@@ -46,15 +53,15 @@ class TestResponseStyleAdapter:
             user_id="test_user",
             preferences={},
             confidence_scores={},
-            preference_sources={}
+            preference_sources={},
         )
         profile.preferences["communication"] = {
             "formality_level": "casual",
-            "technical_depth": "high"
+            "technical_depth": "high",
         }
         profile.confidence_scores["communication"] = {
             "formality_level": 0.8,
-            "technical_depth": 0.75
+            "technical_depth": 0.75,
         }
         return profile
 
@@ -65,10 +72,12 @@ class TestResponseStyleAdapter:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="Can you explain this technical concept?",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
-    def test_adapt_response_style(self, adapter, user_profile, preference_profile, conversation_context):
+    def test_adapt_response_style(
+        self, adapter, user_profile, preference_profile, conversation_context
+    ):
         """Test adapting response style."""
         adaptations = adapter.adapt_response_style(
             "test_user", conversation_context, user_profile, preference_profile
@@ -78,14 +87,20 @@ class TestResponseStyleAdapter:
 
     def test_adapt_formality_to_casual(self, adapter, user_profile, preference_profile):
         """Test adapting formality to casual."""
-        adaptations = adapter._adapt_formality_level("test_user", preference_profile, user_profile)
+        adaptations = adapter._adapt_formality_level(
+            "test_user", preference_profile, user_profile
+        )
 
         if adaptations:
             assert all(isinstance(a, Adaptation) for a in adaptations)
 
-    def test_adapt_technical_depth(self, adapter, preference_profile, conversation_context):
+    def test_adapt_technical_depth(
+        self, adapter, preference_profile, conversation_context
+    ):
         """Test adapting technical depth."""
-        adaptations = adapter._adapt_technical_depth("test_user", preference_profile, conversation_context)
+        adaptations = adapter._adapt_technical_depth(
+            "test_user", preference_profile, conversation_context
+        )
 
         assert isinstance(adaptations, list)
 
@@ -94,7 +109,9 @@ class TestResponseStyleAdapter:
         preference_profile.preferences["content"] = {"response_length": "brief"}
         preference_profile.confidence_scores["content"] = {"response_length": 0.8}
 
-        adaptations = adapter._adapt_response_length("test_user", preference_profile, user_profile)
+        adaptations = adapter._adapt_response_length(
+            "test_user", preference_profile, user_profile
+        )
 
         assert isinstance(adaptations, list)
 
@@ -116,7 +133,7 @@ class TestContentSelectionAdapter:
             relationship_duration=timedelta(days=30),
             interaction_count=15,
             trust_level=0.7,
-            engagement_score=0.75
+            engagement_score=0.75,
         )
 
     @pytest.fixture
@@ -126,17 +143,17 @@ class TestContentSelectionAdapter:
             user_id="test_user",
             preferences={},
             confidence_scores={},
-            preference_sources={}
+            preference_sources={},
         )
         profile.preferences["topics"] = {
             "interest_python": 0.8,
             "interest_machine_learning": 0.7,
-            "learning_focus": True
+            "learning_focus": True,
         }
         profile.confidence_scores["topics"] = {
             "interest_python": 0.85,
             "interest_machine_learning": 0.75,
-            "learning_focus": 0.9
+            "learning_focus": 0.9,
         }
         return profile
 
@@ -147,10 +164,12 @@ class TestContentSelectionAdapter:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="Tell me about Python programming",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
-    def test_adapt_content_selection(self, adapter, user_profile, preference_profile, conversation_context):
+    def test_adapt_content_selection(
+        self, adapter, user_profile, preference_profile, conversation_context
+    ):
         """Test adapting content selection."""
         adaptations = adapter.adapt_content_selection(
             "test_user", conversation_context, user_profile, preference_profile
@@ -158,20 +177,29 @@ class TestContentSelectionAdapter:
 
         assert isinstance(adaptations, list)
 
-    def test_adapt_search_weighting_with_interests(self, adapter, preference_profile, conversation_context):
+    def test_adapt_search_weighting_with_interests(
+        self, adapter, preference_profile, conversation_context
+    ):
         """Test adapting search weighting with topic interests."""
-        adaptations = adapter._adapt_search_weighting("test_user", preference_profile, conversation_context)
+        adaptations = adapter._adapt_search_weighting(
+            "test_user", preference_profile, conversation_context
+        )
 
         assert isinstance(adaptations, list)
         if adaptations:
-            assert any(a.adaptation_type == AdaptationType.SEARCH_WEIGHTING for a in adaptations)
+            assert any(
+                a.adaptation_type == AdaptationType.SEARCH_WEIGHTING
+                for a in adaptations
+            )
 
     def test_adapt_content_filtering(self, adapter, user_profile, preference_profile):
         """Test adapting content filtering."""
         preference_profile.preferences["content"] = {"examples_preferred": True}
         preference_profile.confidence_scores["content"] = {"examples_preferred": 0.8}
 
-        adaptations = adapter._adapt_content_filtering("test_user", preference_profile, user_profile)
+        adaptations = adapter._adapt_content_filtering(
+            "test_user", preference_profile, user_profile
+        )
 
         assert isinstance(adaptations, list)
 
@@ -193,7 +221,7 @@ class TestBehavioralAdaptationEngine:
             relationship_duration=timedelta(days=30),
             interaction_count=15,
             trust_level=0.7,
-            engagement_score=0.75
+            engagement_score=0.75,
         )
 
     @pytest.fixture
@@ -203,15 +231,15 @@ class TestBehavioralAdaptationEngine:
             user_id="test_user",
             preferences={},
             confidence_scores={},
-            preference_sources={}
+            preference_sources={},
         )
         profile.preferences["communication"] = {
             "formality_level": "casual",
-            "technical_depth": "high"
+            "technical_depth": "high",
         }
         profile.confidence_scores["communication"] = {
             "formality_level": 0.8,
-            "technical_depth": 0.75
+            "technical_depth": 0.75,
         }
         return profile
 
@@ -222,12 +250,16 @@ class TestBehavioralAdaptationEngine:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="Can you help me understand this?",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
-    def test_adapt_behavior(self, engine, user_profile, preference_profile, conversation_context):
+    def test_adapt_behavior(
+        self, engine, user_profile, preference_profile, conversation_context
+    ):
         """Test adapting behavior."""
-        result = engine.adapt_behavior("test_user", conversation_context, user_profile, preference_profile)
+        result = engine.adapt_behavior(
+            "test_user", conversation_context, user_profile, preference_profile
+        )
 
         assert result is not None
         assert result.user_id == "test_user"
@@ -235,16 +267,20 @@ class TestBehavioralAdaptationEngine:
         assert result.confidence_score >= 0.0
         assert result.confidence_score <= 1.0
 
-    def test_adapt_behavior_empty_preferences(self, engine, user_profile, conversation_context):
+    def test_adapt_behavior_empty_preferences(
+        self, engine, user_profile, conversation_context
+    ):
         """Test adapting behavior with empty preferences."""
         empty_profile = UserPreferenceProfile(
             user_id="test_user",
             preferences={},
             confidence_scores={},
-            preference_sources={}
+            preference_sources={},
         )
 
-        result = engine.adapt_behavior("test_user", conversation_context, user_profile, empty_profile)
+        result = engine.adapt_behavior(
+            "test_user", conversation_context, user_profile, empty_profile
+        )
 
         assert result is not None
         assert len(result.adaptations) == 0
@@ -258,10 +294,14 @@ class TestBehavioralAdaptationEngine:
         # Should not raise error
         engine.update_strategies("test_user", changes)
 
-    def test_get_adaptation_history(self, engine, user_profile, preference_profile, conversation_context):
+    def test_get_adaptation_history(
+        self, engine, user_profile, preference_profile, conversation_context
+    ):
         """Test getting adaptation history."""
         # First create some history
-        engine.adapt_behavior("test_user", conversation_context, user_profile, preference_profile)
+        engine.adapt_behavior(
+            "test_user", conversation_context, user_profile, preference_profile
+        )
 
         history = engine.get_adaptation_history("test_user")
 
@@ -287,7 +327,7 @@ class TestBehavioralAdaptationEngine:
                 confidence=0.8,
                 strategy=AdaptationStrategy.GRADUAL,
                 reasoning="Test reasoning",
-                expected_impact="Test impact"
+                expected_impact="Test impact",
             ),
             Adaptation(
                 adaptation_id="test2",
@@ -298,8 +338,8 @@ class TestBehavioralAdaptationEngine:
                 confidence=0.7,
                 strategy=AdaptationStrategy.IMMEDIATE,
                 reasoning="Test reasoning 2",
-                expected_impact="Test impact 2"
-            )
+                expected_impact="Test impact 2",
+            ),
         ]
 
         reasoning = engine._generate_adaptation_reasoning(adaptations)

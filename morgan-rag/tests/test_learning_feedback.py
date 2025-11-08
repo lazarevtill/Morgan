@@ -10,8 +10,12 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 from morgan.learning.feedback import (
-    FeedbackProcessor, UserFeedback, FeedbackType, FeedbackSentiment,
-    FeedbackAnalysis, LearningUpdate
+    FeedbackProcessor,
+    UserFeedback,
+    FeedbackType,
+    FeedbackSentiment,
+    FeedbackAnalysis,
+    LearningUpdate,
 )
 from morgan.emotional.models import ConversationContext
 
@@ -31,7 +35,7 @@ class TestFeedbackProcessor:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="This response was helpful",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
     @pytest.fixture
@@ -44,7 +48,7 @@ class TestFeedbackProcessor:
             satisfaction_rating=0.9,
             sentiment=FeedbackSentiment.POSITIVE,
             feedback_text="This was very helpful and clear",
-            specific_aspects={"helpfulness": 0.95, "clarity": 0.9}
+            specific_aspects={"helpfulness": 0.95, "clarity": 0.9},
         )
 
     @pytest.fixture
@@ -57,26 +61,39 @@ class TestFeedbackProcessor:
             satisfaction_rating=0.3,
             sentiment=FeedbackSentiment.NEGATIVE,
             feedback_text="This was confusing and not helpful",
-            specific_aspects={"helpfulness": 0.2, "clarity": 0.3}
+            specific_aspects={"helpfulness": 0.2, "clarity": 0.3},
         )
 
-    def test_process_feedback_positive(self, processor, positive_feedback, conversation_context):
+    def test_process_feedback_positive(
+        self, processor, positive_feedback, conversation_context
+    ):
         """Test processing positive feedback."""
-        learning_update = processor.process_feedback("test_user", positive_feedback, conversation_context)
+        learning_update = processor.process_feedback(
+            "test_user", positive_feedback, conversation_context
+        )
 
         assert learning_update is not None
         assert learning_update.user_id == "test_user"
         assert isinstance(learning_update.preference_updates, list)
         assert isinstance(learning_update.learning_insights, list)
 
-    def test_process_feedback_negative(self, processor, negative_feedback, conversation_context):
+    def test_process_feedback_negative(
+        self, processor, negative_feedback, conversation_context
+    ):
         """Test processing negative feedback."""
-        learning_update = processor.process_feedback("test_user", negative_feedback, conversation_context)
+        learning_update = processor.process_feedback(
+            "test_user", negative_feedback, conversation_context
+        )
 
         assert learning_update is not None
-        assert len(learning_update.adaptation_changes) > 0 or len(learning_update.learning_insights) > 0
+        assert (
+            len(learning_update.adaptation_changes) > 0
+            or len(learning_update.learning_insights) > 0
+        )
 
-    def test_analyze_feedback_high_satisfaction(self, processor, positive_feedback, conversation_context):
+    def test_analyze_feedback_high_satisfaction(
+        self, processor, positive_feedback, conversation_context
+    ):
         """Test analyzing high satisfaction feedback."""
         analysis = processor._analyze_feedback(positive_feedback, conversation_context)
 
@@ -84,7 +101,9 @@ class TestFeedbackProcessor:
         assert len(analysis.positive_aspects) > 0
         assert analysis.confidence_score > 0.5
 
-    def test_analyze_feedback_low_satisfaction(self, processor, negative_feedback, conversation_context):
+    def test_analyze_feedback_low_satisfaction(
+        self, processor, negative_feedback, conversation_context
+    ):
         """Test analyzing low satisfaction feedback."""
         analysis = processor._analyze_feedback(negative_feedback, conversation_context)
 
@@ -110,7 +129,9 @@ class TestFeedbackProcessor:
 
     def test_analyze_feedback_text_preference_indicators(self, processor):
         """Test analyzing feedback text with preference indicators."""
-        insights = processor._analyze_feedback_text("I prefer brief and simple explanations")
+        insights = processor._analyze_feedback_text(
+            "I prefer brief and simple explanations"
+        )
 
         assert "preferences" in insights
         assert len(insights["preferences"]) > 0
@@ -120,7 +141,7 @@ class TestFeedbackProcessor:
         signals = {
             "long_session": True,
             "follow_up_questions": True,
-            "copy_response": True
+            "copy_response": True,
         }
 
         insights = processor._analyze_behavioral_signals(signals)
@@ -130,11 +151,7 @@ class TestFeedbackProcessor:
 
     def test_analyze_behavioral_signals_negative(self, processor):
         """Test analyzing negative behavioral signals."""
-        signals = {
-            "short_session": True,
-            "abrupt_end": True,
-            "topic_change": True
-        }
+        signals = {"short_session": True, "abrupt_end": True, "topic_change": True}
 
         insights = processor._analyze_behavioral_signals(signals)
 
@@ -146,7 +163,9 @@ class TestFeedbackProcessor:
         improvements = ["accuracy", "clarity"]
         positives = ["High helpfulness rating"]
 
-        insights = processor._generate_actionable_insights(issues, improvements, positives)
+        insights = processor._generate_actionable_insights(
+            issues, improvements, positives
+        )
 
         assert isinstance(insights, list)
         assert len(insights) > 0
@@ -159,7 +178,7 @@ class TestFeedbackProcessor:
             feedback_type=FeedbackType.EXPLICIT_RATING,
             satisfaction_rating=0.8,
             feedback_text="This was very helpful and clear with good examples",
-            specific_aspects={"helpfulness": 0.9}
+            specific_aspects={"helpfulness": 0.9},
         )
 
         confidence = processor._calculate_analysis_confidence(feedback)
@@ -171,7 +190,7 @@ class TestFeedbackProcessor:
         feedback = UserFeedback(
             feedback_id="test",
             user_id="test_user",
-            feedback_type=FeedbackType.BEHAVIORAL
+            feedback_type=FeedbackType.BEHAVIORAL,
         )
 
         confidence = processor._calculate_analysis_confidence(feedback)
@@ -179,7 +198,9 @@ class TestFeedbackProcessor:
         assert confidence >= 0.1
         assert confidence <= 0.5
 
-    def test_generate_learning_updates(self, processor, positive_feedback, conversation_context):
+    def test_generate_learning_updates(
+        self, processor, positive_feedback, conversation_context
+    ):
         """Test generating learning updates from analysis."""
         analysis = processor._analyze_feedback(positive_feedback, conversation_context)
         learning_update = processor._generate_learning_updates(
@@ -189,7 +210,9 @@ class TestFeedbackProcessor:
         assert isinstance(learning_update, LearningUpdate)
         assert learning_update.confidence_score > 0.0
 
-    def test_get_feedback_history(self, processor, positive_feedback, conversation_context):
+    def test_get_feedback_history(
+        self, processor, positive_feedback, conversation_context
+    ):
         """Test getting feedback history."""
         # First add some feedback
         processor.process_feedback("test_user", positive_feedback, conversation_context)
@@ -206,7 +229,9 @@ class TestFeedbackProcessor:
         assert isinstance(history, list)
         assert len(history) == 0
 
-    def test_get_feedback_analysis(self, processor, positive_feedback, conversation_context):
+    def test_get_feedback_analysis(
+        self, processor, positive_feedback, conversation_context
+    ):
         """Test getting feedback analysis."""
         processor.process_feedback("test_user", positive_feedback, conversation_context)
 
@@ -224,13 +249,13 @@ class TestFeedbackProcessor:
                 user_id="test_user",
                 feedback_type=FeedbackType.EXPLICIT_RATING,
                 satisfaction_rating=0.7 + (i * 0.05),
-                timestamp=datetime.utcnow() - timedelta(days=i)
+                timestamp=datetime.utcnow() - timedelta(days=i),
             )
             context = ConversationContext(
                 user_id="test_user",
                 conversation_id=f"conv_{i}",
                 message_text="Test",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
             processor.process_feedback("test_user", feedback, context)
 
@@ -259,7 +284,7 @@ class TestUserFeedback:
             user_id="test_user",
             feedback_type=FeedbackType.EXPLICIT_RATING,
             satisfaction_rating=0.8,
-            sentiment=FeedbackSentiment.POSITIVE
+            sentiment=FeedbackSentiment.POSITIVE,
         )
 
         assert feedback.feedback_id == "test"
@@ -270,7 +295,7 @@ class TestUserFeedback:
         feedback = UserFeedback(
             feedback_id="",
             user_id="test_user",
-            feedback_type=FeedbackType.THUMBS_UP_DOWN
+            feedback_type=FeedbackType.THUMBS_UP_DOWN,
         )
 
         assert feedback.feedback_id is not None
@@ -289,7 +314,7 @@ class TestLearningUpdate:
             adaptation_changes=[],
             confidence_adjustments={},
             learning_insights=[],
-            confidence_score=0.8
+            confidence_score=0.8,
         )
 
         assert update.update_id == "test"
@@ -304,7 +329,7 @@ class TestLearningUpdate:
             adaptation_changes=[],
             confidence_adjustments={},
             learning_insights=[],
-            confidence_score=0.7
+            confidence_score=0.7,
         )
 
         assert update.update_id is not None

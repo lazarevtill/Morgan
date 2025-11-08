@@ -10,11 +10,19 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 from morgan.learning.patterns import (
-    InteractionPatternAnalyzer, PatternConfidence,
-    CommunicationPattern, TopicPattern, TimingPattern, BehavioralPattern
+    InteractionPatternAnalyzer,
+    PatternConfidence,
+    CommunicationPattern,
+    TopicPattern,
+    TimingPattern,
+    BehavioralPattern,
 )
 from morgan.emotional.models import (
-    InteractionData, ConversationContext, EmotionalState, EmotionType, CommunicationStyle
+    InteractionData,
+    ConversationContext,
+    EmotionalState,
+    EmotionType,
+    CommunicationStyle,
 )
 
 
@@ -35,7 +43,7 @@ class TestInteractionPatternAnalyzer:
             "Thank you for the detailed explanation",
             "Could you provide more examples?",
             "I appreciate your help with this",
-            "Can you explain the algorithm in detail?"
+            "Can you explain the algorithm in detail?",
         ]
 
         for i, msg in enumerate(messages):
@@ -43,7 +51,7 @@ class TestInteractionPatternAnalyzer:
                 user_id="test_user",
                 conversation_id="test_conv",
                 message_text=msg,
-                timestamp=datetime.utcnow() - timedelta(hours=i)
+                timestamp=datetime.utcnow() - timedelta(hours=i),
             )
             interaction = InteractionData(
                 interaction_id=f"test_{i}",
@@ -53,9 +61,9 @@ class TestInteractionPatternAnalyzer:
                     primary_emotion=EmotionType.NEUTRAL,
                     intensity=0.5,
                     confidence=0.7,
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.utcnow(),
                 ),
-                timestamp=datetime.utcnow() - timedelta(hours=i)
+                timestamp=datetime.utcnow() - timedelta(hours=i),
             )
             interactions.append(interaction)
 
@@ -79,10 +87,10 @@ class TestInteractionPatternAnalyzer:
                     user_id="test_user",
                     conversation_id="test_conv",
                     message_text="Test",
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.utcnow(),
                 ),
                 emotional_state=None,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
         ]
 
@@ -93,7 +101,9 @@ class TestInteractionPatternAnalyzer:
 
     def test_analyze_communication_patterns(self, analyzer, sample_interactions):
         """Test analyzing communication patterns."""
-        patterns = analyzer._analyze_communication_patterns("test_user", sample_interactions)
+        patterns = analyzer._analyze_communication_patterns(
+            "test_user", sample_interactions
+        )
 
         assert isinstance(patterns, list)
         if patterns:
@@ -105,7 +115,7 @@ class TestInteractionPatternAnalyzer:
         formal_messages = [
             "Please provide assistance with this matter",
             "Thank you for your help",
-            "I would appreciate your guidance"
+            "I would appreciate your guidance",
         ]
 
         formality = analyzer._calculate_formality_level(formal_messages)
@@ -117,7 +127,7 @@ class TestInteractionPatternAnalyzer:
         casual_messages = [
             "Hey! Can you help?",
             "Yeah that's cool",
-            "Awesome, thanks!!"
+            "Awesome, thanks!!",
         ]
 
         formality = analyzer._calculate_formality_level(casual_messages)
@@ -129,7 +139,7 @@ class TestInteractionPatternAnalyzer:
         technical_messages = [
             "Can you explain the algorithm implementation?",
             "What's the API architecture?",
-            "How does the database optimization work?"
+            "How does the database optimization work?",
         ]
 
         depth = analyzer._calculate_technical_depth(technical_messages)
@@ -141,7 +151,7 @@ class TestInteractionPatternAnalyzer:
         simple_messages = [
             "How are you today?",
             "Can you help me?",
-            "Thank you for the information"
+            "Thank you for the information",
         ]
 
         depth = analyzer._calculate_technical_depth(simple_messages)
@@ -150,19 +160,25 @@ class TestInteractionPatternAnalyzer:
 
     def test_determine_communication_style_formal(self, analyzer):
         """Test determining communication style - formal."""
-        style = analyzer._determine_communication_style(formality_level=0.8, technical_depth=0.3)
+        style = analyzer._determine_communication_style(
+            formality_level=0.8, technical_depth=0.3
+        )
 
         assert style == CommunicationStyle.FORMAL
 
     def test_determine_communication_style_technical(self, analyzer):
         """Test determining communication style - technical."""
-        style = analyzer._determine_communication_style(formality_level=0.5, technical_depth=0.7)
+        style = analyzer._determine_communication_style(
+            formality_level=0.5, technical_depth=0.7
+        )
 
         assert style == CommunicationStyle.TECHNICAL
 
     def test_determine_communication_style_casual(self, analyzer):
         """Test determining communication style - casual."""
-        style = analyzer._determine_communication_style(formality_level=0.2, technical_depth=0.3)
+        style = analyzer._determine_communication_style(
+            formality_level=0.2, technical_depth=0.3
+        )
 
         assert style == CommunicationStyle.CASUAL
 
@@ -173,7 +189,7 @@ class TestInteractionPatternAnalyzer:
             "What is machine learning?",
             "Why does this happen?",
             "When should I use this?",
-            "Where can I find more information?"
+            "Where can I find more information?",
         ]
 
         question_types = analyzer._extract_question_types(messages)
@@ -194,7 +210,7 @@ class TestInteractionPatternAnalyzer:
         """Test determining vocabulary level - advanced."""
         advanced_messages = [
             "The implementation demonstrates sophisticated architecture",
-            "Comprehensive understanding requires contextual analysis"
+            "Comprehensive understanding requires contextual analysis",
         ]
 
         level = analyzer._determine_vocabulary_level(advanced_messages)
@@ -235,7 +251,9 @@ class TestInteractionPatternAnalyzer:
 
     def test_analyze_behavioral_patterns(self, analyzer, sample_interactions):
         """Test analyzing behavioral patterns."""
-        patterns = analyzer._analyze_behavioral_patterns("test_user", sample_interactions)
+        patterns = analyzer._analyze_behavioral_patterns(
+            "test_user", sample_interactions
+        )
 
         assert isinstance(patterns, list)
         if patterns:
@@ -248,7 +266,7 @@ class TestInteractionPatternAnalyzer:
             datetime(2024, 1, 1, 10, 0),
             datetime(2024, 1, 1, 9, 30),
             datetime(2024, 1, 1, 14, 0),
-            datetime(2024, 1, 1, 14, 15)
+            datetime(2024, 1, 1, 14, 15),
         ]
 
         active_hours = analyzer._analyze_active_hours(timestamps)
@@ -259,9 +277,7 @@ class TestInteractionPatternAnalyzer:
 
     def test_determine_interaction_frequency_daily(self, analyzer):
         """Test determining interaction frequency - daily."""
-        timestamps = [
-            datetime.utcnow() - timedelta(hours=i * 12) for i in range(5)
-        ]
+        timestamps = [datetime.utcnow() - timedelta(hours=i * 12) for i in range(5)]
 
         frequency = analyzer._determine_interaction_frequency(timestamps)
 
@@ -269,9 +285,7 @@ class TestInteractionPatternAnalyzer:
 
     def test_determine_interaction_frequency_weekly(self, analyzer):
         """Test determining interaction frequency - weekly."""
-        timestamps = [
-            datetime.utcnow() - timedelta(days=i * 3) for i in range(5)
-        ]
+        timestamps = [datetime.utcnow() - timedelta(days=i * 3) for i in range(5)]
 
         frequency = analyzer._determine_interaction_frequency(timestamps)
 
@@ -279,10 +293,16 @@ class TestInteractionPatternAnalyzer:
 
     def test_calculate_overall_confidence(self, analyzer, sample_interactions):
         """Test calculating overall confidence across patterns."""
-        comm_patterns = analyzer._analyze_communication_patterns("test_user", sample_interactions)
-        topic_patterns = analyzer._analyze_topic_patterns("test_user", sample_interactions, timedelta(days=30))
+        comm_patterns = analyzer._analyze_communication_patterns(
+            "test_user", sample_interactions
+        )
+        topic_patterns = analyzer._analyze_topic_patterns(
+            "test_user", sample_interactions, timedelta(days=30)
+        )
 
-        confidence = analyzer._calculate_overall_confidence([comm_patterns, topic_patterns])
+        confidence = analyzer._calculate_overall_confidence(
+            [comm_patterns, topic_patterns]
+        )
 
         assert confidence >= 0.0
         assert confidence <= 1.0
