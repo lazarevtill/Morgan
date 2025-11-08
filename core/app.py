@@ -217,13 +217,26 @@ class MorganCore:
         # Check if database configuration is provided
         # Check both MORGAN_POSTGRES_HOST (from config) and standard POSTGRES_HOST (from env)
         postgres_host = self.config.get("postgres_host") or os.getenv("POSTGRES_HOST")
-        redis_host = self.config.get("redis_host", "localhost")
+        postgres_port = self.config.get("postgres_port") or os.getenv("POSTGRES_PORT")
+        postgres_db = self.config.get("postgres_db") or os.getenv("POSTGRES_DB")
+        postgres_user = self.config.get("postgres_user") or os.getenv("POSTGRES_USER")
+        postgres_password = self.config.get("postgres_password") or os.getenv("POSTGRES_PASSWORD")
+
+        redis_host = self.config.get("redis_host") or os.getenv("REDIS_HOST", "localhost")
+        redis_port = self.config.get("redis_port") or os.getenv("REDIS_PORT")
+        redis_password = self.config.get("redis_password") or os.getenv("REDIS_PASSWORD")
 
         # Initialize PostgreSQL if configured
         if postgres_host:
             try:
                 self.logger.info(f"Connecting to PostgreSQL at {postgres_host}...")
-                db_client = DatabaseClient()
+                db_client = DatabaseClient(
+                    host=postgres_host,
+                    port=int(postgres_port) if postgres_port else None,
+                    database=postgres_db,
+                    user=postgres_user,
+                    password=postgres_password
+                )
                 await db_client.connect()
 
                 # Validate connection by executing a simple query
@@ -247,12 +260,16 @@ class MorganCore:
         # Initialize Redis if configured
         try:
             self.logger.info(f"Connecting to Redis at {redis_host}...")
-            redis_client = RedisClient()
+            redis_client = RedisClient(
+                host=redis_host,
+                port=int(redis_port) if redis_port else None,
+                password=redis_password
+            )
             await redis_client.connect()
 
             # Validate connection by executing PING
-            if redis_client.redis:
-                ping_result = await redis_client.redis.ping()
+            if redis_client.client:
+                ping_result = await redis_client.client.ping()
                 if ping_result:
                     self.logger.info("Redis connection validated successfully")
                 else:
