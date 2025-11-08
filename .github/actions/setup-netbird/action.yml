@@ -1,0 +1,43 @@
+name: 'Setup NetBird VPN'
+description: 'Install and configure NetBird VPN for accessing private resources (REQUIRED - action will fail if VPN connection cannot be established)'
+inputs:
+  setup-key:
+    description: 'NetBird setup key for VPN authentication'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: Install and configure NetBird VPN
+      shell: bash
+      run: |
+        # Install NetBird
+        curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+        # Start NetBird service (required for daemon mode)
+        sudo netbird service install 2>/dev/null || true
+        sudo netbird service start
+
+        # Wait for daemon to be ready
+        sleep 3
+
+        # Connect to NetBird VPN (required for private Nexus access)
+        sudo netbird up \
+          --management-url https://vpn.lazarev.cloud \
+          --setup-key "${{ inputs.setup-key }}" \
+          --log-level info
+
+        # Wait for connection to establish
+        sleep 5
+
+        # Verify connection (REQUIRED - fail fast if not connected)
+        if sudo netbird status | grep -q "Connected"; then
+          echo "✓ NetBird VPN connected successfully"
+          sudo netbird status
+        else
+          echo "✗ ERROR: NetBird VPN connection failed"
+          echo "NetBird VPN is REQUIRED for accessing internal resources (Nexus, Harbor)"
+          echo "Current status:"
+          sudo netbird status || true
+          echo "Failing the action to prevent masked errors in subsequent steps"
+          exit 1
+        fi

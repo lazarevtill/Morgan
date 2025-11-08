@@ -92,7 +92,7 @@ User Request → Core Service (8000)
 
 ## Directory Structure
 
-```
+```text
 Morgan/
 ├── core/                           # Main orchestration service (Port 8000)
 │   ├── __init__.py

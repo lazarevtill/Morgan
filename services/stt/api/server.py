@@ -263,8 +263,9 @@ class STTAPIServer:
                 # Clean up session
                 try:
                     await self.stt_service.end_audio_stream(session_id)
-                except:
-                    pass
+                except Exception as cleanup_error:
+                    # Log but don't fail on cleanup errors
+                    logger.debug(f"Failed to cleanup session {session_id}: {cleanup_error}")
 
         @app.get("/sessions")
         async def list_sessions():
