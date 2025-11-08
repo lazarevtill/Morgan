@@ -25,6 +25,22 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
+      - name: Install and configure NetBird VPN
+        env:
+          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
+        run: |
+          # Install NetBird
+          curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+          # Connect to NetBird VPN (required for private Nexus access)
+          sudo netbird up --management-url https://vpn.lazarev.cloud --setup-key "$NETBIRD_SETUP_KEY" --daemon-addr ""
+
+          # Wait for connection to establish
+          sleep 5
+
+          # Verify connection
+          sudo netbird status || echo "Warning: NetBird status check failed"
+
       - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -52,7 +68,9 @@ jobs:
 
       - name: Run Mypy (type checking)
         run: |
-          mypy core/ services/ shared/ --ignore-missing-imports --no-strict-optional
+          # Note: --ignore-missing-imports is used for third-party libraries without type stubs
+          # Consider enabling --strict in future for more comprehensive type checking
+          mypy core/ services/ shared/ --ignore-missing-imports
         continue-on-error: true
 
       - name: Check Python syntax

@@ -34,7 +34,7 @@ Morgan is a human-first AI assistant with emotional intelligence, built on RAG (
 - **Memory System**: Conversation history and relationship tracking
 - **Vector Database**: Qdrant for semantic search
 - **Caching Layer**: Redis for performance optimization
-- **CLI Interface**: Interactive command-line tools
+- **CLI**: Interactive command-line tools
 
 ---
 
@@ -154,6 +154,124 @@ brew install \
     postgresql \
     redis
 ```
+
+---
+
+## NetBird VPN Setup
+
+### Important: NetBird VPN is Required
+
+NetBird VPN is required for accessing the **private Nexus repository** (nexus.in.lazarev.cloud) used for installing Morgan dependencies. Without NetBird, dependency installation will fail.
+
+### Why NetBird?
+
+- **Private Registry Access**: Nexus repository is only accessible through the NetBird VPN
+- **Secure Communication**: All package downloads are encrypted and secured
+- **Network Isolation**: Internal services are protected behind the VPN
+
+### 1. Get a NetBird Setup Key
+
+You'll need a NetBird setup key to connect to the VPN. Contact your system administrator to obtain:
+- **NetBird Setup Key**: A unique token for authentication
+- **VPN Management URL**: https://vpn.lazarev.cloud (standard for Morgan infrastructure)
+
+### 2. Install NetBird
+
+#### Linux (Ubuntu/Debian)
+
+```bash
+# Download and run installer
+curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+# Verify installation
+netbird version
+```
+
+#### macOS
+
+```bash
+# Install via Homebrew
+brew install netbird
+
+# Or download from: https://releases.netbird.io/
+```
+
+#### Windows
+
+Download installer from: https://releases.netbird.io/
+
+### 3. Connect to VPN
+
+```bash
+# Connect to NetBird VPN
+netbird up --management-url https://vpn.lazarev.cloud --setup-key <your-setup-key>
+
+# Example:
+# netbird up --management-url https://vpn.lazarev.cloud --setup-key AKIA2E5F7B9D1C3F6H8J
+```
+
+### 4. Verify Connection
+
+```bash
+# Check VPN status
+netbird status
+
+# Expected output:
+# NetBird daemon is running
+# Connected to management:  true
+# Connected to signal:      true
+# Connected to relay:       true
+# Management Address: https://vpn.lazarev.cloud:33073
+# Signal Address: signal.netbird.io:10000
+# Relay Address: relay.netbird.io
+# Interface name: wt0
+# ...
+# IP: 100.xx.xx.xx
+
+# Verify you can reach Nexus
+curl -I https://nexus.in.lazarev.cloud
+# Should return a response (not connection refused)
+```
+
+### 5. Troubleshooting NetBird Connection
+
+#### Connection Refused
+```bash
+# If you get "connection refused" to Nexus:
+
+# 1. Check NetBird is running
+netbird status
+
+# 2. Verify setup key is correct
+# 3. Check internet connection
+# 4. Try reconnecting
+netbird down
+netbird up --management-url https://vpn.lazarev.cloud --setup-key <your-setup-key>
+
+# 5. Check NetBird logs (if using systemd)
+sudo journalctl -u netbird -f
+```
+
+#### Persistent Issues
+```bash
+# Restart NetBird service
+sudo systemctl restart netbird  # Linux with systemd
+
+# Or restart the service manually on other platforms
+netbird down
+netbird up --management-url https://vpn.lazarev.cloud --setup-key <your-setup-key>
+```
+
+### Keep VPN Connected During Setup
+
+**Important**: Keep NetBird VPN connected throughout the entire installation process. The following commands require Nexus access:
+
+1. Creating Python virtual environment
+2. Installing dependencies (`pip install -r requirements.txt`)
+3. Building Docker images
+4. Running tests
+
+If you disconnect during installation, you'll need to restart the process.
 
 ---
 
@@ -945,7 +1063,7 @@ For multi-host GPU deployment:
 
 - **README**: [morgan-rag/README.md](morgan-rag/README.md)
 - **Deployment Guide**: [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
-- **API Documentation**: http://localhost:8080/docs (when server is running)
+- **API Documentation**: [http://localhost:8080/docs](http://localhost:8080/docs) (when server is running)
 - **Architecture Docs**: [docs/](docs/)
 - **Examples**: [morgan-rag/examples/](morgan-rag/examples/)
 

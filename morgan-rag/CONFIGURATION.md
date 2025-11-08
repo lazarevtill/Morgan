@@ -363,7 +363,7 @@ MORGAN_ANALYTICS_RETENTION=90      # Days to retain analytics data
 **Monitoring Stack:**
 - Prometheus: Metrics collection
 - Grafana: Visualization
-- Logs: JSON structured logging
+- Logs: JSON-structured logging
 
 ### 11. CUDA & GPU Configuration
 
@@ -947,9 +947,9 @@ docker-compose exec postgres pg_isready -U morgan
 ## Support
 
 For issues and questions:
-- GitHub Issues: https://github.com/yourusername/morgan/issues
-- Documentation: https://morgan-docs.example.com
-- Community: https://discord.gg/morgan
+- GitHub Issues: [https://github.com/yourusername/morgan/issues](https://github.com/yourusername/morgan/issues)
+- Documentation: [https://morgan-docs.example.com](https://morgan-docs.example.com)
+- Community: [https://discord.gg/morgan](https://discord.gg/morgan)
 
 ---
 

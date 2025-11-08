@@ -378,7 +378,7 @@ Content-Type: application/json
 ```
 
 Response (Server-Sent Events):
-```
+```text
 data: {"type": "start", "session_id": "session456"}
 
 data: {"type": "chunk", "content": "Neural"}
@@ -691,7 +691,7 @@ Prompts for key configuration values and creates config file.
 
 ### CLI Architecture
 
-```
+```text
 morgan (CLI command)
     ↓
 [app.py:cli()]
@@ -722,7 +722,7 @@ morgan (CLI command)
 
 ### Web API Architecture
 
-```
+```text
 FastAPI App
     ↓
 [Startup]
@@ -742,7 +742,7 @@ FastAPI App
 
 ### WebSocket Architecture
 
-```
+```text
 WebSocket Connection
     ↓
 [ConnectionManager]

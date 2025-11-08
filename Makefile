@@ -10,7 +10,7 @@
 #   make run           - Start all services
 #
 
-.PHONY: help install test lint format run clean docker-build docker-up docker-down deploy
+.PHONY: help install test lint format run clean docker-build docker-up docker-down deploy stop restart logs ci
 
 # Default target
 .DEFAULT_GOAL := help

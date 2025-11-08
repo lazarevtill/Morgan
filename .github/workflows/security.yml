@@ -27,6 +27,22 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Install and configure NetBird VPN
+        env:
+          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
+        run: |
+          # Install NetBird
+          curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+          # Connect to NetBird VPN (required for private Nexus access)
+          sudo netbird up --management-url https://vpn.lazarev.cloud --setup-key "$NETBIRD_SETUP_KEY" --daemon-addr ""
+
+          # Wait for connection to establish
+          sleep 5
+
+          # Verify connection
+          sudo netbird status || echo "Warning: NetBird status check failed"
+
       - name: Install safety
         run: |
           pip install safety pip-audit

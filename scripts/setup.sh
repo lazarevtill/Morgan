@@ -129,6 +129,68 @@ check_requirements() {
     log_success "System requirements check completed"
 }
 
+# Install and configure NetBird VPN
+setup_netbird() {
+    log_info "Setting up NetBird VPN (required for private Nexus access)..."
+
+    # Check if NetBird is already installed
+    if command_exists netbird; then
+        log_success "NetBird is already installed"
+    else
+        log_info "Installing NetBird..."
+        curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+        if command_exists netbird; then
+            log_success "NetBird installed successfully"
+        else
+            log_error "Failed to install NetBird"
+            log_error "Please install NetBird manually: https://netbird.io/docs/getting-started/installation"
+            exit 1
+        fi
+    fi
+
+    # Check if already connected
+    if sudo netbird status 2>/dev/null | grep -q "Connected"; then
+        log_success "NetBird is already connected"
+        return
+    fi
+
+    # Prompt for setup key if not in environment
+    if [[ -z "${NETBIRD_SETUP_KEY:-}" ]]; then
+        log_warning "NetBird setup key not found in environment"
+        echo ""
+        echo "Please enter your NetBird setup key (or press Enter to skip):"
+        echo "You can get the setup key from your team administrator"
+        read -r NETBIRD_SETUP_KEY
+
+        if [[ -z "$NETBIRD_SETUP_KEY" ]]; then
+            log_warning "Skipping NetBird connection. You will need to connect manually later."
+            log_info "To connect later, run: sudo netbird up --management-url https://vpn.lazarev.cloud --setup-key <your-key>"
+            return
+        fi
+    fi
+
+    # Connect to NetBird
+    log_info "Connecting to NetBird VPN..."
+    if sudo netbird up --management-url https://vpn.lazarev.cloud --setup-key "$NETBIRD_SETUP_KEY" --daemon-addr ""; then
+        log_success "Successfully connected to NetBird VPN"
+
+        # Wait for connection to stabilize
+        sleep 3
+
+        # Verify connection
+        if sudo netbird status 2>/dev/null | grep -q "Connected"; then
+            log_success "NetBird connection verified"
+        else
+            log_warning "NetBird connection may not be stable yet"
+        fi
+    else
+        log_error "Failed to connect to NetBird VPN"
+        log_error "Please connect manually: sudo netbird up --management-url https://vpn.lazarev.cloud --setup-key <your-key>"
+        exit 1
+    fi
+}
+
 # Install uv package manager
 install_uv() {
     if [[ "$SKIP_UV" == true ]]; then
@@ -379,6 +441,7 @@ main() {
     parse_args "$@"
 
     check_requirements
+    setup_netbird
     install_uv
     setup_venv
     install_dependencies

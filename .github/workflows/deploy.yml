@@ -41,6 +41,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install and configure NetBird VPN
+        env:
+          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
+        run: |
+          # Install NetBird
+          curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+          # Connect to NetBird VPN (required for private Nexus and Harbor access)
+          sudo netbird up --management-url https://vpn.lazarev.cloud --setup-key "$NETBIRD_SETUP_KEY" --daemon-addr ""
+
+          # Wait for connection to establish
+          sleep 5
+
+          # Verify connection
+          sudo netbird status || echo "Warning: NetBird status check failed"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

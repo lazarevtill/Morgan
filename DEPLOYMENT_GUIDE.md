@@ -110,6 +110,51 @@ See [DISTRIBUTED_SETUP_GUIDE.md](DISTRIBUTED_SETUP_GUIDE.md) for complete multi-
 
 ---
 
+## NetBird VPN Prerequisite
+
+### Required for Deployment
+
+Before deploying Morgan to production, ensure **NetBird VPN is configured** on your deployment machine. This is required for:
+
+- **Accessing Nexus Registry**: Private Docker images and Python packages are stored in the Nexus repository at `nexus.in.lazarev.cloud`
+- **Internal Service Communication**: Production servers may need to access internal resources via the VPN
+- **Deployment Automation**: CI/CD pipelines use NetBird to authenticate and pull dependencies
+
+### Setup Steps
+
+1. **Get NetBird Setup Key**
+   - Contact your infrastructure team for a NetBird setup key
+   - Management URL: `https://vpn.lazarev.cloud`
+
+2. **Install NetBird**
+   ```bash
+   # Linux
+   curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+   # macOS
+   brew install netbird
+
+   # Windows
+   # Download from https://releases.netbird.io/
+   ```
+
+3. **Connect to VPN**
+   ```bash
+   netbird up --management-url https://vpn.lazarev.cloud --setup-key <your-setup-key>
+   ```
+
+4. **Verify Connection**
+   ```bash
+   netbird status  # Should show "Connected to management: true"
+   curl -I https://nexus.in.lazarev.cloud  # Should return HTTP response
+   ```
+
+### Keep NetBird Connected
+
+**Important**: Keep NetBird VPN connected throughout the entire deployment process. All deployment steps that access the Nexus registry, pull Docker images, or connect to internal services require VPN access.
+
+---
+
 ## Production Environment Setup
 
 ### 1. Infrastructure Provisioning

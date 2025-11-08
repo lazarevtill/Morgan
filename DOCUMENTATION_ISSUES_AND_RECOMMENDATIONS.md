@@ -42,7 +42,7 @@ During the creation of comprehensive setup and deployment guides for Morgan v2-0
 #### 1.2 Documentation Fragmentation
 
 **Existing Documentation**:
-```
+```bash
 /home/user/Morgan/
 ├── JARVIS_SETUP_GUIDE.md           # Self-hosted LLM setup
 ├── DISTRIBUTED_SETUP_GUIDE.md      # Multi-host distributed setup
@@ -69,7 +69,7 @@ During the creation of comprehensive setup and deployment guides for Morgan v2-0
 
 **Recommendation**: Reorganize documentation structure:
 
-```
+```bash
 /home/user/Morgan/
 ├── README.md                      # Project overview (NEW)
 ├── SETUP_GUIDE.md                 # Complete setup guide (NEW)
@@ -293,7 +293,7 @@ LLM_MODEL=gpt-3.5-turbo
 **Issue**: ASCII diagrams in some files don't match actual implementation
 
 **Example from DISTRIBUTED_SETUP_GUIDE.md**:
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                       Morgan JARVIS                          │
 │                    (Main Orchestrator)                       │
@@ -374,7 +374,6 @@ sudo apt install cuda-toolkit-12-3
 
 # Install PyTorch with CUDA
 pip install torch --index-url https://download.pytorch.org/whl/cu121
-```
 ```
 
 ### 8. Versioning and Compatibility

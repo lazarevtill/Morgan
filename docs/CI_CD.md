@@ -26,10 +26,11 @@ Morgan's CI/CD infrastructure provides:
 - **Pre-commit Hooks** - Local quality checks before commits
 - **Automation Scripts** - One-command setup, testing, and deployment
 - **Makefile** - Simple commands for common operations
+- **NetBird VPN Integration** - Automatic VPN setup for Nexus registry access in CI/CD
 
 ### Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                         CI/CD Pipeline                          │
 ├─────────────────────────────────────────────────────────────────┤
@@ -66,6 +67,7 @@ Morgan's CI/CD infrastructure provides:
 
 **Jobs:**
 - **test** - Run unit tests on Python 3.11 and 3.12
+  - Automatically setup NetBird VPN for Nexus access
   - Install dependencies with uv
   - Run pytest with coverage
   - Upload coverage to Codecov
@@ -73,10 +75,12 @@ Morgan's CI/CD infrastructure provides:
 
 - **integration-test** - Run integration tests
   - Start PostgreSQL, Redis, Qdrant services
+  - Automatically setup NetBird VPN for Nexus access
   - Run integration tests
   - Only runs on non-draft PRs
 
 - **docker-build-test** - Test Docker builds
+  - Automatically setup NetBird VPN for Nexus access
   - Build all service images
   - Validate docker-compose.yml
   - Cache builds for faster runs
@@ -84,6 +88,8 @@ Morgan's CI/CD infrastructure provides:
 - **summary** - Aggregate results
   - Fail if any job fails
   - Report overall status
+
+**Note**: All workflows automatically configure NetBird VPN before dependency installation using the `NETBIRD_SETUP_KEY` secret. This enables access to the private Nexus repository.
 
 **Usage:**
 ```bash
@@ -623,10 +629,11 @@ make help             # Show all commands
 ### GitHub Actions Setup
 
 1. **Required secrets:**
-   ```
+   ```bash
    CODECOV_TOKEN              # Codecov upload token
    HARBOR_USERNAME            # Harbor registry username
    HARBOR_PASSWORD            # Harbor registry password
+   NETBIRD_SETUP_KEY          # NetBird VPN setup key (for Nexus access)
    STAGING_SSH_KEY            # Staging server SSH key
    STAGING_USER               # Staging server user
    STAGING_HOST               # Staging server hostname
@@ -743,7 +750,7 @@ pre-commit autoupdate
    - Documentation updated
 
 5. **Deployment workflow:**
-   ```
+   ```text
    feature → develop → staging → main → production
    ```
 
