@@ -170,9 +170,20 @@ setup_netbird() {
         fi
     fi
 
+    # Ensure NetBird service is running
+    log_info "Starting NetBird service..."
+    sudo netbird service install 2>/dev/null || true
+    sudo netbird service start 2>/dev/null || true
+
+    # Wait for daemon to be ready
+    sleep 2
+
     # Connect to NetBird
     log_info "Connecting to NetBird VPN..."
-    if sudo netbird up --management-url https://vpn.lazarev.cloud --setup-key "$NETBIRD_SETUP_KEY" --daemon-addr ""; then
+    if sudo netbird up \
+        --management-url https://vpn.lazarev.cloud \
+        --setup-key "$NETBIRD_SETUP_KEY" \
+        --log-level info; then
         log_success "Successfully connected to NetBird VPN"
 
         # Wait for connection to stabilize
