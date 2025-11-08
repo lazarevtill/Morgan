@@ -68,447 +68,547 @@ The plan prioritizes **CLI/bash user experience** as the primary interface, focu
 
 ## Implementation Phases
 
-## **PHASE 1: Foundation & Basic CLI (Week 1-2)**
-### Goal: Get users chatting via CLI as fast as possible
+> **Note**: This implementation plan uses the 8-phase breakdown from V2_FULL_SYSTEM_PLAN.md for consistency.
+> The phases are ordered to prioritize CLI functionality while building toward the complete emotional AI system.
+
+## **PHASE 1: Core Infrastructure (Week 1-2)**
+### Goal: Get the foundation right - all services ready
 
 ### Priority: CRITICAL 🔴
-This phase enables basic user interaction and validates the CLI design.
+This phase sets up all infrastructure needed for the full emotional AI system.
 
 ### Tasks
 
-#### 1.1 Project Structure Setup
-- [ ] Create `morgan-rag/` directory structure
-- [ ] Set up `morgan/cli/` directory
-- [ ] Create `morgan/core/` for basic assistant logic
-- [ ] Set up `requirements.txt` with Click, Rich, httpx
-- [ ] Create `morgan/__main__.py` for CLI entry point
-- [ ] Add `.env.example` with basic configuration
+#### 1.1 Project Structure & Dependencies
+**Directory Structure**:
+```bash
+morgan-rag/
+├── morgan/
+│   ├── cli/              # CLI interface
+│   ├── core/             # Assistant, conversation, integration
+│   ├── emotions/         # 11 emotion modules
+│   ├── empathy/          # 5 empathy modules
+│   ├── learning/         # 6 learning modules
+│   ├── memory/           # Memory processing
+│   ├── search/           # Multi-stage search + companion memory
+│   ├── storage/          # Vector DB, profile, memory storage
+│   ├── services/         # Embedding, LLM services
+│   ├── config/           # Configuration
+│   └── utils/            # Error handling, logging, helpers
+└── tests/                # Comprehensive tests
+```
 
-**Deliverable**: Clean directory structure, installable package
+- [ ] Create complete directory structure
+- [ ] Set up requirements.txt with all dependencies
+- [ ] Create .env.example with all configuration options
+- [ ] Set up virtual environment
+- [ ] Install dependencies
 
-#### 1.2 Basic User-Facing CLI (morgan command)
-**File**: `morgan-rag/morgan/cli/app.py`
+**Deliverable**: Clean project structure, all dependencies installed
 
-- [ ] Implement Click-based argument parser
-- [ ] Create `morgan chat` command (basic)
-- [ ] Create `morgan ask <question>` command
-- [ ] Create `morgan health` command
-- [ ] Create `morgan init` command
-- [ ] Add Rich console for colored output
-- [ ] Add progress bars using Rich
-- [ ] Add basic error handling
+#### 1.2 Configuration System
+**File**: `morgan/config/settings.py`
 
-**Deliverable**: Working CLI with 4 basic commands
+Must support:
+- LLM settings (Ollama URL, model)
+- Embedding settings (model, batch size)
+- Reranking settings (Jina model)
+- Qdrant connection
+- PostgreSQL connection (optional)
+- Redis connection (optional)
+- Emotion detection settings
+- Learning rate settings
+- Memory retention settings
 
-#### 1.3 Simple Backend Service
-**File**: `morgan-rag/morgan/core/assistant.py`
+**Deliverable**: Complete configuration system with validation
 
-- [ ] Create `MorganAssistant` class with basic chat
-- [ ] Implement simple in-memory conversation history
-- [ ] Add Ollama integration (or OpenAI API fallback)
-- [ ] Create basic response handler
-- [ ] Add logging setup
+#### 1.3 Storage Layer Setup
+- [ ] Set up Qdrant (Docker or cloud)
+- [ ] Create collections for different embedding granularities (coarse, medium, fine)
+- [ ] Set up PostgreSQL for structured data (optional, fallback to JSON)
+- [ ] Create local storage for conversations/preferences
+- [ ] Verify all storage connections
 
-**Deliverable**: CLI can chat with LLM
+**Deliverable**: All storage services running and tested
 
-#### 1.4 Configuration System
-**File**: `morgan-rag/morgan/config/settings.py`
+#### 1.4 Services Integration
+- [ ] Ollama integration for LLM (qwen2.5:32b or 7b)
+- [ ] Ollama integration for embeddings (qwen3-embedding:latest)
+- [ ] Jina reranker setup (transformers + torch)
+- [ ] Service health checks
+- [ ] Connection pooling and retry logic
 
-- [ ] Create `Settings` class using Pydantic
-- [ ] Support `.env` file loading
-- [ ] Add configuration validation
-- [ ] Create default config templates
-- [ ] Add `morgan config` command to view/edit settings
+**Deliverable**: All AI services ready and accessible
 
-**Deliverable**: Flexible configuration system
+#### 1.5 Basic CLI Framework
+**File**: `morgan/cli/app.py`
 
-#### 1.5 Testing & Validation
-- [ ] Create `tests/test_cli_basic.py`
-- [ ] Test `morgan chat` interaction
-- [ ] Test `morgan ask` one-shot query
-- [ ] Test error handling (no LLM, network errors)
-- [ ] Create basic integration test
+Commands:
+- `morgan chat` - Interactive chat (basic for now)
+- `morgan ask` - One-shot query
+- `morgan learn` - Document ingestion (prepared)
+- `morgan health` - All services status
+- `morgan info` - System information
 
-**Deliverable**: Validated CLI that users can test
-
-### Phase 1 Success Criteria
-✅ User can run `morgan chat` and have conversation
-✅ User can run `morgan ask "question"` and get answer
-✅ Health check shows service status
-✅ Configuration works via .env file
-✅ Tests pass
+**Deliverable**: Infrastructure ready, CLI skeleton works, health checks pass
 
 **Estimated Time**: 1-2 weeks
-**Key Files**: 5-10 files (~1,000 lines)
+**Key Files**: 10-15 files (~2,000 lines)
 
 ---
 
-## **PHASE 2: RAG System Integration (Week 3-5)**
-### Goal: Enable document ingestion and intelligent retrieval
+## **PHASE 2: Emotion Detection System (Week 3-4)**
+### Goal: Implement all 11 emotion modules
 
 ### Priority: HIGH 🟠
-This phase adds the core value proposition: RAG-based question answering.
+This phase implements the core differentiation: emotional intelligence.
 
 ### Tasks
 
-#### 2.1 Document Ingestion CLI
-**File**: `morgan-rag/morgan/cli/app.py` (extend)
+#### 2.1 Core Emotion Modules
+**Files**: `morgan/emotions/`
 
-- [ ] Add `morgan learn <path>` command
-- [ ] Support file types: PDF, MD, TXT, DOCX
-- [ ] Add progress bar for document processing
-- [ ] Show summary after ingestion
-- [ ] Add `morgan knowledge --stats` command
+All 11 modules from v2-0.0.1:
+1. **analyzer.py** - Core emotion analysis
+2. **classifier.py** - Emotion categorization (joy, sadness, anger, fear, etc.)
+3. **intensity.py** - Emotion strength measurement
+4. **context.py** - Contextual emotion understanding
+5. **patterns.py** - Emotion pattern recognition
+6. **memory.py** - Emotional event storage
+7. **triggers.py** - Trigger identification
+8. **recovery.py** - Emotional recovery tracking
+9. **tracker.py** - Long-term emotion tracking
+10. **detector.py** - Real-time emotion detection
 
-**Deliverable**: CLI can ingest documents
+**Deliverable**: All 11 emotion modules implemented
 
-#### 2.2 Vector Database Setup
-**File**: `morgan-rag/morgan/storage/vector.py`
+#### 2.2 Emotion Models
+**File**: `morgan/emotional/models.py`
 
-- [ ] Set up Qdrant (Docker or local)
-- [ ] Create collection manager
-- [ ] Implement vector storage operations
-- [ ] Add connection pooling
-- [ ] Create health check for Qdrant
+Data structures for:
+- EmotionalState
+- EmotionVector
+- EmotionalContext
+- EmotionalMemory
+- EmotionalPattern
 
-**Deliverable**: Vector database ready
+**Deliverable**: Complete emotion data models
 
-#### 2.3 Document Processing Pipeline
-**File**: `morgan-rag/morgan/ingestion/enhanced_processor.py`
+#### 2.3 Intelligence Engine
+**File**: `morgan/emotional/intelligence_engine.py`
 
-- [ ] Implement semantic chunking
-- [ ] Add metadata extraction
-- [ ] Create document parsers (PDF, MD, TXT, DOCX)
-- [ ] Add error handling for corrupted files
-- [ ] Implement batch processing
+Orchestrates all emotion modules:
+- Detects emotions in user input
+- Tracks emotional context
+- Stores emotional memories
+- Identifies patterns and triggers
+- Provides emotion insights to empathy engine
 
-**Deliverable**: Documents → chunks with metadata
+**Deliverable**: Integrated emotion intelligence engine
 
-#### 2.4 Embedding Generation
-**File**: `morgan-rag/morgan/services/embedding_service.py`
+#### 2.4 CLI Integration
+**Update**: `morgan/cli/app.py`
 
-- [ ] Integrate Ollama embedding API (qwen3-embedding)
-- [ ] Add batching for efficiency
-- [ ] Implement caching for duplicate chunks
-- [ ] Add retry logic for transient failures
-- [ ] Create embedding performance metrics
+Add emotion visualization:
+- `morgan chat --show-emotions` - Display detected emotions
+- `morgan emotions` - Emotion analytics command
+- Rich console output for emotional context
 
-**Deliverable**: Text → embeddings
+**Deliverable**: Emotions visible and tracked in CLI
 
-#### 2.5 Search & Retrieval
-**File**: `morgan-rag/morgan/core/search.py`
-
-- [ ] Implement basic vector search
-- [ ] Add reciprocal rank fusion (RRF)
-- [ ] Create result deduplication
-- [ ] Add source attribution
-- [ ] Implement search result caching
-
-**Deliverable**: Query → relevant documents
-
-#### 2.6 RAG-Augmented Responses
-**File**: `morgan-rag/morgan/core/assistant.py` (extend)
-
-- [ ] Integrate search results into LLM prompts
-- [ ] Add context window management
-- [ ] Implement source citation in responses
-- [ ] Add "no relevant results" handling
-- [ ] Create RAG performance logging
-
-**Deliverable**: Answers based on user's documents
-
-#### 2.7 Knowledge Management Commands
-- [ ] `morgan knowledge --search "query"` - Search knowledge base
-- [ ] `morgan knowledge --stats` - Show KB statistics
-- [ ] `morgan knowledge --clear` - Clear knowledge base
-- [ ] `morgan knowledge --export <path>` - Export KB
-
-**Deliverable**: Full knowledge base management
-
-#### 2.8 Testing & Validation
-- [ ] Create `tests/test_rag_pipeline.py`
-- [ ] Test document ingestion
-- [ ] Test embedding generation
-- [ ] Test vector search accuracy
-- [ ] Test RAG response quality
-- [ ] Create integration test with sample docs
-
-**Deliverable**: Validated RAG system
-
-### Phase 2 Success Criteria
-✅ User can run `morgan learn ./docs` to ingest documents
-✅ User can ask questions and get answers from their docs
-✅ Source attribution shows which documents were used
-✅ Search performance is <500ms
-✅ Tests validate accuracy
-
-**Estimated Time**: 2-3 weeks
-**Key Files**: 15-20 files (~3,000 lines)
-
----
-
-## **PHASE 3: Multi-Host Foundation (Week 6-8)**
-### Goal: Enable distributed deployment across multiple hosts
-
-### Priority: MEDIUM 🟡
-This phase enables scalability but is not critical for MVP.
-
-### Tasks
-
-#### 3.1 Service Discovery Setup
-**File**: `morgan-rag/morgan/infrastructure/distributed_manager.py`
-
-- [ ] Set up Consul (Docker or native)
-- [ ] Implement service registration
-- [ ] Create health check integration
-- [ ] Add DNS-based service discovery
-- [ ] Create fallback for local-only mode
-
-**Deliverable**: Consul service registry
-
-#### 3.2 Distributed CLI Commands
-**File**: `morgan-rag/morgan/cli/distributed_cli.py`
-
-- [ ] Create `morgan-admin` entry point (or `morgan admin`)
-- [ ] Implement `deploy` command
-- [ ] Implement `health` command (all hosts)
-- [ ] Implement `status` command
-- [ ] Implement `restart` command
-- [ ] Add host configuration management
-
-**Deliverable**: Multi-host management CLI
-
-#### 3.3 Remote Service Communication
-**File**: `morgan-rag/morgan/infrastructure/distributed_llm.py`
-
-- [ ] Implement service client with Consul discovery
-- [ ] Add load balancing across hosts
-- [ ] Create connection pooling
-- [ ] Add retry logic with exponential backoff
-- [ ] Implement request routing
-
-**Deliverable**: Services can call each other across hosts
-
-#### 3.4 Host Detection & Auto-Configuration
-- [ ] Detect GPU capabilities (CUDA, VRAM)
-- [ ] Detect CPU capabilities (cores, RAM)
-- [ ] Auto-assign services based on hardware
-- [ ] Create host inventory system
-- [ ] Add dynamic service placement
-
-**Deliverable**: Automatic host detection
-
-#### 3.5 Deployment Automation
-**File**: `scripts/deploy_multi_host.sh`
-
-- [ ] Create deployment script
-- [ ] Add SSH-based remote execution
-- [ ] Implement rolling updates
-- [ ] Add health checks during deployment
-- [ ] Create rollback mechanism
-
-**Deliverable**: Automated deployment
-
-#### 3.6 Testing & Validation
-- [ ] Create `tests/test_distributed.py`
-- [ ] Test service discovery
-- [ ] Test multi-host communication
-- [ ] Test deployment automation
-- [ ] Test failover scenarios
-
-**Deliverable**: Validated distributed system
-
-### Phase 3 Success Criteria
-✅ System can deploy across 2+ hosts
-✅ Services discover each other via Consul
-✅ Load balancing works for LLM/embedding services
-✅ `morgan admin health` shows all hosts
-✅ Rolling updates work without downtime
-
-**Estimated Time**: 2-3 weeks
-**Key Files**: 10-15 files (~2,500 lines)
-
----
-
-## **PHASE 4: Emotional Intelligence (Week 9-11)**
-### Goal: Add emotion detection and empathetic responses
-
-### Priority: MEDIUM 🟡
-This phase adds differentiation but is not critical for basic functionality.
-
-### Tasks
-
-#### 4.1 Emotion Detection System
-**Files**: `morgan-rag/morgan/emotions/` (11 modules)
-
-- [ ] Implement basic emotion classifier
-- [ ] Add emotion intensity detection
-- [ ] Create emotion context tracking
-- [ ] Add emotion pattern recognition
-- [ ] Implement emotional memory
-
-**Deliverable**: Detects user emotions
-
-#### 4.2 Empathy Engine
-**Files**: `morgan-rag/morgan/empathy/` (5 modules)
-
-- [ ] Create empathetic response generator
-- [ ] Add tone adjustment
-- [ ] Implement emotional validation
-- [ ] Create support response templates
-- [ ] Add empathy scoring
-
-**Deliverable**: Emotionally appropriate responses
-
-#### 4.3 CLI Integration
-- [ ] Add emotional tone to `morgan chat` output
-- [ ] Use colored output for different emotions
-- [ ] Add `--show-emotions` flag
-- [ ] Create emotion analytics command
-- [ ] Add emotion history tracking
-
-**Deliverable**: Emotions visible in CLI
-
-#### 4.4 Testing & Validation
-- [ ] Create `tests/test_emotions.py`
+#### 2.5 Testing
+- [ ] Test each emotion module independently
 - [ ] Test emotion detection accuracy
-- [ ] Test empathy response quality
-- [ ] Validate emotional context tracking
-- [ ] Create user feedback system
+- [ ] Test emotional context tracking
+- [ ] Validate emotional memory storage
+- [ ] Integration tests with CLI
 
-**Deliverable**: Validated emotion system
+**Deliverable**: Full emotion detection working with >80% accuracy
 
-### Phase 4 Success Criteria
-✅ System detects user emotions accurately
-✅ Responses adapt based on emotional state
-✅ CLI shows emotional context (optional)
-✅ Emotional memory persists across sessions
-✅ Tests validate accuracy >80%
-
-**Estimated Time**: 2-3 weeks
-**Key Files**: 20-25 files (~5,000 lines)
-
----
-
-## **PHASE 5: Learning & Adaptation (Week 12-14)**
-### Goal: Enable continuous learning from user feedback
-
-### Priority: LOW 🟢
-This phase adds long-term value but is not needed for MVP.
-
-### Tasks
-
-#### 5.1 Feedback Collection
-**File**: `morgan-rag/morgan/learning/feedback.py`
-
-- [ ] Add thumbs up/down after responses
-- [ ] Collect implicit feedback (follow-up questions)
-- [ ] Track conversation success metrics
-- [ ] Create feedback storage
-- [ ] Add feedback analysis
-
-**Deliverable**: Collects user feedback
-
-#### 5.2 Learning Engine
-**Files**: `morgan-rag/morgan/learning/` (6 modules)
-
-- [ ] Implement preference learning
-- [ ] Add pattern recognition
-- [ ] Create adaptation strategies
-- [ ] Add learning rate control
-- [ ] Implement learning metrics
-
-**Deliverable**: Learns from feedback
-
-#### 5.3 Preference Management
-- [ ] Add `morgan preferences` command
-- [ ] Show learned preferences
-- [ ] Allow preference overrides
-- [ ] Create preference export/import
-- [ ] Add preference reset
-
-**Deliverable**: User-controllable learning
-
-#### 5.4 Testing & Validation
-- [ ] Create `tests/test_learning.py`
-- [ ] Test feedback collection
-- [ ] Test adaptation over time
-- [ ] Validate preference learning
-- [ ] Create long-term learning tests
-
-**Deliverable**: Validated learning system
-
-### Phase 5 Success Criteria
-✅ System learns from user feedback
-✅ Preferences improve over time
-✅ Users can view/edit learned preferences
-✅ Learning doesn't degrade performance
-✅ Tests validate improvement
-
-**Estimated Time**: 2-3 weeks
+**Estimated Time**: 1-2 weeks
 **Key Files**: 15-20 files (~4,000 lines)
 
 ---
 
-## **PHASE 6: Production Hardening (Week 15-16)**
-### Goal: Make system production-ready
+## **PHASE 3: Empathy Engine (Week 5)**
+### Goal: Generate emotionally-appropriate responses
 
-### Priority: CRITICAL for deployment 🔴
+### Priority: HIGH 🟠
+This phase completes the emotional AI pipeline with empathetic responses.
 
 ### Tasks
 
-#### 6.1 Error Handling & Recovery
-- [ ] Add comprehensive error handling
-- [ ] Implement automatic retry logic
-- [ ] Create graceful degradation
-- [ ] Add circuit breakers
-- [ ] Implement timeout management
+#### 3.1 Empathy Modules
+**Files**: `morgan/empathy/`
 
-#### 6.2 Monitoring & Observability
-- [ ] Add Prometheus metrics
-- [ ] Create health dashboards
-- [ ] Implement structured logging
-- [ ] Add request tracing
-- [ ] Create alerting system
+All 5 modules:
+1. **generator.py** - Empathetic response generation
+2. **mirror.py** - Emotional mirroring
+3. **support.py** - Support response templates
+4. **tone.py** - Tone adjustment based on emotions
+5. **validator.py** - Empathy validation
 
-#### 6.3 Performance Optimization
-- [ ] Profile bottlenecks
-- [ ] Optimize database queries
-- [ ] Add caching layers
-- [ ] Implement connection pooling
-- [ ] Optimize batch processing
+**Deliverable**: All 5 empathy modules implemented
 
-#### 6.4 Security Hardening
-- [ ] Add authentication (optional for MVP)
-- [ ] Implement rate limiting
-- [ ] Add input validation
-- [ ] Secure API endpoints
-- [ ] Add audit logging
+#### 3.2 Integration with Emotion Engine
+Connect empathy to emotion detection:
+- Receive emotional state from detector
+- Adjust response tone
+- Select appropriate support strategies
+- Validate empathy effectiveness
 
-#### 6.5 Documentation & Guides
-- [ ] Create user documentation
-- [ ] Write deployment guide
-- [ ] Add troubleshooting guide
-- [ ] Create API documentation
-- [ ] Write contribution guide
+**Deliverable**: Empathy engine connected to emotion detection
 
-#### 6.6 Testing & Validation
-- [ ] Create comprehensive test suite
-- [ ] Add integration tests
-- [ ] Create load tests
-- [ ] Add chaos testing
-- [ ] Validate deployment scenarios
+#### 3.3 Response Handler
+**File**: `morgan/core/response_handler.py`
 
-### Phase 6 Success Criteria
-✅ System handles errors gracefully
-✅ Monitoring shows key metrics
-✅ Performance meets targets (<2s responses)
-✅ Security best practices implemented
-✅ Documentation complete
-✅ Tests cover >80% of code
+Combines:
+- LLM-generated content
+- Emotional tone adjustment
+- Empathy layer
+- Personalization
+
+**Deliverable**: Response handler with empathy integration
+
+#### 3.4 CLI Output Enhancement
+Show empathy in action with rich console output and emotional validation scores.
+
+**Deliverable**: Empathetic responses working in CLI
+
+**Estimated Time**: 1 week
+**Key Files**: 8-10 files (~2,500 lines)
+
+---
+
+## **PHASE 4: Advanced RAG System (Week 6-8)**
+### Goal: Implement hierarchical search with reranking
+
+### Priority: HIGH 🟠
+This phase adds intelligent document-based knowledge to responses.
+
+### Tasks
+
+#### 4.1 Document Processing
+**File**: `morgan/ingestion/enhanced_processor.py`
+
+- PDF, DOCX, MD, HTML, TXT parsing
+- Semantic chunking (not just fixed-size)
+- Metadata extraction
+- Hierarchical embedding generation (coarse, medium, fine)
+
+**Deliverable**: Complete document processing pipeline
+
+#### 4.2 Embedding Service
+**File**: `morgan/services/embedding_service.py`
+
+- Ollama qwen3-embedding integration
+- Batch processing for efficiency
+- Three granularity levels (coarse, medium, fine)
+- Caching for duplicate content
+
+**Deliverable**: Embedding service with hierarchical support
+
+#### 4.3 Multi-Stage Search
+**File**: `morgan/search/multi_stage_search.py`
+
+Implements the full search pipeline:
+1. **Coarse Search**: Find relevant documents
+2. **Medium Search**: Narrow to relevant sections
+3. **Fine Search**: Extract precise chunks
+4. **Reciprocal Rank Fusion**: Merge results
+5. **Reranking**: Use Jina reranker for final ordering
+
+**Deliverable**: Multi-stage search with reranking
+
+#### 4.4 Reranking Service
+**File**: `morgan/jina/reranking/service.py`
+
+- Load Jina reranker model (jina-reranker-v2-base-multilingual)
+- Cross-encoder scoring
+- GPU acceleration if available
+- Batch processing
+
+**Deliverable**: Reranking service operational
+
+#### 4.5 Companion Memory Search
+**File**: `morgan/search/companion_memory_search.py`
+
+Special search for relationship/emotional memories:
+- Search by emotional context
+- Search by time period
+- Search by relationship milestone
+- Combine with factual search
+
+**Deliverable**: Companion memory search integrated
+
+#### 4.6 Knowledge Management
+**File**: `morgan/core/knowledge.py`
+
+- Ingest documents via CLI
+- Update existing knowledge
+- Query knowledge base
+- Track knowledge sources
+- Manage collections
+
+**Deliverable**: Complete knowledge management system
+
+#### 4.7 CLI Integration
+Add commands:
+- `morgan learn ./docs` - Ingest documents
+- `morgan knowledge --search "query"` - Search knowledge
+- `morgan knowledge --stats` - Statistics
+- `morgan ask` - Now uses RAG for answers
+
+**Deliverable**: Full RAG pipeline working via CLI
+
+**Estimated Time**: 2-3 weeks
+**Key Files**: 15-20 files (~5,000 lines)
+
+---
+
+## **PHASE 5: Memory System (Week 9-10)**
+### Goal: Multi-layer memory with emotional context
+
+### Priority: MEDIUM 🟡
+This phase adds persistent memory across all interaction types.
+
+### Tasks
+
+#### 5.1 Memory Types
+
+**Conversation Memory** (`morgan/storage/memory.py`):
+- Short-term conversation history
+- Message-level storage
+- Efficient retrieval
+- Context window management
+
+**Knowledge Memory** (`morgan/storage/vector.py`):
+- Long-term factual knowledge
+- Document embeddings
+- Searchable via RAG
+
+**Emotional Memory** (`morgan/emotions/memory.py`):
+- Significant emotional events
+- Emotional patterns over time
+- Triggers and recovery tracking
+
+**Relationship Memory** (`morgan/companion/storage.py`):
+- User preferences
+- Communication style
+- Milestones and trust level
+- Interaction patterns
+
+**Deliverable**: All memory types implemented
+
+#### 5.2 Memory Processor
+**File**: `morgan/memory/memory_processor.py`
+
+Consolidates memories:
+- Identifies important conversations
+- Extracts key facts
+- Recognizes emotional events
+- Updates relationship model
+- Prunes old/irrelevant memories
+
+**Deliverable**: Memory consolidation working
+
+#### 5.3 Companion Relationship Manager
+**File**: `morgan/companion/relationship_manager.py`
+
+Tracks relationship dynamics:
+- Trust building
+- Communication preferences
+- Emotional bonds
+- Shared experiences
+- Milestones
+
+**Deliverable**: Relationship tracking functional
+
+#### 5.4 CLI Integration
+Add commands:
+- `morgan memory --stats` - Memory statistics
+- `morgan memory --search "topic"` - Search memories
+- `morgan relationship` - Relationship insights
+
+**Deliverable**: Complete memory system accessible via CLI
 
 **Estimated Time**: 1-2 weeks
-**Key Files**: Documentation + test files
+**Key Files**: 10-15 files (~3,000 lines)
+
+---
+
+## **PHASE 6: Learning & Adaptation (Week 11-12)**
+### Goal: Continuous improvement based on feedback
+
+### Priority: MEDIUM 🟡
+This phase enables the system to improve over time.
+
+### Tasks
+
+#### 6.1 Feedback Collection
+**File**: `morgan/learning/feedback.py`
+
+Collect:
+- Explicit feedback (thumbs up/down, ratings)
+- Implicit feedback (follow-up questions, conversation length)
+- Emotional feedback (user emotions during interaction)
+- Outcome feedback (did it help?)
+
+**Deliverable**: Feedback collection system
+
+#### 6.2 Pattern Recognition
+**File**: `morgan/learning/patterns.py`
+
+Identify:
+- Common questions
+- Preferred response styles
+- Successful interactions
+- Failed interactions
+- Emotional triggers
+
+**Deliverable**: Pattern recognition working
+
+#### 6.3 Adaptation Engine
+**File**: `morgan/learning/adaptation.py`
+
+Adapt:
+- Response style
+- Detail level
+- Emotional tone
+- Proactivity
+- Formality
+
+**Deliverable**: Adaptation engine functional
+
+#### 6.4 Preference Learning
+**File**: `morgan/learning/preferences.py`
+
+Learn:
+- Communication style preferences
+- Topic interests
+- Response length preferences
+- Emotional support needs
+- Learning style
+
+**Deliverable**: Preference learning operational
+
+#### 6.5 CLI Integration
+Add commands:
+- `morgan preferences --view` - Show learned preferences
+- Feedback prompts after responses
+
+**Deliverable**: Learning system working via CLI
+
+**Estimated Time**: 1-2 weeks
+**Key Files**: 10-15 files (~3,000 lines)
+
+---
+
+## **PHASE 7: System Integration (Week 13-14)**
+### Goal: Everything works together seamlessly
+
+### Priority: CRITICAL 🔴
+This phase ensures all components work as a unified system.
+
+### Tasks
+
+#### 7.1 Core Assistant
+**File**: `morgan/core/assistant.py`
+
+Main orchestrator that:
+1. Receives user input
+2. Detects emotions
+3. Searches memory/knowledge
+4. Applies empathy
+5. Generates response with LLM
+6. Updates memories
+7. Learns from interaction
+8. Returns emotionally-aware, contextual response
+
+**Deliverable**: Complete assistant orchestration
+
+#### 7.2 System Integration
+**File**: `morgan/core/system_integration.py`
+
+Coordinates all subsystems:
+- Emotional intelligence pipeline
+- Empathy engine
+- RAG system
+- Memory system
+- Learning system
+- Storage layer
+
+**Deliverable**: All systems integrated
+
+#### 7.3 End-to-End Testing
+- [ ] Test complete conversation flows
+- [ ] Validate all components working together
+- [ ] Performance testing (<3s response time)
+- [ ] Stress testing (1000+ interactions)
+- [ ] Error handling and graceful degradation
+
+**Deliverable**: Validated end-to-end system
+
+#### 7.4 CLI Polish
+- Rich formatting
+- Progress indicators
+- Error handling
+- Graceful degradation
+- Help text
+- Examples
+
+**Deliverable**: Complete system working end-to-end with polished CLI
+
+**Estimated Time**: 1-2 weeks
+**Key Files**: Integration code + extensive testing
+
+---
+
+## **PHASE 8: Distributed Deployment (Week 15-16)**
+### Goal: Multi-host support (optional for CLI MVP)
+
+### Priority: LOW 🟢
+This phase enables distributed deployment across multiple hosts.
+
+### Tasks
+
+#### 8.1 Service Discovery
+- Consul setup
+- Service registration
+- Health checks
+- DNS resolution
+
+**Deliverable**: Consul service discovery working
+
+#### 8.2 Distributed Services
+- LLM service on GPU hosts
+- Embedding service on GPU hosts
+- Reranking service on GPU hosts
+- Qdrant on high-RAM hosts
+- Core assistant on CPU hosts
+
+**Deliverable**: Services distributed across hosts
+
+#### 8.3 Admin CLI
+**File**: `morgan/cli/distributed_cli.py`
+
+Commands:
+- `morgan-admin deploy` - Deploy to cluster
+- `morgan-admin health` - Check all hosts
+- `morgan-admin restart --service llm` - Restart services
+
+**Deliverable**: Multi-host deployment working
+
+#### 8.4 Testing & Validation
+- [ ] Multi-host deployment tests
+- [ ] Service discovery tests
+- [ ] Load balancing validation
+- [ ] Failover testing
+
+**Deliverable**: Multi-host deployment validated
+
+**Estimated Time**: 1-2 weeks
+**Key Files**: 10-15 files (~2,500 lines)
 
 ---
 
