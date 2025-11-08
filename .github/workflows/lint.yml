@@ -93,7 +93,7 @@ jobs:
 
       - name: Check Python syntax
         run: |
-          python -m py_compile core/**/*.py services/**/*.py shared/**/*.py || true
+          find core services shared -type f -name '*.py' -exec python -m py_compile {} +
 
   format-check:
     name: Formatting Checks
