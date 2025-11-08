@@ -7,9 +7,10 @@ Follows KISS principles with simple, focused functionality.
 Requirements addressed: 23.1, 23.2, 23.3
 """
 
-from typing import Dict, Any, Optional, List
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
 import requests
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LazarevConfig:
     """Configuration for gpt.lazarev.cloud endpoint."""
+
     endpoint_url: str = "https://gpt.lazarev.cloud"
     api_key: Optional[str] = None
     timeout: int = 30
@@ -33,15 +35,13 @@ class LazarevModelManager:
 
     def __init__(self, config: Dict[str, Any]):
         self.config = LazarevConfig(
-            endpoint_url=config.get('endpoint_url',
-                                    'https://gpt.lazarev.cloud'),
-            api_key=config.get('api_key'),
-            timeout=config.get('timeout', 30),
-            max_retries=config.get('max_retries', 3)
+            endpoint_url=config.get("endpoint_url", "https://gpt.lazarev.cloud"),
+            api_key=config.get("api_key"),
+            timeout=config.get("timeout", 30),
+            max_retries=config.get("max_retries", 3),
         )
 
-    def load_model(self, model_name: str,
-                   model_type: str = "auto") -> Dict[str, Any]:
+    def load_model(self, model_name: str, model_type: str = "auto") -> Dict[str, Any]:
         """
         Create a connection to a Lazarev cloud model.
 
@@ -56,12 +56,12 @@ class LazarevModelManager:
             # Test connection
             if self._test_connection():
                 return {
-                    'provider': 'lazarev',
-                    'model_name': model_name,
-                    'endpoint': self.config.endpoint_url,
-                    'config': self.config,
-                    'type': model_type,
-                    'client': self
+                    "provider": "lazarev",
+                    "model_name": model_name,
+                    "endpoint": self.config.endpoint_url,
+                    "config": self.config,
+                    "type": model_type,
+                    "client": self,
                 }
 
             raise ConnectionError("Cannot connect to gpt.lazarev.cloud")
@@ -75,8 +75,7 @@ class LazarevModelManager:
         try:
             # Simple health check
             response = requests.get(
-                f"{self.config.endpoint_url}/health",
-                timeout=self.config.timeout
+                f"{self.config.endpoint_url}/health", timeout=self.config.timeout
             )
             return response.status_code == 200
         except Exception:
@@ -88,58 +87,51 @@ class LazarevModelManager:
         try:
             headers = {}
             if self.config.api_key:
-                headers['Authorization'] = f"Bearer {self.config.api_key}"
+                headers["Authorization"] = f"Bearer {self.config.api_key}"
 
-            payload = {
-                'model': model_name,
-                'input': text
-            }
+            payload = {"model": model_name, "input": text}
 
             response = requests.post(
                 f"{self.config.endpoint_url}/embeddings",
                 json=payload,
                 headers=headers,
-                timeout=self.config.timeout
+                timeout=self.config.timeout,
             )
 
             response.raise_for_status()
             result = response.json()
 
-            return result['data'][0]['embedding']
+            return result["data"][0]["embedding"]
 
         except Exception as e:
             logger.error("Lazarev embedding failed: %s", e)
             raise
 
-    def generate_response(self, model_name: str, prompt: str,
-                          context: str = "") -> str:
+    def generate_response(self, model_name: str, prompt: str, context: str = "") -> str:
         """Generate text response using Lazarev cloud model."""
         try:
             headers = {}
             if self.config.api_key:
-                headers['Authorization'] = f"Bearer {self.config.api_key}"
+                headers["Authorization"] = f"Bearer {self.config.api_key}"
 
             messages = []
             if context:
                 messages.append({"role": "system", "content": context})
             messages.append({"role": "user", "content": prompt})
 
-            payload = {
-                'model': model_name,
-                'messages': messages
-            }
+            payload = {"model": model_name, "messages": messages}
 
             response = requests.post(
                 f"{self.config.endpoint_url}/chat/completions",
                 json=payload,
                 headers=headers,
-                timeout=self.config.timeout
+                timeout=self.config.timeout,
             )
 
             response.raise_for_status()
             result = response.json()
 
-            return result['choices'][0]['message']['content']
+            return result["choices"][0]["message"]["content"]
 
         except Exception as e:
             logger.error("Lazarev response failed: %s", e)
@@ -150,48 +142,48 @@ class LazarevModelManager:
         try:
             headers = {}
             if self.config.api_key:
-                headers['Authorization'] = f"Bearer {self.config.api_key}"
+                headers["Authorization"] = f"Bearer {self.config.api_key}"
 
             response = requests.get(
                 f"{self.config.endpoint_url}/models",
                 headers=headers,
-                timeout=self.config.timeout
+                timeout=self.config.timeout,
             )
 
             if response.status_code == 200:
                 result = response.json()
-                return [model['id'] for model in result.get('data', [])]
+                return [model["id"] for model in result.get("data", [])]
 
             # Fallback to common models if API doesn't support listing
             return [
-                'gpt-3.5-turbo',
-                'gpt-4',
-                'text-embedding-ada-002',
-                'jina-embeddings-v4',
-                'jina-code-embeddings-1.5b',
-                'jina-clip-v2',
-                'jina-reranker-v3'
+                "gpt-3.5-turbo",
+                "gpt-4",
+                "text-embedding-ada-002",
+                "jina-embeddings-v4",
+                "jina-code-embeddings-1.5b",
+                "jina-clip-v2",
+                "jina-reranker-v3",
             ]
 
         except Exception as e:
             logger.warning("Failed to list Lazarev models: %s", e)
             # Return common models as fallback
             return [
-                'gpt-3.5-turbo',
-                'gpt-4',
-                'text-embedding-ada-002',
-                'jina-embeddings-v4',
-                'jina-code-embeddings-1.5b',
-                'jina-clip-v2',
-                'jina-reranker-v3'
+                "gpt-3.5-turbo",
+                "gpt-4",
+                "text-embedding-ada-002",
+                "jina-embeddings-v4",
+                "jina-code-embeddings-1.5b",
+                "jina-clip-v2",
+                "jina-reranker-v3",
             ]
 
     def get_model_info(self, model_name: str) -> Dict[str, Any]:
         """Get information about a Lazarev cloud model."""
         return {
-            'name': model_name,
-            'provider': 'lazarev',
-            'location': 'remote',
-            'endpoint': self.config.endpoint_url,
-            'type': 'cloud'
+            "name": model_name,
+            "provider": "lazarev",
+            "location": "remote",
+            "endpoint": self.config.endpoint_url,
+            "type": "cloud",
         }

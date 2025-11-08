@@ -6,10 +6,10 @@ Advanced search capabilities with hierarchical filtering and result fusion.
 
 from .multi_stage_search import (
     MultiStageSearchEngine,
-    SearchStrategy,
     SearchResult,
     SearchResults,
-    get_multi_stage_search_engine
+    SearchStrategy,
+    get_multi_stage_search_engine,
 )
 
 __all__ = [
@@ -17,5 +17,5 @@ __all__ = [
     "SearchStrategy",
     "SearchResult",
     "SearchResults",
-    "get_multi_stage_search_engine"
+    "get_multi_stage_search_engine",
 ]

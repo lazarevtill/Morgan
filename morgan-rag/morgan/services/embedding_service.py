@@ -13,30 +13,25 @@ Based on InspecTor's proven embedding architecture:
 """
 
 import hashlib
-import time
 import random
 import threading
+import time
+from collections import defaultdict, deque
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Iterator
-from collections import defaultdict, deque
+from typing import List, Optional
 
-import requests
 import numpy as np
+import requests
 from tqdm import tqdm
 
 from morgan.config import get_settings
-from morgan.utils.logger import get_logger
+from morgan.optimization.batch_processor import get_batch_processor
 from morgan.utils.cache import FileCache
+from morgan.utils.error_handling import EmbeddingError, ErrorSeverity, NetworkError
+from morgan.utils.logger import get_logger
 from morgan.utils.rate_limiting import TokenBucketRateLimiter
 from morgan.utils.request_context import get_request_id, set_request_id
-from morgan.utils.error_handling import (
-    EmbeddingError, NetworkError, ConfigurationError, ErrorCategory, ErrorSeverity
-)
-from morgan.utils.error_decorators import (
-    handle_embedding_errors, monitor_performance, RetryConfig
-)
-from morgan.optimization.batch_processor import get_batch_processor
 
 logger = get_logger(__name__)
 
@@ -76,27 +71,27 @@ class EmbeddingService:
             "dimensions": 4096,
             "max_tokens": 8192,
             "type": "remote",
-            "supports_instructions": True
+            "supports_instructions": True,
         },
         "all-MiniLM-L6-v2": {
             "dimensions": 384,
             "max_tokens": 512,
             "type": "local",
-            "supports_instructions": False
+            "supports_instructions": False,
         },
         # Additional models for Morgan
         "nomic-embed-text": {
             "dimensions": 768,
             "max_tokens": 8192,
             "type": "remote",
-            "supports_instructions": True
+            "supports_instructions": True,
         },
         "sentence-transformers/all-mpnet-base-v2": {
             "dimensions": 768,
             "max_tokens": 514,
             "type": "local",
-            "supports_instructions": False
-        }
+            "supports_instructions": False,
+        },
     }
 
     def __init__(self):
@@ -121,15 +116,11 @@ class EmbeddingService:
         # Get active model configuration
         self.model_name = self.settings.embedding_model
         self.model_config = self.MODELS.get(
-            self.model_name,
-            self.MODELS["qwen3-embedding:latest"]
+            self.model_name, self.MODELS["qwen3-embedding:latest"]
         )
 
         # Rate limiting (100 requests/minute for embedding service)
-        self.rate_limiter = TokenBucketRateLimiter(
-            rate_limit=100,
-            time_window=60.0
-        )
+        self.rate_limiter = TokenBucketRateLimiter(rate_limit=100, time_window=60.0)
 
         logger.info(
             f"EmbeddingService initialized with model: {self.model_name}, "
@@ -144,10 +135,14 @@ class EmbeddingService:
             True if either remote or local embedding is available (respects force_remote setting)
         """
         # Check if force remote is enabled
-        force_remote = getattr(self.settings, 'embedding_force_remote', False)
-        
+        force_remote = getattr(self.settings, "embedding_force_remote", False)
+
         # Try remote first (if configured)
-        if hasattr(self.settings, 'llm_base_url') and self.settings.llm_base_url and self._check_remote_available():
+        if (
+            hasattr(self.settings, "llm_base_url")
+            and self.settings.llm_base_url
+            and self._check_remote_available()
+        ):
             return True
 
         # If force remote is enabled, don't check local
@@ -169,12 +164,20 @@ class EmbeddingService:
         Returns:
             Embedding dimension
         """
-        if hasattr(self.settings, 'llm_base_url') and self.settings.llm_base_url and self._check_remote_available():
+        if (
+            hasattr(self.settings, "llm_base_url")
+            and self.settings.llm_base_url
+            and self._check_remote_available()
+        ):
             return self.model_config["dimensions"]
         elif self._check_local_available():
             # Return local model dimensions
-            local_model_name = getattr(self.settings, 'embedding_local_model', 'all-MiniLM-L6-v2')
-            return self.MODELS.get(local_model_name, self.MODELS["all-MiniLM-L6-v2"])["dimensions"]
+            local_model_name = getattr(
+                self.settings, "embedding_local_model", "all-MiniLM-L6-v2"
+            )
+            return self.MODELS.get(local_model_name, self.MODELS["all-MiniLM-L6-v2"])[
+                "dimensions"
+            ]
         else:
             raise RuntimeError("No embedding service available")
 
@@ -183,7 +186,7 @@ class EmbeddingService:
         text: str,
         instruction: Optional[str] = None,
         use_cache: bool = True,
-        request_id: Optional[str] = None
+        request_id: Optional[str] = None,
     ) -> List[float]:
         """
         Encode single text to embedding vector.
@@ -228,10 +231,14 @@ class EmbeddingService:
 
         try:
             # Check if force remote is enabled
-            force_remote = getattr(self.settings, 'embedding_force_remote', False)
-            
+            force_remote = getattr(self.settings, "embedding_force_remote", False)
+
             # Try remote first (if configured)
-            if hasattr(self.settings, 'llm_base_url') and self.settings.llm_base_url and self._check_remote_available():
+            if (
+                hasattr(self.settings, "llm_base_url")
+                and self.settings.llm_base_url
+                and self._check_remote_available()
+            ):
                 embedding = self._encode_remote(text, request_id=request_id)
             # If force remote is enabled and remote failed, raise error instead of falling back
             elif force_remote:
@@ -241,9 +248,11 @@ class EmbeddingService:
                     "service": "embedding_service",
                     "operation": "encode",
                     "text_length": len(text),
-                    "error": "Remote embedding forced but not available"
+                    "error": "Remote embedding forced but not available",
                 }
-                logger.error(f"Remote embedding forced but not available: {error_context}")
+                logger.error(
+                    f"Remote embedding forced but not available: {error_context}"
+                )
                 raise RuntimeError(
                     f"Remote embedding forced but not available (request_id: {request_id}). "
                     f"Check gpt.lazarev.cloud connectivity."
@@ -258,7 +267,7 @@ class EmbeddingService:
                     "service": "embedding_service",
                     "operation": "encode",
                     "text_length": len(text),
-                    "error": "No embedding service available"
+                    "error": "No embedding service available",
                 }
                 logger.error(f"No embedding service available: {error_context}")
                 raise RuntimeError(
@@ -293,8 +302,8 @@ class EmbeddingService:
                         "text_length": len(text),
                         "instruction": instruction,
                         "use_cache": use_cache,
-                        "force_remote": True
-                    }
+                        "force_remote": True,
+                    },
                 ) from e
             elif "No embedding service available" in str(e):
                 raise EmbeddingError(
@@ -306,8 +315,8 @@ class EmbeddingService:
                     metadata={
                         "text_length": len(text),
                         "instruction": instruction,
-                        "use_cache": use_cache
-                    }
+                        "use_cache": use_cache,
+                    },
                 ) from e
             else:
                 raise EmbeddingError(
@@ -319,8 +328,8 @@ class EmbeddingService:
                         "text_length": len(text),
                         "instruction": instruction,
                         "use_cache": use_cache,
-                        "error_type": type(e).__name__
-                    }
+                        "error_type": type(e).__name__,
+                    },
                 ) from e
 
     def encode_batch(
@@ -331,7 +340,7 @@ class EmbeddingService:
         batch_size: Optional[int] = None,
         use_cache: bool = True,
         request_id: Optional[str] = None,
-        use_optimized_batching: bool = True
+        use_optimized_batching: bool = True,
     ) -> List[List[float]]:
         """
         Encode multiple texts in batches with 10x performance optimization.
@@ -371,31 +380,31 @@ class EmbeddingService:
         if use_optimized_batching:
             try:
                 batch_processor = get_batch_processor()
-                
+
                 # Create embedding function for batch processor
                 def embedding_function(batch_texts: List[str]) -> List[List[float]]:
                     return self._encode_batch_with_retry(
                         batch_texts,
                         instruction,
                         use_cache=use_cache,
-                        request_id=request_id
+                        request_id=request_id,
                     )
-                
+
                 # Process with optimized batch processor
                 result = batch_processor.process_embeddings_batch(
                     texts=texts,
                     embedding_function=embedding_function,
                     instruction=instruction,
-                    show_progress=show_progress
+                    show_progress=show_progress,
                 )
-                
+
                 if result.success_rate >= 90.0:  # 90% success threshold
                     logger.info(
                         f"Optimized batch encoding completed: {result.processed_items}/{result.total_items} "
                         f"({result.success_rate:.1f}%) in {result.processing_time:.2f}s "
                         f"({result.throughput:.1f} items/sec)"
                     )
-                    
+
                     # Return successful embeddings (need to reconstruct from batch results)
                     # For now, fall back to standard processing if we need the actual embeddings
                     # In a full implementation, we'd modify the batch processor to return embeddings
@@ -405,14 +414,16 @@ class EmbeddingService:
                         f"Optimized batching had low success rate ({result.success_rate:.1f}%), "
                         f"falling back to standard processing"
                     )
-                    
+
             except Exception as e:
-                logger.warning(f"Optimized batch processing failed, falling back to standard: {e}")
+                logger.warning(
+                    f"Optimized batch processing failed, falling back to standard: {e}"
+                )
 
         # Fall back to standard batch processing
         # Use configured batch size or default
         if batch_size is None:
-            batch_size = getattr(self.settings, 'embedding_batch_size', 100)
+            batch_size = getattr(self.settings, "embedding_batch_size", 100)
 
         cache_msg = " (cache disabled)" if not use_cache else ""
         logger.info(
@@ -423,19 +434,13 @@ class EmbeddingService:
         all_embeddings = []
 
         # Process in batches
-        batches = [
-            texts[i:i+batch_size]
-            for i in range(0, len(texts), batch_size)
-        ]
+        batches = [texts[i : i + batch_size] for i in range(0, len(texts), batch_size)]
 
         iterator = tqdm(batches, desc="Embedding batches") if show_progress else batches
 
         for batch in iterator:
             batch_embeddings = self._encode_batch_with_retry(
-                batch,
-                instruction,
-                use_cache=use_cache,
-                request_id=request_id
+                batch, instruction, use_cache=use_cache, request_id=request_id
             )
             all_embeddings.extend(batch_embeddings)
 
@@ -452,7 +457,7 @@ class EmbeddingService:
         instruction: Optional[str] = None,
         max_retries: int = 3,
         use_cache: bool = True,
-        request_id: Optional[str] = None
+        request_id: Optional[str] = None,
     ) -> List[List[float]]:
         """
         Encode batch with exponential backoff retry and jitter.
@@ -472,7 +477,9 @@ class EmbeddingService:
 
         # Apply instruction prefix if supported
         if instruction and self.model_config.get("supports_instructions"):
-            texts_to_encode = [self._apply_instruction_prefix(t, instruction) for t in texts]
+            texts_to_encode = [
+                self._apply_instruction_prefix(t, instruction) for t in texts
+            ]
         else:
             texts_to_encode = texts
 
@@ -511,10 +518,14 @@ class EmbeddingService:
                 start_time = time.time()
 
                 # Check if force remote is enabled
-                force_remote = getattr(self.settings, 'embedding_force_remote', False)
-                
+                force_remote = getattr(self.settings, "embedding_force_remote", False)
+
                 # Try remote first (if configured)
-                if hasattr(self.settings, 'llm_base_url') and self.settings.llm_base_url and self._check_remote_available():
+                if (
+                    hasattr(self.settings, "llm_base_url")
+                    and self.settings.llm_base_url
+                    and self._check_remote_available()
+                ):
                     new_embeddings = self._encode_batch_remote(uncached_texts)
                 # If force remote is enabled and remote failed, raise error instead of falling back
                 elif force_remote:
@@ -559,8 +570,8 @@ class EmbeddingService:
                             metadata={
                                 "batch_size": len(uncached_texts),
                                 "attempts": max_retries,
-                                "force_remote": True
-                            }
+                                "force_remote": True,
+                            },
                         ) from e
                     else:
                         raise EmbeddingError(
@@ -572,13 +583,13 @@ class EmbeddingService:
                             metadata={
                                 "batch_size": len(uncached_texts),
                                 "attempts": max_retries,
-                                "error_type": type(e).__name__
-                            }
+                                "error_type": type(e).__name__,
+                            },
                         ) from e
 
                 # Exponential backoff with jitter
                 # Base delay: 2^attempt (1s, 2s, 4s)
-                base_delay = 2 ** attempt
+                base_delay = 2**attempt
                 # Add 0-30% jitter to prevent thundering herd
                 jitter = random.uniform(0, base_delay * 0.3)
                 delay = base_delay + jitter
@@ -597,7 +608,7 @@ class EmbeddingService:
         if self._remote_available is not None:
             return self._remote_available
 
-        if not hasattr(self.settings, 'llm_base_url') or not self.settings.llm_base_url:
+        if not hasattr(self.settings, "llm_base_url") or not self.settings.llm_base_url:
             logger.debug("LLM base URL not configured")
             self._remote_available = False
             return False
@@ -609,21 +620,24 @@ class EmbeddingService:
         for attempt in range(max_retries):
             try:
                 # Normalize URL - remove trailing /v1 if present
-                base_url = self.settings.llm_base_url.rstrip('/')
-                if base_url.endswith('/v1'):
+                base_url = self.settings.llm_base_url.rstrip("/")
+                if base_url.endswith("/v1"):
                     base_url = base_url[:-3]
 
                 # For Ollama-compatible endpoints, check /api/tags
                 url = f"{base_url}/api/tags"
 
                 headers = {}
-                if hasattr(self.settings, 'llm_api_key') and self.settings.llm_api_key:
+                if hasattr(self.settings, "llm_api_key") and self.settings.llm_api_key:
                     headers["Authorization"] = f"Bearer {self.settings.llm_api_key}"
 
                 try:
                     response = requests.get(url, headers=headers, timeout=5)
                     response.raise_for_status()
-                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                except (
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.Timeout,
+                ) as e:
                     if attempt < max_retries - 1:
                         delay = delays[attempt]
                         logger.debug(
@@ -634,7 +648,9 @@ class EmbeddingService:
                         continue
                     else:
                         # Final attempt failed - log with masked key
-                        logger.warning(f"Remote embedding service not available after {max_retries} attempts: {e}")
+                        logger.warning(
+                            f"Remote embedding service not available after {max_retries} attempts: {e}"
+                        )
                         self._remote_available = False
                         return False
                 except Exception as e:
@@ -655,7 +671,9 @@ class EmbeddingService:
                     self._remote_available = False
                     return False
 
-                logger.info(f"Remote embedding service available with model {self.model_name}")
+                logger.info(
+                    f"Remote embedding service available with model {self.model_name}"
+                )
                 self._remote_available = True
                 return True
 
@@ -676,22 +694,23 @@ class EmbeddingService:
             from sentence_transformers import SentenceTransformer
 
             # Get local model name from settings
-            local_model_name = getattr(self.settings, 'embedding_local_model', 'all-MiniLM-L6-v2')
-            device = getattr(self.settings, 'embedding_device', 'cpu')
+            local_model_name = getattr(
+                self.settings, "embedding_local_model", "all-MiniLM-L6-v2"
+            )
+            device = getattr(self.settings, "embedding_device", "cpu")
 
             # Try to load model (will download if not cached)
             logger.info(f"Loading local embedding model ({local_model_name})...")
-            self._local_model = SentenceTransformer(
-                local_model_name,
-                device=device
-            )
+            self._local_model = SentenceTransformer(local_model_name, device=device)
 
             logger.info("Local embedding model loaded successfully")
             self._local_available = True
             return True
 
         except ImportError:
-            logger.warning("sentence-transformers not installed, local embeddings unavailable")
+            logger.warning(
+                "sentence-transformers not installed, local embeddings unavailable"
+            )
             self._local_available = False
             return False
         except Exception as e:
@@ -699,7 +718,9 @@ class EmbeddingService:
             self._local_available = False
             return False
 
-    def _encode_remote(self, text: str, request_id: Optional[str] = None) -> List[float]:
+    def _encode_remote(
+        self, text: str, request_id: Optional[str] = None
+    ) -> List[float]:
         """Encode text using remote embedding service."""
         # Rate limiting - acquire token before API call
         try:
@@ -711,34 +732,36 @@ class EmbeddingService:
             )
 
         # Normalize URL - remove trailing /v1 if present
-        base_url = self.settings.llm_base_url.rstrip('/')
-        if base_url.endswith('/v1'):
+        base_url = self.settings.llm_base_url.rstrip("/")
+        if base_url.endswith("/v1"):
             base_url = base_url[:-3]
 
         url = f"{base_url}/api/embeddings"
 
         headers = {}
-        if hasattr(self.settings, 'llm_api_key') and self.settings.llm_api_key:
+        if hasattr(self.settings, "llm_api_key") and self.settings.llm_api_key:
             headers["Authorization"] = f"Bearer {self.settings.llm_api_key}"
 
-        payload = {
-            "model": self.model_name,
-            "prompt": text
-        }
+        payload = {"model": self.model_name, "prompt": text}
 
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
         except Exception as e:
             # Mask API key in error messages
-            masked_key = _mask_api_key(getattr(self.settings, 'llm_api_key', None))
-            error_msg = str(e).replace(
-                getattr(self.settings, 'llm_api_key', '') or "",
-                masked_key
-            ) if getattr(self.settings, 'llm_api_key', None) else str(e)
+            masked_key = _mask_api_key(getattr(self.settings, "llm_api_key", None))
+            error_msg = (
+                str(e).replace(
+                    getattr(self.settings, "llm_api_key", "") or "", masked_key
+                )
+                if getattr(self.settings, "llm_api_key", None)
+                else str(e)
+            )
 
             # Convert to structured Morgan error
-            if isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+            if isinstance(
+                e, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
+            ):
                 raise NetworkError(
                     f"Remote embedding service connection failed: {error_msg}",
                     operation="encode_remote",
@@ -748,8 +771,8 @@ class EmbeddingService:
                         "model": self.model_name,
                         "text_length": len(text),
                         "masked_api_key": masked_key,
-                        "error_type": type(e).__name__
-                    }
+                        "error_type": type(e).__name__,
+                    },
                 ) from e
             else:
                 raise EmbeddingError(
@@ -761,8 +784,8 @@ class EmbeddingService:
                         "model": self.model_name,
                         "text_length": len(text),
                         "masked_api_key": masked_key,
-                        "error_type": type(e).__name__
-                    }
+                        "error_type": type(e).__name__,
+                    },
                 ) from e
 
         data = response.json()
@@ -775,19 +798,17 @@ class EmbeddingService:
                 "service": "embedding_service",
                 "operation": "encode_remote",
                 "model": self.model_name,
-                "error": "No embedding in response"
+                "error": "No embedding in response",
             }
             logger.error(f"No embedding in response: {error_context}")
-            raise ValueError(
-                f"No embedding in response (request_id: {request_id})"
-            )
+            raise ValueError(f"No embedding in response (request_id: {request_id})")
 
         return embedding
 
     def _encode_batch_remote(self, texts: List[str]) -> List[List[float]]:
         """
         Encode batch using remote service with optimized API calls.
-        
+
         For qwen3-embedding on gpt.lazarev.cloud, we process texts individually
         but with optimized batching and connection reuse for 10x performance improvement.
         """
@@ -797,70 +818,69 @@ class EmbeddingService:
             try:
                 self.rate_limiter.acquire(timeout=30.0)
             except TimeoutError:
-                logger.warning(f"Rate limiter timeout for batch of {batch_size}, proceeding")
+                logger.warning(
+                    f"Rate limiter timeout for batch of {batch_size}, proceeding"
+                )
                 break
 
         # Normalize URL - remove trailing /v1 if present
-        base_url = self.settings.llm_base_url.rstrip('/')
-        if base_url.endswith('/v1'):
+        base_url = self.settings.llm_base_url.rstrip("/")
+        if base_url.endswith("/v1"):
             base_url = base_url[:-3]
 
         url = f"{base_url}/api/embeddings"
 
         headers = {}
-        if hasattr(self.settings, 'llm_api_key') and self.settings.llm_api_key:
+        if hasattr(self.settings, "llm_api_key") and self.settings.llm_api_key:
             headers["Authorization"] = f"Bearer {self.settings.llm_api_key}"
 
         # Use session for connection reuse (optimization for remote API)
         import requests
+
         session = requests.Session()
         session.headers.update(headers)
 
         embeddings = []
-        
+
         try:
             # Process texts with optimized batching
             # For remote APIs, we often get better performance with smaller concurrent batches
             # rather than one large batch due to timeout and memory constraints
-            
+
             from concurrent.futures import ThreadPoolExecutor, as_completed
-            import threading
-            
+
             def encode_single_text(text_with_index):
                 idx, text = text_with_index
-                payload = {
-                    "model": self.model_name,
-                    "prompt": text
-                }
-                
+                payload = {"model": self.model_name, "prompt": text}
+
                 try:
                     response = session.post(url, json=payload, timeout=30)
                     response.raise_for_status()
                     data = response.json()
                     embedding = data.get("embedding")
-                    
+
                     if not embedding:
                         raise ValueError(f"No embedding in response for text {idx}")
-                    
+
                     return idx, embedding
-                    
+
                 except Exception as e:
                     logger.error(f"Failed to encode text {idx}: {e}")
                     raise
-            
+
             # Use ThreadPoolExecutor for concurrent API calls (optimization)
             max_workers = min(10, len(texts))  # Limit concurrent connections
-            
+
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all texts for processing
                 future_to_idx = {
-                    executor.submit(encode_single_text, (i, text)): i 
+                    executor.submit(encode_single_text, (i, text)): i
                     for i, text in enumerate(texts)
                 }
-                
+
                 # Collect results in order
                 results = [None] * len(texts)
-                
+
                 for future in as_completed(future_to_idx):
                     try:
                         idx, embedding = future.result()
@@ -868,15 +888,17 @@ class EmbeddingService:
                     except Exception as e:
                         logger.error(f"Batch encoding failed for text: {e}")
                         raise
-                
+
                 # Filter out None results and return
                 embeddings = [emb for emb in results if emb is not None]
-                
+
                 if len(embeddings) != len(texts):
-                    raise ValueError(f"Expected {len(texts)} embeddings, got {len(embeddings)}")
-                
+                    raise ValueError(
+                        f"Expected {len(texts)} embeddings, got {len(embeddings)}"
+                    )
+
                 return embeddings
-                
+
         finally:
             session.close()
 
@@ -889,14 +911,12 @@ class EmbeddingService:
                 component="embedding_service",
                 severity=ErrorSeverity.HIGH,
                 request_id=request_id,
-                metadata={"model_type": "local"}
+                metadata={"model_type": "local"},
             )
 
         try:
             embedding = self._local_model.encode(
-                text,
-                convert_to_numpy=True,
-                show_progress_bar=False
+                text, convert_to_numpy=True, show_progress_bar=False
             )
 
             return embedding.tolist()
@@ -910,8 +930,8 @@ class EmbeddingService:
                 metadata={
                     "text_length": len(text),
                     "error_type": type(e).__name__,
-                    "model_type": "local"
-                }
+                    "model_type": "local",
+                },
             ) from e
 
     def _encode_batch_local(self, texts: List[str]) -> List[List[float]]:
@@ -923,7 +943,7 @@ class EmbeddingService:
             texts,
             convert_to_numpy=True,
             show_progress_bar=False,
-            batch_size=32  # Internal batch size for GPU efficiency
+            batch_size=32,  # Internal batch size for GPU efficiency
         )
 
         return embeddings.tolist()
@@ -980,7 +1000,7 @@ class EmbeddingService:
                     "total": sum(times),
                     "avg": sum(times) / len(times),
                     "min": min(times),
-                    "max": max(times)
+                    "max": max(times),
                 }
 
         return stats
@@ -993,9 +1013,9 @@ class EmbeddingService:
             print("No performance data available")
             return
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("Embedding Service Performance Stats")
-        print("="*60)
+        print("=" * 60)
 
         for operation, data in stats.items():
             print(f"\n{operation}:")
@@ -1005,7 +1025,7 @@ class EmbeddingService:
             print(f"  Min: {data['min']:.3f}s")
             print(f"  Max: {data['max']:.3f}s")
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
 
     def clear_cache(self):
         """Clear embedding cache."""
@@ -1039,9 +1059,9 @@ def get_embedding_service() -> EmbeddingService:
 if __name__ == "__main__":
     """Test embedding service."""
 
-    print("="*60)
+    print("=" * 60)
     print("Testing Morgan RAG EmbeddingService")
-    print("="*60)
+    print("=" * 60)
 
     # Initialize service
     print("\n1. Initializing service...")
@@ -1098,7 +1118,7 @@ if __name__ == "__main__":
         "Docker networking setup",
         "Container orchestration",
         "Kubernetes deployment",
-        "Microservices architecture"
+        "Microservices architecture",
     ] * 10  # 50 texts
 
     start = time.time()
@@ -1113,6 +1133,6 @@ if __name__ == "__main__":
     print("\n7. Performance Statistics:")
     service.print_performance_stats()
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("[SUCCESS] All tests passed!")
-    print("="*60)
+    print("=" * 60)

@@ -6,18 +6,18 @@ for the Morgan RAG system, including performance tracking, companion experience 
 and system health monitoring.
 """
 
+from .alerting import AlertManager
+from .companion_metrics import CompanionMetrics
+from .dashboard import MonitoringDashboard
+from .health_monitor import HealthMonitor
 from .metrics_collector import MetricsCollector
 from .performance_monitor import PerformanceMonitor
-from .companion_metrics import CompanionMetrics
-from .health_monitor import HealthMonitor
-from .alerting import AlertManager
-from .dashboard import MonitoringDashboard
 
 __all__ = [
     "MetricsCollector",
-    "PerformanceMonitor", 
+    "PerformanceMonitor",
     "CompanionMetrics",
     "HealthMonitor",
     "AlertManager",
-    "MonitoringDashboard"
+    "MonitoringDashboard",
 ]

@@ -6,23 +6,20 @@ based on personality traits, context, and relationship dynamics.
 """
 
 import uuid
-import random
-from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
+from typing import List, Optional
 
 from ..utils.logger import get_logger
-from ..emotional.models import (
-    ConversationContext, EmotionalState, EmotionType
-)
-from .traits import PersonalityProfile, PersonalityTrait, TraitLevel
+from .traits import PersonalityProfile
 
 logger = get_logger(__name__)
 
 
 class HumorStyle(Enum):
     """Types of humor styles."""
+
     WITTY = "witty"  # Clever wordplay and observations
     PLAYFUL = "playful"  # Light-hearted and fun
     DRY = "dry"  # Deadpan and understated
@@ -35,6 +32,7 @@ class HumorStyle(Enum):
 
 class HumorTiming(Enum):
     """When to use humor."""
+
     OPENING = "opening"  # At conversation start
     TRANSITION = "transition"  # Between topics
     EXPLANATION = "explanation"  # During explanations
@@ -46,6 +44,7 @@ class HumorTiming(Enum):
 @dataclass
 class HumorPreference:
     """User's humor preferences."""
+
     preferred_styles: List[HumorStyle] = field(default_factory=list)
     avoided_styles: List[HumorStyle] = field(default_factory=list)
     preferred_timing: List[HumorTiming] = field(default_factory=list)
@@ -58,6 +57,7 @@ class HumorPreference:
 @dataclass
 class HumorAttempt:
     """Record of a humor attempt and its reception."""
+
     attempt_id: str
     user_id: str
     humor_style: HumorStyle
@@ -66,7 +66,7 @@ class HumorAttempt:
     user_reaction: Optional[str] = None
     success_score: Optional[float] = None  # 0.0 to 1.0
     timestamp: datetime = field(default_factory=datetime.utcnow)
-    
+
     def __post_init__(self):
         """Initialize attempt ID if not provided."""
         if not self.attempt_id:
@@ -76,6 +76,7 @@ class HumorAttempt:
 @dataclass
 class HumorSuggestion:
     """Suggestion for humorous content."""
+
     suggestion_id: str
     humor_style: HumorStyle
     content: str
@@ -83,7 +84,7 @@ class HumorSuggestion:
     timing: HumorTiming
     reasoning: str
     context_factors: List[str] = field(default_factory=list)
-    
+
     def __post_init__(self):
         """Initialize suggestion ID if not provided."""
         if not self.suggestion_id:
@@ -93,70 +94,79 @@ class HumorSuggestion:
 class HumorDetector:
     """
     Detects user humor preferences and reactions.
-    
+
     Analyzes user messages and responses to identify humor preferences,
     timing preferences, and reaction patterns.
     """
-    
+
     # Humor indicators in user messages
     HUMOR_INDICATORS = {
         HumorStyle.WITTY: [
-            r'\b(clever|smart|brilliant|genius)\b',
-            r'\b(ironic|irony|sarcastic|sarcasm)\b',
-            r'[😏😉🤓]'
+            r"\b(clever|smart|brilliant|genius)\b",
+            r"\b(ironic|irony|sarcastic|sarcasm)\b",
+            r"[😏😉🤓]",
         ],
         HumorStyle.PLAYFUL: [
-            r'\b(fun|funny|hilarious|amusing|entertaining)\b',
-            r'\b(silly|goofy|playful|cheerful)\b',
-            r'[😄😆😂🤣😊]'
+            r"\b(fun|funny|hilarious|amusing|entertaining)\b",
+            r"\b(silly|goofy|playful|cheerful)\b",
+            r"[😄😆😂🤣😊]",
         ],
         HumorStyle.DRY: [
-            r'\b(dry|deadpan|understated|subtle)\b',
-            r'\b(matter.of.fact|straightforward)\b',
-            r'[😐😑]'
+            r"\b(dry|deadpan|understated|subtle)\b",
+            r"\b(matter.of.fact|straightforward)\b",
+            r"[😐😑]",
         ],
-        HumorStyle.PUNNY: [
-            r'\b(pun|wordplay|play.on.words)\b',
-            r'[🙄😅]'
-        ],
+        HumorStyle.PUNNY: [r"\b(pun|wordplay|play.on.words)\b", r"[🙄😅]"],
         HumorStyle.GENTLE: [
-            r'\b(sweet|kind|gentle|wholesome)\b',
-            r'\b(nice|pleasant|friendly)\b',
-            r'[😌☺️🙂]'
-        ]
+            r"\b(sweet|kind|gentle|wholesome)\b",
+            r"\b(nice|pleasant|friendly)\b",
+            r"[😌☺️🙂]",
+        ],
     }
-    
+
     # Positive reaction indicators
     POSITIVE_REACTIONS = [
-        r'\b(haha|lol|lmao|rofl)\b',
-        r'\b(funny|hilarious|amusing|clever)\b',
-        r'\b(love|like|enjoy|appreciate)\b.*\b(humor|joke|funny)\b',
-        r'[😂🤣😄😆😊😁]'
+        r"\b(haha|lol|lmao|rofl)\b",
+        r"\b(funny|hilarious|amusing|clever)\b",
+        r"\b(love|like|enjoy|appreciate)\b.*\b(humor|joke|funny)\b",
+        r"[😂🤣😄😆😊😁]",
     ]
-    
+
     # Negative reaction indicators
     NEGATIVE_REACTIONS = [
-        r'\b(not funny|unfunny|inappropriate)\b',
-        r'\b(serious|professional|formal)\b.*\b(please|prefer)\b',
-        r'\b(stop|enough|no more)\b.*\b(joke|humor|funny)\b',
-        r'[😐😑🙄😒]'
+        r"\b(not funny|unfunny|inappropriate)\b",
+        r"\b(serious|professional|formal)\b.*\b(please|prefer)\b",
+        r"\b(stop|enough|no more)\b.*\b(joke|humor|funny)\b",
+        r"[😐😑🙄😒]",
     ]
-    
+
     def __init__(self):
         """Initialize humor detector."""
         logger.info("Humor detector initialized")
-    
+
     def analyze_humor_preferences(
         self,
         user_id: str,
         conversation_history: List[str],
         user_reactions: List[str],
-        personality_profile: Optional[PersonalityProfile] = None
+        personality_profile: Optional[PersonalityProfile] = None,
     ) -> HumorPreference:
         """
         Analyze user humor preferences from conversation history.
-        
+
         Args:
             user_id: User identifier
             conversation_history: List of user messages
-            user_reactions: List of user reactions to humo
+            user_reactions: List of user reactions to humor
+            personality_profile: Optional personality profile
+
+        Returns:
+            HumorPreference object with detected preferences
+        """
+        # Placeholder implementation
+        return HumorPreference(
+            humor_types=[],
+            sensitivity_level=0.5,
+            preferred_topics=[],
+            avoided_topics=[],
+        )

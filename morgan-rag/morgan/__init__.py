@@ -55,5 +55,5 @@ __all__ = [
     "KnowledgeBase",
     "ConversationMemory",
     "SmartSearch",
-    "create_assistant"
+    "create_assistant",
 ]
