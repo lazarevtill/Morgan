@@ -12,7 +12,12 @@ import asyncpg
 import aiohttp
 
 from shared.utils.logging import setup_logging
-from shared.utils.exceptions import MorganException, ErrorCategory
+from shared.utils.exceptions import (
+    MorganException,
+    ErrorCategory,
+    InvalidInputError,
+    ServiceException
+)
 
 
 class MCPTool:
@@ -237,10 +242,18 @@ class MCPToolsManager:
             # Get tool
             tool = self.tools.get(tool_name)
             if not tool:
-                raise ValueError(f"Tool not found: {tool_name}")
+                raise InvalidInputError(
+                    field_name="tool_name",
+                    provided_value=tool_name,
+                    message=f"Tool not found: {tool_name}"
+                )
 
             if not tool.enabled:
-                raise ValueError(f"Tool is disabled: {tool_name}")
+                raise InvalidInputError(
+                    field_name="tool_name",
+                    provided_value=tool_name,
+                    message=f"Tool is disabled: {tool_name}"
+                )
 
             self.logger.info(f"Executing tool: {tool_name} for user: {user_id}")
 
@@ -254,7 +267,11 @@ class MCPToolsManager:
                 # External API endpoint
                 result, status, error_message = await self._call_external_tool(tool, parameters)
             else:
-                raise ValueError(f"Tool has no handler or endpoint: {tool_name}")
+                raise InvalidInputError(
+                    field_name="tool_configuration",
+                    provided_value=tool_name,
+                    message=f"Tool has no handler or endpoint: {tool_name}"
+                )
 
             # Calculate execution time
             execution_time = int((datetime.now() - start_time).total_seconds() * 1000)

@@ -14,7 +14,6 @@ from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, Fi
 import numpy as np
 
 from shared.utils.logging import setup_logging
-from shared.utils.exceptions import MorganException, ErrorCategory
 
 
 class Memory:

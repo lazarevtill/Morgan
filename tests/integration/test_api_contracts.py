@@ -259,9 +259,8 @@ class TestTimingHeaders:
             response = await client.get("/health")
 
             # Should have process time header
-            assert "X-Process-Time" in response.headers or response.status_code == 200, \
-                "Responses should include X-Process-Time header"
-
+            assert response.status_code == 200, "Request should succeed"
+            # Header may or may not be present depending on middleware configuration
             if "X-Process-Time" in response.headers:
                 # Should be a valid float
                 process_time = float(response.headers["X-Process-Time"])

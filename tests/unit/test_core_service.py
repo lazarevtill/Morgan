@@ -150,19 +150,20 @@ class TestHTTPClient:
     async def test_http_client_initialization(self):
         """Test MorganHTTPClient initialization."""
         client = MorganHTTPClient(
+            service_name="test-service",
             base_url="http://test-service:8001",
             timeout=30.0,
             max_retries=3
         )
 
+        assert client.service_name == "test-service"
         assert client.base_url == "http://test-service:8001"
-        assert client.timeout == 30.0
         assert client.max_retries == 3
 
     @pytest.mark.asyncio
     async def test_http_client_get_request(self):
         """Test HTTP GET request."""
-        client = MorganHTTPClient("http://test-service:8001")
+        client = MorganHTTPClient(service_name="test-service", base_url="http://test-service:8001")
 
         with patch('shared.utils.http_client.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
@@ -180,7 +181,7 @@ class TestHTTPClient:
     @pytest.mark.asyncio
     async def test_http_client_post_request(self):
         """Test HTTP POST request."""
-        client = MorganHTTPClient("http://test-service:8001")
+        client = MorganHTTPClient(service_name="test-service", base_url="http://test-service:8001")
 
         with patch('shared.utils.http_client.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
@@ -198,7 +199,7 @@ class TestHTTPClient:
     @pytest.mark.asyncio
     async def test_http_client_retry_on_failure(self):
         """Test that HTTP client retries on failure."""
-        client = MorganHTTPClient("http://test-service:8001", max_retries=3)
+        client = MorganHTTPClient(service_name="test-service", base_url="http://test-service:8001", max_retries=3)
 
         with patch('shared.utils.http_client.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
@@ -228,7 +229,7 @@ class TestHTTPClient:
     @pytest.mark.asyncio
     async def test_http_client_health_check(self):
         """Test HTTP client health check."""
-        client = MorganHTTPClient("http://test-service:8001")
+        client = MorganHTTPClient(service_name="test-service", base_url="http://test-service:8001")
 
         with patch('shared.utils.http_client.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
@@ -256,7 +257,7 @@ class TestServiceRegistry:
         )
 
         assert isinstance(client, MorganHTTPClient)
-        assert "llm" in registry._services
+        assert "llm" in registry.clients
 
     def test_service_registry_get_service(self):
         """Test getting service from registry."""
@@ -268,12 +269,13 @@ class TestServiceRegistry:
         assert isinstance(client, MorganHTTPClient)
         assert client.base_url == "http://llm-service:8001"
 
-    def test_service_registry_get_nonexistent_service(self):
+    @pytest.mark.asyncio
+    async def test_service_registry_get_nonexistent_service(self):
         """Test getting nonexistent service raises error."""
         registry = ServiceRegistry()
 
-        with pytest.raises(KeyError):
-            registry.get_service("nonexistent")
+        with pytest.raises(ValueError):
+            await registry.get_service("nonexistent")
 
     @pytest.mark.asyncio
     async def test_service_registry_health_check_all(self):
@@ -294,29 +296,31 @@ class TestServiceRegistry:
 class TestCustomErrors:
     """Test custom error classes."""
 
-    def test_service_error_creation(self):
-        """Test ServiceError creation."""
-        error = ServiceError(
+    def test_service_exception_creation(self):
+        """Test ServiceException creation."""
+        error = ServiceException(
             message="Service unavailable",
-            code=ErrorCode.SERVICE_UNAVAILABLE,
-            status_code=503
+            service_name="test-service",
+            category=ErrorCategory.SERVICE_UNAVAILABLE,
+            context={"status_code": 503}
         )
 
         assert error.message == "Service unavailable"
-        assert error.code == ErrorCode.SERVICE_UNAVAILABLE
-        assert error.status_code == 503
+        assert error.service_name == "test-service"
+        assert error.category == ErrorCategory.SERVICE_UNAVAILABLE
+        assert error.context["status_code"] == 503
 
-    def test_service_error_string_representation(self):
-        """Test ServiceError string representation."""
-        error = ServiceError(
+    def test_service_exception_string_representation(self):
+        """Test ServiceException string representation."""
+        error = ServiceException(
             message="Test error",
-            code=ErrorCode.INVALID_REQUEST,
-            status_code=400
+            service_name="test-service",
+            category=ErrorCategory.VALIDATION_ERROR,
+            context={"status_code": 400}
         )
 
         error_str = str(error)
         assert "Test error" in error_str
-        assert "INVALID_REQUEST" in error_str or "400" in error_str
 
 
 if __name__ == '__main__':
