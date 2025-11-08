@@ -17,7 +17,7 @@ Based on your request to **"review latest commit and consolidate all plans, requ
 All planning documents have been consolidated into:
 
 ```
-.kiro/morgan-multi-host-mvp/
+.kiro/specs/morgan-multi-host-mvp/
 ├── README.md           (266 lines) - Project overview and quick reference
 ├── requirements.md     (288 lines) - Detailed EARS-format requirements
 ├── design.md          (1001 lines) - Complete system architecture and design

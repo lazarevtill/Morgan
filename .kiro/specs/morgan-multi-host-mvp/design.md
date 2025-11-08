@@ -614,19 +614,18 @@ def services():
 ```python
 # morgan/cli/client.py
 import httpx
-from kubernetes impoptional, config
+from kubernetes import client, config
 from typing import Optional
-import organClient:
+
+class MorganClient:
     def __init__(self, base_url: Optional[str] = None):
-        # Optionnt:
-    def _elf.t__(self, base_url: Optional[str] = None):
-        # MVP: Direct connectio MicroK8s
-        selftion _url = base_url or self._discover_core_v_k8s()
-        
-        self.cl.AsyncClien
-        s   base_url= httpx.AsyncCl
+        # MVP: Direct connection to MicroK8s
+        self.base_url = base_url or self._discover_core_via_k8s()
+
+        self.client = httpx.AsyncClient(
             base_url=self.base_url,
-            follow_redi0,
+            follow_redirects=True,
+            timeout=30.0,
         )
 
     def _discover_core_via_k8s(self) -> str:
@@ -1145,9 +1144,9 @@ class PodAllocator:
             self.allocations.append(PodAllocation(
                 deployment_name="ollama-embedding",
                 node_selector={"node-type": "gpu", "gpu-vram": "medium"},
-                replicas=1s
-                resources= "nvidia",
-                    "requests": {"nvidia.c, "memory": "4Gi"},
+                replicas=1,
+                resources={
+                    "requests": {"nvidia.com/gpu": 1, "memory": "4Gi"},
                     "limits": {"nvidia.com/gpu": 1, "memory": "8Gi"}
                 }
             ))
@@ -1245,39 +1244,20 @@ class PodAllocator:
             replicas=1,
             resources={
                 "requests": {"memory": "2Gi", "cpu": "1000m"},
-                "limy_cpu_{"memorypu_host", "cpu": "20"}
-        }
-        ))
-
-        # Empathy rvice_name="learning-system",
-          lf.allocations.append(pu_host.ation(
-                rement_nam,
-            node_selectints={"ram_ype": "cpu"},
-            replicas=
-es={
-            # PostgreSsts": {"memory": "2Gi", "cpu": "1000m"},
                 "limits": {"memory": "4Gi", "cpu": "2000m"}
             }
-                host=secondary_cpu_host.hostname,
-                replicas=1,
-                constraints={"ram_min": 32}
-            ))
+        ))
 
-            # Redis node 2
-            self.allocations.append(ServiceAllocation(
-                service_name="redis-2",
-                host=secondary_cpu_host.hostname,
-                replicas=1,
-                constraints={"ram_min": 8}
-            ))
-
-            # Monitoring stack
-            self.allocations.append(ServiceAllocation(
-                service_name="monitoring",
-                host=secondary_cpu_host.hostname,
-                replicas=1,
-                constraints={"ram_min": 16}
-            ))
+        # Learning system
+        self.allocations.append(PodAllocation(
+            deployment_name="learning-system",
+            node_selector={"node-type": "cpu"},
+            replicas=1,
+            resources={
+                "requests": {"memory": "2Gi", "cpu": "1000m"},
+                "limits": {"memory": "4Gi", "cpu": "2000m"}
+            }
+        ))
 
     def _allocate_arm_services(self, arm_hosts: List[HostCapabilities]):
         """Allocate ARM64 services (macOS M1)"""
@@ -1288,19 +1268,25 @@ es={
         arm_host = arm_hosts[0]
 
         # Core proxy (ARM64-compatible)
-        self.allocations.append(ServiceAllocation(
-            service_name="core-proxy-arm64",
-            host=arm_host.hostname,
+        self.allocations.append(PodAllocation(
+            deployment_name="core-proxy-arm64",
+            node_selector={"node-type": "cpu", "arch": "arm64"},
             replicas=1,
-            constraints={"arch": "arm64"}
+            resources={
+                "requests": {"memory": "1Gi", "cpu": "500m"},
+                "limits": {"memory": "2Gi", "cpu": "1000m"}
+            }
         ))
 
         # LLM proxy (ARM64-compatible)
-        self.allocations.append(ServiceAllocation(
-            service_name="llm-proxy-arm64",
-            host=arm_host.hostname,
+        self.allocations.append(PodAllocation(
+            deployment_name="llm-proxy-arm64",
+            node_selector={"node-type": "cpu", "arch": "arm64"},
             replicas=1,
-            constraints={"arch": "arm64"}
+            resources={
+                "requests": {"memory": "1Gi", "cpu": "500m"},
+                "limits": {"memory": "2Gi", "cpu": "1000m"}
+            }
         ))
 ```
 
@@ -1726,9 +1712,14 @@ services:
       timeout: 5s
       retries: 3
 
-# postgres-standby.conf
+# postgres-standby.conf (template - use envsubst or init script to expand)
 hot_standby = on
-primary_conninfo = 'host=postgres-primary port=5432 user=replicator password=${REPLICATION_PASSWORD}'
+# Note: Replace REPLICATION_PASSWORD_VALUE with actual password via init script
+# Example init script: envsubst < postgres-standby.conf.template > postgres-standby.conf
+primary_conninfo = 'host=postgres-primary port=5432 user=replicator password=REPLICATION_PASSWORD_VALUE'
+
+# Alternative: Use .pgpass file for password management
+# Create /root/.pgpass with: postgres-primary:5432:*:replicator:actual_password
 ```
 
 ---
@@ -1763,7 +1754,7 @@ services:
     networks:
       - morgan-net
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
       timeout: 10s
       retries: 3

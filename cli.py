@@ -117,7 +117,10 @@ class MorganCLI:
         if topic:
             console.print(f"[dim]Starting conversation about: {topic}[/dim]\n")
             # Send initial topic message
-            await self.send_message(f"I'd like to talk about {topic}")
+            response = await self.send_message(f"I'd like to talk about {topic}")
+            if response and "text" in response:
+                console.print(f"\n[bold magenta]Morgan[/bold magenta]:")
+                console.print(Markdown(response["text"]))
 
         while True:
             try:
