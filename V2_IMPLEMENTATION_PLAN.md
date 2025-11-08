@@ -22,7 +22,7 @@ The plan prioritizes **CLI/bash user experience** as the primary interface, focu
 - ✅ Docker Compose microservices (Core, LLM, TTS, STT, VAD)
 - ✅ FastAPI-based services
 - ✅ Basic health checks
-- ❌ **NO CLI interface** (only HTTP API)
+- ❌ **NO CLI** (only HTTP API)
 - ❌ No RAG system
 - ❌ No multi-host support
 - ❌ No service discovery (Consul)
@@ -651,7 +651,7 @@ Error: Connection refused
 ### 2. Command Design Patterns
 
 #### Command Structure
-```
+```text
 morgan <command> [options] [arguments]
 
 Categories:
@@ -684,7 +684,7 @@ Categories:
 - Minimize import overhead
 
 #### Response Time
-```
+```text
 Target Response Times:
 - CLI startup: <500ms
 - Health check: <2s

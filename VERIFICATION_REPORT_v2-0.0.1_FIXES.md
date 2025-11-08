@@ -259,8 +259,8 @@ All modules compile independently:
 
 ### 5.4 Security
 
-| Security Check | Result |
-|----------------|--------|
+| Security Check | Details | Result |
+|----------------|---------|--------|
 | MD5 usage | 0 instances | ✅ |
 | SHA256 usage | 11 instances (correct) | ✅ |
 | Proper hashing | 100% correct | ✅ |
@@ -326,7 +326,7 @@ All modified files compile successfully:
 
 ### Change Summary
 
-```
+```bash
 180 files changed
 32,146 insertions(+)
 22,342 deletions(-)

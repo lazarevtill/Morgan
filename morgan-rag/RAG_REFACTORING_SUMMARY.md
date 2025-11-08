@@ -181,7 +181,7 @@ async for doc in processor.process_directory(Path("./docs"), recursive=True):
 5. **Final Results**: Top K with scores
 
 #### RRF Algorithm:
-```
+```text
 RRF_score(d) = Σ weight_i / (k + rank_i(d))
 ```
 Where:
@@ -303,6 +303,8 @@ print(f"Reranked: {metrics.reranked}")
 ---
 
 ## Performance Improvements
+
+**Note**: "N/A" values indicate the previous codebase did not exist or was placeholder code without measurable performance. "Improvement" column shows "-" because baselines were not available for comparison.
 
 ### Latency (P95)
 | Operation | Before | After | Improvement |
@@ -536,7 +538,7 @@ config = {
 ## Dependencies
 
 ### Required
-```
+```text
 qdrant-client>=1.7.0
 httpx>=0.25.0
 numpy>=1.24.0
@@ -548,7 +550,7 @@ langchain>=0.1.0
 ```
 
 ### Optional
-```
+```text
 pypdf>=3.0.0  # PDF support
 python-docx>=1.0.0  # DOCX support
 beautifulsoup4>=4.12.0  # HTML support

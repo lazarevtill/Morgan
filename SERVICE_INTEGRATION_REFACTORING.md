@@ -239,7 +239,7 @@ Complete production-quality refactoring of the service integration layer with en
 
 ## File Structure
 
-```
+```text
 /home/user/Morgan/
 ├── shared/
 │   └── infrastructure/
