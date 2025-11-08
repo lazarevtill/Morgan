@@ -3,8 +3,6 @@ Main entry point for LLM service
 """
 import asyncio
 import argparse
-import logging
-from pathlib import Path
 
 from shared.config.base import ServiceConfig
 from shared.utils.logging import setup_logging

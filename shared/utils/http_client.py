@@ -2,7 +2,6 @@
 HTTP client utilities for service-to-service communication
 """
 import asyncio
-import json
 from typing import Dict, Any, Optional, Union
 import logging
 from urllib.parse import urljoin
@@ -10,7 +9,7 @@ from urllib.parse import urljoin
 import aiohttp
 from aiohttp import ClientTimeout, ClientError
 
-from .errors import ServiceError, ErrorCode, ErrorHandler
+from .exceptions import ServiceException, ErrorCategory
 from ..models.base import ProcessingResult
 
 logger = logging.getLogger(__name__)
@@ -28,7 +27,7 @@ class MorganHTTPClient:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.session: Optional[aiohttp.ClientSession] = None
-        self.error_handler = ErrorHandler(logger or logging.getLogger(__name__))
+        self.logger = logger or logging.getLogger(__name__)
 
     async def __aenter__(self):
         """Async context manager entry"""
@@ -50,9 +49,15 @@ class MorganHTTPClient:
             await self.session.close()
             self.session = None
 
-    async def _make_request(self, method: str, endpoint: str, **kwargs) -> ProcessingResult:
-        """Make HTTP request with retries and error handling"""
+    async def _make_request(self, method: str, endpoint: str, request_id: Optional[str] = None, **kwargs) -> ProcessingResult:
+        """Make HTTP request with retries, error handling, and request ID propagation"""
         url = urljoin(self.base_url, endpoint)
+
+        # Add request ID to headers if provided
+        headers = kwargs.get('headers', {})
+        if request_id:
+            headers['X-Request-ID'] = request_id
+            kwargs['headers'] = headers
 
         for attempt in range(self.max_retries):
             try:
@@ -62,10 +67,10 @@ class MorganHTTPClient:
                 async with self.session.request(method, url, **kwargs) as response:
                     if response.status >= 400:
                         error_text = await response.text()
-                        raise ServiceError(
-                            f"HTTP {response.status}: {error_text}",
-                            ErrorCode.SERVICE_ERROR,
-                            {"status": response.status, "url": url}
+                        raise ServiceException(
+                            message=f"HTTP {response.status}: {error_text}",
+                            service_name=self.service_name,
+                            context={"status_code": response.status, "url": url}
                         )
 
                     content = await response.json()
@@ -79,10 +84,10 @@ class MorganHTTPClient:
 
             except ClientError as e:
                 if attempt == self.max_retries - 1:
-                    raise ServiceError(
-                        f"Failed to connect to {self.service_name}: {e}",
-                        ErrorCode.CONNECTION_ERROR,
-                        {"url": url, "attempts": attempt + 1}
+                    raise ServiceException(
+                        message=f"Failed to connect: {e}",
+                        service_name=self.service_name,
+                        context={"status_code": 503, "url": url, "error": str(e)}
                     )
 
                 logger.warning(f"Request failed (attempt {attempt + 1}/{self.max_retries}): {e}")
@@ -90,48 +95,48 @@ class MorganHTTPClient:
 
             except asyncio.TimeoutError:
                 if attempt == self.max_retries - 1:
-                    raise ServiceError(
-                        f"Timeout connecting to {self.service_name}",
-                        ErrorCode.SERVICE_TIMEOUT,
-                        {"url": url, "timeout": self.timeout.total}
+                    raise ServiceException(
+                        message=f"Timeout connecting to {url}",
+                        service_name=self.service_name,
+                        context={"status_code": 504, "url": url}
                     )
 
                 logger.warning(f"Request timeout (attempt {attempt + 1}/{self.max_retries})")
                 await asyncio.sleep(self.retry_delay * (2 ** attempt))
 
             except Exception as e:
-                raise ServiceError(
-                    f"Unexpected error in {self.service_name}: {e}",
-                    ErrorCode.SERVICE_ERROR,
-                    {"url": url, "error_type": type(e).__name__}
+                raise ServiceException(
+                    message=f"Unexpected error: {e}",
+                    service_name=self.service_name,
+                    context={"status_code": 500, "url": url, "error": str(e)}
                 )
 
         # This should never be reached, but just in case
-        raise ServiceError(
-            f"Max retries exceeded for {self.service_name}",
-            ErrorCode.SERVICE_ERROR,
-            {"url": url, "max_retries": self.max_retries}
+        raise ServiceException(
+            message=f"Max retries exceeded for {url}",
+            service_name=self.service_name,
+            context={"status_code": 503, "url": url, "max_retries": self.max_retries}
         )
 
-    async def get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> ProcessingResult:
-        """Make GET request"""
-        return await self._make_request("GET", endpoint, params=params)
+    async def get(self, endpoint: str, params: Optional[Dict[str, Any]] = None, request_id: Optional[str] = None) -> ProcessingResult:
+        """Make GET request with optional request ID propagation"""
+        return await self._make_request("GET", endpoint, request_id=request_id, params=params)
 
     async def post(self, endpoint: str, data: Optional[Union[Dict[str, Any], str]] = None,
-                   json_data: Optional[Dict[str, Any]] = None) -> ProcessingResult:
-        """Make POST request"""
+                   json_data: Optional[Dict[str, Any]] = None, request_id: Optional[str] = None) -> ProcessingResult:
+        """Make POST request with optional request ID propagation"""
         if json_data:
-            return await self._make_request("POST", endpoint, json=json_data)
+            return await self._make_request("POST", endpoint, request_id=request_id, json=json_data)
         else:
-            return await self._make_request("POST", endpoint, data=data)
+            return await self._make_request("POST", endpoint, request_id=request_id, data=data)
 
-    async def put(self, endpoint: str, data: Optional[Dict[str, Any]] = None) -> ProcessingResult:
-        """Make PUT request"""
-        return await self._make_request("PUT", endpoint, json=data)
+    async def put(self, endpoint: str, data: Optional[Dict[str, Any]] = None, request_id: Optional[str] = None) -> ProcessingResult:
+        """Make PUT request with optional request ID propagation"""
+        return await self._make_request("PUT", endpoint, request_id=request_id, json=data)
 
-    async def delete(self, endpoint: str) -> ProcessingResult:
-        """Make DELETE request"""
-        return await self._make_request("DELETE", endpoint)
+    async def delete(self, endpoint: str, request_id: Optional[str] = None) -> ProcessingResult:
+        """Make DELETE request with optional request ID propagation"""
+        return await self._make_request("DELETE", endpoint, request_id=request_id)
 
     async def health_check(self) -> bool:
         """Check if service is healthy"""

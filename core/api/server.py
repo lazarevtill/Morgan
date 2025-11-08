@@ -19,9 +19,9 @@ import os
 from shared.config.base import ServiceConfig
 from shared.models.base import Response, ProcessingResult
 from shared.utils.logging import setup_logging
-from shared.utils.errors import ErrorHandler, ErrorCode
-from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware
-from shared.utils.audio import AudioCapture, DeviceAudioCapture
+from shared.utils.exceptions import MorganException, ErrorCategory, ServiceException
+from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware, RateLimitMiddleware
+from shared.utils.audio import AudioCapture, DeviceAudioCapture, validate_audio_file, AudioValidationError, safe_base64_decode
 from shared.utils.http_client import service_registry
 
 # Import WebSocket handler
@@ -156,7 +156,7 @@ class APIServer:
 
     async def start(self):
         """Start the API server"""
-        # Create FastAPI app
+        # Create FastAPI app with request size limits
         self.app = FastAPI(
             title="Morgan AI Assistant",
             description="Modern AI assistant with voice and text capabilities",
@@ -165,9 +165,44 @@ class APIServer:
             redoc_url="/redoc"
         )
 
+        # Add request size limit middleware
+        from starlette.middleware import Middleware
+        from starlette.middleware.base import BaseHTTPMiddleware
+
+        @self.app.middleware("http")
+        async def limit_request_size(request: Request, call_next):
+            """Limit request body size to 10MB"""
+            max_size = 10 * 1024 * 1024  # 10MB
+            content_length = request.headers.get("content-length")
+
+            if content_length:
+                if int(content_length) > max_size:
+                    return JSONResponse(
+                        status_code=413,
+                        content={"error": "Request body too large. Maximum size is 10MB."}
+                    )
+
+            return await call_next(request)
+
         # Add middleware
         self.app.add_middleware(RequestIDMiddleware)
         self.app.add_middleware(TimingMiddleware)
+
+        # Add rate limiting middleware if enabled
+        if self.core_service.config.get("rate_limit_enabled", True):
+            rate_limit_rps = self.core_service.config.get("rate_limit_requests_per_second", 10.0)
+            rate_limit_burst = self.core_service.config.get("rate_limit_burst_size", 20)
+            rate_limit_exempt = self.core_service.config.get("rate_limit_exempt_paths", ["/health", "/docs", "/redoc", "/openapi.json"])
+
+            self.app.add_middleware(
+                RateLimitMiddleware,
+                requests_per_second=rate_limit_rps,
+                burst_size=rate_limit_burst,
+                exempt_paths=rate_limit_exempt
+            )
+            self.logger.info(f"Rate limiting enabled: {rate_limit_rps} req/s, burst={rate_limit_burst}")
+        else:
+            self.logger.warning("Rate limiting is disabled")
 
         # Add proxy middleware if behind reverse proxy
         if os.getenv("BEHIND_PROXY", "false").lower() == "true":
@@ -181,13 +216,24 @@ class APIServer:
             except ImportError as e:
                 self.logger.warning(f"Could not import proxy middleware: {e}")
 
-        # Add CORS middleware
+        # Add CORS middleware - use configuration from core.yaml or environment
+        cors_origins = self.core_service.config.get("cors_origins", ["http://localhost:3000"])
+        # Support both list and string (comma-separated) from environment
+        if isinstance(cors_origins, str):
+            cors_origins = [origin.strip() for origin in cors_origins.split(",")]
+
+        cors_allow_credentials = self.core_service.config.get("cors_allow_credentials", True)
+        cors_max_age = self.core_service.config.get("cors_max_age", 600)
+
+        self.logger.info(f"CORS configured with origins: {cors_origins}")
+
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],  # Configure appropriately for production
-            allow_credentials=True,
-            allow_methods=["*"],
+            allow_origins=cors_origins,
+            allow_credentials=cors_allow_credentials,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
             allow_headers=["*"],
+            max_age=cors_max_age,
         )
 
         # Serve static files
@@ -460,14 +506,13 @@ class APIServer:
                 return {
                     "text": response.text,
                     "audio": response.audio_data.hex() if response.audio_data else None,
-                    "actions": [action.dict() for action in response.actions] if response.actions else [],
+                    "actions": [action.model_dump() for action in response.actions] if response.actions else [],
                     "metadata": response.metadata,
                     "confidence": response.confidence
                 }
 
             except Exception as e:
-                error_handler = ErrorHandler()
-                error_handler.logger.error(f"Text processing error: {e}")
+                self.logger.error(f"Text processing error: {e}")
                 raise HTTPException(status_code=500, detail=f"Text processing failed: {e}")
 
         @self.app.post("/api/audio")
@@ -479,8 +524,24 @@ class APIServer:
         ) -> Dict[str, Any]:
             """Process audio input - simplified voice interface"""
             try:
-                # Read audio file
+                # Read audio file with size validation
                 audio_data = await file.read()
+
+                # Validate audio file
+                try:
+                    validation_result = validate_audio_file(
+                        audio_data,
+                        max_size_mb=10,
+                        allowed_formats=['wav', 'mp3', 'webm', 'ogg', 'flac']
+                    )
+                    self.logger.info(
+                        f"Audio validated: size={validation_result['size']/1024:.2f}KB, "
+                        f"format={validation_result['format']}, filename={file.filename}"
+                    )
+                except AudioValidationError as e:
+                    self.logger.error(f"Audio validation failed: {e}")
+                    raise HTTPException(status_code=400, detail=f"Invalid audio file: {str(e)}")
+
                 self.logger.info(f"Processing audio: size={len(audio_data)}, type={file.content_type}, filename={file.filename}")
 
                 # Step 1: Transcribe audio using STT service
@@ -530,8 +591,7 @@ class APIServer:
                 return response_data
 
             except Exception as e:
-                error_handler = ErrorHandler()
-                error_handler.logger.error(f"Audio processing error: {e}")
+                self.logger.error(f"Audio processing error: {e}")
                 raise HTTPException(status_code=500, detail=f"Audio processing failed: {e}")
 
         @self.app.post("/api/conversation/reset")
@@ -548,8 +608,7 @@ class APIServer:
                 }
 
             except Exception as e:
-                error_handler = ErrorHandler()
-                error_handler.logger.error(f"Conversation reset error: {e}")
+                self.logger.error(f"Conversation reset error: {e}")
                 raise HTTPException(status_code=500, detail=f"Conversation reset failed: {e}")
 
         @self.app.get("/")
@@ -616,8 +675,7 @@ class APIServer:
                 )
 
             except Exception as e:
-                error_handler = ErrorHandler()
-                error_handler.logger.error(f"Device list error: {e}")
+                self.logger.error(f"Device list error: {e}")
                 raise HTTPException(status_code=500, detail=f"Failed to list devices: {e}")
 
 
@@ -664,8 +722,7 @@ class APIServer:
                 }
 
             except Exception as e:
-                error_handler = ErrorHandler()
-                error_handler.logger.error(f"Start audio stream error: {e}")
+                self.logger.error(f"Start audio stream error: {e}")
                 raise HTTPException(status_code=500, detail=f"Failed to start audio stream: {e}")
 
 
@@ -700,8 +757,7 @@ class APIServer:
                         return {"status": "success", "message": "Chunk processed"}
 
             except Exception as e:
-                error_handler = ErrorHandler()
-                error_handler.logger.error(f"Audio chunk error: {e}")
+                self.logger.error(f"Audio chunk error: {e}")
                 raise HTTPException(status_code=500, detail=f"Failed to process audio chunk: {e}")
 
 
@@ -758,8 +814,7 @@ class APIServer:
                     }
 
             except Exception as e:
-                error_handler = ErrorHandler()
-                error_handler.logger.error(f"End audio stream error: {e}")
+                self.logger.error(f"End audio stream error: {e}")
                 raise HTTPException(status_code=500, detail=f"Failed to end audio stream: {e}")
 
 
@@ -775,10 +830,20 @@ class APIServer:
                 # Read audio file
                 audio_bytes = await file.read()
 
-                # Validate audio
-                validation = AudioCapture.validate_audio_format(audio_bytes)
-                if not validation.get("valid", False):
-                    raise HTTPException(status_code=400, detail=f"Invalid audio format: {validation.get('error')}")
+                # Validate audio with enhanced validation
+                try:
+                    validation_result = validate_audio_file(
+                        audio_bytes,
+                        max_size_mb=10,
+                        allowed_formats=['wav', 'mp3', 'webm', 'ogg', 'flac']
+                    )
+                    self.logger.info(
+                        f"Audio file validated: size={validation_result['size']/1024:.2f}KB, "
+                        f"format={validation_result['format']}, filename={file.filename}"
+                    )
+                except AudioValidationError as e:
+                    self.logger.error(f"Audio validation failed: {e}")
+                    raise HTTPException(status_code=400, detail=f"Invalid audio file: {str(e)}")
 
                 # Get STT service client
                 stt_client = await service_registry.get_service("stt")
@@ -828,8 +893,7 @@ class APIServer:
                 }
 
             except Exception as e:
-                error_handler = ErrorHandler()
-                error_handler.logger.error(f"Audio processing error: {e}")
+                self.logger.error(f"Audio processing error: {e}")
                 raise HTTPException(status_code=500, detail=f"Failed to process audio: {e}")
 
         @self.app.post("/api/audio/stream")
@@ -978,7 +1042,26 @@ class APIServer:
             while True:
                 # Receive message from client
                 message = await websocket.receive_text()
-                data = json.loads(message)
+
+                # Validate JSON parsing with proper error handling
+                try:
+                    data = json.loads(message)
+                    if not isinstance(data, dict):
+                        await self._send_error(websocket, "Invalid message format: expected JSON object")
+                        continue
+                except json.JSONDecodeError as e:
+                    self.logger.error(f"Invalid JSON from WebSocket: {e}")
+                    await self._send_error(websocket, f"Invalid JSON: {str(e)}")
+                    continue
+                except Exception as e:
+                    self.logger.error(f"Failed to parse WebSocket message: {e}")
+                    await self._send_error(websocket, f"Failed to parse message: {str(e)}")
+                    continue
+
+                # Validate message type
+                if not data.get('type'):
+                    await self._send_error(websocket, "Message missing required 'type' field")
+                    continue
 
                 # Handle different message types
                 if data.get('type') == 'start':
@@ -1060,7 +1143,7 @@ class APIServer:
         """Process audio chunk through STT service with real-time VAD"""
         try:
             # Send to STT service (use real-time endpoint with VAD)
-            stt_response = await self.core_service.service_orchestrator.transcribe_chunk(
+            stt_response = await self.core_service.streaming_orchestrator.transcribe_chunk(
                 audio_bytes,
                 session.get('language', 'auto')
             )

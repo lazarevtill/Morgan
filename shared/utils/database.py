@@ -129,7 +129,11 @@ class DatabaseClient:
             # Convert row to dict and parse JSON metadata
             row_dict = dict(row)
             if isinstance(row_dict.get('metadata'), str):
-                row_dict['metadata'] = json.loads(row_dict['metadata'])
+                try:
+                    row_dict['metadata'] = json.loads(row_dict['metadata'])
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.error(f"Failed to parse metadata JSON for conversation {conversation_id}: {e}")
+                    row_dict['metadata'] = {}
 
             return ConversationModel(**row_dict)
 
@@ -167,7 +171,11 @@ class DatabaseClient:
                 row_dict = dict(row)
                 # Parse JSON metadata string to dict
                 if isinstance(row_dict.get('metadata'), str):
-                    row_dict['metadata'] = json.loads(row_dict['metadata'])
+                    try:
+                        row_dict['metadata'] = json.loads(row_dict['metadata'])
+                    except (json.JSONDecodeError, ValueError) as e:
+                        logger.error(f"Failed to parse metadata JSON for conversation: {e}")
+                        row_dict['metadata'] = {}
                 conversations.append(ConversationModel(**row_dict))
             return conversations
 

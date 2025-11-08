@@ -33,6 +33,25 @@ real_time_processing: true     # Enable real-time processing optimizations
 # Logging
 log_level: "INFO"
 
+# CORS Configuration
+cors_origins:
+  - "http://localhost:3000"
+  - "http://localhost:8080"
+  - "http://127.0.0.1:3000"
+  - "http://127.0.0.1:8080"
+cors_allow_credentials: true
+cors_max_age: 600
+
+# Rate Limiting Configuration
+rate_limit_enabled: true
+rate_limit_requests_per_second: 10.0
+rate_limit_burst_size: 20  # Allow bursts up to 20 requests
+rate_limit_exempt_paths:
+  - "/health"
+  - "/docs"
+  - "/redoc"
+  - "/openapi.json"
+
 # Database configuration (set via environment variables)
 postgres_host: ""  # Set via POSTGRES_HOST environment variable
 postgres_port: 5432
