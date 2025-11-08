@@ -8,20 +8,20 @@ This module contains advanced vectorization capabilities including:
 - Intelligent caching with Git hash tracking
 """
 
-from .hierarchical_embeddings import (
-    HierarchicalEmbeddingService,
-    HierarchicalEmbedding,
-    get_hierarchical_embedding_service
-)
 from .contrastive_clustering import (
     ContrastiveClusteringEngine,
-    get_contrastive_clustering_engine
+    get_contrastive_clustering_engine,
+)
+from .hierarchical_embeddings import (
+    HierarchicalEmbedding,
+    HierarchicalEmbeddingService,
+    get_hierarchical_embedding_service,
 )
 
 __all__ = [
-    'HierarchicalEmbeddingService',
-    'HierarchicalEmbedding',
-    'get_hierarchical_embedding_service',
-    'ContrastiveClusteringEngine',
-    'get_contrastive_clustering_engine'
+    "HierarchicalEmbeddingService",
+    "HierarchicalEmbedding",
+    "get_hierarchical_embedding_service",
+    "ContrastiveClusteringEngine",
+    "get_contrastive_clustering_engine",
 ]

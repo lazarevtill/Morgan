@@ -4,20 +4,20 @@ Jina AI Embedding Services
 Simple embedding generation services following KISS principles.
 """
 
-from .service import JinaEmbeddingService
 from .multimodal_service import (
+    ImageContent,
     MultimodalContentProcessor,
     MultimodalDocument,
     MultimodalEmbedding,
     MultimodalSearchResult,
-    ImageContent
 )
+from .service import JinaEmbeddingService
 
 __all__ = [
-    'JinaEmbeddingService',
-    'MultimodalContentProcessor',
-    'MultimodalDocument',
-    'MultimodalEmbedding',
-    'MultimodalSearchResult',
-    'ImageContent'
+    "JinaEmbeddingService",
+    "MultimodalContentProcessor",
+    "MultimodalDocument",
+    "MultimodalEmbedding",
+    "MultimodalSearchResult",
+    "ImageContent",
 ]

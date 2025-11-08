@@ -12,7 +12,6 @@ Usage:
 """
 
 import sys
-import argparse
 from pathlib import Path
 
 # Add the parent directory to the path so we can import morgan

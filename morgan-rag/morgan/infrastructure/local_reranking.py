@@ -12,23 +12,24 @@ dedicated host (Host 6 with RTX 2060).
 """
 
 import time
-from typing import List, Tuple, Optional, Dict, Any
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 try:
     import requests
+
     REQUESTS_AVAILABLE = True
 except ImportError:
     REQUESTS_AVAILABLE = False
 
 try:
     from sentence_transformers import CrossEncoder
+
     CROSS_ENCODER_AVAILABLE = True
 except ImportError:
     CROSS_ENCODER_AVAILABLE = False
 
 from morgan.utils.logger import get_logger
-
 
 logger = get_logger(__name__)
 
@@ -36,6 +37,7 @@ logger = get_logger(__name__)
 @dataclass
 class RerankResult:
     """Result from reranking operation."""
+
     text: str
     score: float
     original_index: int
@@ -44,6 +46,7 @@ class RerankResult:
 @dataclass
 class RerankStats:
     """Statistics for reranking operations."""
+
     total_requests: int = 0
     total_pairs: int = 0
     total_time: float = 0.0
@@ -94,7 +97,7 @@ class LocalRerankingService:
         model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
         timeout: float = 30.0,
         batch_size: int = 100,
-        local_device: str = "cpu"
+        local_device: str = "cpu",
     ):
         """
         Initialize local reranking service.
@@ -123,8 +126,7 @@ class LocalRerankingService:
         self.stats = RerankStats()
 
         logger.info(
-            f"LocalRerankingService initialized: "
-            f"endpoint={endpoint}, model={model}"
+            f"LocalRerankingService initialized: " f"endpoint={endpoint}, model={model}"
         )
 
     def is_available(self) -> bool:
@@ -138,8 +140,7 @@ class LocalRerankingService:
         if self.endpoint and REQUESTS_AVAILABLE:
             try:
                 response = requests.get(
-                    f"{self.endpoint.rstrip('/rerank')}/health",
-                    timeout=5.0
+                    f"{self.endpoint.rstrip('/rerank')}/health", timeout=5.0
                 )
                 if response.status_code == 200:
                     logger.info("Remote reranking service available")
@@ -156,10 +157,7 @@ class LocalRerankingService:
         return False
 
     async def rerank(
-        self,
-        query: str,
-        documents: List[str],
-        top_k: Optional[int] = None
+        self, query: str, documents: List[str], top_k: Optional[int] = None
     ) -> List[RerankResult]:
         """
         Rerank documents by relevance to query.
@@ -208,26 +206,16 @@ class LocalRerankingService:
             raise
 
     async def _rerank_remote(
-        self,
-        query: str,
-        documents: List[str],
-        top_k: Optional[int] = None
+        self, query: str, documents: List[str], top_k: Optional[int] = None
     ) -> List[RerankResult]:
         """Rerank using remote endpoint."""
-        payload = {
-            "query": query,
-            "documents": documents
-        }
+        payload = {"query": query, "documents": documents}
 
         if top_k is not None:
             payload["top_k"] = top_k
 
         try:
-            response = requests.post(
-                self.endpoint,
-                json=payload,
-                timeout=self.timeout
-            )
+            response = requests.post(self.endpoint, json=payload, timeout=self.timeout)
             response.raise_for_status()
 
             data = response.json()
@@ -235,11 +223,13 @@ class LocalRerankingService:
             # Parse results
             results = []
             for item in data.get("results", []):
-                results.append(RerankResult(
-                    text=item["text"],
-                    score=item["score"],
-                    original_index=item["index"]
-                ))
+                results.append(
+                    RerankResult(
+                        text=item["text"],
+                        score=item["score"],
+                        original_index=item["index"],
+                    )
+                )
 
             return results
 
@@ -259,10 +249,7 @@ class LocalRerankingService:
 
         try:
             logger.info(f"Loading local reranking model ({self.model})...")
-            self._local_model = CrossEncoder(
-                self.model,
-                device=self.local_device
-            )
+            self._local_model = CrossEncoder(self.model, device=self.local_device)
             logger.info("Local reranking model loaded successfully")
             self._local_available = True
             return True
@@ -272,10 +259,7 @@ class LocalRerankingService:
             return False
 
     def _rerank_local(
-        self,
-        query: str,
-        documents: List[str],
-        top_k: Optional[int] = None
+        self, query: str, documents: List[str], top_k: Optional[int] = None
     ) -> List[RerankResult]:
         """Rerank using local CrossEncoder."""
         if self._local_model is None:
@@ -286,19 +270,13 @@ class LocalRerankingService:
 
         # Score all pairs
         scores = self._local_model.predict(
-            pairs,
-            batch_size=self.batch_size,
-            show_progress_bar=False
+            pairs, batch_size=self.batch_size, show_progress_bar=False
         )
 
         # Create results with original indices
         results = []
         for i, (doc, score) in enumerate(zip(documents, scores)):
-            results.append(RerankResult(
-                text=doc,
-                score=float(score),
-                original_index=i
-            ))
+            results.append(RerankResult(text=doc, score=float(score), original_index=i))
 
         # Sort by score (descending)
         results.sort(key=lambda x: x.score, reverse=True)
@@ -324,7 +302,7 @@ class LocalRerankingService:
             "throughput": f"{self.stats.throughput:.1f} pairs/sec",
             "errors": self.stats.errors,
             "endpoint": self.endpoint,
-            "model": self.model
+            "model": self.model,
         }
 
 
@@ -333,8 +311,7 @@ _service: Optional[LocalRerankingService] = None
 
 
 def get_local_reranking_service(
-    endpoint: Optional[str] = None,
-    **kwargs
+    endpoint: Optional[str] = None, **kwargs
 ) -> LocalRerankingService:
     """
     Get global local reranking service instance (singleton).
@@ -349,9 +326,6 @@ def get_local_reranking_service(
     global _service
 
     if _service is None:
-        _service = LocalRerankingService(
-            endpoint=endpoint,
-            **kwargs
-        )
+        _service = LocalRerankingService(endpoint=endpoint, **kwargs)
 
     return _service

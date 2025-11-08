@@ -18,37 +18,38 @@ Architecture:
 """
 
 import asyncio
-import json
 import time
-from pathlib import Path
-from typing import List, Dict, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 try:
     import asyncssh
+
     ASYNCSSH_AVAILABLE = True
 except ImportError:
     ASYNCSSH_AVAILABLE = False
 
 from morgan.utils.logger import get_logger
 
-
 logger = get_logger(__name__)
 
 
 class HostRole(str, Enum):
     """Host roles in distributed architecture."""
-    MANAGER = "manager"              # Host 1 - Central orchestrator
-    BACKGROUND = "background"        # Host 2 - Background services
-    MAIN_LLM_1 = "main_llm_1"       # Host 3 - RTX 3090 #1
-    MAIN_LLM_2 = "main_llm_2"       # Host 4 - RTX 3090 #2
-    EMBEDDINGS = "embeddings"        # Host 5 - RTX 4070
-    RERANKING = "reranking"          # Host 6 - RTX 2060
+
+    MANAGER = "manager"  # Host 1 - Central orchestrator
+    BACKGROUND = "background"  # Host 2 - Background services
+    MAIN_LLM_1 = "main_llm_1"  # Host 3 - RTX 3090 #1
+    MAIN_LLM_2 = "main_llm_2"  # Host 4 - RTX 3090 #2
+    EMBEDDINGS = "embeddings"  # Host 5 - RTX 4070
+    RERANKING = "reranking"  # Host 6 - RTX 2060
 
 
 class ServiceType(str, Enum):
     """Service types per host."""
+
     MORGAN_CORE = "morgan_core"
     OLLAMA = "ollama"
     QDRANT = "qdrant"
@@ -61,15 +62,16 @@ class ServiceType(str, Enum):
 @dataclass
 class HostConfig:
     """Configuration for a single host."""
-    hostname: str                    # Hostname or IP
-    role: HostRole                   # Host role
-    ssh_user: str = "morgan"         # SSH username
-    ssh_port: int = 22               # SSH port
-    ssh_key: Optional[str] = None    # Path to SSH private key
+
+    hostname: str  # Hostname or IP
+    role: HostRole  # Host role
+    ssh_user: str = "morgan"  # SSH username
+    ssh_port: int = 22  # SSH port
+    ssh_key: Optional[str] = None  # Path to SSH private key
     project_path: str = "/opt/Morgan"  # Project path on host
     python_path: str = "/opt/Morgan/morgan-venv/bin/python"  # Python path
     services: List[ServiceType] = field(default_factory=list)  # Services on host
-    gpu_available: bool = False      # GPU available
+    gpu_available: bool = False  # GPU available
     gpu_model: Optional[str] = None  # GPU model (e.g., "RTX 3090")
 
     # Health check settings
@@ -80,6 +82,7 @@ class HostConfig:
 @dataclass
 class DeploymentResult:
     """Result from deployment operation."""
+
     host: str
     success: bool
     message: str
@@ -129,9 +132,7 @@ class DistributedHostManager:
             ssh_key_path: Path to SSH private key (default: ~/.ssh/id_rsa)
         """
         if not ASYNCSSH_AVAILABLE:
-            raise ImportError(
-                "asyncssh required. Install with: pip install asyncssh"
-            )
+            raise ImportError("asyncssh required. Install with: pip install asyncssh")
 
         self.ssh_key_path = ssh_key_path or str(Path.home() / ".ssh" / "id_rsa")
         self.hosts: Dict[str, HostConfig] = {}
@@ -145,7 +146,7 @@ class DistributedHostManager:
         services: List[ServiceType],
         ssh_user: str = "morgan",
         gpu_model: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Add host to managed cluster.
@@ -165,11 +166,13 @@ class DistributedHostManager:
             services=services,
             gpu_available=gpu_model is not None,
             gpu_model=gpu_model,
-            **kwargs
+            **kwargs,
         )
 
         self.hosts[hostname] = config
-        logger.info(f"Added host: {hostname} ({role.value}, GPU: {gpu_model or 'None'})")
+        logger.info(
+            f"Added host: {hostname} ({role.value}, GPU: {gpu_model or 'None'})"
+        )
 
     def load_default_config(self):
         """
@@ -187,21 +190,14 @@ class DistributedHostManager:
         self.add_host(
             hostname="192.168.1.10",
             role=HostRole.MANAGER,
-            services=[
-                ServiceType.MORGAN_CORE,
-                ServiceType.QDRANT,
-                ServiceType.REDIS
-            ]
+            services=[ServiceType.MORGAN_CORE, ServiceType.QDRANT, ServiceType.REDIS],
         )
 
         # Host 2 - Background (CPU)
         self.add_host(
             hostname="192.168.1.11",
             role=HostRole.BACKGROUND,
-            services=[
-                ServiceType.PROMETHEUS,
-                ServiceType.GRAFANA
-            ]
+            services=[ServiceType.PROMETHEUS, ServiceType.GRAFANA],
         )
 
         # Host 3 - Main LLM #1 (RTX 3090)
@@ -209,7 +205,7 @@ class DistributedHostManager:
             hostname="192.168.1.20",
             role=HostRole.MAIN_LLM_1,
             services=[ServiceType.OLLAMA],
-            gpu_model="RTX 3090"
+            gpu_model="RTX 3090",
         )
 
         # Host 4 - Main LLM #2 (RTX 3090)
@@ -217,7 +213,7 @@ class DistributedHostManager:
             hostname="192.168.1.21",
             role=HostRole.MAIN_LLM_2,
             services=[ServiceType.OLLAMA],
-            gpu_model="RTX 3090"
+            gpu_model="RTX 3090",
         )
 
         # Host 5 - Embeddings (RTX 4070)
@@ -225,7 +221,7 @@ class DistributedHostManager:
             hostname="192.168.1.22",
             role=HostRole.EMBEDDINGS,
             services=[ServiceType.OLLAMA],
-            gpu_model="RTX 4070"
+            gpu_model="RTX 4070",
         )
 
         # Host 6 - Reranking (RTX 2060)
@@ -233,16 +229,13 @@ class DistributedHostManager:
             hostname="192.168.1.23",
             role=HostRole.RERANKING,
             services=[ServiceType.RERANKING_API],
-            gpu_model="RTX 2060"
+            gpu_model="RTX 2060",
         )
 
         logger.info(f"Loaded default config with {len(self.hosts)} hosts")
 
     async def _run_ssh_command(
-        self,
-        hostname: str,
-        command: str,
-        timeout: float = 300.0
+        self, hostname: str, command: str, timeout: float = 300.0
     ) -> tuple[bool, str, str]:
         """
         Run command on remote host via SSH.
@@ -265,12 +258,9 @@ class DistributedHostManager:
                 port=config.ssh_port,
                 username=config.ssh_user,
                 client_keys=[self.ssh_key_path],
-                known_hosts=None  # Skip host key verification (adjust for production)
+                known_hosts=None,  # Skip host key verification (adjust for production)
             ) as conn:
-                result = await asyncio.wait_for(
-                    conn.run(command),
-                    timeout=timeout
-                )
+                result = await asyncio.wait_for(conn.run(command), timeout=timeout)
 
                 stdout = result.stdout if result.stdout else ""
                 stderr = result.stderr if result.stderr else ""
@@ -284,10 +274,7 @@ class DistributedHostManager:
             return False, "", f"SSH error: {e}"
 
     async def deploy_to_host(
-        self,
-        hostname: str,
-        git_branch: str = "v2-0.0.1",
-        force: bool = False
+        self, hostname: str, git_branch: str = "v2-0.0.1", force: bool = False
     ) -> DeploymentResult:
         """
         Deploy/update Morgan on a single host.
@@ -308,7 +295,7 @@ class DistributedHostManager:
                 host=hostname,
                 success=False,
                 message="Host not configured",
-                duration=0.0
+                duration=0.0,
             )
 
         logger.info(f"Deploying to {hostname} ({config.role.value})...")
@@ -327,7 +314,9 @@ class DistributedHostManager:
             commands.append("git pull origin {git_branch}")
 
         # 3. Update Python dependencies
-        commands.append(f"{config.python_path} -m pip install -r morgan-rag/requirements.txt")
+        commands.append(
+            f"{config.python_path} -m pip install -r morgan-rag/requirements.txt"
+        )
 
         # 4. Restart services based on host role
         for service in config.services:
@@ -347,9 +336,7 @@ class DistributedHostManager:
 
         # Execute
         success, stdout, stderr = await self._run_ssh_command(
-            hostname,
-            full_command,
-            timeout=600.0  # 10 minutes for deployment
+            hostname, full_command, timeout=600.0  # 10 minutes for deployment
         )
 
         duration = time.time() - start_time
@@ -361,23 +348,20 @@ class DistributedHostManager:
                 success=True,
                 message=f"Deployed successfully ({config.role.value})",
                 duration=duration,
-                output=stdout
+                output=stdout,
             )
         else:
             logger.error(f"✗ Deployment failed on {hostname}: {stderr}")
             return DeploymentResult(
                 host=hostname,
                 success=False,
-                message=f"Deployment failed",
+                message="Deployment failed",
                 duration=duration,
-                error=stderr
+                error=stderr,
             )
 
     async def deploy_all(
-        self,
-        git_branch: str = "v2-0.0.1",
-        force: bool = False,
-        parallel: bool = True
+        self, git_branch: str = "v2-0.0.1", force: bool = False, parallel: bool = True
     ) -> List[DeploymentResult]:
         """
         Deploy to all hosts.
@@ -408,14 +392,14 @@ class DistributedHostManager:
 
         # Summary
         successful = sum(1 for r in results if r.success)
-        logger.info(f"Deployment complete: {successful}/{len(results)} hosts successful")
+        logger.info(
+            f"Deployment complete: {successful}/{len(results)} hosts successful"
+        )
 
         return results
 
     async def update_all(
-        self,
-        git_branch: str = "v2-0.0.1",
-        rolling: bool = True
+        self, git_branch: str = "v2-0.0.1", rolling: bool = True
     ) -> List[DeploymentResult]:
         """
         Update all hosts with zero-downtime rolling update.
@@ -436,12 +420,12 @@ class DistributedHostManager:
             # 3. Update manager last
 
             update_order = [
-                HostRole.BACKGROUND,    # Host 2 - no user-facing impact
-                HostRole.RERANKING,     # Host 6 - fallback available
-                HostRole.EMBEDDINGS,    # Host 5 - fallback available
-                HostRole.MAIN_LLM_2,    # Host 4 - LLM #1 still serving
-                HostRole.MAIN_LLM_1,    # Host 3 - LLM #2 now serving
-                HostRole.MANAGER,       # Host 1 - last (critical)
+                HostRole.BACKGROUND,  # Host 2 - no user-facing impact
+                HostRole.RERANKING,  # Host 6 - fallback available
+                HostRole.EMBEDDINGS,  # Host 5 - fallback available
+                HostRole.MAIN_LLM_2,  # Host 4 - LLM #1 still serving
+                HostRole.MAIN_LLM_1,  # Host 3 - LLM #2 now serving
+                HostRole.MANAGER,  # Host 1 - last (critical)
             ]
 
             results = []
@@ -455,7 +439,9 @@ class DistributedHostManager:
 
                 if hostname:
                     logger.info(f"Updating {role.value} ({hostname})...")
-                    result = await self.deploy_to_host(hostname, git_branch, force=False)
+                    result = await self.deploy_to_host(
+                        hostname, git_branch, force=False
+                    )
                     results.append(result)
 
                     # Wait a bit for service to stabilize
@@ -468,9 +454,7 @@ class DistributedHostManager:
             return await self.deploy_all(git_branch, force=False, parallel=True)
 
     async def restart_service(
-        self,
-        service: ServiceType,
-        hosts: Optional[List[str]] = None
+        self, service: ServiceType, hosts: Optional[List[str]] = None
     ) -> Dict[str, bool]:
         """
         Restart a service on specified hosts.
@@ -485,8 +469,7 @@ class DistributedHostManager:
         # Determine which hosts to restart
         if hosts is None:
             hosts = [
-                h for h, config in self.hosts.items()
-                if service in config.services
+                h for h, config in self.hosts.items() if service in config.services
             ]
 
         logger.info(f"Restarting {service.value} on {len(hosts)} hosts...")
@@ -504,12 +487,11 @@ class DistributedHostManager:
             command = "sudo systemctl restart morgan-reranking"
         else:
             logger.error(f"Unknown service: {service}")
-            return {h: False for h in hosts}
+            return dict.fromkeys(hosts, False)
 
         # Restart on all hosts in parallel
         tasks = [
-            self._run_ssh_command(hostname, command, timeout=60.0)
-            for hostname in hosts
+            self._run_ssh_command(hostname, command, timeout=60.0) for hostname in hosts
         ]
         results = await asyncio.gather(*tasks)
 
@@ -520,7 +502,9 @@ class DistributedHostManager:
             if success:
                 logger.info(f"✓ Restarted {service.value} on {hostname}")
             else:
-                logger.error(f"✗ Failed to restart {service.value} on {hostname}: {stderr}")
+                logger.error(
+                    f"✗ Failed to restart {service.value} on {hostname}: {stderr}"
+                )
 
         return status
 
@@ -540,9 +524,7 @@ class DistributedHostManager:
 
         # Check SSH connectivity
         success, stdout, stderr = await self._run_ssh_command(
-            hostname,
-            "echo 'alive'",
-            timeout=5.0
+            hostname, "echo 'alive'", timeout=5.0
         )
 
         if not success:
@@ -550,7 +532,7 @@ class DistributedHostManager:
                 "hostname": hostname,
                 "role": config.role.value,
                 "healthy": False,
-                "error": "SSH connection failed"
+                "error": "SSH connection failed",
             }
 
         # Check services
@@ -558,17 +540,13 @@ class DistributedHostManager:
         for service in config.services:
             if service == ServiceType.OLLAMA:
                 success, stdout, stderr = await self._run_ssh_command(
-                    hostname,
-                    "systemctl is-active ollama",
-                    timeout=5.0
+                    hostname, "systemctl is-active ollama", timeout=5.0
                 )
                 service_status["ollama"] = stdout.strip() == "active"
 
             elif service == ServiceType.MORGAN_CORE:
                 success, stdout, stderr = await self._run_ssh_command(
-                    hostname,
-                    "systemctl is-active morgan",
-                    timeout=5.0
+                    hostname, "systemctl is-active morgan", timeout=5.0
                 )
                 service_status["morgan"] = stdout.strip() == "active"
 
@@ -578,7 +556,7 @@ class DistributedHostManager:
             success, stdout, stderr = await self._run_ssh_command(
                 hostname,
                 "nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits",
-                timeout=5.0
+                timeout=5.0,
             )
             if success:
                 try:
@@ -586,7 +564,7 @@ class DistributedHostManager:
                     gpu_status = {
                         "utilization": f"{util.strip()}%",
                         "memory_used": f"{mem.strip()}MB",
-                        "model": config.gpu_model
+                        "model": config.gpu_model,
                     }
                 except Exception:
                     pass
@@ -596,7 +574,7 @@ class DistributedHostManager:
             "role": config.role.value,
             "healthy": True,
             "services": service_status,
-            "gpu": gpu_status
+            "gpu": gpu_status,
         }
 
     async def health_check_all(self) -> Dict[str, Any]:
@@ -609,10 +587,7 @@ class DistributedHostManager:
         logger.info(f"Health checking {len(self.hosts)} hosts...")
 
         # Check all hosts in parallel
-        tasks = [
-            self.health_check_host(hostname)
-            for hostname in self.hosts.keys()
-        ]
+        tasks = [self.health_check_host(hostname) for hostname in self.hosts.keys()]
         results = await asyncio.gather(*tasks)
 
         # Build summary
@@ -622,7 +597,7 @@ class DistributedHostManager:
             "total_hosts": len(self.hosts),
             "healthy_hosts": healthy_count,
             "unhealthy_hosts": len(self.hosts) - healthy_count,
-            "hosts": results
+            "hosts": results,
         }
 
     def get_config(self) -> Dict[str, Any]:
@@ -640,16 +615,14 @@ class DistributedHostManager:
                     "hostname": config.hostname,
                     "role": config.role.value,
                     "services": [s.value for s in config.services],
-                    "gpu": config.gpu_model
+                    "gpu": config.gpu_model,
                 }
                 for config in self.hosts.values()
-            ]
+            ],
         }
 
     async def sync_config(
-        self,
-        config_file: str = ".env",
-        source_host: Optional[str] = None
+        self, config_file: str = ".env", source_host: Optional[str] = None
     ) -> Dict[str, bool]:
         """
         Synchronize configuration file across all hosts.
@@ -669,23 +642,21 @@ class DistributedHostManager:
             config = self.hosts.get(source_host)
             if not config:
                 logger.error(f"Source host {source_host} not found")
-                return {h: False for h in self.hosts.keys()}
+                return dict.fromkeys(self.hosts.keys(), False)
 
             success, content, stderr = await self._run_ssh_command(
-                source_host,
-                f"cat {config.project_path}/{config_file}",
-                timeout=10.0
+                source_host, f"cat {config.project_path}/{config_file}", timeout=10.0
             )
 
             if not success:
                 logger.error(f"Failed to read config from {source_host}")
-                return {h: False for h in self.hosts.keys()}
+                return dict.fromkeys(self.hosts.keys(), False)
         else:
             # Use local file
             local_path = Path(config_file)
             if not local_path.exists():
                 logger.error(f"Local config file not found: {config_file}")
-                return {h: False for h in self.hosts.keys()}
+                return dict.fromkeys(self.hosts.keys(), False)
 
             content = local_path.read_text()
 
@@ -698,9 +669,7 @@ class DistributedHostManager:
             command = f"echo '{escaped_content}' > {config.project_path}/{config_file}"
 
             success, stdout, stderr = await self._run_ssh_command(
-                hostname,
-                command,
-                timeout=10.0
+                hostname, command, timeout=10.0
             )
 
             results[hostname] = success
@@ -718,8 +687,7 @@ _manager: Optional[DistributedHostManager] = None
 
 
 def get_distributed_manager(
-    ssh_key_path: Optional[str] = None,
-    auto_load_config: bool = True
+    ssh_key_path: Optional[str] = None, auto_load_config: bool = True
 ) -> DistributedHostManager:
     """
     Get global distributed host manager instance (singleton).

@@ -11,26 +11,27 @@ Designed for 6-host distributed architecture where embeddings run on
 dedicated host (Host 5 with RTX 4070).
 """
 
-import time
 import hashlib
-from typing import List, Optional, Dict, Any
+import time
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 try:
-    from openai import AsyncOpenAI
     import httpx
+    from openai import AsyncOpenAI
+
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
 
 try:
     from sentence_transformers import SentenceTransformer
+
     SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
     SENTENCE_TRANSFORMERS_AVAILABLE = False
 
 from morgan.utils.logger import get_logger
-
 
 logger = get_logger(__name__)
 
@@ -38,6 +39,7 @@ logger = get_logger(__name__)
 @dataclass
 class EmbeddingStats:
     """Statistics for embedding operations."""
+
     total_requests: int = 0
     total_embeddings: int = 0
     total_time: float = 0.0
@@ -104,7 +106,7 @@ class LocalEmbeddingService:
         local_model: str = "all-MiniLM-L6-v2",
         local_device: str = "cpu",
         use_cache: bool = True,
-        max_cache_size: int = 10000
+        max_cache_size: int = 10000,
     ):
         """
         Initialize local embedding service.
@@ -163,13 +165,12 @@ class LocalEmbeddingService:
                 client = AsyncOpenAI(
                     base_url=self.endpoint,
                     api_key=self.api_key,
-                    timeout=httpx.Timeout(5.0)
+                    timeout=httpx.Timeout(5.0),
                 )
 
                 # Test with simple embedding
                 response = await client.embeddings.create(
-                    model=self.model,
-                    input="test"
+                    model=self.model, input="test"
                 )
 
                 if response.data and len(response.data) > 0:
@@ -195,11 +196,7 @@ class LocalEmbeddingService:
         """
         return self.dimensions
 
-    async def embed_text(
-        self,
-        text: str,
-        use_cache: bool = True
-    ) -> List[float]:
+    async def embed_text(self, text: str, use_cache: bool = True) -> List[float]:
         """
         Embed single text.
 
@@ -244,9 +241,7 @@ class LocalEmbeddingService:
             if use_cache and self.use_cache:
                 self._cache_embedding(cache_key, embedding)
 
-            logger.debug(
-                f"Embedded text (length={len(text)}) in {elapsed:.3f}s"
-            )
+            logger.debug(f"Embedded text (length={len(text)}) in {elapsed:.3f}s")
 
             return embedding
 
@@ -256,10 +251,7 @@ class LocalEmbeddingService:
             raise
 
     async def embed_batch(
-        self,
-        texts: List[str],
-        use_cache: bool = True,
-        show_progress: bool = False
+        self, texts: List[str], use_cache: bool = True, show_progress: bool = False
     ) -> List[List[float]]:
         """
         Embed batch of texts.
@@ -298,9 +290,7 @@ class LocalEmbeddingService:
                 logger.debug(f"All {len(texts)} texts found in cache")
                 return embeddings
 
-            logger.debug(
-                f"Cache hit: {len(texts) - len(uncached_texts)}/{len(texts)}"
-            )
+            logger.debug(f"Cache hit: {len(texts) - len(uncached_texts)}/{len(texts)}")
         else:
             embeddings = [None] * len(texts)
             uncached_texts = texts
@@ -349,13 +339,10 @@ class LocalEmbeddingService:
         client = AsyncOpenAI(
             base_url=self.endpoint,
             api_key=self.api_key,
-            timeout=httpx.Timeout(self.timeout)
+            timeout=httpx.Timeout(self.timeout),
         )
 
-        response = await client.embeddings.create(
-            model=self.model,
-            input=text
-        )
+        response = await client.embeddings.create(model=self.model, input=text)
 
         if not response.data or len(response.data) == 0:
             raise ValueError("No embedding in response")
@@ -367,19 +354,16 @@ class LocalEmbeddingService:
         client = AsyncOpenAI(
             base_url=self.endpoint,
             api_key=self.api_key,
-            timeout=httpx.Timeout(self.timeout)
+            timeout=httpx.Timeout(self.timeout),
         )
 
         # Process in batches
         all_embeddings = []
 
         for i in range(0, len(texts), self.batch_size):
-            batch = texts[i:i+self.batch_size]
+            batch = texts[i : i + self.batch_size]
 
-            response = await client.embeddings.create(
-                model=self.model,
-                input=batch
-            )
+            response = await client.embeddings.create(model=self.model, input=batch)
 
             if not response.data or len(response.data) != len(batch):
                 raise ValueError(
@@ -404,8 +388,7 @@ class LocalEmbeddingService:
         try:
             logger.info(f"Loading local embedding model ({self.local_model_name})...")
             self._local_model = SentenceTransformer(
-                self.local_model_name,
-                device=self.local_device
+                self.local_model_name, device=self.local_device
             )
             logger.info("Local embedding model loaded successfully")
             self._local_available = True
@@ -421,9 +404,7 @@ class LocalEmbeddingService:
             raise RuntimeError("Local model not initialized")
 
         embedding = self._local_model.encode(
-            text,
-            convert_to_numpy=True,
-            show_progress_bar=False
+            text, convert_to_numpy=True, show_progress_bar=False
         )
 
         return embedding.tolist()
@@ -437,7 +418,7 @@ class LocalEmbeddingService:
             texts,
             convert_to_numpy=True,
             show_progress_bar=False,
-            batch_size=32  # Internal batch size
+            batch_size=32,  # Internal batch size
         )
 
         return embeddings.tolist()
@@ -477,7 +458,7 @@ class LocalEmbeddingService:
             "errors": self.stats.errors,
             "endpoint": self.endpoint,
             "model": self.model,
-            "dimensions": self.dimensions
+            "dimensions": self.dimensions,
         }
 
     def clear_cache(self):
@@ -491,9 +472,7 @@ _service: Optional[LocalEmbeddingService] = None
 
 
 def get_local_embedding_service(
-    endpoint: Optional[str] = None,
-    model: Optional[str] = None,
-    **kwargs
+    endpoint: Optional[str] = None, model: Optional[str] = None, **kwargs
 ) -> LocalEmbeddingService:
     """
     Get global local embedding service instance (singleton).
@@ -515,10 +494,6 @@ def get_local_embedding_service(
         if model is None:
             model = "nomic-embed-text"
 
-        _service = LocalEmbeddingService(
-            endpoint=endpoint,
-            model=model,
-            **kwargs
-        )
+        _service = LocalEmbeddingService(endpoint=endpoint, model=model, **kwargs)
 
     return _service

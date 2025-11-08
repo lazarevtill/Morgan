@@ -6,17 +6,17 @@ background processing, and quality metrics tracking.
 """
 
 from .service import (
+    BackgroundTask,
     JinaRerankingService,
-    SearchResult,
-    RerankingMetrics,
     PrecomputedResult,
-    BackgroundTask
+    RerankingMetrics,
+    SearchResult,
 )
 
 __all__ = [
-    'JinaRerankingService',
-    'SearchResult',
-    'RerankingMetrics',
-    'PrecomputedResult',
-    'BackgroundTask'
+    "JinaRerankingService",
+    "SearchResult",
+    "RerankingMetrics",
+    "PrecomputedResult",
+    "BackgroundTask",
 ]

@@ -10,6 +10,6 @@ Components:
 Requirements addressed: 23.1, 23.4
 """
 
-from .settings import get_settings, Settings, validate_settings
+from .settings import Settings, get_settings, validate_settings
 
-__all__ = ['get_settings', 'Settings', 'validate_settings']
+__all__ = ["get_settings", "Settings", "validate_settings"]

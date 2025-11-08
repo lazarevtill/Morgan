@@ -7,13 +7,13 @@ emotional models. Follows KISS principles with clear separation of concerns.
 Requirements addressed: 23.1, 23.2, 23.3
 """
 
-from typing import Dict, Any, Optional, List
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
-from .local import LocalModelManager
-from .lazarev import LazarevModelManager
 from .cache import ModelCache
+from .lazarev import LazarevModelManager
+from .local import LocalModelManager
 from .selector import ModelSelector
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ModelConfig:
     """Simple model configuration."""
+
     model_type: str  # 'embedding', 'llm', 'emotional'
     model_name: str
     provider: str  # 'local', 'lazarev'
@@ -37,10 +38,10 @@ class ModelManager:
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.local_manager = LocalModelManager(config.get('local', {}))
-        self.lazarev_manager = LazarevModelManager(config.get('lazarev', {}))
-        self.cache = ModelCache(config.get('cache', {}))
-        self.selector = ModelSelector(config.get('selector', {}))
+        self.local_manager = LocalModelManager(config.get("local", {}))
+        self.lazarev_manager = LazarevModelManager(config.get("lazarev", {}))
+        self.cache = ModelCache(config.get("cache", {}))
+        self.selector = ModelSelector(config.get("selector", {}))
 
         self._loaded_models: Dict[str, Any] = {}
 
@@ -69,8 +70,7 @@ class ModelManager:
             if provider == "local":
                 model = self.local_manager.load_model(model_name, model_type)
             elif provider == "lazarev":
-                model = self.lazarev_manager.load_model(model_name,
-                                                        model_type)
+                model = self.lazarev_manager.load_model(model_name, model_type)
             else:
                 raise ValueError(f"Unknown provider: {provider}")
 
@@ -78,8 +78,7 @@ class ModelManager:
             self.cache.store_model(model_name, model)
             self._loaded_models[model_name] = model
 
-            logger.info("Successfully loaded model: %s from %s",
-                        model_name, provider)
+            logger.info("Successfully loaded model: %s from %s", model_name, provider)
             return model
 
         except Exception as e:
@@ -94,7 +93,7 @@ class ModelManager:
         """List all available models by provider."""
         return {
             "local": self.local_manager.list_models(),
-            "lazarev": self.lazarev_manager.list_available_models()
+            "lazarev": self.lazarev_manager.list_available_models(),
         }
 
     def unload_model(self, model_name: str) -> bool:
@@ -121,30 +120,30 @@ class ModelManager:
 
         return {"error": f"Unknown provider: {provider}"}
 
-    def generate_response(self, model_name: str, prompt: str,
-                         context: str = "") -> str:
+    def generate_response(self, model_name: str, prompt: str, context: str = "") -> str:
         """Generate text response using loaded model."""
         try:
             model = self.get_model(model_name)
             if not model:
                 model = self.load_model(model_name, "llm")
 
-            provider = model.get('provider')
+            provider = model.get("provider")
 
-            if provider == 'ollama':
+            if provider == "ollama":
                 return self.local_manager.generate_ollama_response(
-                    model, prompt, context)
-            elif provider == 'lazarev':
+                    model, prompt, context
+                )
+            elif provider == "lazarev":
                 return self.lazarev_manager.generate_response(
-                    model['model_name'], prompt, context)
+                    model["model_name"], prompt, context
+                )
             else:
                 raise ValueError(
-                    f"Response generation not supported for provider: "
-                    f"{provider}")
+                    f"Response generation not supported for provider: " f"{provider}"
+                )
 
         except Exception as e:
-            logger.error("Failed to generate response with %s: %s",
-                         model_name, e)
+            logger.error("Failed to generate response with %s: %s", model_name, e)
             raise
 
     def generate_embedding(self, model_name: str, text: str) -> List[float]:
@@ -154,25 +153,24 @@ class ModelManager:
             if not model:
                 model = self.load_model(model_name, "embedding")
 
-            provider = model.get('provider')
+            provider = model.get("provider")
 
-            if provider == 'ollama':
-                return self.local_manager.generate_ollama_embedding(
-                    model, text)
-            elif provider == 'sentence_transformers':
+            if provider == "ollama":
+                return self.local_manager.generate_ollama_embedding(model, text)
+            elif provider == "sentence_transformers":
                 # Use sentence transformers model directly
-                return model['model'].encode([text])[0].tolist()
-            elif provider == 'lazarev':
+                return model["model"].encode([text])[0].tolist()
+            elif provider == "lazarev":
                 return self.lazarev_manager.generate_embedding(
-                        model['model_name'], text)
+                    model["model_name"], text
+                )
             else:
                 raise ValueError(
-                    f"Embedding generation not supported for provider: "
-                    f"{provider}")
+                    f"Embedding generation not supported for provider: " f"{provider}"
+                )
 
         except Exception as e:
-            logger.error("Failed to generate embedding with %s: %s",
-                         model_name, e)
+            logger.error("Failed to generate embedding with %s: %s", model_name, e)
             raise
 
     def is_model_available(self, model_name: str) -> bool:

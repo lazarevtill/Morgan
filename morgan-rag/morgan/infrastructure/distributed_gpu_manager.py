@@ -12,41 +12,42 @@ Provides centralized GPU monitoring and resource management.
 
 import asyncio
 import time
-from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Dict, Optional
 
 from morgan.utils.logger import get_logger
-
 
 logger = get_logger(__name__)
 
 
 class GPURole(str, Enum):
     """GPU role assignment in distributed architecture."""
-    MAIN_LLM_1 = "main_llm_1"       # Host 3 - RTX 3090 #1
-    MAIN_LLM_2 = "main_llm_2"       # Host 4 - RTX 3090 #2
-    EMBEDDINGS = "embeddings"        # Host 5 - RTX 4070 (embeddings)
-    FAST_LLM = "fast_llm"           # Host 5 - RTX 4070 (fast LLM)
-    RERANKING = "reranking"          # Host 6 - RTX 2060
+
+    MAIN_LLM_1 = "main_llm_1"  # Host 3 - RTX 3090 #1
+    MAIN_LLM_2 = "main_llm_2"  # Host 4 - RTX 3090 #2
+    EMBEDDINGS = "embeddings"  # Host 5 - RTX 4070 (embeddings)
+    FAST_LLM = "fast_llm"  # Host 5 - RTX 4070 (fast LLM)
+    RERANKING = "reranking"  # Host 6 - RTX 2060
 
 
 @dataclass
 class GPUStatus:
     """GPU status information."""
-    hostname: str                    # Host hostname/IP
-    gpu_id: int = 0                  # GPU ID on host (usually 0 for 1 GPU per host)
-    gpu_model: str = "Unknown"       # GPU model (RTX 3090, etc.)
-    vram_total_mb: int = 0           # Total VRAM in MB
-    vram_used_mb: int = 0            # Used VRAM in MB
-    vram_free_mb: int = 0            # Free VRAM in MB
-    utilization_percent: int = 0     # GPU utilization %
-    temperature_c: int = 0           # Temperature in Celsius
-    power_draw_w: int = 0            # Power draw in Watts
-    role: Optional[GPURole] = None   # Assigned role
+
+    hostname: str  # Host hostname/IP
+    gpu_id: int = 0  # GPU ID on host (usually 0 for 1 GPU per host)
+    gpu_model: str = "Unknown"  # GPU model (RTX 3090, etc.)
+    vram_total_mb: int = 0  # Total VRAM in MB
+    vram_used_mb: int = 0  # Used VRAM in MB
+    vram_free_mb: int = 0  # Free VRAM in MB
+    utilization_percent: int = 0  # GPU utilization %
+    temperature_c: int = 0  # Temperature in Celsius
+    power_draw_w: int = 0  # Power draw in Watts
+    role: Optional[GPURole] = None  # Assigned role
     model_loaded: Optional[str] = None  # Currently loaded model
-    healthy: bool = True             # Health status
-    last_check: float = 0.0          # Last health check timestamp
+    healthy: bool = True  # Health status
+    last_check: float = 0.0  # Last health check timestamp
 
     @property
     def vram_usage_percent(self) -> float:
@@ -64,6 +65,7 @@ class GPUStatus:
 @dataclass
 class HostGPUConfig:
     """GPU configuration for a host."""
+
     hostname: str
     role: GPURole
     gpu_model: str
@@ -120,7 +122,7 @@ class DistributedGPUManager:
         role: GPURole,
         gpu_model: str,
         expected_vram_gb: int,
-        expected_model: Optional[str] = None
+        expected_model: Optional[str] = None,
     ):
         """
         Register a GPU host.
@@ -137,7 +139,7 @@ class DistributedGPUManager:
             role=role,
             gpu_model=gpu_model,
             expected_vram_gb=expected_vram_gb,
-            expected_model=expected_model
+            expected_model=expected_model,
         )
 
         self.hosts[hostname] = config
@@ -159,7 +161,7 @@ class DistributedGPUManager:
             role=GPURole.MAIN_LLM_1,
             gpu_model="RTX 3090",
             expected_vram_gb=24,
-            expected_model="qwen2.5:32b-instruct-q4_K_M"
+            expected_model="qwen2.5:32b-instruct-q4_K_M",
         )
 
         # Host 4 - Main LLM #2 (RTX 3090)
@@ -168,7 +170,7 @@ class DistributedGPUManager:
             role=GPURole.MAIN_LLM_2,
             gpu_model="RTX 3090",
             expected_vram_gb=24,
-            expected_model="qwen2.5:32b-instruct-q4_K_M"
+            expected_model="qwen2.5:32b-instruct-q4_K_M",
         )
 
         # Host 5 - Embeddings (RTX 4070)
@@ -177,7 +179,7 @@ class DistributedGPUManager:
             role=GPURole.EMBEDDINGS,
             gpu_model="RTX 4070",
             expected_vram_gb=8,
-            expected_model="nomic-embed-text"
+            expected_model="nomic-embed-text",
         )
 
         # Host 6 - Reranking (RTX 2060)
@@ -186,7 +188,7 @@ class DistributedGPUManager:
             role=GPURole.RERANKING,
             gpu_model="RTX 2060",
             expected_vram_gb=6,
-            expected_model="cross-encoder/ms-marco-MiniLM-L-6-v2"
+            expected_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         )
 
         logger.info(f"Loaded default GPU config with {len(self.hosts)} hosts")
@@ -219,9 +221,7 @@ class DistributedGPUManager:
 
         try:
             success, stdout, stderr = await self.distributed_manager._run_ssh_command(
-                hostname,
-                command,
-                timeout=10.0
+                hostname, command, timeout=10.0
             )
 
             if not success:
@@ -231,7 +231,7 @@ class DistributedGPUManager:
                     role=config.role,
                     gpu_model=config.gpu_model,
                     healthy=False,
-                    last_check=time.time()
+                    last_check=time.time(),
                 )
 
             # Parse output: vram_total, vram_used, vram_free, util, temp, power
@@ -253,7 +253,7 @@ class DistributedGPUManager:
                 role=config.role,
                 model_loaded=config.expected_model,
                 healthy=True,
-                last_check=time.time()
+                last_check=time.time(),
             )
 
             # Cache status
@@ -275,7 +275,7 @@ class DistributedGPUManager:
                 role=config.role,
                 gpu_model=config.gpu_model,
                 healthy=False,
-                last_check=time.time()
+                last_check=time.time(),
             )
 
     def _get_mock_gpu_status(self, hostname: str) -> GPUStatus:
@@ -298,7 +298,7 @@ class DistributedGPUManager:
             role=config.role,
             model_loaded=config.expected_model,
             healthy=True,
-            last_check=time.time()
+            last_check=time.time(),
         )
 
     async def check_all_gpus(self) -> Dict[str, GPUStatus]:
@@ -311,10 +311,7 @@ class DistributedGPUManager:
         logger.info(f"Checking GPU status on {len(self.hosts)} hosts...")
 
         # Query all hosts in parallel
-        tasks = [
-            self.get_gpu_status(hostname)
-            for hostname in self.hosts.keys()
-        ]
+        tasks = [self.get_gpu_status(hostname) for hostname in self.hosts.keys()]
         results = await asyncio.gather(*tasks)
 
         # Build result dict
@@ -332,21 +329,20 @@ class DistributedGPUManager:
         Returns:
             Recommendations dict
         """
-        recommendations = {
-            "timestamp": time.time(),
-            "hosts": []
-        }
+        recommendations = {"timestamp": time.time(), "hosts": []}
 
         for hostname, config in self.hosts.items():
             status = self.status_cache.get(hostname)
 
             if not status:
-                recommendations["hosts"].append({
-                    "hostname": hostname,
-                    "role": config.role.value,
-                    "recommendation": "Unable to assess - no status data",
-                    "priority": "unknown"
-                })
+                recommendations["hosts"].append(
+                    {
+                        "hostname": hostname,
+                        "role": config.role.value,
+                        "recommendation": "Unable to assess - no status data",
+                        "priority": "unknown",
+                    }
+                )
                 continue
 
             # Analyze load
@@ -356,7 +352,7 @@ class DistributedGPUManager:
                 "gpu_model": status.gpu_model,
                 "utilization": f"{status.utilization_percent}%",
                 "vram_usage": f"{status.vram_usage_percent:.1f}%",
-                "temperature": f"{status.temperature_c}°C"
+                "temperature": f"{status.temperature_c}°C",
             }
 
             # Recommendations based on metrics
@@ -398,7 +394,7 @@ class DistributedGPUManager:
             "used_vram_gb": 0,
             "average_utilization": 0.0,
             "average_temperature": 0.0,
-            "hosts_by_role": {}
+            "hosts_by_role": {},
         }
 
         for hostname, config in self.hosts.items():
@@ -420,12 +416,14 @@ class DistributedGPUManager:
                 if role not in summary["hosts_by_role"]:
                     summary["hosts_by_role"][role] = []
 
-                summary["hosts_by_role"][role].append({
-                    "hostname": hostname,
-                    "gpu_model": status.gpu_model,
-                    "utilization": status.utilization_percent,
-                    "vram_usage_percent": status.vram_usage_percent
-                })
+                summary["hosts_by_role"][role].append(
+                    {
+                        "hostname": hostname,
+                        "gpu_model": status.gpu_model,
+                        "utilization": status.utilization_percent,
+                        "vram_usage_percent": status.vram_usage_percent,
+                    }
+                )
 
         # Calculate averages
         if summary["healthy_hosts"] > 0:
@@ -434,7 +432,8 @@ class DistributedGPUManager:
 
         summary["vram_usage_percent"] = (
             (summary["used_vram_gb"] / summary["total_vram_gb"] * 100)
-            if summary["total_vram_gb"] > 0 else 0.0
+            if summary["total_vram_gb"] > 0
+            else 0.0
         )
 
         return summary
@@ -445,8 +444,7 @@ _gpu_manager: Optional[DistributedGPUManager] = None
 
 
 def get_distributed_gpu_manager(
-    distributed_manager=None,
-    auto_load_config: bool = True
+    distributed_manager=None, auto_load_config: bool = True
 ) -> DistributedGPUManager:
     """
     Get global distributed GPU manager instance (singleton).
@@ -461,9 +459,7 @@ def get_distributed_gpu_manager(
     global _gpu_manager
 
     if _gpu_manager is None:
-        _gpu_manager = DistributedGPUManager(
-            distributed_manager=distributed_manager
-        )
+        _gpu_manager = DistributedGPUManager(distributed_manager=distributed_manager)
 
         if auto_load_config:
             _gpu_manager.load_default_config()

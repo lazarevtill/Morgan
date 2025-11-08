@@ -14,16 +14,16 @@ Components:
 Requirements addressed: 23.1, 23.4, 23.5
 """
 
-from .vector import VectorStorage
+from .backup import BackupStorage
+from .cache import CacheStorage
 from .memory import MemoryStorage
 from .profile import ProfileStorage
-from .cache import CacheStorage
-from .backup import BackupStorage
+from .vector import VectorStorage
 
 __all__ = [
-    'VectorStorage',
-    'MemoryStorage',
-    'ProfileStorage',
-    'CacheStorage',
-    'BackupStorage'
+    "VectorStorage",
+    "MemoryStorage",
+    "ProfileStorage",
+    "CacheStorage",
+    "BackupStorage",
 ]

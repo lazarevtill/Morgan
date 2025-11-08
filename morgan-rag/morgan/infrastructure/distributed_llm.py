@@ -10,30 +10,31 @@ Manages LLM requests across multiple hosts with:
 This enables Morgan JARVIS to run across separate GPU hosts.
 """
 
+import asyncio
 import random
 import time
-import asyncio
-from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 try:
-    from openai import AsyncOpenAI
     import httpx
+    from openai import AsyncOpenAI
+
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
 
 from morgan.utils.logger import get_logger
 
-
 logger = get_logger(__name__)
 
 
 class LoadBalancingStrategy(str, Enum):
     """Load balancing strategies for distributed setup"""
-    ROUND_ROBIN = "round_robin"    # Cycle through endpoints
-    RANDOM = "random"               # Random selection
+
+    ROUND_ROBIN = "round_robin"  # Cycle through endpoints
+    RANDOM = "random"  # Random selection
     LEAST_LOADED = "least_loaded"  # Lowest avg response time
 
 
@@ -44,15 +45,16 @@ class LLMEndpoint:
 
     Tracks health, performance, and error metrics for each endpoint.
     """
-    url: str                                    # Endpoint URL
-    model: str                                  # Model name
-    healthy: bool = True                        # Health status
+
+    url: str  # Endpoint URL
+    model: str  # Model name
+    healthy: bool = True  # Health status
     response_times: List[float] = field(default_factory=list)  # Response times (s)
-    error_count: int = 0                        # Consecutive errors
-    total_requests: int = 0                     # Total requests served
-    total_errors: int = 0                       # Total errors encountered
-    last_health_check: Optional[float] = None   # Last health check timestamp
-    last_request: Optional[float] = None        # Last request timestamp
+    error_count: int = 0  # Consecutive errors
+    total_requests: int = 0  # Total requests served
+    total_errors: int = 0  # Total errors encountered
+    last_health_check: Optional[float] = None  # Last health check timestamp
+    last_request: Optional[float] = None  # Last request timestamp
 
     @property
     def average_response_time(self) -> float:
@@ -130,7 +132,7 @@ class DistributedLLMClient:
         strategy: str = "round_robin",
         api_key: str = "ollama",
         timeout: float = 60.0,
-        health_check_interval: int = 60
+        health_check_interval: int = 60,
     ):
         """
         Initialize distributed LLM client.
@@ -144,15 +146,14 @@ class DistributedLLMClient:
             health_check_interval: Health check interval in seconds
         """
         if not OPENAI_AVAILABLE:
-            raise ImportError("openai package required. Install with: pip install openai")
+            raise ImportError(
+                "openai package required. Install with: pip install openai"
+            )
 
         if not endpoints:
             raise ValueError("At least one endpoint required")
 
-        self.endpoints = [
-            LLMEndpoint(url=url, model=model)
-            for url in endpoints
-        ]
+        self.endpoints = [LLMEndpoint(url=url, model=model) for url in endpoints]
         self.model = model
         self.strategy = LoadBalancingStrategy(strategy)
         self.api_key = api_key
@@ -235,7 +236,7 @@ class DistributedLLMClient:
         temperature: float = 0.7,
         max_tokens: int = 2048,
         stream: bool = False,
-        max_retries: int = 3
+        max_retries: int = 3,
     ) -> Any:
         """
         Generate response using distributed LLMs.
@@ -270,7 +271,7 @@ class DistributedLLMClient:
                 client = AsyncOpenAI(
                     base_url=endpoint.url,
                     api_key=self.api_key,
-                    timeout=httpx.Timeout(self.timeout)
+                    timeout=httpx.Timeout(self.timeout),
                 )
 
                 # Make request
@@ -281,7 +282,7 @@ class DistributedLLMClient:
                     messages=[{"role": "user", "content": prompt}],
                     temperature=temperature,
                     max_tokens=max_tokens,
-                    stream=stream
+                    stream=stream,
                 )
 
                 elapsed = time.time() - start_time
@@ -289,9 +290,7 @@ class DistributedLLMClient:
                 # Track success
                 endpoint.mark_success(elapsed)
 
-                logger.info(
-                    f"✓ Success in {elapsed:.2f}s using {endpoint.url}"
-                )
+                logger.info(f"✓ Success in {elapsed:.2f}s using {endpoint.url}")
 
                 # Return response
                 if stream:
@@ -315,7 +314,7 @@ class DistributedLLMClient:
                     ) from last_error
 
                 # Wait before retry (exponential backoff)
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
                 continue
 
     async def health_check(self) -> Dict[str, bool]:
@@ -333,14 +332,14 @@ class DistributedLLMClient:
                 client = AsyncOpenAI(
                     base_url=endpoint.url,
                     api_key=self.api_key,
-                    timeout=httpx.Timeout(5.0)
+                    timeout=httpx.Timeout(5.0),
                 )
 
                 # Simple test query
                 await client.chat.completions.create(
                     model=self.model,
                     messages=[{"role": "user", "content": "test"}],
-                    max_tokens=5
+                    max_tokens=5,
                 )
 
                 endpoint.healthy = True
@@ -358,14 +357,12 @@ class DistributedLLMClient:
                 return False
 
         # Check all endpoints in parallel
-        results = await asyncio.gather(*[
-            check_endpoint(endpoint)
-            for endpoint in self.endpoints
-        ])
+        results = await asyncio.gather(
+            *[check_endpoint(endpoint) for endpoint in self.endpoints]
+        )
 
         return {
-            endpoint.url: healthy
-            for endpoint, healthy in zip(self.endpoints, results)
+            endpoint.url: healthy for endpoint, healthy in zip(self.endpoints, results)
         }
 
     def get_stats(self) -> Dict[str, Any]:
@@ -393,12 +390,15 @@ class DistributedLLMClient:
                     "total_errors": e.total_errors,
                     "error_count": e.error_count,
                     "last_request": (
-                        time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(e.last_request))
-                        if e.last_request else "Never"
-                    )
+                        time.strftime(
+                            "%Y-%m-%d %H:%M:%S", time.localtime(e.last_request)
+                        )
+                        if e.last_request
+                        else "Never"
+                    ),
                 }
                 for e in self.endpoints
-            ]
+            ],
         }
 
     def __repr__(self) -> str:
@@ -417,9 +417,7 @@ _client: Optional[DistributedLLMClient] = None
 
 
 def get_distributed_llm_client(
-    endpoints: Optional[List[str]] = None,
-    model: Optional[str] = None,
-    **kwargs
+    endpoints: Optional[List[str]] = None, model: Optional[str] = None, **kwargs
 ) -> DistributedLLMClient:
     """
     Get global distributed LLM client instance (singleton).
@@ -436,15 +434,9 @@ def get_distributed_llm_client(
 
     if _client is None:
         if endpoints is None or model is None:
-            raise ValueError(
-                "endpoints and model required for first initialization"
-            )
+            raise ValueError("endpoints and model required for first initialization")
 
-        _client = DistributedLLMClient(
-            endpoints=endpoints,
-            model=model,
-            **kwargs
-        )
+        _client = DistributedLLMClient(endpoints=endpoints, model=model, **kwargs)
 
         # Start health monitoring
         _client.start_health_monitoring()

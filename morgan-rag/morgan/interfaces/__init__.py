@@ -8,6 +8,4 @@ feedback systems.
 
 from .chat_interface import EmotionalChatInterface
 
-__all__ = [
-    'EmotionalChatInterface'
-]
+__all__ = ["EmotionalChatInterface"]
