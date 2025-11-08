@@ -3,18 +3,19 @@
 Tests for streaming functionality in Morgan AI Assistant
 """
 import asyncio
-import json
 import base64
-import pytest
+import json
+from unittest.mock import AsyncMock, patch
+
 import aiohttp
 import numpy as np
+import pytest
 import torch
-from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from core.api.server import APIServer
-from services.tts.service import TTSService
 from services.stt.service import STTService
+from services.tts.service import TTSService
 from shared.config.base import ServiceConfig
 from shared.models.base import TTSRequest
 
@@ -40,6 +41,7 @@ class TestStreamingEndpoints:
         server = APIServer(mock_core_service, host="0.0.0.0", port=8000)
         # Manually create the app for testing
         from fastapi import FastAPI
+
         server.app = FastAPI()
         server._setup_routes()
         return server
@@ -62,11 +64,10 @@ class TestStreamingEndpoints:
         assert response.status_code == 422
 
         # Test valid request
-        response = client.post("/api/audio/stream", json={
-            "text": "Hello, Morgan",
-            "voice": "default",
-            "user_id": "test_user"
-        })
+        response = client.post(
+            "/api/audio/stream",
+            json={"text": "Hello, Morgan", "voice": "default", "user_id": "test_user"},
+        )
         # Should start processing (may fail later due to mocking)
         assert response.status_code in [200, 500]  # 500 due to mocking
 
@@ -78,7 +79,7 @@ class TestStreamingEndpoints:
 
         # Test that the streaming method exists
         request = TTSRequest(text="Hello world", voice="default")
-        assert hasattr(tts_service, 'generate_speech_stream')
+        assert hasattr(tts_service, "generate_speech_stream")
 
         # Test that we can call the method (it will fail due to missing CSM model, but that's expected)
         try:
@@ -100,8 +101,8 @@ class TestStreamingEndpoints:
         assert stt_service.vad_available is True
 
         # Test that the VAD method exists
-        assert hasattr(stt_service, '_apply_vad_filter')
-        assert hasattr(stt_service, '_apply_simple_energy_vad')
+        assert hasattr(stt_service, "_apply_vad_filter")
+        assert hasattr(stt_service, "_apply_simple_energy_vad")
 
         # Test with simple energy-based VAD (built-in functionality)
         audio_array = np.random.randn(16000)  # 1 second at 16kHz
@@ -125,7 +126,8 @@ class TestStreamingEndpoints:
         # Test hex string conversion
         test_hex = "48656c6c6f"  # "Hello" in hex
         import re
-        matches = re.findall(r'.{1,2}', test_hex)
+
+        matches = re.findall(r".{1,2}", test_hex)
 
         assert matches is not None
         assert len(matches) == 5
@@ -150,7 +152,7 @@ class TestWebAudioAPI:
         test_hex = "fffe0000"  # WAV header start
 
         # Simulate the JavaScript conversion
-        hex_matches = [test_hex[i:i+2] for i in range(0, len(test_hex), 2)]
+        hex_matches = [test_hex[i : i + 2] for i in range(0, len(test_hex), 2)]
         audio_bytes = bytes([int(byte, 16) for byte in hex_matches])
 
         assert audio_bytes[0] == 255  # ff
@@ -166,7 +168,7 @@ class TestWebAudioAPI:
             "timestamp": 1234567890.123,
             "duration": 0.5,
             "sample_rate": 24000,
-            "format": "wav"
+            "format": "wav",
         }
 
         # Validate message structure

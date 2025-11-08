@@ -2,26 +2,29 @@
 MCP (Model Context Protocol) Tools Manager
 Handles tool registration, execution, and management
 """
+
 import asyncio
+import json
 import logging
 import uuid
-import json
-from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime
-import asyncpg
-import aiohttp
+from typing import Any, Callable, Dict, List, Optional
 
-from shared.utils.logging import setup_logging
+import aiohttp
+import asyncpg
+
 from shared.utils.exceptions import (
-    MorganException,
     ErrorCategory,
     InvalidInputError,
-    ServiceException
+    MorganException,
+    ServiceException,
 )
+from shared.utils.logging import setup_logging
 
 
 class MCPTool:
     """MCP Tool definition"""
+
     def __init__(
         self,
         id: str,
@@ -32,7 +35,7 @@ class MCPTool:
         method: str = "POST",
         parameters_schema: Optional[Dict] = None,
         handler: Optional[Callable] = None,
-        enabled: bool = True
+        enabled: bool = True,
     ):
         self.id = id
         self.name = name
@@ -54,7 +57,7 @@ class MCPTool:
             "method": self.method,
             "parameters_schema": self.parameters_schema,
             "enabled": self.enabled,
-            "has_handler": self.handler is not None
+            "has_handler": self.handler is not None,
         }
 
 
@@ -85,10 +88,13 @@ class MCPToolsManager:
             description="Perform mathematical calculations",
             category="utility",
             parameters_schema={
-                "expression": {"type": "string", "description": "Math expression to evaluate"}
+                "expression": {
+                    "type": "string",
+                    "description": "Math expression to evaluate",
+                }
             },
             handler=self._calculator_handler,
-            enabled=True
+            enabled=True,
         )
 
         # DateTime tool
@@ -98,10 +104,14 @@ class MCPToolsManager:
             description="Get current date and time information",
             category="utility",
             parameters_schema={
-                "timezone": {"type": "string", "description": "Timezone (optional)", "default": "UTC"}
+                "timezone": {
+                    "type": "string",
+                    "description": "Timezone (optional)",
+                    "default": "UTC",
+                }
             },
             handler=self._datetime_handler,
-            enabled=True
+            enabled=True,
         )
 
         # Memory tool
@@ -112,11 +122,18 @@ class MCPToolsManager:
             category="memory",
             parameters_schema={
                 "content": {"type": "string", "description": "Information to remember"},
-                "category": {"type": "string", "description": "Memory category (optional)"},
-                "importance": {"type": "integer", "description": "Importance 1-10", "default": 5}
+                "category": {
+                    "type": "string",
+                    "description": "Memory category (optional)",
+                },
+                "importance": {
+                    "type": "integer",
+                    "description": "Importance 1-10",
+                    "default": 5,
+                },
             },
             handler=None,  # Handled by memory manager
-            enabled=True
+            enabled=True,
         )
 
     async def start(self):
@@ -124,10 +141,7 @@ class MCPToolsManager:
         try:
             # Initialize PostgreSQL connection pool
             self.pg_pool = await asyncpg.create_pool(
-                self.postgres_dsn,
-                min_size=2,
-                max_size=10,
-                command_timeout=60
+                self.postgres_dsn, min_size=2, max_size=10, command_timeout=60
             )
             self.logger.info("PostgreSQL connection pool created")
 
@@ -178,7 +192,7 @@ class MCPToolsManager:
                         tool.description,
                         tool.category,
                         json.dumps(tool.parameters_schema),
-                        tool.enabled
+                        tool.enabled,
                     )
             self.logger.info("Built-in tools synced to database")
 
@@ -207,7 +221,7 @@ class MCPToolsManager:
                         endpoint_url=row["endpoint_url"],
                         method=row["method"],
                         parameters_schema=row["parameters_schema"],
-                        enabled=row["enabled"]
+                        enabled=row["enabled"],
                     )
                     self.tools[tool.name] = tool
 
@@ -221,7 +235,7 @@ class MCPToolsManager:
         tool_name: str,
         parameters: Dict[str, Any],
         user_id: str,
-        conversation_id: Optional[str] = None
+        conversation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Execute a tool
@@ -245,14 +259,14 @@ class MCPToolsManager:
                 raise InvalidInputError(
                     field_name="tool_name",
                     provided_value=tool_name,
-                    message=f"Tool not found: {tool_name}"
+                    message=f"Tool not found: {tool_name}",
                 )
 
             if not tool.enabled:
                 raise InvalidInputError(
                     field_name="tool_name",
                     provided_value=tool_name,
-                    message=f"Tool is disabled: {tool_name}"
+                    message=f"Tool is disabled: {tool_name}",
                 )
 
             self.logger.info(f"Executing tool: {tool_name} for user: {user_id}")
@@ -265,12 +279,14 @@ class MCPToolsManager:
                 error_message = None
             elif tool.endpoint_url:
                 # External API endpoint
-                result, status, error_message = await self._call_external_tool(tool, parameters)
+                result, status, error_message = await self._call_external_tool(
+                    tool, parameters
+                )
             else:
                 raise InvalidInputError(
                     field_name="tool_configuration",
                     provided_value=tool_name,
-                    message=f"Tool has no handler or endpoint: {tool_name}"
+                    message=f"Tool has no handler or endpoint: {tool_name}",
                 )
 
             # Calculate execution time
@@ -285,7 +301,7 @@ class MCPToolsManager:
                 result=result,
                 status=status,
                 error_message=error_message,
-                execution_time_ms=execution_time
+                execution_time_ms=execution_time,
             )
 
             # Update tool usage count
@@ -297,14 +313,16 @@ class MCPToolsManager:
                 "status": status,
                 "result": result,
                 "error": error_message,
-                "execution_time_ms": execution_time
+                "execution_time_ms": execution_time,
             }
 
         except Exception as e:
             execution_time = int((datetime.now() - start_time).total_seconds() * 1000)
             error_message = str(e)
 
-            self.logger.error(f"Tool execution failed: {tool_name}: {error_message}", exc_info=True)
+            self.logger.error(
+                f"Tool execution failed: {tool_name}: {error_message}", exc_info=True
+            )
 
             # Log failed execution
             if tool:
@@ -316,7 +334,7 @@ class MCPToolsManager:
                     result=None,
                     status="error",
                     error_message=error_message,
-                    execution_time_ms=execution_time
+                    execution_time_ms=execution_time,
                 )
 
             return {
@@ -325,20 +343,20 @@ class MCPToolsManager:
                 "status": "error",
                 "result": None,
                 "error": error_message,
-                "execution_time_ms": execution_time
+                "execution_time_ms": execution_time,
             }
 
     async def _call_external_tool(
-        self,
-        tool: MCPTool,
-        parameters: Dict[str, Any]
+        self, tool: MCPTool, parameters: Dict[str, Any]
     ) -> tuple[Optional[Dict], str, Optional[str]]:
         """Call an external tool API"""
         try:
             method = tool.method.upper()
 
             if method == "GET":
-                async with self.http_session.get(tool.endpoint_url, params=parameters) as response:
+                async with self.http_session.get(
+                    tool.endpoint_url, params=parameters
+                ) as response:
                     if response.status == 200:
                         result = await response.json()
                         return result, "success", None
@@ -347,7 +365,9 @@ class MCPToolsManager:
                         return None, "error", f"HTTP {response.status}: {error_text}"
 
             elif method == "POST":
-                async with self.http_session.post(tool.endpoint_url, json=parameters) as response:
+                async with self.http_session.post(
+                    tool.endpoint_url, json=parameters
+                ) as response:
                     if response.status == 200:
                         result = await response.json()
                         return result, "success", None
@@ -370,27 +390,26 @@ class MCPToolsManager:
 
             # Safe eval with limited scope
             allowed_names = {
-                "abs": abs, "round": round, "min": min, "max": max,
-                "sum": sum, "pow": pow
+                "abs": abs,
+                "round": round,
+                "min": min,
+                "max": max,
+                "sum": sum,
+                "pow": pow,
             }
 
             # Evaluate expression
             result = eval(expression, {"__builtins__": {}}, allowed_names)
 
-            return {
-                "expression": expression,
-                "result": result
-            }
+            return {"expression": expression, "result": result}
 
         except Exception as e:
-            return {
-                "expression": expression,
-                "error": str(e)
-            }
+            return {"expression": expression, "error": str(e)}
 
     async def _datetime_handler(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Built-in datetime tool"""
         from datetime import datetime, timezone
+
         import pytz
 
         try:
@@ -408,13 +427,11 @@ class MCPToolsManager:
                 "datetime": now.isoformat(),
                 "timezone": tz_name,
                 "timestamp": now.timestamp(),
-                "formatted": now.strftime("%Y-%m-%d %H:%M:%S %Z")
+                "formatted": now.strftime("%Y-%m-%d %H:%M:%S %Z"),
             }
 
         except Exception as e:
-            return {
-                "error": str(e)
-            }
+            return {"error": str(e)}
 
     async def _log_execution(
         self,
@@ -425,7 +442,7 @@ class MCPToolsManager:
         result: Optional[Dict],
         status: str,
         error_message: Optional[str],
-        execution_time_ms: int
+        execution_time_ms: int,
     ):
         """Log tool execution to database"""
         try:
@@ -443,7 +460,7 @@ class MCPToolsManager:
                     result,
                     status,
                     error_message,
-                    execution_time_ms
+                    execution_time_ms,
                 )
         except Exception as e:
             self.logger.error(f"Failed to log tool execution: {e}")
@@ -459,7 +476,7 @@ class MCPToolsManager:
                         last_used_at = CURRENT_TIMESTAMP
                     WHERE id = $1
                     """,
-                    tool_id
+                    tool_id,
                 )
         except Exception as e:
             self.logger.error(f"Failed to update tool usage: {e}")

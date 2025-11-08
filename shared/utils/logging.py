@@ -1,13 +1,14 @@
 """
 Modern logging utilities for Morgan AI Assistant
 """
+
+import json
 import logging
 import logging.handlers
 import sys
-from typing import Optional
-from pathlib import Path
-import json
 from datetime import datetime
+from pathlib import Path
+from typing import Optional
 
 
 class JSONFormatter(logging.Formatter):
@@ -33,8 +34,13 @@ class JSONFormatter(logging.Formatter):
 class MorganLogger:
     """Enhanced logger for Morgan services"""
 
-    def __init__(self, name: str, level: str = "INFO", log_file: Optional[str] = None,
-                 json_format: bool = False):
+    def __init__(
+        self,
+        name: str,
+        level: str = "INFO",
+        log_file: Optional[str] = None,
+        json_format: bool = False,
+    ):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(getattr(logging, level.upper()))
 
@@ -49,7 +55,7 @@ class MorganLogger:
             formatter = JSONFormatter()
         else:
             formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
             )
 
         console_handler.setFormatter(formatter)
@@ -61,7 +67,7 @@ class MorganLogger:
             log_path.parent.mkdir(parents=True, exist_ok=True)
 
             file_handler = logging.handlers.RotatingFileHandler(
-                log_file, maxBytes=10*1024*1024, backupCount=5
+                log_file, maxBytes=10 * 1024 * 1024, backupCount=5
             )
             file_handler.setLevel(getattr(logging, level.upper()))
             file_handler.setFormatter(formatter)
@@ -96,8 +102,12 @@ class MorganLogger:
         self.logger.debug(message)
 
 
-def setup_logging(service_name: str, level: str = "INFO", log_file: Optional[str] = None,
-                 json_format: bool = False) -> logging.Logger:
+def setup_logging(
+    service_name: str,
+    level: str = "INFO",
+    log_file: Optional[str] = None,
+    json_format: bool = False,
+) -> logging.Logger:
     """Setup logging for a service"""
     morgan_logger = MorganLogger(service_name, level, log_file, json_format)
     return morgan_logger.get_logger()
@@ -106,7 +116,9 @@ def setup_logging(service_name: str, level: str = "INFO", log_file: Optional[str
 class Timer:
     """Context manager for timing operations"""
 
-    def __init__(self, logger: Optional[logging.Logger] = None, operation: str = "operation"):
+    def __init__(
+        self, logger: Optional[logging.Logger] = None, operation: str = "operation"
+    ):
         self.logger = logger
         self.operation = operation
         self.start_time = None
@@ -137,13 +149,18 @@ class Timer:
 
 def log_function_call(logger: Optional[logging.Logger] = None):
     """Decorator to log function calls"""
+
     def decorator(func):
         def wrapper(*args, **kwargs):
             if logger:
-                logger.debug(f"Calling {func.__name__} with args={args}, kwargs={kwargs}")
+                logger.debug(
+                    f"Calling {func.__name__} with args={args}, kwargs={kwargs}"
+                )
             result = func(*args, **kwargs)
             if logger:
                 logger.debug(f"{func.__name__} returned {result}")
             return result
+
         return wrapper
+
     return decorator

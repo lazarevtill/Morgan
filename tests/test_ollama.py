@@ -4,6 +4,7 @@ Test script for external Ollama service
 """
 import asyncio
 import json
+
 import pytest
 from openai import AsyncOpenAI
 
@@ -15,10 +16,7 @@ async def test_ollama():
 
     try:
         # Initialize OpenAI client for Ollama
-        client = AsyncOpenAI(
-            base_url="http://192.168.101.3:11434/v1",
-            api_key="ollama"
-        )
+        client = AsyncOpenAI(base_url="http://192.168.101.3:11434/v1", api_key="ollama")
 
         # Test 1: List models
         print("\n1. Testing model listing...")
@@ -31,10 +29,13 @@ async def test_ollama():
         chat_response = await client.chat.completions.create(
             model="superdrew100/llama3-abliterated:latest",
             messages=[
-                {"role": "user", "content": "Hello! Please respond with a simple greeting."}
+                {
+                    "role": "user",
+                    "content": "Hello! Please respond with a simple greeting.",
+                }
             ],
             max_tokens=100,
-            temperature=0.7
+            temperature=0.7,
         )
 
         print(f"Response: {chat_response.choices[0].message.content}")

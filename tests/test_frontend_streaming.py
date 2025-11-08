@@ -2,9 +2,10 @@
 """
 Tests for frontend streaming functionality (Web Audio API integration)
 """
-import pytest
 import json
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 
 class TestFrontendStreaming:
@@ -24,7 +25,14 @@ class TestFrontendStreaming:
         assert streaming_enabled is True
 
         # Test status updates
-        status_types = ["idle", "recording", "processing", "streaming", "playing", "error"]
+        status_types = [
+            "idle",
+            "recording",
+            "processing",
+            "streaming",
+            "playing",
+            "error",
+        ]
         for status_type in status_types:
             mock_status["className"] = f"status {status_type}"
             assert status_type in mock_status["className"]
@@ -60,7 +68,7 @@ class TestFrontendStreaming:
                 "type": msg_type,
                 "audio_data": "base64_encoded_audio" if msg_type == "audio" else None,
                 "session_id": "test_session",
-                "timestamp": 1234567890.123
+                "timestamp": 1234567890.123,
             }
 
             assert message["type"] == msg_type
@@ -75,11 +83,11 @@ data: {"type": "end", "chunk_id": 2}
 
 """
 
-        lines = sse_message.strip().split('\n')
+        lines = sse_message.strip().split("\n")
         messages = []
 
         for line in lines:
-            if line.startswith('data: '):
+            if line.startswith("data: "):
                 try:
                     data = json.loads(line[6:])  # Remove "data: "
                     messages.append(data)
@@ -98,7 +106,7 @@ data: {"type": "end", "chunk_id": 2}
         mock_audio_context = {
             "state": "running",
             "sampleRate": 44100,
-            "currentTime": 0.0
+            "currentTime": 0.0,
         }
 
         # Test context properties
@@ -110,7 +118,7 @@ data: {"type": "end", "chunk_id": 2}
             "sampleRate": 24000,
             "length": 24000,  # 1 second at 24kHz
             "duration": 1.0,
-            "numberOfChannels": 1
+            "numberOfChannels": 1,
         }
 
         assert mock_buffer["sampleRate"] == 24000
@@ -131,7 +139,7 @@ data: {"type": "end", "chunk_id": 2}
 
         assert total_time == 0.5  # 500ms
         assert chunks_per_second == 20.0  # 10 chunks in 0.5 seconds
-        assert audio_throughput == 10.0   # 5 seconds of audio in 0.5 seconds real time
+        assert audio_throughput == 10.0  # 5 seconds of audio in 0.5 seconds real time
 
 
 class TestStreamingIntegration:
@@ -145,7 +153,7 @@ class TestStreamingIntegration:
             "llm_processing",
             "tts_streaming",
             "audio_chunks",
-            "frontend_playback"
+            "frontend_playback",
         ]
 
         # Simulate flow
@@ -163,7 +171,7 @@ class TestStreamingIntegration:
             "audio_decode_error",
             "tts_generation_error",
             "websocket_disconnect",
-            "timeout_error"
+            "timeout_error",
         ]
 
         for scenario in error_scenarios:
@@ -184,7 +192,7 @@ class TestStreamingIntegration:
             "sample_rate": 24000,
             "buffer_size": 16384,
             "voice": "default",
-            "speed": 1.0
+            "speed": 1.0,
         }
 
         # Validate configuration

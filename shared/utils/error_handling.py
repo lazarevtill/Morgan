@@ -8,27 +8,27 @@ Provides:
 - Error logging with context
 - HTTP status code mapping
 """
+
 import logging
 import uuid
-from typing import Dict, Any, Optional, Union
 from datetime import datetime
 from http import HTTPStatus
+from typing import Any, Dict, Optional, Union
 
 from shared.utils.exceptions import (
-    MorganException,
+    AudioException,
+    ConfigurationException,
+    DatabaseException,
     ErrorCategory,
     ErrorSeverity,
-    ServiceException,
+    ExternalIntegrationException,
     ModelException,
-    AudioException,
+    MorganException,
     NetworkException,
-    ConfigurationException,
-    ValidationException,
     ResourceException,
-    DatabaseException,
-    ExternalIntegrationException
+    ServiceException,
+    ValidationException,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class ErrorContext:
         return {
             "correlation_id": self.correlation_id,
             "metadata": self.metadata,
-            "timestamp": self.start_time.isoformat()
+            "timestamp": self.start_time.isoformat(),
         }
 
 
@@ -65,7 +65,7 @@ class ErrorResponse:
     def from_exception(
         exception: Exception,
         include_stack_trace: bool = False,
-        correlation_id: Optional[str] = None
+        correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create structured error response from exception
@@ -80,22 +80,18 @@ class ErrorResponse:
         """
         if isinstance(exception, MorganException):
             return ErrorResponse._from_morgan_exception(
-                exception,
-                include_stack_trace,
-                correlation_id
+                exception, include_stack_trace, correlation_id
             )
         else:
             return ErrorResponse._from_generic_exception(
-                exception,
-                include_stack_trace,
-                correlation_id
+                exception, include_stack_trace, correlation_id
             )
 
     @staticmethod
     def _from_morgan_exception(
         exception: MorganException,
         include_stack_trace: bool = False,
-        correlation_id: Optional[str] = None
+        correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create response from MorganException"""
         error_dict = exception.to_dict()
@@ -121,7 +117,7 @@ class ErrorResponse:
     def _from_generic_exception(
         exception: Exception,
         include_stack_trace: bool = False,
-        correlation_id: Optional[str] = None
+        correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create response from generic exception"""
         import traceback
@@ -137,7 +133,7 @@ class ErrorResponse:
                 "is_retryable": False,
                 "timestamp": datetime.utcnow().isoformat(),
                 "http_status": HTTPStatus.INTERNAL_SERVER_ERROR.value,
-                "recovery_suggestions": ["Contact support if the issue persists"]
+                "recovery_suggestions": ["Contact support if the issue persists"],
             }
         }
 
@@ -196,7 +192,7 @@ class ErrorResponse:
     def success(
         data: Any = None,
         metadata: Optional[Dict[str, Any]] = None,
-        correlation_id: Optional[str] = None
+        correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create structured success response
@@ -209,10 +205,7 @@ class ErrorResponse:
         Returns:
             Structured success response
         """
-        response = {
-            "success": True,
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        response = {"success": True, "timestamp": datetime.utcnow().isoformat()}
 
         if data is not None:
             response["data"] = data
@@ -237,7 +230,11 @@ class ErrorLogger:
     - Error context capture
     """
 
-    def __init__(self, logger_instance: Optional[logging.Logger] = None, service_name: str = "morgan"):
+    def __init__(
+        self,
+        logger_instance: Optional[logging.Logger] = None,
+        service_name: str = "morgan",
+    ):
         self.logger = logger_instance or logger
         self.service_name = service_name
 
@@ -245,7 +242,7 @@ class ErrorLogger:
         self,
         exception: Exception,
         context: Optional[ErrorContext] = None,
-        additional_data: Optional[Dict[str, Any]] = None
+        additional_data: Optional[Dict[str, Any]] = None,
     ):
         """
         Log exception with full context
@@ -268,7 +265,7 @@ class ErrorLogger:
             "service": self.service_name,
             "correlation_id": correlation_id,
             "exception_type": type(exception).__name__,
-            "exception_message": str(exception)
+            "exception_message": str(exception),
         }
 
         # Add context if available
@@ -277,13 +274,15 @@ class ErrorLogger:
 
         # Add exception-specific data
         if isinstance(exception, MorganException):
-            log_data.update({
-                "category": exception.category.value,
-                "severity": exception.severity.value,
-                "is_transient": exception.is_transient,
-                "is_retryable": exception.is_retryable,
-                "error_context": exception.context
-            })
+            log_data.update(
+                {
+                    "category": exception.category.value,
+                    "severity": exception.severity.value,
+                    "is_transient": exception.is_transient,
+                    "is_retryable": exception.is_retryable,
+                    "error_context": exception.context,
+                }
+            )
 
         # Add additional data
         if additional_data:
@@ -291,10 +290,7 @@ class ErrorLogger:
 
         # Log with appropriate level
         self.logger.log(
-            log_level,
-            f"Error occurred: {exception}",
-            extra=log_data,
-            exc_info=True
+            log_level, f"Error occurred: {exception}", extra=log_data, exc_info=True
         )
 
     def _get_log_level(self, severity: ErrorSeverity) -> int:
@@ -304,7 +300,7 @@ class ErrorLogger:
             ErrorSeverity.INFO: logging.INFO,
             ErrorSeverity.WARNING: logging.WARNING,
             ErrorSeverity.ERROR: logging.ERROR,
-            ErrorSeverity.CRITICAL: logging.CRITICAL
+            ErrorSeverity.CRITICAL: logging.CRITICAL,
         }
         return severity_map.get(severity, logging.ERROR)
 
@@ -324,7 +320,7 @@ class ErrorHandler:
         self,
         logger_instance: Optional[logging.Logger] = None,
         service_name: str = "morgan",
-        include_stack_trace: bool = False
+        include_stack_trace: bool = False,
     ):
         self.logger = ErrorLogger(logger_instance, service_name)
         self.service_name = service_name
@@ -334,7 +330,7 @@ class ErrorHandler:
         self,
         exception: Exception,
         context: Optional[ErrorContext] = None,
-        additional_data: Optional[Dict[str, Any]] = None
+        additional_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Handle exception and return structured error response
@@ -355,7 +351,7 @@ class ErrorHandler:
         return ErrorResponse.from_exception(
             exception,
             include_stack_trace=self.include_stack_trace,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
 
     def wrap_exception(
@@ -363,7 +359,7 @@ class ErrorHandler:
         exception: Exception,
         message: Optional[str] = None,
         category: ErrorCategory = ErrorCategory.INTERNAL_ERROR,
-        context: Optional[ErrorContext] = None
+        context: Optional[ErrorContext] = None,
     ) -> MorganException:
         """
         Wrap generic exception as MorganException
@@ -395,7 +391,7 @@ class ErrorHandler:
             category=category,
             correlation_id=correlation_id,
             cause=exception,
-            context=context.metadata if context else {}
+            context=context.metadata if context else {},
         )
 
 
@@ -416,7 +412,7 @@ def handle_async_errors(
     logger_instance: Optional[logging.Logger] = None,
     service_name: str = "morgan",
     suppress_errors: bool = False,
-    default_return: Any = None
+    default_return: Any = None,
 ):
     """
     Decorator for handling async function errors
@@ -438,10 +434,7 @@ def handle_async_errors(
         @wraps(func)
         async def wrapper(*args, **kwargs):
             handler = ErrorHandler(logger_instance, service_name)
-            context = create_error_context(
-                function=func.__name__,
-                service=service_name
-            )
+            context = create_error_context(function=func.__name__, service=service_name)
 
             try:
                 return await func(*args, **kwargs)
@@ -459,4 +452,5 @@ def handle_async_errors(
                         raise handler.wrap_exception(e, context=context)
 
         return wrapper
+
     return decorator
