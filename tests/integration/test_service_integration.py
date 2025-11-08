@@ -315,7 +315,7 @@ class TestCoreServiceIntegration:
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{service_urls['core']}/api/text",
+                    f"{service_urls['core']}/api/chat",
                     json={"text": "Hello, how are you?", "user_id": "test_user"},
                 )
 

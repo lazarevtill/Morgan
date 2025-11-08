@@ -483,7 +483,12 @@ Primary Goal: Build a modular AI assistant with advanced emotional intelligence 
 - **Clean Interfaces**: Simple, well-defined APIs between modules
 - **Dependency Injection**: Modules depend on abstractions, not implementations
 - **Configuration-Driven**: Behavior controlled through configuration, not code changes
-- **Local-First**: All processing happens locally, no external API dependencies (except gpt.lazarev.cloud)
+- **Local-First with Secure Remote Option**:
+  - Default: All processing happens locally without external dependencies
+  - Remote endpoints (e.g., gpt.lazarev.cloud) require explicit configuration via `allow_remote_endpoints` flag (default: false)
+  - PII redaction enforced via `redact_pii_in_logs` flag (default: true)
+  - Telemetry limited to allowlisted fields via `telemetry_fields_allowlist: []`
+  - All requests must log whether local or remote endpoint was used for audit trail
 
 ### Module Structure Guidelines
 ```
@@ -534,15 +539,21 @@ morgan/
 
 ## Phase 11: Operational Validation & CLI Compliance (Priority: HIGH)
 
-- [ ] 11.1 Verify embedding + LLM endpoint usage
-  - Confirm all embedding requests target the configured OpenAI-compatible base URL when reachable, with logged fallback to local HuggingFace/`sentence-transformers` models (Requirements 1, 16, 23)
+- [ ] 11.1 Verify embedding + LLM endpoint usage with security controls
+  - Require `allow_remote_endpoints` configuration flag (default: false) to gate any remote endpoint usage including gpt.lazarev.cloud
+  - When `allow_remote_endpoints=true`, confirm all embedding requests target the configured OpenAI-compatible base URL when reachable, with logged fallback to local HuggingFace/`sentence-transformers` models (Requirements 1, 16, 23)
   - Ensure LLM completions (where applicable) respect the same endpoint/fallback policy
+  - Enforce `redact_pii_in_logs` (default: true) to prevent sensitive data in logs
+  - Implement `telemetry_fields_allowlist: []` to restrict telemetry to explicitly allowed fields only
+  - Add metrics/audit entries that record whether local or remote selection was used for each embedding/LLM request
 - [ ] 11.2 Validate CLI-first workflows
   - Exercise document ingestion via `morgan learn` to cover the full hierarchical/vectorization pipeline without GUI dependencies (Requirement 1)
   - Exercise search and reranking via `morgan ask`/CLI scripts to confirm multi-stage search, reranking, and memory integration work headlessly (Requirement 2)
+  - Verify all workflows respect `allow_remote_endpoints` configuration
 - [ ] 11.3 Provide operational scripts and diagnostics
   - Deliver bash scripts or documented commands for common scenarios (ingestion, search, background tasks) to support automation (Requirements 1, 2, 21)
-  - Extend logging/metrics dashboards to highlight endpoint selection (remote vs. local fallback) for auditing
+  - Extend logging/metrics dashboards to highlight endpoint selection (remote vs. local fallback) for auditing and compliance
+  - Add configuration validation script to ensure PII redaction and telemetry allowlist are properly configured
 
 ## Success Criteria
 

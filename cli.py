@@ -29,6 +29,7 @@ class MorganCLI:
         self.user_id = "cli_user"
         self.conversation_id: Optional[str] = None
         self.session: Optional[aiohttp.ClientSession] = None
+        self.timeout = aiohttp.ClientTimeout(total=60)
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
@@ -40,14 +41,34 @@ class MorganCLI:
 
     async def check_health(self) -> bool:
         """Check if Morgan service is healthy"""
+        # Try /health endpoint first
         try:
-            async with self.session.get(f"{self.base_url}/health") as resp:
+            async with self.session.get(
+                f"{self.base_url}/health",
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    return data.get("status") == "healthy"
+                    if data.get("status") == "healthy":
+                        return True
+        except Exception as e:
+            console.print(f"[yellow]/health endpoint unavailable, trying /api/status...[/yellow]")
+
+        # Fallback to /api/status endpoint
+        try:
+            async with self.session.get(
+                f"{self.base_url}/api/status",
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    # Check if status indicates healthy
+                    status = data.get("status", "").lower()
+                    if status in ["healthy", "ok", "running"]:
+                        return True
         except Exception as e:
             console.print(f"[red]Failed to connect to Morgan: {e}[/red]")
-            return False
+
         return False
 
     async def send_message(self, text: str, show_sources: bool = False) -> dict:
@@ -62,9 +83,9 @@ class MorganCLI:
                 payload["metadata"]["show_sources"] = show_sources
 
             async with self.session.post(
-                f"{self.base_url}/api/text",
+                f"{self.base_url}/api/chat",
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=60)
+                timeout=self.timeout
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
@@ -178,15 +199,21 @@ class MorganCLI:
     async def get_memory_stats(self):
         """Get conversation memory statistics"""
         try:
-            async with self.session.get(f"{self.base_url}/status") as resp:
+            async with self.session.get(
+                f"{self.base_url}/status",
+                timeout=self.timeout
+            ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if "conversations" in data:
+                        stats_text = (
+                            f"**Total Conversations:** {data['conversations'].get('total', 0)}\n"
+                            f"**Active Conversations:** {data['conversations'].get('active', 0)}\n"
+                            f"**Total Messages:** {data['conversations'].get('total_messages', 0)}"
+                        )
                         console.print(
                             Panel.fit(
-                                f"**Total Conversations:** {data['conversations'].get('total', 0)}\n"
-                                f"**Active Conversations:** {data['conversations'].get('active', 0)}\n"
-                                f"**Total Messages:** {data['conversations'].get('total_messages', 0)}",
+                                Markdown(stats_text),
                                 title="📊 Memory Statistics",
                             )
                         )

@@ -53,7 +53,7 @@ class TestTextConversationFlow:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 # First message
                 response1 = await client.post(
-                    f"{core_service_url}/api/text",
+                    f"{core_service_url}/api/chat",
                     json={"text": "Hello, my name is Alice", "user_id": user_id},
                 )
 
@@ -69,7 +69,7 @@ class TestTextConversationFlow:
                 await asyncio.sleep(1)
 
                 response2 = await client.post(
-                    f"{core_service_url}/api/text",
+                    f"{core_service_url}/api/chat",
                     json={"text": "What is my name?", "user_id": user_id},
                 )
 
@@ -100,7 +100,7 @@ class TestTextConversationFlow:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 for idx, text in enumerate(conversations):
                     response = await client.post(
-                        f"{core_service_url}/api/text",
+                        f"{core_service_url}/api/chat",
                         json={"text": text, "user_id": user_id},
                     )
 
@@ -131,7 +131,7 @@ class TestTextConversationFlow:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 # First conversation
                 await client.post(
-                    f"{core_service_url}/api/text",
+                    f"{core_service_url}/api/chat",
                     json={"text": "My name is Bob", "user_id": user_id},
                 )
 
@@ -144,7 +144,7 @@ class TestTextConversationFlow:
                 if reset_response.status_code == 200:
                     # After reset, context should be cleared
                     response = await client.post(
-                        f"{core_service_url}/api/text",
+                        f"{core_service_url}/api/chat",
                         json={"text": "What is my name?", "user_id": user_id},
                     )
 
@@ -230,7 +230,7 @@ class TestErrorHandling:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 # Missing required fields
-                response = await client.post(f"{core_service_url}/api/text", json={})
+                response = await client.post(f"{core_service_url}/api/chat", json={})
 
                 # Should get error response, not crash
                 assert response.status_code in [400, 422, 500]
@@ -245,7 +245,7 @@ class TestErrorHandling:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(
-                    f"{core_service_url}/api/text",
+                    f"{core_service_url}/api/chat",
                     json={"text": "", "user_id": "test_user"},
                 )
 
@@ -265,7 +265,7 @@ class TestErrorHandling:
 
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
-                    f"{core_service_url}/api/text",
+                    f"{core_service_url}/api/chat",
                     json={"text": long_text, "user_id": "test_user"},
                 )
 
@@ -293,7 +293,7 @@ class TestPerformance:
                 start_time = time.time()
 
                 response = await client.post(
-                    f"{core_service_url}/api/text",
+                    f"{core_service_url}/api/chat",
                     json={"text": "Hello", "user_id": "perf_test_user"},
                 )
 
@@ -322,7 +322,7 @@ class TestPerformance:
                 # Create multiple concurrent requests
                 async def make_request(idx):
                     return await client.post(
-                        f"{core_service_url}/api/text",
+                        f"{core_service_url}/api/chat",
                         json={
                             "text": f"Hello {idx}",
                             "user_id": f"concurrent_user_{idx}",
@@ -364,7 +364,7 @@ class TestSystemIntegration:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 # 1. Initial greeting
                 response1 = await client.post(
-                    f"{core_service_url}/api/text",
+                    f"{core_service_url}/api/chat",
                     json={"text": "Hi, I'm testing the system", "user_id": user_id},
                 )
 
@@ -377,7 +377,7 @@ class TestSystemIntegration:
                 await asyncio.sleep(1)
 
                 response2 = await client.post(
-                    f"{core_service_url}/api/text",
+                    f"{core_service_url}/api/chat",
                     json={"text": "What can you help me with?", "user_id": user_id},
                 )
 
