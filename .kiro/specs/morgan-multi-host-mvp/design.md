@@ -530,17 +530,19 @@ def hosts():
 @click.option('--json', 'output_json', is_flag=True, help='Output as JSON')
 def hosts_list(output_json):
     """List all detected hosts and their capabilities"""
-    # Query Consul catalog and KV for host capabilities
-    # Display table: Host, IP, OS, Arch, CPU, RAM, GPU, VRAM, Services
-    # Show service allocation and health status
+    # Query Kubernetes Node API for node capabilities
+    # kubectl get nodes -o json | parse node labels and status
+    # Display table: Node, IP, OS, Arch, CPU, RAM, GPU, VRAM, Pods
+    # Show pod allocation and health status via kubectl get pods -o wide
 
 @hosts.command('capabilities')
 @click.argument('hostname', required=False)
 def hosts_capabilities(hostname):
     """Show detailed hardware capabilities for host(s)"""
-    # Query Consul KV for detailed host capabilities
-    # Show GPU models, CUDA versions, compute capabilities
-    # If hostname provided, show only that host
+    # Query Kubernetes Node API for detailed node capabilities
+    # kubectl describe node <hostname> | parse GPU labels, capacity, allocatable
+    # Show GPU models via node labels (nvidia.com/gpu.product, nvidia.com/cuda.runtime.version)
+    # If hostname provided, filter to that node only
 
 @cli.command()
 @click.option('--rating', type=click.IntRange(1, 5), help='Rating from 1-5')
@@ -555,40 +557,43 @@ def feedback(rating, comment, conversation_id):
 
 @cli.group()
 def config():
-    """Configure system settings via Consul KV"""
+    """Configure system settings via Kubernetes ConfigMaps"""
     pass
 
 @config.command('get')
 @click.argument('key')
 def config_get(key):
     """Get configuration value"""
-    # GET from Consul KV /v1/kv/morgan/config/{key}
-    # Support dot notation for nested keys
+    # Query Kubernetes ConfigMap: kubectl get configmap morgan-config -o json
+    # Parse JSON and extract data[key] using dot notation for nested keys
+    # For secrets: kubectl get secret morgan-secrets -o jsonpath='{.data.key}' | base64 -d
 
 @config.command('set')
 @click.argument('key')
 @click.argument('value')
 def config_set(key, value):
     """Set configuration value"""
-    # PUT to Consul KV /v1/kv/morgan/config/{key}
+    # Update Kubernetes ConfigMap: kubectl patch configmap morgan-config --type merge -p '{"data":{"key":"value"}}'
     # Validate values (e.g., temperature 0-2, max_tokens > 0)
-    # Support dot notation for nested keys
+    # For nested keys, use JSON merge patch to update nested structure
+    # For secrets: kubectl create secret generic morgan-secrets --from-literal=key=value --dry-run=client -o yaml | kubectl apply -f -
 
 @config.command('list')
 @click.option('--prefix', default='', help='Filter by key prefix')
 def config_list(prefix):
     """List all configuration keys and values"""
-    # GET from Consul KV /v1/kv/morgan/config/?recurse
-    # Display as table: Key, Value, Type
-    # Support filtering by prefix
+    # Query Kubernetes ConfigMap: kubectl get configmap morgan-config -o json
+    # Parse data field and display as table: Key, Value, Type
+    # Support filtering by prefix via client-side filtering on keys
 
 @config.command('delete')
 @click.argument('key')
 @click.confirmation_option(prompt='Are you sure you want to delete this config?')
 def config_delete(key):
     """Delete configuration key"""
-    # DELETE from Consul KV /v1/kv/morgan/config/{key}
+    # Remove from Kubernetes ConfigMap: kubectl patch configmap morgan-config --type json -p '[{"op":"remove","path":"/data/key"}]'
     # Require confirmation for safety
+    # For nested keys, use JSON patch to remove the specific path
 
 # Hidden debug commands
 @cli.group(hidden=True)
@@ -1797,15 +1802,20 @@ services:
       - minio
     entrypoint: >
       /bin/sh -c "
+      set -e;
+      echo 'Waiting for MinIO to be ready...';
       sleep 5;
-      mc alias set myminio http://minio:9000 morgan ${MINIO_ROOT_PASSWORD};
-      mc mb --ignore-existing myminio/morgan-documents;
-      mc mb --ignore-existing myminio/morgan-artifacts;
-      mc mb --ignore-existing myminio/morgan-audio;
-      mc policy set download myminio/morgan-documents;
-      mc policy set download myminio/morgan-artifacts;
-      mc policy set download myminio/morgan-audio;
-      exit 0;
+      echo 'Configuring MinIO alias...';
+      mc alias set myminio http://minio:9000 morgan ${MINIO_ROOT_PASSWORD} || exit 1;
+      echo 'Creating buckets...';
+      mc mb --ignore-existing myminio/morgan-documents || exit 1;
+      mc mb --ignore-existing myminio/morgan-artifacts || exit 1;
+      mc mb --ignore-existing myminio/morgan-audio || exit 1;
+      echo 'Setting bucket policies...';
+      mc policy set download myminio/morgan-documents || exit 1;
+      mc policy set download myminio/morgan-artifacts || exit 1;
+      mc policy set download myminio/morgan-audio || exit 1;
+      echo 'MinIO initialization completed successfully';
       "
     networks:
       - morgan-net
