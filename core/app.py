@@ -1,6 +1,6 @@
 """
 Morgan AI Assistant - Core Service
-Modern orchestration service with async/await support
+Modern orchestration service with async/await support and emotional intelligence
 """
 
 import asyncio
@@ -12,6 +12,7 @@ import time
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
@@ -38,6 +39,7 @@ from integrations.manager import IntegrationManager
 from services.streaming_orchestrator import StreamingOrchestrator
 from memory.manager import MemoryManager
 from tools.mcp_manager import MCPToolsManager
+from emotional_handler import EmotionalHandler
 
 
 class CoreConfig(BaseModel):
@@ -92,6 +94,7 @@ class MorganCore:
         self.api_server = None
         self.memory_manager = None
         self.tools_manager = None
+        self.emotional_handler = None  # Emotional intelligence handler
 
         # Runtime state
         self.running = False
@@ -187,6 +190,10 @@ class MorganCore:
                 max_history=self.core_config.max_history,
                 timeout=self.core_config.conversation_timeout,
             )
+
+            # Initialize emotional intelligence handler
+            self.emotional_handler = EmotionalHandler()
+            self.logger.info("Emotional intelligence handler initialized")
 
             # Initialize handler registry
             self.handler_registry = HandlerRegistry(self)
@@ -388,37 +395,100 @@ class MorganCore:
         user_id: str = "default",
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Response:
-        """Process text input request"""
+        """Process text input request with emotional intelligence"""
         with Timer(self.logger, f"Text processing for user {user_id}"):
             try:
                 self.request_count += 1
 
+                # Detect emotion from user input
+                emotion = self.emotional_handler.detect_emotion(text)
+                self.emotional_handler.track_user_emotion(user_id, emotion)
+
+                # Log significant emotional states
+                if emotion.intensity > 0.6:
+                    self.logger.info(
+                        f"User {user_id}: {emotion.primary_emotion.value} "
+                        f"(intensity: {emotion.intensity:.2f}, confidence: {emotion.confidence:.2f})"
+                    )
+
                 # Get or create conversation context (async)
                 context = await self.conversation_manager.get_context(user_id)
 
-                # Add user message (async)
-                user_message = Message(role="user", content=text, metadata=metadata)
+                # Enhance metadata with emotional context
+                enhanced_metadata = metadata or {}
+                enhanced_metadata.update(
+                    {
+                        "emotion": emotion.primary_emotion.value,
+                        "emotion_intensity": emotion.intensity,
+                        "emotion_confidence": emotion.confidence,
+                        "emotion_indicators": emotion.indicators,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
+
+                # Add user message with emotional metadata
+                user_message = Message(
+                    role="user",
+                    content=text,
+                    timestamp=datetime.utcnow().isoformat(),
+                    metadata=enhanced_metadata,
+                )
                 await self.conversation_manager.add_message(user_id, user_message)
+
+                # Get emotional context for LLM to enable empathetic responses
+                emotional_context = self.emotional_handler.get_emotional_context_for_llm(
+                    user_id, emotion
+                )
+
+                # Enhance context with emotional awareness if emotion is significant
+                if emotional_context and emotion.intensity > 0.5:
+                    # Prepend emotional context to the conversation
+                    enhanced_metadata["emotional_context"] = emotional_context
 
                 # Process through streaming orchestrator
                 response = await self.streaming_orchestrator.process_request(
-                    context, metadata
+                    context, enhanced_metadata
                 )
 
-                # Add assistant response to context (async)
+                # Enhance response with empathy if emotion is strong
+                enhanced_text = response.text
+                if emotion.intensity > 0.7:
+                    enhanced_text = self.emotional_handler.enhance_response_with_empathy(
+                        response.text, emotion
+                    )
+
+                # Add assistant response to context
                 assistant_message = Message(
                     role="assistant",
-                    content=response.text,
+                    content=enhanced_text,
+                    timestamp=datetime.utcnow().isoformat(),
                     metadata={
-                        "actions": len(response.actions) if response.actions else 0
+                        "actions": len(response.actions) if response.actions else 0,
+                        "empathy_enhanced": enhanced_text != response.text,
+                        "addressed_emotion": emotion.primary_emotion.value
+                        if emotion.intensity > 0.7
+                        else None,
                     },
                 )
                 await self.conversation_manager.add_message(user_id, assistant_message)
 
-                return response
+                # Return enhanced response with emotional metadata
+                return Response(
+                    text=enhanced_text,
+                    audio_data=response.audio_data,
+                    actions=response.actions,
+                    metadata={
+                        **(response.metadata or {}),
+                        "conversation_id": context.conversation_id,
+                        "emotion_detected": emotion.primary_emotion.value,
+                        "emotion_intensity": round(emotion.intensity, 2),
+                        "empathy_level": "high" if emotion.intensity > 0.7 else "normal",
+                    },
+                    confidence=response.confidence,
+                )
 
             except Exception as e:
-                self.logger.error(f"Error processing text request: {e}")
+                self.logger.error(f"Error processing text request: {e}", exc_info=True)
                 return Response(
                     text="I'm sorry, I'm having trouble processing your request. Please try again.",
                     metadata={"error": True, "error_message": str(e)},
@@ -477,6 +547,11 @@ class MorganCore:
             # Get version from pyproject.toml if available
             version = "0.2.0"  # Default version
 
+            # Get emotional intelligence statistics
+            emotional_stats = (
+                self.emotional_handler.get_stats() if self.emotional_handler else {}
+            )
+
             return {
                 "version": version,
                 "status": "healthy" if all(service_health.values()) else "degraded",
@@ -486,6 +561,12 @@ class MorganCore:
                 "services": service_health,
                 "orchestrator": orchestrator_status,
                 "conversations": conversation_status,
+                "emotional_intelligence": {
+                    "enabled": self.emotional_handler is not None,
+                    "tracked_users": emotional_stats.get("tracked_users", 0),
+                    "total_states": emotional_stats.get("total_emotional_states", 0),
+                    "active_users": emotional_stats.get("active_users", 0),
+                },
                 "timestamp": time.time(),
             }
 
