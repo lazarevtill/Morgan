@@ -1,6 +1,7 @@
 """
 Main entry point for TTS service
 """
+
 import asyncio
 import argparse
 
@@ -29,11 +30,7 @@ async def main():
     log_level = args.log_level if args.log_level else config.get("log_level", "INFO")
 
     # Setup logging
-    logger = setup_logging(
-        "tts_main",
-        log_level,
-        "logs/tts_main.log"
-    )
+    logger = setup_logging("tts_main", log_level, "logs/tts_main.log")
 
     logger.info("Starting Morgan TTS Service...")
     logger.info(f"Configuration: {config.all()}")
@@ -51,7 +48,7 @@ async def main():
         logger.error(f"TTS Service failed: {e}")
         raise
     finally:
-        if 'tts_service' in locals():
+        if "tts_service" in locals():
             await tts_service.stop()
 
 

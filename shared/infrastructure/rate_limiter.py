@@ -1,6 +1,7 @@
 """
 Rate limiting implementations for API calls
 """
+
 import asyncio
 import time
 from abc import ABC, abstractmethod
@@ -13,12 +14,14 @@ logger = logging.getLogger(__name__)
 
 class RateLimitExceeded(Exception):
     """Raised when rate limit is exceeded"""
+
     pass
 
 
 @dataclass
 class RateLimitConfig:
     """Rate limiter configuration"""
+
     requests_per_second: float = 10.0
     burst_size: Optional[int] = None  # Max burst, defaults to requests_per_second
 
@@ -82,10 +85,7 @@ class TokenBucketRateLimiter(RateLimiter):
             elapsed = now - self.last_update
 
             # Add tokens based on elapsed time
-            self.tokens = min(
-                self.capacity,
-                self.tokens + (elapsed * self.rate)
-            )
+            self.tokens = min(self.capacity, self.tokens + (elapsed * self.rate))
             self.last_update = now
 
             if self.tokens >= tokens:
@@ -108,10 +108,7 @@ class TokenBucketRateLimiter(RateLimiter):
                 await asyncio.sleep(wait_time)
 
                 # Retry acquisition
-                self.tokens = min(
-                    self.capacity,
-                    self.tokens + (wait_time * self.rate)
-                )
+                self.tokens = min(self.capacity, self.tokens + (wait_time * self.rate))
                 self.last_update = time.time()
                 self.tokens -= tokens
 
@@ -120,16 +117,13 @@ class TokenBucketRateLimiter(RateLimiter):
         # Update tokens before reporting state
         now = time.time()
         elapsed = now - self.last_update
-        current_tokens = min(
-            self.capacity,
-            self.tokens + (elapsed * self.rate)
-        )
+        current_tokens = min(self.capacity, self.tokens + (elapsed * self.rate))
 
         return {
             "available_tokens": current_tokens,
             "capacity": self.capacity,
             "rate": self.rate,
-            "utilization": 1.0 - (current_tokens / self.capacity)
+            "utilization": 1.0 - (current_tokens / self.capacity),
         }
 
 
@@ -204,5 +198,5 @@ class SlidingWindowRateLimiter(RateLimiter):
             "active_requests": len(active_requests),
             "max_requests": self.max_requests,
             "window_size": self.window_size,
-            "utilization": len(active_requests) / self.max_requests
+            "utilization": len(active_requests) / self.max_requests,
         }

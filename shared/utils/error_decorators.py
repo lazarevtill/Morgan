@@ -8,6 +8,7 @@ Provides:
 - Error aggregation for batch operations
 - Correlation ID propagation
 """
+
 import asyncio
 import functools
 import logging
@@ -20,7 +21,7 @@ from shared.utils.exceptions import (
     ErrorSeverity,
     NetworkTimeoutError,
     ServiceTimeoutError,
-    ServiceUnavailableError
+    ServiceUnavailableError,
 )
 
 
@@ -29,8 +30,9 @@ logger = logging.getLogger(__name__)
 
 class CircuitState(Enum):
     """Circuit breaker states"""
-    CLOSED = "closed"      # Normal operation
-    OPEN = "open"          # Failing, reject requests
+
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Failing, reject requests
     HALF_OPEN = "half_open"  # Testing if service recovered
 
 
@@ -50,7 +52,7 @@ class CircuitBreaker:
         failure_threshold: int = 5,
         recovery_timeout: float = 60.0,
         success_threshold: int = 2,
-        name: str = "default"
+        name: str = "default",
     ):
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
@@ -67,12 +69,14 @@ class CircuitBreaker:
         if self.state == CircuitState.OPEN:
             if self._should_attempt_reset():
                 self.state = CircuitState.HALF_OPEN
-                logger.info(f"Circuit breaker '{self.name}': HALF_OPEN (testing recovery)")
+                logger.info(
+                    f"Circuit breaker '{self.name}': HALF_OPEN (testing recovery)"
+                )
             else:
                 raise ServiceUnavailableError(
                     service_name=self.name,
                     message=f"Circuit breaker is OPEN (too many failures)",
-                    context={"circuit_breaker": self.name}
+                    context={"circuit_breaker": self.name},
                 )
 
         try:
@@ -88,12 +92,14 @@ class CircuitBreaker:
         if self.state == CircuitState.OPEN:
             if self._should_attempt_reset():
                 self.state = CircuitState.HALF_OPEN
-                logger.info(f"Circuit breaker '{self.name}': HALF_OPEN (testing recovery)")
+                logger.info(
+                    f"Circuit breaker '{self.name}': HALF_OPEN (testing recovery)"
+                )
             else:
                 raise ServiceUnavailableError(
                     service_name=self.name,
                     message=f"Circuit breaker is OPEN (too many failures)",
-                    context={"circuit_breaker": self.name}
+                    context={"circuit_breaker": self.name},
                 )
 
         try:
@@ -118,7 +124,9 @@ class CircuitBreaker:
                 self.state = CircuitState.CLOSED
                 self.failure_count = 0
                 self.success_count = 0
-                logger.info(f"Circuit breaker '{self.name}': CLOSED (service recovered)")
+                logger.info(
+                    f"Circuit breaker '{self.name}': CLOSED (service recovered)"
+                )
         else:
             self.failure_count = max(0, self.failure_count - 1)
 
@@ -144,7 +152,7 @@ def get_circuit_breaker(
     name: str,
     failure_threshold: int = 5,
     recovery_timeout: float = 60.0,
-    success_threshold: int = 2
+    success_threshold: int = 2,
 ) -> CircuitBreaker:
     """Get or create a circuit breaker"""
     if name not in _circuit_breakers:
@@ -152,7 +160,7 @@ def get_circuit_breaker(
             failure_threshold=failure_threshold,
             recovery_timeout=recovery_timeout,
             success_threshold=success_threshold,
-            name=name
+            name=name,
         )
     return _circuit_breakers[name]
 
@@ -163,7 +171,7 @@ def retry_on_transient_error(
     max_delay: float = 60.0,
     exponential_base: float = 2.0,
     retryable_exceptions: Optional[Tuple[Type[Exception], ...]] = None,
-    on_retry: Optional[Callable[[Exception, int], None]] = None
+    on_retry: Optional[Callable[[Exception, int], None]] = None,
 ):
     """
     Retry decorator with exponential backoff for transient errors
@@ -209,17 +217,21 @@ def retry_on_transient_error(
                     if not is_retryable or attempt >= max_attempts:
                         logger.error(
                             f"Function {func.__name__} failed after {attempt} attempts: {e}",
-                            extra={"correlation_id": getattr(e, "correlation_id", None)}
+                            extra={
+                                "correlation_id": getattr(e, "correlation_id", None)
+                            },
                         )
                         raise
 
                     # Calculate delay with exponential backoff
-                    delay = min(base_delay * (exponential_base ** (attempt - 1)), max_delay)
+                    delay = min(
+                        base_delay * (exponential_base ** (attempt - 1)), max_delay
+                    )
 
                     logger.warning(
                         f"Retrying {func.__name__} (attempt {attempt}/{max_attempts}) "
                         f"after {delay:.2f}s due to: {e}",
-                        extra={"correlation_id": getattr(e, "correlation_id", None)}
+                        extra={"correlation_id": getattr(e, "correlation_id", None)},
                     )
 
                     # Call retry callback if provided
@@ -254,17 +266,21 @@ def retry_on_transient_error(
                     if not is_retryable or attempt >= max_attempts:
                         logger.error(
                             f"Function {func.__name__} failed after {attempt} attempts: {e}",
-                            extra={"correlation_id": getattr(e, "correlation_id", None)}
+                            extra={
+                                "correlation_id": getattr(e, "correlation_id", None)
+                            },
                         )
                         raise
 
                     # Calculate delay with exponential backoff
-                    delay = min(base_delay * (exponential_base ** (attempt - 1)), max_delay)
+                    delay = min(
+                        base_delay * (exponential_base ** (attempt - 1)), max_delay
+                    )
 
                     logger.warning(
                         f"Retrying {func.__name__} (attempt {attempt}/{max_attempts}) "
                         f"after {delay:.2f}s due to: {e}",
-                        extra={"correlation_id": getattr(e, "correlation_id", None)}
+                        extra={"correlation_id": getattr(e, "correlation_id", None)},
                     )
 
                     # Call retry callback if provided
@@ -290,7 +306,7 @@ def with_circuit_breaker(
     name: str,
     failure_threshold: int = 5,
     recovery_timeout: float = 60.0,
-    success_threshold: int = 2
+    success_threshold: int = 2,
 ):
     """
     Circuit breaker decorator
@@ -306,12 +322,13 @@ def with_circuit_breaker(
         async def call_llm_service():
             return await llm_service.generate()
     """
+
     def decorator(func: Callable) -> Callable:
         circuit_breaker = get_circuit_breaker(
             name=name,
             failure_threshold=failure_threshold,
             recovery_timeout=recovery_timeout,
-            success_threshold=success_threshold
+            success_threshold=success_threshold,
         )
 
         @functools.wraps(func)
@@ -343,20 +360,20 @@ def with_timeout(timeout_seconds: float, error_message: Optional[str] = None):
         async def slow_operation():
             await asyncio.sleep(60)  # Will raise ServiceTimeoutError
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
             try:
                 return await asyncio.wait_for(
-                    func(*args, **kwargs),
-                    timeout=timeout_seconds
+                    func(*args, **kwargs), timeout=timeout_seconds
                 )
             except asyncio.TimeoutError:
                 msg = error_message or f"Operation timed out after {timeout_seconds}s"
                 raise ServiceTimeoutError(
                     service_name=func.__name__,
                     timeout_seconds=timeout_seconds,
-                    message=msg
+                    message=msg,
                 )
 
         if not asyncio.iscoroutinefunction(func):
@@ -372,7 +389,7 @@ def handle_errors(
     default_error_message: str = "An error occurred",
     return_value_on_error: Any = None,
     suppress_errors: bool = False,
-    transform_exception: Optional[Callable[[Exception], Exception]] = None
+    transform_exception: Optional[Callable[[Exception], Exception]] = None,
 ):
     """
     Error handling decorator with logging and transformation
@@ -402,7 +419,7 @@ def handle_errors(
                 log.error(
                     f"Error in {func.__name__}: {e}",
                     exc_info=True,
-                    extra={"correlation_id": correlation_id}
+                    extra={"correlation_id": correlation_id},
                 )
 
                 # Transform exception if transformer provided
@@ -425,7 +442,7 @@ def handle_errors(
                 log.error(
                     f"Error in {func.__name__}: {e}",
                     exc_info=True,
-                    extra={"correlation_id": correlation_id}
+                    extra={"correlation_id": correlation_id},
                 )
 
                 # Transform exception if transformer provided
@@ -466,6 +483,7 @@ def aggregate_errors(operation_name: str = "batch_operation"):
                     errors.append((item, e))
             return results, errors
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def async_wrapper(*args, **kwargs) -> Any:
@@ -478,14 +496,16 @@ def aggregate_errors(operation_name: str = "batch_operation"):
                     if errors:
                         logger.warning(
                             f"{operation_name}: {len(errors)} errors occurred in batch operation",
-                            extra={"error_count": len(errors)}
+                            extra={"error_count": len(errors)},
                         )
                         # Return results and errors for caller to handle
                         return results, errors
 
                 return result
             except Exception as e:
-                logger.error(f"{operation_name}: Batch operation failed completely: {e}")
+                logger.error(
+                    f"{operation_name}: Batch operation failed completely: {e}"
+                )
                 raise
 
         @functools.wraps(func)
@@ -499,13 +519,15 @@ def aggregate_errors(operation_name: str = "batch_operation"):
                     if errors:
                         logger.warning(
                             f"{operation_name}: {len(errors)} errors occurred in batch operation",
-                            extra={"error_count": len(errors)}
+                            extra={"error_count": len(errors)},
                         )
                         return results, errors
 
                 return result
             except Exception as e:
-                logger.error(f"{operation_name}: Batch operation failed completely: {e}")
+                logger.error(
+                    f"{operation_name}: Batch operation failed completely: {e}"
+                )
                 raise
 
         if asyncio.iscoroutinefunction(func):
@@ -532,6 +554,7 @@ def with_fallback(fallback_func: Callable, log_fallback: bool = True):
         async def get_llm_response():
             return await llm_service.generate()
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def async_wrapper(*args, **kwargs) -> Any:
@@ -541,7 +564,7 @@ def with_fallback(fallback_func: Callable, log_fallback: bool = True):
                 if log_fallback:
                     logger.warning(
                         f"Using fallback for {func.__name__} due to error: {e}",
-                        extra={"correlation_id": getattr(e, "correlation_id", None)}
+                        extra={"correlation_id": getattr(e, "correlation_id", None)},
                     )
 
                 # Execute fallback
@@ -558,7 +581,7 @@ def with_fallback(fallback_func: Callable, log_fallback: bool = True):
                 if log_fallback:
                     logger.warning(
                         f"Using fallback for {func.__name__} due to error: {e}",
-                        extra={"correlation_id": getattr(e, "correlation_id", None)}
+                        extra={"correlation_id": getattr(e, "correlation_id", None)},
                     )
 
                 # Execute fallback
@@ -579,6 +602,7 @@ def propagate_correlation_id(func: Callable) -> Callable:
     Extracts correlation_id from kwargs and ensures it's passed to
     all MorganException instances.
     """
+
     @functools.wraps(func)
     async def async_wrapper(*args, **kwargs) -> Any:
         correlation_id = kwargs.get("correlation_id")
@@ -594,9 +618,7 @@ def propagate_correlation_id(func: Callable) -> Callable:
             # Wrap non-Morgan exceptions with correlation ID
             if correlation_id:
                 raise MorganException(
-                    message=str(e),
-                    correlation_id=correlation_id,
-                    cause=e
+                    message=str(e), correlation_id=correlation_id, cause=e
                 )
             raise
 
@@ -615,9 +637,7 @@ def propagate_correlation_id(func: Callable) -> Callable:
             # Wrap non-Morgan exceptions with correlation ID
             if correlation_id:
                 raise MorganException(
-                    message=str(e),
-                    correlation_id=correlation_id,
-                    cause=e
+                    message=str(e), correlation_id=correlation_id, cause=e
                 )
             raise
 

@@ -2,6 +2,7 @@
 Memory Manager for Morgan AI Assistant
 Handles persistent memory storage using PostgreSQL and Qdrant
 """
+
 import asyncio
 import logging
 import uuid
@@ -10,7 +11,14 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 import asyncpg
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+from qdrant_client.models import (
+    Distance,
+    VectorParams,
+    PointStruct,
+    Filter,
+    FieldCondition,
+    MatchValue,
+)
 import numpy as np
 
 from shared.utils.logging import setup_logging
@@ -18,6 +26,7 @@ from shared.utils.logging import setup_logging
 
 class Memory:
     """Memory data class"""
+
     def __init__(
         self,
         id: str,
@@ -28,7 +37,7 @@ class Memory:
         importance: int = 5,
         metadata: Optional[Dict] = None,
         created_at: Optional[datetime] = None,
-        qdrant_point_id: Optional[str] = None
+        qdrant_point_id: Optional[str] = None,
     ):
         self.id = id
         self.user_id = user_id
@@ -50,7 +59,7 @@ class Memory:
             "importance": self.importance,
             "metadata": self.metadata,
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "qdrant_point_id": self.qdrant_point_id
+            "qdrant_point_id": self.qdrant_point_id,
         }
 
 
@@ -66,7 +75,7 @@ class MemoryManager:
         postgres_dsn: str,
         qdrant_host: str = "localhost",
         qdrant_port: int = 6333,
-        embedding_dimension: int = 384  # all-MiniLM-L6-v2 default
+        embedding_dimension: int = 384,  # all-MiniLM-L6-v2 default
     ):
         self.postgres_dsn = postgres_dsn
         self.qdrant_host = qdrant_host
@@ -87,18 +96,13 @@ class MemoryManager:
         try:
             # Initialize PostgreSQL connection pool
             self.pg_pool = await asyncpg.create_pool(
-                self.postgres_dsn,
-                min_size=2,
-                max_size=10,
-                command_timeout=60
+                self.postgres_dsn, min_size=2, max_size=10, command_timeout=60
             )
             self.logger.info("PostgreSQL connection pool created")
 
             # Initialize Qdrant client
             self.qdrant_client = QdrantClient(
-                host=self.qdrant_host,
-                port=self.qdrant_port,
-                timeout=30
+                host=self.qdrant_host, port=self.qdrant_port, timeout=30
             )
 
             # Create collection if it doesn't exist
@@ -107,16 +111,17 @@ class MemoryManager:
                 self.qdrant_client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config=VectorParams(
-                        size=self.embedding_dimension,
-                        distance=Distance.COSINE
-                    )
+                        size=self.embedding_dimension, distance=Distance.COSINE
+                    ),
                 )
                 self.logger.info(f"Created Qdrant collection: {self.collection_name}")
             else:
                 self.logger.info(f"Qdrant collection exists: {self.collection_name}")
 
             # Initialize thread pool for CPU-bound operations
-            self.executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="embedding")
+            self.executor = ThreadPoolExecutor(
+                max_workers=2, thread_name_prefix="embedding"
+            )
 
             # Initialize embedding service connection (no longer need thread pool for embeddings)
             # Embedding generation now happens via HTTP calls to LLM service
@@ -150,7 +155,7 @@ class MemoryManager:
         category: Optional[str] = None,
         importance: int = 5,
         metadata: Optional[Dict] = None,
-        embedding: Optional[np.ndarray] = None
+        embedding: Optional[np.ndarray] = None,
     ) -> Memory:
         """
         Create a new memory
@@ -184,7 +189,7 @@ class MemoryManager:
                     memory_type,
                     category,
                     importance,
-                    metadata or {}
+                    metadata or {},
                 )
 
                 # Link to vector
@@ -196,20 +201,26 @@ class MemoryManager:
                     qdrant_point_id,
                     self.collection_name,
                     "memory",
-                    memory_id
+                    memory_id,
                 )
 
             # Store embedding in Qdrant
             if embedding is None:
                 embedding = await self._generate_embedding(content)
-                self.logger.debug(f"Generated embedding with dimension: {len(embedding) if hasattr(embedding, '__len__') else 'unknown'}")
+                self.logger.debug(
+                    f"Generated embedding with dimension: {len(embedding) if hasattr(embedding, '__len__') else 'unknown'}"
+                )
 
             self.qdrant_client.upsert(
                 collection_name=self.collection_name,
                 points=[
                     PointStruct(
                         id=qdrant_point_id,
-                        vector=embedding.tolist() if isinstance(embedding, np.ndarray) else embedding,
+                        vector=(
+                            embedding.tolist()
+                            if isinstance(embedding, np.ndarray)
+                            else embedding
+                        ),
                         payload={
                             "memory_id": memory_id,
                             "user_id": user_id,
@@ -217,10 +228,10 @@ class MemoryManager:
                             "memory_type": memory_type,
                             "category": category,
                             "importance": importance,
-                            "created_at": datetime.now().isoformat()
-                        }
+                            "created_at": datetime.now().isoformat(),
+                        },
                     )
-                ]
+                ],
             )
 
             self.logger.info(f"Created memory: {memory_id} for user: {user_id}")
@@ -233,7 +244,7 @@ class MemoryManager:
                 category=category,
                 importance=importance,
                 metadata=metadata,
-                qdrant_point_id=qdrant_point_id
+                qdrant_point_id=qdrant_point_id,
             )
 
         except Exception as e:
@@ -246,7 +257,7 @@ class MemoryManager:
         query: str,
         limit: int = 10,
         memory_type: Optional[str] = None,
-        min_importance: int = 1
+        min_importance: int = 1,
     ) -> List[Memory]:
         """
         Search memories semantically using vector similarity
@@ -264,7 +275,9 @@ class MemoryManager:
         try:
             # Generate query embedding
             query_embedding = await self._generate_embedding(query)
-            self.logger.debug(f"Generated query embedding with dimension: {len(query_embedding) if hasattr(query_embedding, '__len__') else 'unknown'}")
+            self.logger.debug(
+                f"Generated query embedding with dimension: {len(query_embedding) if hasattr(query_embedding, '__len__') else 'unknown'}"
+            )
 
             # Build filter
             must_conditions = [
@@ -273,7 +286,9 @@ class MemoryManager:
 
             if memory_type:
                 must_conditions.append(
-                    FieldCondition(key="memory_type", match=MatchValue(value=memory_type))
+                    FieldCondition(
+                        key="memory_type", match=MatchValue(value=memory_type)
+                    )
                 )
 
             if min_importance > 1:
@@ -284,28 +299,36 @@ class MemoryManager:
             # Search in Qdrant
             search_results = self.qdrant_client.search(
                 collection_name=self.collection_name,
-                query_vector=query_embedding.tolist() if isinstance(query_embedding, np.ndarray) else query_embedding,
+                query_vector=(
+                    query_embedding.tolist()
+                    if isinstance(query_embedding, np.ndarray)
+                    else query_embedding
+                ),
                 query_filter=Filter(must=must_conditions) if must_conditions else None,
                 limit=limit,
-                with_payload=True
+                with_payload=True,
             )
 
             # Convert to Memory objects
             memories = []
             for result in search_results:
                 payload = result.payload
-                memories.append(Memory(
-                    id=payload["memory_id"],
-                    user_id=payload["user_id"],
-                    content=payload["content"],
-                    memory_type=payload.get("memory_type", "fact"),
-                    category=payload.get("category"),
-                    importance=payload.get("importance", 5),
-                    metadata=payload.get("metadata", {}),
-                    qdrant_point_id=result.id
-                ))
+                memories.append(
+                    Memory(
+                        id=payload["memory_id"],
+                        user_id=payload["user_id"],
+                        content=payload["content"],
+                        memory_type=payload.get("memory_type", "fact"),
+                        category=payload.get("category"),
+                        importance=payload.get("importance", 5),
+                        metadata=payload.get("metadata", {}),
+                        qdrant_point_id=result.id,
+                    )
+                )
 
-            self.logger.info(f"Found {len(memories)} memories for query: {query[:50]}...")
+            self.logger.info(
+                f"Found {len(memories)} memories for query: {query[:50]}..."
+            )
             return memories
 
         except Exception as e:
@@ -313,10 +336,7 @@ class MemoryManager:
             return []
 
     async def get_recent_memories(
-        self,
-        user_id: str,
-        limit: int = 20,
-        memory_type: Optional[str] = None
+        self, user_id: str, limit: int = 20, memory_type: Optional[str] = None
     ) -> List[Memory]:
         """Get most recent memories for a user"""
         try:
@@ -341,17 +361,23 @@ class MemoryManager:
 
                 memories = []
                 for row in rows:
-                    memories.append(Memory(
-                        id=str(row["id"]),
-                        user_id=row["user_id"],
-                        content=row["content"],
-                        memory_type=row["memory_type"],
-                        category=row["category"],
-                        importance=row["importance"],
-                        metadata=row["metadata"],
-                        created_at=row["created_at"],
-                        qdrant_point_id=str(row["qdrant_point_id"]) if row.get("qdrant_point_id") else None
-                    ))
+                    memories.append(
+                        Memory(
+                            id=str(row["id"]),
+                            user_id=row["user_id"],
+                            content=row["content"],
+                            memory_type=row["memory_type"],
+                            category=row["category"],
+                            importance=row["importance"],
+                            metadata=row["metadata"],
+                            created_at=row["created_at"],
+                            qdrant_point_id=(
+                                str(row["qdrant_point_id"])
+                                if row.get("qdrant_point_id")
+                                else None
+                            ),
+                        )
+                    )
 
                 return memories
 
@@ -366,7 +392,7 @@ class MemoryManager:
                 # Get vector reference first
                 vector_ref = await conn.fetchrow(
                     "SELECT qdrant_point_id FROM vector_references WHERE entity_id = $1 AND entity_type = 'memory'",
-                    memory_id
+                    memory_id,
                 )
 
                 # Delete from PostgreSQL (cascade will delete vector_references)
@@ -376,7 +402,7 @@ class MemoryManager:
                 if vector_ref:
                     self.qdrant_client.delete(
                         collection_name=self.collection_name,
-                        points_selector=[str(vector_ref["qdrant_point_id"])]
+                        points_selector=[str(vector_ref["qdrant_point_id"])],
                     )
 
             self.logger.info(f"Deleted memory: {memory_id}")
@@ -413,16 +439,21 @@ class MemoryManager:
 
                 # Truncate or pad to match expected dimension
                 if len(embedding_array) > self.embedding_dimension:
-                    embedding_array = embedding_array[:self.embedding_dimension]
+                    embedding_array = embedding_array[: self.embedding_dimension]
                 elif len(embedding_array) < self.embedding_dimension:
                     # Pad with zeros
-                    padding = np.zeros(self.embedding_dimension - len(embedding_array), dtype=np.float32)
+                    padding = np.zeros(
+                        self.embedding_dimension - len(embedding_array),
+                        dtype=np.float32,
+                    )
                     embedding_array = np.concatenate([embedding_array, padding])
 
                 return embedding_array
             else:
                 # Fallback to random vector if embedding fails
-                self.logger.warning(f"Embedding generation failed: {result.error if result else 'Unknown error'}")
+                self.logger.warning(
+                    f"Embedding generation failed: {result.error if result else 'Unknown error'}"
+                )
                 return np.random.rand(self.embedding_dimension).astype(np.float32)
 
         except Exception as e:
@@ -441,7 +472,7 @@ class MemoryManager:
                         last_accessed_at = CURRENT_TIMESTAMP
                     WHERE id = $1
                     """,
-                    memory_id
+                    memory_id,
                 )
         except Exception as e:
             self.logger.error(f"Failed to update memory access: {e}")
@@ -461,15 +492,21 @@ class MemoryManager:
                     FROM memories
                     WHERE user_id = $1
                     """,
-                    user_id
+                    user_id,
                 )
 
                 return {
                     "total_memories": stats["total_memories"],
                     "unique_types": stats["unique_types"],
                     "unique_categories": stats["unique_categories"],
-                    "avg_importance": float(stats["avg_importance"]) if stats["avg_importance"] else 0,
-                    "latest_memory": stats["latest_memory"].isoformat() if stats["latest_memory"] else None
+                    "avg_importance": (
+                        float(stats["avg_importance"]) if stats["avg_importance"] else 0
+                    ),
+                    "latest_memory": (
+                        stats["latest_memory"].isoformat()
+                        if stats["latest_memory"]
+                        else None
+                    ),
                 }
 
         except Exception as e:

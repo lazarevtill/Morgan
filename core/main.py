@@ -1,6 +1,7 @@
 """
 Main entry point for Core service
 """
+
 import asyncio
 import argparse
 
@@ -29,9 +30,7 @@ async def main():
 
     # Setup logging
     logger = setup_logging(
-        "core_main",
-        config.get("log_level", "INFO"),
-        "logs/core_main.log"
+        "core_main", config.get("log_level", "INFO"), "logs/core_main.log"
     )
 
     logger.info("Starting Morgan Core Service...")

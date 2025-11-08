@@ -1,6 +1,7 @@
 """
 FastAPI server for LLM service with streaming support
 """
+
 import logging
 from typing import Dict, Any, Optional
 import json
@@ -12,13 +13,18 @@ import uvicorn
 
 from shared.models.base import LLMRequest, LLMResponse
 from shared.utils.logging import setup_logging
-from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware, RateLimitMiddleware
+from shared.utils.middleware import (
+    RequestIDMiddleware,
+    TimingMiddleware,
+    RateLimitMiddleware,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class GenerateRequest(BaseModel):
     """Generation request"""
+
     prompt: str = Field(..., description="Input prompt")
     context: Optional[list] = Field(None, description="Conversation context")
     model: Optional[str] = Field(None, description="Model to use")
@@ -30,12 +36,14 @@ class GenerateRequest(BaseModel):
 
 class EmbeddingRequest(BaseModel):
     """Embedding request"""
+
     text: str = Field(..., description="Text to embed")
     model: Optional[str] = Field(None, description="Embedding model to use")
 
 
 class ModelListResponse(BaseModel):
     """Model list response"""
+
     models: list
     total: int
 
@@ -55,7 +63,7 @@ class LLMAPIServer:
         app = FastAPI(
             title="Morgan LLM Service",
             description="LLM service with OpenAI-compatible API",
-            version="0.2.0"
+            version="0.2.0",
         )
 
         # Add middleware
@@ -65,7 +73,7 @@ class LLMAPIServer:
             RateLimitMiddleware,
             requests_per_second=20.0,  # LLM service can handle more requests
             burst_size=40,
-            exempt_paths=["/health", "/docs", "/redoc", "/openapi.json"]
+            exempt_paths=["/health", "/docs", "/redoc", "/openapi.json"],
         )
 
         @app.get("/health")
@@ -88,14 +96,14 @@ class LLMAPIServer:
                     model=request.model,
                     max_tokens=request.max_tokens,
                     temperature=request.temperature,
-                    system_prompt=request.system_prompt
+                    system_prompt=request.system_prompt,
                 )
 
                 # Check if streaming is requested
                 if request.stream:
                     raise HTTPException(
-                        status_code=400, 
-                        detail="Use /stream endpoint for streaming responses"
+                        status_code=400,
+                        detail="Use /stream endpoint for streaming responses",
                     )
 
                 response = await self.llm_service.generate(llm_request)
@@ -116,16 +124,18 @@ class LLMAPIServer:
                     model=request.model,
                     max_tokens=request.max_tokens,
                     temperature=request.temperature,
-                    system_prompt=request.system_prompt
+                    system_prompt=request.system_prompt,
                 )
 
                 async def generate_stream():
                     """Generate streaming response"""
                     try:
-                        async for chunk in self.llm_service.generate_stream(llm_request):
+                        async for chunk in self.llm_service.generate_stream(
+                            llm_request
+                        ):
                             # Send as SSE format
                             yield f"data: {json.dumps({'text': chunk})}\n\n"
-                        
+
                         # Send done signal
                         yield f"data: {json.dumps({'done': True})}\n\n"
                     except Exception as e:
@@ -138,8 +148,8 @@ class LLMAPIServer:
                     headers={
                         "Cache-Control": "no-cache",
                         "Connection": "keep-alive",
-                        "X-Accel-Buffering": "no"
-                    }
+                        "X-Accel-Buffering": "no",
+                    },
                 )
 
             except Exception as e:
@@ -150,11 +160,14 @@ class LLMAPIServer:
         async def embed_text(request: EmbeddingRequest):
             """Generate text embeddings"""
             try:
-                embedding = await self.llm_service.embed_text(request.text, request.model)
+                embedding = await self.llm_service.embed_text(
+                    request.text, request.model
+                )
                 return {
                     "embedding": embedding,
-                    "model": request.model or self.llm_service.llm_config.embedding_model,
-                    "dimensions": len(embedding)
+                    "model": request.model
+                    or self.llm_service.llm_config.embedding_model,
+                    "dimensions": len(embedding),
                 }
             except Exception as e:
                 self.logger.error(f"Embedding error: {e}")
@@ -168,7 +181,9 @@ class LLMAPIServer:
                 return ModelListResponse(**models_data)
             except Exception as e:
                 self.logger.error(f"List models error: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to list models: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to list models: {e}"
+                )
 
         @app.get("/models/{model_name}")
         async def get_model_info(model_name: str):
@@ -178,7 +193,9 @@ class LLMAPIServer:
                 return model_info
             except Exception as e:
                 self.logger.error(f"Get model info error: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to get model info: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to get model info: {e}"
+                )
 
         @app.get("/")
         async def root():
@@ -188,7 +205,7 @@ class LLMAPIServer:
                 "version": "0.2.0",
                 "status": "running",
                 "docs": "/docs",
-                "health": "/health"
+                "health": "/health",
             }
 
         self.app = app
@@ -198,12 +215,9 @@ class LLMAPIServer:
         """Start the API server"""
         self.create_app()
         self.logger.info(f"Starting LLM API server on {self.host}:{self.port}")
-        
+
         config = uvicorn.Config(
-            self.app,
-            host=self.host,
-            port=self.port,
-            log_level="info"
+            self.app, host=self.host, port=self.port, log_level="info"
         )
         server = uvicorn.Server(config)
         await server.serve()

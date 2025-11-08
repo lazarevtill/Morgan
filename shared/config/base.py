@@ -1,6 +1,7 @@
 """
 Base configuration management for Morgan AI Assistant services
 """
+
 import os
 import yaml
 from typing import Dict, Any, Optional
@@ -9,6 +10,7 @@ from pathlib import Path
 
 class ConfigError(Exception):
     """Custom exception for configuration errors"""
+
     pass
 
 
@@ -32,7 +34,7 @@ class BaseConfig:
         default_dirs = [
             Path.cwd() / "config",
             Path.home() / ".morgan" / "config",
-            Path("/etc/morgan")
+            Path("/etc/morgan"),
         ]
 
         for config_dir in default_dirs:
@@ -51,7 +53,7 @@ class BaseConfig:
         # Load from YAML file if it exists
         if self.config_path.exists():
             try:
-                with open(self.config_path, 'r') as f:
+                with open(self.config_path, "r") as f:
                     config = yaml.safe_load(f) or {}
             except Exception as e:
                 raise ConfigError(f"Failed to load config file {self.config_path}: {e}")
@@ -71,11 +73,15 @@ class BaseConfig:
             env_value = os.getenv(env_var)
             if env_value is not None:
                 # Convert string values to appropriate types
-                result = self._set_nested_value(result, key, self._convert_env_value(env_value))
+                result = self._set_nested_value(
+                    result, key, self._convert_env_value(env_value)
+                )
 
         return result
 
-    def _flatten_config(self, config: Dict[str, Any], prefix: str = "") -> Dict[str, str]:
+    def _flatten_config(
+        self, config: Dict[str, Any], prefix: str = ""
+    ) -> Dict[str, str]:
         """Flatten nested config dict for environment variable mapping"""
         flattened = {}
 
@@ -89,9 +95,11 @@ class BaseConfig:
 
         return flattened
 
-    def _set_nested_value(self, config: Dict[str, Any], key: str, value: Any) -> Dict[str, Any]:
+    def _set_nested_value(
+        self, config: Dict[str, Any], key: str, value: Any
+    ) -> Dict[str, Any]:
         """Set a nested value in config dict"""
-        keys = key.split('.')
+        keys = key.split(".")
         current = config
 
         for k in keys[:-1]:
@@ -105,8 +113,8 @@ class BaseConfig:
     def _convert_env_value(self, value: str) -> Any:
         """Convert environment variable string to appropriate type"""
         # Boolean conversion
-        if value.lower() in ('true', 'false'):
-            return value.lower() == 'true'
+        if value.lower() in ("true", "false"):
+            return value.lower() == "true"
 
         # Integer conversion
         try:
@@ -121,14 +129,14 @@ class BaseConfig:
             pass
 
         # List conversion (comma-separated)
-        if ',' in value:
-            return [item.strip() for item in value.split(',')]
+        if "," in value:
+            return [item.strip() for item in value.split(",")]
 
         return value
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get configuration value by key with environment variable fallback"""
-        keys = key.split('.')
+        keys = key.split(".")
         current = self._config
 
         for k in keys:
@@ -165,7 +173,7 @@ class BaseConfig:
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            with open(self.config_path, 'w') as f:
+            with open(self.config_path, "w") as f:
                 yaml.dump(self._config, f, default_flow_style=False, sort_keys=False)
         except Exception as e:
             raise ConfigError(f"Failed to save config file {self.config_path}: {e}")
@@ -220,7 +228,7 @@ def get_default_config(service_name: str) -> Dict[str, Any]:
             "gpu_layers": -1,
             "context_window": 4096,
             "system_prompt": "You are Morgan, a helpful AI assistant.",
-            "log_level": "INFO"
+            "log_level": "INFO",
         },
         "tts": {
             "host": "0.0.0.0",
@@ -232,7 +240,7 @@ def get_default_config(service_name: str) -> Dict[str, Any]:
             "speed": 1.0,
             "output_format": "wav",
             "sample_rate": 22050,
-            "log_level": "INFO"
+            "log_level": "INFO",
         },
         "stt": {
             "host": "0.0.0.0",
@@ -244,7 +252,7 @@ def get_default_config(service_name: str) -> Dict[str, Any]:
             "chunk_size": 1024,
             "threshold": 0.5,
             "min_silence_duration": 0.5,
-            "log_level": "INFO"
+            "log_level": "INFO",
         },
         "vad": {
             "host": "0.0.0.0",
@@ -256,7 +264,7 @@ def get_default_config(service_name: str) -> Dict[str, Any]:
             "window_size": 512,
             "sample_rate": 16000,
             "device": "cpu",
-            "log_level": "INFO"
+            "log_level": "INFO",
         },
         "core": {
             "host": "0.0.0.0",
@@ -267,8 +275,8 @@ def get_default_config(service_name: str) -> Dict[str, Any]:
             "vad_service_url": "http://vad:8004",
             "conversation_timeout": 1800,
             "max_history": 50,
-            "log_level": "INFO"
-        }
+            "log_level": "INFO",
+        },
     }
 
     return defaults.get(service_name, {})

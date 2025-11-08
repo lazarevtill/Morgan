@@ -1,6 +1,7 @@
 """
 Conversation manager for Morgan Core Service with PostgreSQL and Redis
 """
+
 import asyncio
 import logging
 import time
@@ -25,12 +26,14 @@ class ConversationManager:
         db_client: Optional[DatabaseClient] = None,
         redis_client: Optional[RedisClient] = None,
         max_history: int = 50,
-        timeout: int = 1800
+        timeout: int = 1800,
     ):
         self.config = config
         self.max_history = max_history
         self.timeout = timeout  # seconds
-        self.logger = setup_logging("conversation_manager", "INFO", "logs/conversation.log")
+        self.logger = setup_logging(
+            "conversation_manager", "INFO", "logs/conversation.log"
+        )
 
         # Database clients
         self.db = db_client
@@ -63,11 +66,13 @@ class ConversationManager:
                 if cached_context:
                     self.last_accessed[user_id] = current_time
                     # Convert to ConversationContext
-                    messages = [Message(**msg) for msg in cached_context.get("messages", [])]
+                    messages = [
+                        Message(**msg) for msg in cached_context.get("messages", [])
+                    ]
                     context = ConversationContext(
                         conversation_id=cached_context["conversation_id"],
                         user_id=user_id,
-                        messages=messages
+                        messages=messages,
                     )
                     # Add database UUID if available
                     if "db_id" in cached_context:
@@ -90,52 +95,53 @@ class ConversationManager:
                 if conversations:
                     conv = conversations[0]
                     # Load messages
-                    messages_db = await self.db.get_recent_messages(conv.id, self.max_history)
+                    messages_db = await self.db.get_recent_messages(
+                        conv.id, self.max_history
+                    )
                     messages = [
                         Message(
                             role=msg.role,
                             content=msg.content,
                             timestamp=msg.created_at,
-                            metadata=msg.metadata
+                            metadata=msg.metadata,
                         )
                         for msg in messages_db
                     ]
-                    
+
                     context = ConversationContext(
                         conversation_id=conv.conversation_id,
                         user_id=user_id,
-                        messages=messages
+                        messages=messages,
                     )
                     context.id = conv.id  # Store database UUID
                 else:
                     # Create new conversation in DB
                     conversation_id = f"conv_{user_id}_{int(current_time)}"
                     conv_model = ConversationModel(
-                        conversation_id=conversation_id,
-                        user_id=user_id
+                        conversation_id=conversation_id, user_id=user_id
                     )
                     await self.db.create_conversation(conv_model)
-                    
+
                     context = ConversationContext(
-                        conversation_id=conversation_id,
-                        user_id=user_id,
-                        messages=[]
+                        conversation_id=conversation_id, user_id=user_id, messages=[]
                     )
                     # Get the created conversation ID
                     created_conv = await self.db.get_conversation(conversation_id)
                     if created_conv:
                         context.id = created_conv.id
-                
+
                 # Cache in memory and Redis
                 self.conversations[user_id] = context
                 self.last_accessed[user_id] = current_time
-                
+
                 if self.redis:
                     await self._cache_context_to_redis(user_id, context)
-                
-                self.logger.info(f"Loaded/created conversation from DB for user: {user_id}")
+
+                self.logger.info(
+                    f"Loaded/created conversation from DB for user: {user_id}"
+                )
                 return context
-                
+
             except Exception as e:
                 self.logger.error(f"Database error for user {user_id}: {e}")
 
@@ -143,7 +149,7 @@ class ConversationManager:
         context = ConversationContext(
             conversation_id=f"conv_{user_id}_{int(current_time)}",
             user_id=user_id,
-            messages=[]
+            messages=[],
         )
         self.conversations[user_id] = context
         self.last_accessed[user_id] = current_time
@@ -156,26 +162,27 @@ class ConversationManager:
         if user_id in self.conversations:
             del self.conversations[user_id]
             del self.last_accessed[user_id]
-        
+
         # Clear from Redis
         if self.redis:
             try:
                 await self.redis.delete(f"conv:context:{user_id}")
             except Exception as e:
-                self.logger.warning(f"Failed to clear Redis cache for user {user_id}: {e}")
-        
+                self.logger.warning(
+                    f"Failed to clear Redis cache for user {user_id}: {e}"
+                )
+
         # Mark as inactive in database
         if self.db:
             try:
                 conversations = await self.db.get_user_conversations(user_id, limit=1)
                 if conversations:
                     await self.db.update_conversation(
-                        conversations[0].conversation_id,
-                        is_active=False
+                        conversations[0].conversation_id, is_active=False
                     )
             except Exception as e:
                 self.logger.warning(f"Failed to update DB for user {user_id}: {e}")
-        
+
         self.logger.info(f"Reset conversation context for user: {user_id}")
 
     async def add_message(self, user_id: str, message: Message):
@@ -185,7 +192,7 @@ class ConversationManager:
 
         # Trim history if too long
         if len(context.messages) > self.max_history:
-            context.messages = context.messages[-self.max_history:]
+            context.messages = context.messages[-self.max_history :]
 
         # Persist to database
         if self.db:
@@ -197,7 +204,7 @@ class ConversationManager:
                         role=message.role,
                         content=message.content,
                         sequence_number=len(context.messages),
-                        metadata=message.metadata
+                        metadata=message.metadata,
                     )
                     await self.db.add_message(message_model)
             except Exception as e:
@@ -221,7 +228,7 @@ class ConversationManager:
         """Cache conversation context to Redis"""
         if not self.redis:
             return
-        
+
         try:
             cache_data = {
                 "conversation_id": context.conversation_id,
@@ -230,20 +237,24 @@ class ConversationManager:
                     {
                         "role": msg.role,
                         "content": msg.content,
-                        "timestamp": msg.timestamp.isoformat() if hasattr(msg.timestamp, 'isoformat') else str(msg.timestamp),
-                        "metadata": msg.metadata
+                        "timestamp": (
+                            msg.timestamp.isoformat()
+                            if hasattr(msg.timestamp, "isoformat")
+                            else str(msg.timestamp)
+                        ),
+                        "metadata": msg.metadata,
                     }
-                    for msg in context.messages[-self.max_history:]  # Only cache recent messages
-                ]
+                    for msg in context.messages[
+                        -self.max_history :
+                    ]  # Only cache recent messages
+                ],
             }
             # Include database UUID if available
-            if hasattr(context, 'id') and context.id:
+            if hasattr(context, "id") and context.id:
                 cache_data["db_id"] = str(context.id)
-            
+
             await self.redis.set_json(
-                f"conv:context:{user_id}",
-                cache_data,
-                expire=self.timeout
+                f"conv:context:{user_id}", cache_data, expire=self.timeout
             )
         except Exception as e:
             self.logger.error(f"Failed to cache context to Redis: {e}")
@@ -256,7 +267,8 @@ class ConversationManager:
         # Count active conversations (accessed within timeout)
         current_time = time.time()
         active_conversations = sum(
-            1 for last_access in self.last_accessed.values()
+            1
+            for last_access in self.last_accessed.values()
             if current_time - last_access < self.timeout
         )
 
@@ -264,9 +276,15 @@ class ConversationManager:
             "total_conversations": total_conversations,
             "active_conversations": active_conversations,
             "total_messages": total_messages,
-            "average_messages_per_conversation": total_messages / total_conversations if total_conversations > 0 else 0,
-            "oldest_conversation": min(self.last_accessed.values()) if self.last_accessed else None,
-            "newest_conversation": max(self.last_accessed.values()) if self.last_accessed else None
+            "average_messages_per_conversation": (
+                total_messages / total_conversations if total_conversations > 0 else 0
+            ),
+            "oldest_conversation": (
+                min(self.last_accessed.values()) if self.last_accessed else None
+            ),
+            "newest_conversation": (
+                max(self.last_accessed.values()) if self.last_accessed else None
+            ),
         }
 
     def cleanup_expired(self):
@@ -284,7 +302,9 @@ class ConversationManager:
             del self.last_accessed[user_id]
 
         if expired_users:
-            self.logger.info(f"Cleaned up {len(expired_users)} expired conversations: {expired_users}")
+            self.logger.info(
+                f"Cleaned up {len(expired_users)} expired conversations: {expired_users}"
+            )
 
     def get_status(self) -> Dict[str, Any]:
         """Get conversation manager status"""
@@ -294,7 +314,7 @@ class ConversationManager:
             "timeout_seconds": self.timeout,
             "stats": self.get_conversation_stats(),
             "db_connected": self.db is not None,
-            "redis_connected": self.redis is not None
+            "redis_connected": self.redis is not None,
         }
 
     def start_cleanup_task(self):
@@ -318,4 +338,3 @@ class ConversationManager:
             except Exception as e:
                 self.logger.error(f"Error in periodic cleanup: {e}")
                 await asyncio.sleep(300)
-
