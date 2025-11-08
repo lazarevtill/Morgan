@@ -63,6 +63,8 @@ jobs:
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install linting tools
+        env:
+          UV_INDEX_URL: https://nexus.in.lazarev.cloud/repository/pypi-proxy/simple
         run: |
           uv pip install --system black isort ruff mypy types-PyYAML types-redis
           uv pip install --system -r requirements-base.txt
