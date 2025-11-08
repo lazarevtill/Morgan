@@ -17,7 +17,7 @@ Primary Goal: Align Morgan’s codebase with the advanced architecture by delive
   - [ ] 2.1 Route all local embedding calls through `morgan/jina/models/selector.py` and `JinaEmbeddingService` (R2.1, R2.2)
   - [ ] 2.2 Implement batching, multilingual support, and logging hooks (R2.3, R2.4, R2.5)
   - [ ] 2.3 Update CLI/config defaults to opt-in while preserving legacy fallbacks (R8.1, R8.3)
-  - [ ] 2.4 Enforce OpenAI-compatible embedding endpoint usage with logged fallback to approved local transformers when offline but main time we use embedding from gpt.lazarev.cloud and local jina based rerancers and etc (R2.6)
+  - [ ] 2.4 Enforce OpenAI-compatible embedding endpoint usage with logged fallback to approved local transformers when offline. Primarily use embeddings from gpt.lazarev.cloud, and when offline log a fallback to approved local transformers such as Jina-based rerankers (R2.6)
 
 - [ ] 3. Finalise multi-stage search with reranking
   - [ ] 3.1 Ensure `SmartSearch` delegates to `MultiStageSearchEngine` with hierarchical embeddings (R3.1)

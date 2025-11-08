@@ -233,7 +233,7 @@ The enhancement will provide Morgan with sophisticated document processing, inte
 3. WHEN processing multimodal content, THE Vectorization_Service SHALL use jina-clip-v2 model for combined text and image embeddings
 4. WHEN embedding model selection occurs, THE Vectorization_Service SHALL automatically choose the appropriate Jina model based on content type
 5. WHEN generating embeddings, THE Jina_Embeddings SHALL maintain compatibility with existing vector database schema
-6. WHEN the configured OpenAI-compatible embedding endpoint is reachable, THE Vectorization_Service SHALL send embedding requests there; only when it is unavailable SHALL it fall back to approved local HuggingFace/`sentence-transformers` models and log the fallback decision.
+6. WHEN the `offline_first` configuration flag is TRUE, THE Vectorization_Service SHALL skip all remote OpenAI-compatible endpoints and use only approved local HuggingFace/`sentence-transformers` models, logging that offline-first mode was selected; WHEN the `offline_first` flag is FALSE, THE Vectorization_Service SHALL attempt the configured OpenAI-compatible embedding endpoint first, and only if it is unreachable SHALL it fall back to local models, logging both the reachability check result and the fallback decision.
 
 ### Requirement 17
 
@@ -313,11 +313,11 @@ The enhancement will provide Morgan with sophisticated document processing, inte
 
 #### Acceptance Criteria for Requirement 23
 
-1. WHEN the system starts, THE Model_Manager SHALL load all required models locally without internet connectivity
-2. WHEN processing requests, THE Vectorization_Service SHALL use only local embedding models and never send data externally
+1. WHEN the system starts with `offline_first=true`, THE Model_Manager SHALL load all required models locally without internet connectivity and log that offline-first mode is active
+2. WHEN processing requests with `offline_first=true`, THE Vectorization_Service SHALL use only local embedding models and never send data externally, logging each embedding operation source
 3. WHEN generating responses, THE Assistant_Core SHALL use local language models (like Ollama or local transformers)
 4. WHEN storing data, THE Vector_Database SHALL keep all embeddings and memories on local storage
-5. WHEN the system operates, THE Self_Hosted_Assistant SHALL function fully without any external API calls
+5. WHEN the system operates with `offline_first=true`, THE Self_Hosted_Assistant SHALL function fully without any external API calls, and SHALL log a warning if any component attempts external connectivity
 
 ### Requirement 24
 

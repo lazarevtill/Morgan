@@ -2082,7 +2082,10 @@ morgan/
 ## Requirements-Design-Tasks Linkage Matrix
 
 ### Complete Traceability Mapping
- Multi-Stage Search Engine | Task 3.1, 3.3 | `morgan/search/multi_stage_search.py` |
+
+| Requirement | Design Component | Task Reference | Implementation File |
+|-------------|------------------|----------------|---------------------|
+| **R3: Multi-Stage Search** | Multi-Stage Search Engine | Task 3.1, 3.3 | `morgan/search/multi_stage_search.py` |
 | **R4: Document Types** | Enhanced Document Processor | Task 1 | `morgan/ingestion/enhanced_processor.py` |
 | **R5: Performance** | Batch Processor + Cache | Task 5, 11.1 | `morgan/optimization/batch_processor.py` |
 | **R6: Learning** | Search Fusion + Memory | Task 3, 8 | `morgan/search/` + `morgan/memory/` |
@@ -2097,13 +2100,6 @@ morgan/
 | **R16: Jina Embeddings** | Jina AI Model Manager | Task 2.1 | `morgan/jina/models/selector.py` |
 | **R17: Jina Reranking** | Advanced Reranking Engine | Task 3.2 | `morgan/jina/reranking/service.py` |
 | **R18: Web Scraping** | Intelligent Web Scraper | Task 4.1 | `morgan/jina/scraping/service.py` |
-| **R19: Code Intelligence** | Code Intelligence Engine | Task 4.3 | `morgan/jina/embeddings/code_service.py` |
-| **R20: Multimodal Content** | Multimodal Content Processor | Task 4.2 | `morgan/jina/embeddings/multimodal_service.py` |
-| **R21: Background Processing** | Background Processing Engine | Task 6 | `morgan/background/scheduler.py` |
-| **R22: Modular Jina Integration** | Jina AI Integration Module | Task 2.1 | `morgan/jina/` |
-| **R23: Self-Hosted Operation** | Local Model Manager | Task 12 | `morgan/local/model_manager.py` |
-| **R24: Continuous Learning** | Personalization Engine | Task 13 | `morgan/personalization/learning_engine.py` |
-| **R25: Deep Thinking & Reasoning** | Reasoning Engine | Task 14 | `morgan/reasoning/thinking_engine.py` |y` |
 | **R19: Code Intelligence** | Code Intelligence Engine | Task 4.3 | `morgan/jina/embeddings/code_service.py` |
 | **R20: Multimodal Content** | Multimodal Content Processor | Task 4.2 | `morgan/jina/embeddings/multimodal_service.py` |
 | **R21: Background Processing** | Background Processing Engine | Task 6 | `morgan/background/scheduler.py` |

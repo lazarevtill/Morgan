@@ -2,11 +2,11 @@
 
 ## Overview
 
-This design defines the refactoring program that evolves Morgan into a production‑ready companion assistant while preserving the existing human‑first ergonomics. The scope complements the **Advanced Vectorization System** by aligning ingestion, search, reasoning, learning, and background optimisation code with the 2025 architecture envisioned for Morgan.
+This design defines the refactoring program that evolves Morgan into a production‑ready companion assistant while preserving the existing human‑first ergonomics. The scope complements the **Advanced Vectorization System** by aligning ingestion, search, reasoning, learning, and background optimization code with the 2025 architecture envisioned for Morgan.
 
 ## Goals
 
-- Close the gap between current implementation and specification by delivering hierarchical embeddings, Jina integration, continuous background optimisation, and adaptive behaviours.
+- Close the gap between current implementation and specification by delivering hierarchical embeddings, Jina integration, continuous background optimization, and adaptive behaviors.
 - Simplify orchestration so Morgan can grow into a smart, self‑learning companion with memory, reranking, and transparent reasoning.
 - Maintain KISS principles—each module keeps a single responsibility with clear, composable interfaces.
 - Ensure every embedding/LLM call honours the configured OpenAI-compatible API base URL/IP, with explicit fallbacks to approved local HuggingFace/`sentence-transformers` models (e.g., self-hosted Jina models); no opaque third-party endpoints.
@@ -290,7 +290,7 @@ Each architectural component maps directly to specific requirements, ensuring co
 
 1. **Phase A: Parallel-path ingestion/search** – Build hierarchical ingestion and Jina pipelines while keeping legacy defaults; run shadow evaluations.
 2. **Phase B: Activate background services & reranking** – Start background tasks, expose CLI toggles, gather metrics.
-3. **Phase C: Launch learning + reasoning** – Introduce personalisation, habit detection, reasoning chain, and wire them into chat responses; gather user feedback.
+3. **Phase C: Launch learning + reasoning** – Introduce personalization, habit detection, reasoning chain, and wire them into chat responses; gather user feedback.
 4. **Phase D: Chat MVP & Hardening** – Validate chat playbooks, optimise latency, document CLI flows, polish monitoring dashboards, prepare release notes.
 
 This refactoring blueprint ensures Morgan progresses toward a smart, self-learning companion that can reason, remember, and adapt, while keeping the existing human-first experience intact.

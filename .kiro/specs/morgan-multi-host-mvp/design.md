@@ -2390,46 +2390,80 @@ docker-compose -f docker-compose-monitoring.yml up -d
 
 ## Security Considerations
 
-### Mutual TLS (mTLS) for Service Communication
+### Kubernetes Ingress & Gateway (MVP Approach)
 
 ```yaml
-# Generate certificates with Consul Connect or cert-manager
-services:
-  core:
-    environment:
-      - CONSUL_HTTP_SSL=true
-      - CONSUL_CACERT=/certs/ca.crt
-      - CONSUL_CLIENT_CERT=/certs/core.crt
-      - CONSUL_CLIENT_KEY=/certs/core.key
-    volumes:
-      - ./certs:/certs:ro
+# Kubernetes Ingress with TLS
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: morgan-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  tls:
+    - hosts:
+        - api.morgan.local
+      secretName: morgan-tls
+  rules:
+    - host: api.morgan.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: core-service
+                port:
+                  number: 8000
 ```
 
-### API Key Authentication (Kong Plugin)
+### Secure Secrets Management (Kubernetes Secrets)
+
+**MVP Approach**: Use Kubernetes Secrets with RBAC and optional encryption at rest.
 
 ```yaml
-# Kong API key plugin (if using Kong)
-plugins:
-  - name: key-auth
-    config:
-      key_names:
-        - apikey
+# Create secret from file or literal
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: morgan
+type: Opaque
+data:
+  username: <base64-encoded>
+  password: <base64-encoded>
+
+---
+# Enable encryption at rest in MicroK8s
+# Edit /var/snap/microk8s/current/args/kube-apiserver
+# Add: --encryption-provider-config=/path/to/encryption-config.yaml
 ```
 
-### Secrets Management
+**Accessing Secrets in Services**:
 
-Use Consul KV with encryption or external vault:
-
-```bash
-# Store secrets in Consul KV
-consul kv put -cas secret/postgres/password "secure_password"
-
-# Retrieve in service
-import consul
-c = consul.Consul()
-_, data = c.kv.get('secret/postgres/password')
-password = data['Value'].decode('utf-8')
+```yaml
+# Mount secrets as environment variables
+apiVersion: v1
+kind: Pod
+metadata:
+  name: core-service
+spec:
+  containers:
+    - name: core
+      env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: password
 ```
+
+**Secret Rotation**:
+- Use external-secrets-operator for automated secret rotation from Vault (optional)
+- Manual rotation: Update secret and restart pods to pick up new values
+- Enable audit logging to track secret access
 
 ### Data Encryption
 

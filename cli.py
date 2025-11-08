@@ -58,8 +58,13 @@ class MorganCLI:
             if self.conversation_id:
                 payload["metadata"]["conversation_id"] = self.conversation_id
 
+            if show_sources:
+                payload["metadata"]["show_sources"] = show_sources
+
             async with self.session.post(
-                f"{self.base_url}/api/text", json=payload
+                f"{self.base_url}/api/text",
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=60)
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()

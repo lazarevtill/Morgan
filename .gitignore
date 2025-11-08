@@ -5,7 +5,6 @@
 /morgan-rag/data/cache/
 *.meta
 *.cache
-/.env
 .env
 data/
 logs/
