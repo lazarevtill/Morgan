@@ -5,6 +5,7 @@ Modern orchestration service with async/await support
 import asyncio
 import signal
 import sys
+import os
 import logging
 import time
 from typing import Dict, Any, List, Optional
@@ -214,7 +215,8 @@ class MorganCore:
         redis_client = None
 
         # Check if database configuration is provided
-        postgres_host = self.config.get("postgres_host")
+        # Check both MORGAN_POSTGRES_HOST (from config) and standard POSTGRES_HOST (from env)
+        postgres_host = self.config.get("postgres_host") or os.getenv("POSTGRES_HOST")
         redis_host = self.config.get("redis_host", "localhost")
 
         # Initialize PostgreSQL if configured

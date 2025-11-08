@@ -506,7 +506,7 @@ class APIServer:
                 return {
                     "text": response.text,
                     "audio": response.audio_data.hex() if response.audio_data else None,
-                    "actions": [action.dict() for action in response.actions] if response.actions else [],
+                    "actions": [action.model_dump() for action in response.actions] if response.actions else [],
                     "metadata": response.metadata,
                     "confidence": response.confidence
                 }

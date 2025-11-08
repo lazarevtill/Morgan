@@ -214,7 +214,7 @@ class TestDeviceAudioWorkflow:
     async def test_list_audio_devices(self):
         """Test listing available audio devices"""
         async with AsyncClient(base_url="http://localhost:8000", timeout=30.0) as client:
-            response = await client.get("/devices/audio")
+            response = await client.get("/audio/devices")
 
             # Should return device list (may be empty in Docker)
             assert response.status_code == 200, "Device listing should succeed"

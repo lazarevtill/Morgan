@@ -68,9 +68,9 @@ class MorganHTTPClient:
                     if response.status >= 400:
                         error_text = await response.text()
                         raise ServiceException(
-                            service_name=self.service_name,
                             message=f"HTTP {response.status}: {error_text}",
-                            status_code=response.status
+                            service_name=self.service_name,
+                            context={"status_code": response.status, "url": url}
                         )
 
                     content = await response.json()
@@ -85,9 +85,9 @@ class MorganHTTPClient:
             except ClientError as e:
                 if attempt == self.max_retries - 1:
                     raise ServiceException(
-                        service_name=self.service_name,
                         message=f"Failed to connect: {e}",
-                        status_code=503
+                        service_name=self.service_name,
+                        context={"status_code": 503, "url": url, "error": str(e)}
                     )
 
                 logger.warning(f"Request failed (attempt {attempt + 1}/{self.max_retries}): {e}")
@@ -96,9 +96,9 @@ class MorganHTTPClient:
             except asyncio.TimeoutError:
                 if attempt == self.max_retries - 1:
                     raise ServiceException(
+                        message=f"Timeout connecting to {url}",
                         service_name=self.service_name,
-                        message=f"Timeout connecting",
-                        status_code=504
+                        context={"status_code": 504, "url": url}
                     )
 
                 logger.warning(f"Request timeout (attempt {attempt + 1}/{self.max_retries})")
@@ -106,16 +106,16 @@ class MorganHTTPClient:
 
             except Exception as e:
                 raise ServiceException(
-                    service_name=self.service_name,
                     message=f"Unexpected error: {e}",
-                    status_code=500
+                    service_name=self.service_name,
+                    context={"status_code": 500, "url": url, "error": str(e)}
                 )
 
         # This should never be reached, but just in case
         raise ServiceException(
+            message=f"Max retries exceeded for {url}",
             service_name=self.service_name,
-            message=f"Max retries exceeded",
-            status_code=503
+            context={"status_code": 503, "url": url, "max_retries": self.max_retries}
         )
 
     async def get(self, endpoint: str, params: Optional[Dict[str, Any]] = None, request_id: Optional[str] = None) -> ProcessingResult:
