@@ -224,27 +224,62 @@ class MorganCore:
             raise
 
     async def _initialize_database_clients(self):
-        """Initialize PostgreSQL and Redis clients"""
+        """Initialize PostgreSQL and Redis clients with proper validation"""
         from shared.utils.database import DatabaseClient
         from shared.utils.redis_client import RedisClient
 
         db_client = None
         redis_client = None
 
-        try:
-            # Initialize PostgreSQL client
-            db_client = DatabaseClient()
-            await db_client.connect()
-            self.logger.info("PostgreSQL client connected")
+        # Check if database configuration is provided
+        postgres_host = self.config.get("postgres_host")
+        redis_host = self.config.get("redis_host", "localhost")
 
-            # Initialize Redis client
+        # Initialize PostgreSQL if configured
+        if postgres_host:
+            try:
+                self.logger.info(f"Connecting to PostgreSQL at {postgres_host}...")
+                db_client = DatabaseClient()
+                await db_client.connect()
+
+                # Validate connection by executing a simple query
+                if db_client.pool:
+                    async with db_client.acquire() as conn:
+                        result = await conn.fetchval("SELECT 1")
+                        if result == 1:
+                            self.logger.info("PostgreSQL connection validated successfully")
+                        else:
+                            raise Exception("PostgreSQL connection validation failed")
+                else:
+                    raise Exception("PostgreSQL connection pool not initialized")
+
+            except Exception as e:
+                self.logger.error(f"Failed to connect to PostgreSQL: {e}")
+                self.logger.warning("Database persistence will be disabled. Running with in-memory fallback.")
+                db_client = None
+        else:
+            self.logger.info("PostgreSQL not configured. Using in-memory conversation storage.")
+
+        # Initialize Redis if configured
+        try:
+            self.logger.info(f"Connecting to Redis at {redis_host}...")
             redis_client = RedisClient()
             await redis_client.connect()
-            self.logger.info("Redis client connected")
+
+            # Validate connection by executing PING
+            if redis_client.redis:
+                ping_result = await redis_client.redis.ping()
+                if ping_result:
+                    self.logger.info("Redis connection validated successfully")
+                else:
+                    raise Exception("Redis PING validation failed")
+            else:
+                raise Exception("Redis client not initialized")
 
         except Exception as e:
-            self.logger.warning(f"Failed to initialize database clients: {e}")
-            self.logger.info("Continuing with in-memory fallback")
+            self.logger.error(f"Failed to connect to Redis: {e}")
+            self.logger.warning("Redis caching will be disabled. Running with in-memory fallback.")
+            redis_client = None
 
         return db_client, redis_client
 

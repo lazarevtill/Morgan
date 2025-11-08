@@ -14,6 +14,7 @@ import uvicorn
 
 from shared.models.base import TTSRequest, TTSResponse
 from shared.utils.logging import setup_logging
+from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware, RateLimitMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,16 @@ class TTSAPIServer:
             title="Morgan TTS Service",
             description="Text-to-Speech service with multiple voice models",
             version="0.2.0"
+        )
+
+        # Add middleware
+        app.add_middleware(RequestIDMiddleware)
+        app.add_middleware(TimingMiddleware)
+        app.add_middleware(
+            RateLimitMiddleware,
+            requests_per_second=15.0,  # TTS is resource-intensive
+            burst_size=30,
+            exempt_paths=["/health", "/docs", "/redoc", "/openapi.json"]
         )
 
         @app.get("/health")

@@ -12,6 +12,7 @@ import uvicorn
 
 from shared.models.base import LLMRequest, LLMResponse
 from shared.utils.logging import setup_logging
+from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware, RateLimitMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,16 @@ class LLMAPIServer:
             title="Morgan LLM Service",
             description="LLM service with OpenAI-compatible API",
             version="0.2.0"
+        )
+
+        # Add middleware
+        app.add_middleware(RequestIDMiddleware)
+        app.add_middleware(TimingMiddleware)
+        app.add_middleware(
+            RateLimitMiddleware,
+            requests_per_second=20.0,  # LLM service can handle more requests
+            burst_size=40,
+            exempt_paths=["/health", "/docs", "/redoc", "/openapi.json"]
         )
 
         @app.get("/health")

@@ -13,6 +13,7 @@ import uvicorn
 
 from shared.models.base import STTRequest, STTResponse
 from shared.utils.logging import setup_logging
+from shared.utils.middleware import RequestIDMiddleware, TimingMiddleware, RateLimitMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,16 @@ class STTAPIServer:
             title="Morgan STT Service",
             description="Speech-to-Text service with Faster Whisper and built-in VAD",
             version="0.2.0"
+        )
+
+        # Add middleware
+        app.add_middleware(RequestIDMiddleware)
+        app.add_middleware(TimingMiddleware)
+        app.add_middleware(
+            RateLimitMiddleware,
+            requests_per_second=15.0,  # STT is resource-intensive
+            burst_size=30,
+            exempt_paths=["/health", "/docs", "/redoc", "/openapi.json"]
         )
 
         @app.get("/health")
@@ -215,7 +226,31 @@ class STTAPIServer:
                 while True:
                     # Receive audio chunk from client
                     data = await websocket.receive_text()
-                    message = json.loads(data)
+
+                    # Validate JSON parsing with proper error handling
+                    try:
+                        message = json.loads(data)
+                        if not isinstance(message, dict):
+                            logger.error("Invalid message format: expected JSON object")
+                            await websocket.send_text(json.dumps({
+                                "type": "error",
+                                "error": "Invalid message format: expected JSON object"
+                            }))
+                            continue
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Invalid JSON from WebSocket: {e}")
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "error": f"Invalid JSON: {str(e)}"
+                        }))
+                        continue
+                    except Exception as e:
+                        logger.error(f"Failed to parse WebSocket message: {e}")
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "error": f"Failed to parse message: {str(e)}"
+                        }))
+                        continue
 
                     if message.get("type") == "audio":
                         # Decode and process audio chunk

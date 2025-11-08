@@ -12,6 +12,8 @@ from typing import Dict, Any, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
+from shared.utils.audio import safe_base64_decode, AudioValidationError
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,9 +58,25 @@ class WebSocketHandler:
             while True:
                 # Receive message from client
                 message_raw = await websocket.receive_text()
-                message_data = json.loads(message_raw)
-                
+
+                # Validate JSON parsing with proper error handling
+                try:
+                    message_data = json.loads(message_raw)
+                    if not isinstance(message_data, dict):
+                        await self._send_error(websocket, "Invalid message format: expected JSON object")
+                        continue
+                except json.JSONDecodeError as e:
+                    await self._send_error(websocket, f"Invalid JSON: {str(e)}")
+                    continue
+                except Exception as e:
+                    await self._send_error(websocket, f"Failed to parse message: {str(e)}")
+                    continue
+
                 message_type = message_data.get("type")
+                if not message_type:
+                    await self._send_error(websocket, "Message missing required 'type' field")
+                    continue
+
                 data = message_data.get("data", {})
                 
                 # Handle different message types
@@ -165,8 +183,13 @@ class WebSocketHandler:
             if not audio_b64:
                 await self._send_error(websocket, "No audio_data in message")
                 return
-            
-            audio_bytes = base64.b64decode(audio_b64)
+
+            # Safe base64 decode with validation
+            try:
+                audio_bytes = safe_base64_decode(audio_b64, max_size_mb=10)
+            except AudioValidationError as e:
+                await self._send_error(websocket, f"Invalid audio data: {str(e)}")
+                return
             
             # Process through streaming orchestrator
             result = await self.streaming_orchestrator.process_audio_stream(
