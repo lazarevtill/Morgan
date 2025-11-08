@@ -9,42 +9,44 @@ Manages model allocation across multiple GPUs:
 This enables optimal resource utilization for JARVIS-like performance.
 """
 
-import os
-import psutil
-from typing import Dict, Optional, List
 from dataclasses import dataclass
 from enum import Enum
+from typing import Dict, List, Optional
+
+import psutil
 
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
 
 from morgan.utils.logger import get_logger
 
-
 logger = get_logger(__name__)
 
 
 class GPURole(str, Enum):
     """GPU role assignment"""
-    MAIN_LLM = "main_llm"          # Heavy reasoning (RTX 3090s)
-    FAST_LLM = "fast_llm"          # Quick responses (RTX 4070)
-    EMBEDDINGS = "embeddings"      # Embedding generation (RTX 4070)
-    RERANKING = "reranking"        # Result reranking (RTX 2060)
-    UTILITY = "utility"            # Misc tasks (RTX 2060/CPU)
+
+    MAIN_LLM = "main_llm"  # Heavy reasoning (RTX 3090s)
+    FAST_LLM = "fast_llm"  # Quick responses (RTX 4070)
+    EMBEDDINGS = "embeddings"  # Embedding generation (RTX 4070)
+    RERANKING = "reranking"  # Result reranking (RTX 2060)
+    UTILITY = "utility"  # Misc tasks (RTX 2060/CPU)
 
 
 @dataclass
 class GPUAllocation:
     """GPU allocation configuration"""
-    gpu_ids: List[int]             # GPU device IDs
-    role: GPURole                  # GPU role
-    model: Optional[str] = None    # Model name
-    vram_gb: float = 0.0           # Total VRAM (GB)
-    utilization: float = 0.0       # Current utilization %
-    temperature: float = 0.0       # Temperature (C)
+
+    gpu_ids: List[int]  # GPU device IDs
+    role: GPURole  # GPU role
+    model: Optional[str] = None  # Model name
+    vram_gb: float = 0.0  # Total VRAM (GB)
+    utilization: float = 0.0  # Current utilization %
+    temperature: float = 0.0  # Temperature (C)
 
 
 class MultiGPUManager:
@@ -105,7 +107,7 @@ class MultiGPUManager:
         model_name: str,
         role: GPURole,
         gpu_ids: List[int],
-        vram_estimate_gb: Optional[float] = None
+        vram_estimate_gb: Optional[float] = None,
     ) -> GPUAllocation:
         """
         Allocate a model to specific GPU(s).
@@ -129,7 +131,9 @@ class MultiGPUManager:
         # Validate GPU IDs
         for gpu_id in gpu_ids:
             if gpu_id >= self.gpu_count:
-                raise ValueError(f"GPU {gpu_id} not available (only {self.gpu_count} GPUs)")
+                raise ValueError(
+                    f"GPU {gpu_id} not available (only {self.gpu_count} GPUs)"
+                )
 
         # Calculate total VRAM
         total_vram = sum(
@@ -146,10 +150,7 @@ class MultiGPUManager:
             )
 
         allocation = GPUAllocation(
-            gpu_ids=gpu_ids,
-            role=role,
-            model=model_name,
-            vram_gb=total_vram
+            gpu_ids=gpu_ids, role=role, model=model_name, vram_gb=total_vram
         )
 
         self.allocations[role] = allocation
@@ -220,7 +221,7 @@ class MultiGPUManager:
             # Memory stats
             if torch.cuda.is_available():
                 mem_allocated = torch.cuda.memory_allocated(gpu_id) / (1024**3)
-                mem_reserved = torch.cuda.memory_reserved(gpu_id) / (1024**3)
+                torch.cuda.memory_reserved(gpu_id) / (1024**3)
                 mem_total = self.gpu_info[gpu_id]["vram_gb"]
 
                 stats["memory_used_gb"] = mem_allocated
@@ -237,10 +238,7 @@ class MultiGPUManager:
 
     def get_all_gpu_stats(self) -> Dict[int, Dict[str, float]]:
         """Get statistics for all GPUs"""
-        return {
-            gpu_id: self.get_gpu_stats(gpu_id)
-            for gpu_id in range(self.gpu_count)
-        }
+        return {gpu_id: self.get_gpu_stats(gpu_id) for gpu_id in range(self.gpu_count)}
 
     def monitor_health(self) -> Dict[str, any]:
         """
@@ -283,7 +281,7 @@ class MultiGPUManager:
                     "qwen2.5:32b-instruct-q4_K_M",
                     GPURole.MAIN_LLM,
                     gpu_ids=[0, 1],
-                    vram_estimate_gb=20.0  # Q4 quantization ~19GB
+                    vram_estimate_gb=20.0,  # Q4 quantization ~19GB
                 )
                 logger.info("✓ Main LLM allocated to GPU 0+1 (RTX 3090s)")
 
@@ -293,14 +291,14 @@ class MultiGPUManager:
                     "nomic-embed-text",
                     GPURole.EMBEDDINGS,
                     gpu_ids=[2],
-                    vram_estimate_gb=1.5
+                    vram_estimate_gb=1.5,
                 )
 
                 self.allocate_model(
                     "qwen2.5:7b-instruct-q5_K_M",
                     GPURole.FAST_LLM,
                     gpu_ids=[2],
-                    vram_estimate_gb=5.0
+                    vram_estimate_gb=5.0,
                 )
                 logger.info("✓ Embeddings + Fast LLM allocated to GPU 2 (RTX 4070)")
 
@@ -310,7 +308,7 @@ class MultiGPUManager:
                     "cross-encoder/ms-marco-MiniLM-L-6-v2",
                     GPURole.RERANKING,
                     gpu_ids=[3],
-                    vram_estimate_gb=0.5
+                    vram_estimate_gb=0.5,
                 )
                 logger.info("✓ Reranking allocated to GPU 3 (RTX 2060)")
 

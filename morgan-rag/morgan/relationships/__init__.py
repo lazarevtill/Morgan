@@ -12,16 +12,16 @@ All modules follow KISS principles with single responsibility and clean
 interfaces.
 """
 
+from .adaptation import RelationshipAdaptation
 from .builder import RelationshipBuilder
+from .dynamics import RelationshipDynamics
 from .milestones import MilestoneDetector
 from .timeline import RelationshipTimeline
-from .dynamics import RelationshipDynamics
-from .adaptation import RelationshipAdaptation
 
 __all__ = [
-    'RelationshipBuilder',
-    'MilestoneDetector',
-    'RelationshipTimeline',
-    'RelationshipDynamics',
-    'RelationshipAdaptation'
+    "RelationshipBuilder",
+    "MilestoneDetector",
+    "RelationshipTimeline",
+    "RelationshipDynamics",
+    "RelationshipAdaptation",
 ]

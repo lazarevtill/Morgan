@@ -6,4 +6,4 @@ Simple web scraping services following KISS principles.
 
 from .service import JinaWebScrapingService
 
-__all__ = ['JinaWebScrapingService']
+__all__ = ["JinaWebScrapingService"]

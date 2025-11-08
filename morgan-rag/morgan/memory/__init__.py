@@ -6,15 +6,15 @@ and personal preference detection for building meaningful companion relationship
 """
 
 from .memory_processor import (
-    MemoryProcessor,
     Memory,
     MemoryExtractionResult,
-    get_memory_processor
+    MemoryProcessor,
+    get_memory_processor,
 )
 
 __all__ = [
-    'MemoryProcessor',
-    'Memory', 
-    'MemoryExtractionResult',
-    'get_memory_processor'
+    "MemoryProcessor",
+    "Memory",
+    "MemoryExtractionResult",
+    "get_memory_processor",
 ]

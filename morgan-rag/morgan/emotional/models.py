@@ -7,12 +7,13 @@ relationship milestones, and empathetic responses.
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 class EmotionType(Enum):
     """Primary emotion types based on Ekman's basic emotions."""
+
     JOY = "joy"
     SADNESS = "sadness"
     ANGER = "anger"
@@ -24,6 +25,7 @@ class EmotionType(Enum):
 
 class CommunicationStyle(Enum):
     """User communication style preferences."""
+
     FORMAL = "formal"
     CASUAL = "casual"
     TECHNICAL = "technical"
@@ -33,6 +35,7 @@ class CommunicationStyle(Enum):
 
 class ResponseLength(Enum):
     """User preferred response length."""
+
     BRIEF = "brief"
     DETAILED = "detailed"
     COMPREHENSIVE = "comprehensive"
@@ -40,6 +43,7 @@ class ResponseLength(Enum):
 
 class MilestoneType(Enum):
     """Types of relationship milestones."""
+
     FIRST_CONVERSATION = "first_conversation"
     BREAKTHROUGH_MOMENT = "breakthrough_moment"
     GOAL_ACHIEVED = "goal_achieved"
@@ -51,13 +55,16 @@ class MilestoneType(Enum):
 @dataclass
 class EmotionalState:
     """User's emotional state analysis."""
+
     primary_emotion: EmotionType
     intensity: float  # 0.0 to 1.0
     confidence: float  # 0.0 to 1.0
     secondary_emotions: List[EmotionType] = field(default_factory=list)
-    emotional_indicators: List[str] = field(default_factory=list)  # text patterns that indicated emotion
+    emotional_indicators: List[str] = field(
+        default_factory=list
+    )  # text patterns that indicated emotion
     timestamp: datetime = field(default_factory=datetime.utcnow)
-    
+
     def __post_init__(self):
         """Validate emotional state values."""
         if not 0.0 <= self.intensity <= 1.0:
@@ -69,6 +76,7 @@ class EmotionalState:
 @dataclass
 class MoodPattern:
     """User's mood patterns over time."""
+
     user_id: str
     timeframe: str  # e.g., "7d", "30d"
     dominant_emotions: List[EmotionType]
@@ -82,6 +90,7 @@ class MoodPattern:
 @dataclass
 class UserPreferences:
     """User's learned preferences and interests."""
+
     topics_of_interest: List[str] = field(default_factory=list)
     communication_style: CommunicationStyle = CommunicationStyle.FRIENDLY
     preferred_response_length: ResponseLength = ResponseLength.DETAILED
@@ -94,6 +103,7 @@ class UserPreferences:
 @dataclass
 class RelationshipMilestone:
     """Significant moments in the user-Morgan relationship."""
+
     milestone_id: str
     milestone_type: MilestoneType
     description: str
@@ -107,6 +117,7 @@ class RelationshipMilestone:
 @dataclass
 class EmpatheticResponse:
     """Emotionally aware response generation."""
+
     response_text: str
     emotional_tone: str
     empathy_level: float  # 0.0 to 1.0
@@ -119,6 +130,7 @@ class EmpatheticResponse:
 @dataclass
 class ConversationContext:
     """Context for a conversation turn."""
+
     user_id: str
     conversation_id: str
     message_text: str
@@ -131,6 +143,7 @@ class ConversationContext:
 @dataclass
 class InteractionData:
     """Data from a user interaction for profile updates."""
+
     conversation_context: ConversationContext
     emotional_state: EmotionalState
     user_satisfaction: Optional[float] = None
@@ -142,6 +155,7 @@ class InteractionData:
 @dataclass
 class CompanionProfile:
     """Complete companion relationship profile."""
+
     user_id: str
     relationship_duration: timedelta
     interaction_count: int
@@ -154,11 +168,11 @@ class CompanionProfile:
     trust_level: float = 0.0  # 0.0 to 1.0
     engagement_score: float = 0.0  # 0.0 to 1.0
     profile_created: datetime = field(default_factory=datetime.utcnow)
-    
+
     def get_relationship_age_days(self) -> int:
         """Get relationship age in days."""
         return self.relationship_duration.days
-    
+
     def add_milestone(self, milestone: RelationshipMilestone):
         """Add a new relationship milestone."""
         self.relationship_milestones.append(milestone)
@@ -169,6 +183,7 @@ class CompanionProfile:
 @dataclass
 class PersonalizedGreeting:
     """Personalized greeting based on user profile."""
+
     greeting_text: str
     personalization_level: float  # 0.0 to 1.0
     context_elements: List[str] = field(default_factory=list)
@@ -179,6 +194,7 @@ class PersonalizedGreeting:
 @dataclass
 class ConversationTopic:
     """Suggested conversation topic."""
+
     topic: str
     relevance_score: float  # 0.0 to 1.0
     category: str
@@ -189,6 +205,7 @@ class ConversationTopic:
 @dataclass
 class ConversationStyle:
     """Adapted conversation style for user."""
+
     formality_level: float  # 0.0 (very casual) to 1.0 (very formal)
     technical_depth: float  # 0.0 (simple) to 1.0 (highly technical)
     empathy_emphasis: float  # 0.0 (minimal) to 1.0 (high empathy)
