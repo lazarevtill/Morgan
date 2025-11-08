@@ -1,5 +1,5 @@
 name: 'Setup NetBird VPN'
-description: 'Install and configure NetBird VPN for accessing private resources'
+description: 'Install and configure NetBird VPN for accessing private resources (REQUIRED - action will fail if VPN connection cannot be established)'
 inputs:
   setup-key:
     description: 'NetBird setup key for VPN authentication'
@@ -29,11 +29,15 @@ runs:
         # Wait for connection to establish
         sleep 5
 
-        # Verify connection
+        # Verify connection (REQUIRED - fail fast if not connected)
         if sudo netbird status | grep -q "Connected"; then
           echo "✓ NetBird VPN connected successfully"
           sudo netbird status
         else
-          echo "⚠ NetBird connection status unclear, continuing anyway"
+          echo "✗ ERROR: NetBird VPN connection failed"
+          echo "NetBird VPN is REQUIRED for accessing internal resources (Nexus, Harbor)"
+          echo "Current status:"
           sudo netbird status || true
+          echo "Failing the action to prevent masked errors in subsequent steps"
+          exit 1
         fi
