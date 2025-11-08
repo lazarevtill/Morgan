@@ -27,37 +27,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install and configure NetBird VPN
-        env:
-          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
-        run: |
-          # Install NetBird
-          curl -fsSL https://pkgs.netbird.io/install.sh | sh
-
-          # Start NetBird service (required for daemon mode)
-          sudo netbird service install 2>/dev/null || true
-          sudo netbird service start
-
-          # Wait for daemon to be ready
-          sleep 3
-
-          # Connect to NetBird VPN (required for private Nexus access)
-          sudo netbird up \
-            --management-url https://vpn.lazarev.cloud \
-            --setup-key "$NETBIRD_SETUP_KEY" \
-            --log-level info
-
-          # Wait for connection to establish
-          sleep 5
-
-          # Verify connection
-          if sudo netbird status | grep -q "Connected"; then
-            echo "✓ NetBird VPN connected successfully"
-            sudo netbird status
-          else
-            echo "⚠ NetBird connection status unclear, continuing anyway"
-            sudo netbird status || true
-          fi
+      - name: Setup NetBird VPN
+        uses: ./.github/actions/setup-netbird
+        with:
+          setup-key: ${{ secrets.NETBIRD_SETUP_KEY }}
 
       - name: Install safety
         env:
@@ -122,37 +95,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install and configure NetBird VPN
-        env:
-          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
-        run: |
-          # Install NetBird
-          curl -fsSL https://pkgs.netbird.io/install.sh | sh
-
-          # Start NetBird service (required for daemon mode)
-          sudo netbird service install 2>/dev/null || true
-          sudo netbird service start
-
-          # Wait for daemon to be ready
-          sleep 3
-
-          # Connect to NetBird VPN (required for private Nexus access)
-          sudo netbird up \
-            --management-url https://vpn.lazarev.cloud \
-            --setup-key "$NETBIRD_SETUP_KEY" \
-            --log-level info
-
-          # Wait for connection to establish
-          sleep 5
-
-          # Verify connection
-          if sudo netbird status | grep -q "Connected"; then
-            echo "✓ NetBird VPN connected successfully"
-            sudo netbird status
-          else
-            echo "⚠ NetBird connection status unclear, continuing anyway"
-            sudo netbird status || true
-          fi
+      - name: Setup NetBird VPN
+        uses: ./.github/actions/setup-netbird
+        with:
+          setup-key: ${{ secrets.NETBIRD_SETUP_KEY }}
 
       - name: Install bandit
         env:
@@ -292,37 +238,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install and configure NetBird VPN
-        env:
-          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
-        run: |
-          # Install NetBird
-          curl -fsSL https://pkgs.netbird.io/install.sh | sh
-
-          # Start NetBird service (required for daemon mode)
-          sudo netbird service install 2>/dev/null || true
-          sudo netbird service start
-
-          # Wait for daemon to be ready
-          sleep 3
-
-          # Connect to NetBird VPN (required for private Nexus access)
-          sudo netbird up \
-            --management-url https://vpn.lazarev.cloud \
-            --setup-key "$NETBIRD_SETUP_KEY" \
-            --log-level info
-
-          # Wait for connection to establish
-          sleep 5
-
-          # Verify connection
-          if sudo netbird status | grep -q "Connected"; then
-            echo "✓ NetBird VPN connected successfully"
-            sudo netbird status
-          else
-            echo "⚠ NetBird connection status unclear, continuing anyway"
-            sudo netbird status || true
-          fi
+      - name: Setup NetBird VPN
+        uses: ./.github/actions/setup-netbird
+        with:
+          setup-key: ${{ secrets.NETBIRD_SETUP_KEY }}
 
       - name: Install pip-licenses
         env:
