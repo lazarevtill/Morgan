@@ -4,13 +4,14 @@ Real-world end-to-end tests for Morgan AI Assistant
 Tests complete user workflows from start to finish
 """
 
-import pytest
 import asyncio
-from httpx import AsyncClient
 import base64
-import wave
 import io
 import struct
+import wave
+
+import pytest
+from httpx import AsyncClient
 
 
 class TestTextConversationWorkflow:

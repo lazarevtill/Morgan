@@ -7,12 +7,13 @@ and provides access to internal infrastructure resources.
 """
 
 import os
+import socket
 import subprocess
 import time
-import socket
-import pytest
-import httpx
 from typing import Optional
+
+import httpx
+import pytest
 
 
 class TestNetBirdIntegration:

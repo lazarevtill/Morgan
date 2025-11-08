@@ -8,10 +8,11 @@ variables, and proper action sequencing.
 """
 
 import os
-import yaml
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict, List
+
 import pytest
+import yaml
 
 
 class TestWorkflowValidation:

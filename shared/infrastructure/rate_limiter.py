@@ -3,11 +3,11 @@ Rate limiting implementations for API calls
 """
 
 import asyncio
+import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Optional
 from dataclasses import dataclass
-import logging
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 

@@ -4,11 +4,12 @@ Integration tests for security features
 Tests rate limiting, CORS, input validation, and request size limits
 """
 
-import pytest
 import asyncio
-from httpx import AsyncClient
 import base64
 import json
+
+import pytest
+from httpx import AsyncClient
 
 
 class TestRateLimiting:

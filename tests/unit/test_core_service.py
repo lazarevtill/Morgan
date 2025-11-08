@@ -10,19 +10,20 @@ Tests the core service functionality including:
 - Error handling
 """
 
-import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from pathlib import Path
 import sys
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from shared.config.base import ServiceConfig, BaseConfig
-from shared.models.base import Message, ConversationContext
+from shared.config.base import BaseConfig, ServiceConfig
+from shared.models.base import ConversationContext, Message
+from shared.utils.exceptions import ErrorCategory, MorganException, ServiceException
 from shared.utils.http_client import MorganHTTPClient, ServiceRegistry
-from shared.utils.exceptions import MorganException, ErrorCategory, ServiceException
 
 
 class TestServiceConfig:

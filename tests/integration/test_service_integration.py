@@ -11,12 +11,13 @@ Tests the integration between different services:
 - Cross-service communication
 """
 
-import pytest
 import asyncio
-import httpx
-from pathlib import Path
-import sys
 import os
+import sys
+from pathlib import Path
+
+import httpx
+import pytest
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -265,9 +266,9 @@ class TestSTTServiceIntegration:
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 # Create a minimal WAV file (silence)
+                import io
                 import struct
                 import wave
-                import io
 
                 # Create 1 second of silence at 16kHz
                 sample_rate = 16000
