@@ -12,7 +12,7 @@ import asyncpg
 import aiohttp
 
 from shared.utils.logging import setup_logging
-from shared.utils.errors import ErrorHandler, ErrorCode
+from shared.utils.exceptions import MorganException, ErrorCategory
 
 
 class MCPTool:
@@ -62,7 +62,6 @@ class MCPToolsManager:
     def __init__(self, postgres_dsn: str):
         self.postgres_dsn = postgres_dsn
         self.logger = setup_logging("mcp_tools", "INFO", "logs/mcp_tools.log")
-        self.error_handler = ErrorHandler(self.logger)
 
         self.pg_pool: Optional[asyncpg.Pool] = None
         self.tools: Dict[str, MCPTool] = {}  # Cache of tools

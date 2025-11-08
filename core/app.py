@@ -19,7 +19,7 @@ import uvicorn
 from shared.config.base import ServiceConfig
 from shared.models.base import Message, ConversationContext, Response, Command, ProcessingResult
 from shared.utils.logging import setup_logging, Timer
-from shared.utils.errors import ErrorHandler, ErrorCode
+from shared.utils.exceptions import MorganException, ErrorCategory
 from shared.utils.http_client import service_registry
 
 # Import core components (relative imports)
@@ -27,7 +27,6 @@ from api.server import APIServer
 from conversation.manager import ConversationManager
 from handlers.registry import HandlerRegistry
 from integrations.manager import IntegrationManager
-from services.orchestrator import ServiceOrchestrator
 from services.streaming_orchestrator import StreamingOrchestrator
 from memory.manager import MemoryManager
 from tools.mcp_manager import MCPToolsManager
@@ -66,7 +65,6 @@ class MorganCore:
 
     def __init__(self, config: Optional[ServiceConfig] = None):
         self.config = config or ServiceConfig("core")
-        self.error_handler = ErrorHandler()
         self.logger = setup_logging(
             "morgan_core",
             self.config.get("log_level", "INFO"),
@@ -81,8 +79,7 @@ class MorganCore:
         self.conversation_manager = None
         self.handler_registry = None
         self.integration_manager = None
-        self.service_orchestrator = None
-        self.streaming_orchestrator = None  # New real-time streaming orchestrator
+        self.streaming_orchestrator = None  # Unified streaming and non-streaming orchestrator
         self.api_server = None
         self.memory_manager = None
         self.tools_manager = None
@@ -136,12 +133,9 @@ class MorganCore:
             if self.api_server:
                 await self.api_server.stop()
 
-            # Stop service orchestrators
+            # Stop streaming orchestrator
             if self.streaming_orchestrator:
                 await self.streaming_orchestrator.stop()
-            
-            if self.service_orchestrator:
-                await self.service_orchestrator.stop()
 
             # Stop conversation manager and disconnect from databases
             if self.conversation_manager:
@@ -191,19 +185,7 @@ class MorganCore:
             # Initialize integration manager
             self.integration_manager = IntegrationManager(self.config)
 
-            # Initialize service orchestrator (legacy)
-            self.service_orchestrator = ServiceOrchestrator(
-                config=self.config,
-                conversation_manager=self.conversation_manager,
-                handler_registry=self.handler_registry,
-                integration_manager=self.integration_manager,
-                memory_manager=self.memory_manager,
-                tools_manager=self.tools_manager
-            )
-
-            await self.service_orchestrator.start()
-
-            # Initialize streaming orchestrator (real-time optimized)
+            # Initialize streaming orchestrator (unified for both streaming and non-streaming)
             self.streaming_orchestrator = StreamingOrchestrator(
                 config=self.config,
                 conversation_manager=self.conversation_manager,
@@ -380,8 +362,8 @@ class MorganCore:
                 )
                 await self.conversation_manager.add_message(user_id, user_message)
 
-                # Process through orchestrator
-                response = await self.service_orchestrator.process_request(context, metadata)
+                # Process through streaming orchestrator
+                response = await self.streaming_orchestrator.process_request(context, metadata)
 
                 # Add assistant response to context (async)
                 assistant_message = Message(
@@ -395,13 +377,9 @@ class MorganCore:
 
             except Exception as e:
                 self.logger.error(f"Error processing text request: {e}")
-                error_response = self.error_handler.create_error_response(
-                    "I'm sorry, I'm having trouble processing your request. Please try again.",
-                    ErrorCode.INTERNAL_ERROR
-                )
                 return Response(
-                    text=error_response["error"]["message"],
-                    metadata={"error": True}
+                    text="I'm sorry, I'm having trouble processing your request. Please try again.",
+                    metadata={"error": True, "error_message": str(e)}
                 )
 
     async def process_audio_request(self, audio_data: bytes, user_id: str = "default",
@@ -414,8 +392,8 @@ class MorganCore:
                 # Get or create conversation context (async)
                 context = await self.conversation_manager.get_context(user_id)
 
-                # Process through orchestrator with audio
-                response = await self.service_orchestrator.process_audio_request(
+                # Process through streaming orchestrator with audio
+                response = await self.streaming_orchestrator.process_audio_request(
                     audio_data, context, metadata
                 )
 
@@ -431,13 +409,9 @@ class MorganCore:
 
             except Exception as e:
                 self.logger.error(f"Error processing audio request: {e}")
-                error_response = self.error_handler.create_error_response(
-                    "I'm sorry, I couldn't process the audio. Please try again.",
-                    ErrorCode.AUDIO_PROCESSING_ERROR
-                )
                 return Response(
-                    text=error_response["error"]["message"],
-                    metadata={"error": True}
+                    text="I'm sorry, I couldn't process the audio. Please try again.",
+                    metadata={"error": True, "error_message": str(e)}
                 )
 
     async def get_system_status(self) -> Dict[str, Any]:
@@ -447,7 +421,7 @@ class MorganCore:
             service_health = await service_registry.health_check_all()
 
             # Get component status
-            orchestrator_status = await self.service_orchestrator.health_check()
+            orchestrator_status = await self.streaming_orchestrator.health_check()
             conversation_status = self.conversation_manager.get_status()
 
             # Calculate uptime

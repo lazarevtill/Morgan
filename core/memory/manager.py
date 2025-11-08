@@ -14,7 +14,7 @@ from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, Fi
 import numpy as np
 
 from shared.utils.logging import setup_logging
-from shared.utils.errors import ErrorHandler, ErrorCode
+from shared.utils.exceptions import MorganException, ErrorCategory
 
 
 class Memory:
@@ -75,7 +75,6 @@ class MemoryManager:
         self.embedding_dimension = embedding_dimension
 
         self.logger = setup_logging("memory_manager", "INFO", "logs/memory.log")
-        self.error_handler = ErrorHandler(self.logger)
 
         self.pg_pool: Optional[asyncpg.Pool] = None
         self.qdrant_client: Optional[QdrantClient] = None

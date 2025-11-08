@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from shared.config.base import ServiceConfig, BaseConfig
 from shared.models.base import Message, ConversationContext
 from shared.utils.http_client import MorganHTTPClient, ServiceRegistry
-from shared.utils.errors import ServiceError, ErrorCode
+from shared.utils.exceptions import MorganException, ErrorCategory, ServiceException
 
 
 class TestServiceConfig:
