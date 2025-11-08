@@ -4,10 +4,8 @@ Conversation manager for Morgan Core Service with PostgreSQL and Redis
 import asyncio
 import logging
 import time
-import json
 from datetime import datetime
 from typing import Dict, Any, Optional, List
-from pathlib import Path
 from uuid import UUID
 
 from shared.config.base import ServiceConfig
