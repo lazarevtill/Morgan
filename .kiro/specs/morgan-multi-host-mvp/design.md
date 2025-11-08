@@ -613,6 +613,7 @@ def services():
 
 ```python
 # morgan/cli/client.py
+import os
 import httpx
 from kubernetes import client, config
 from typing import Optional
@@ -1712,14 +1713,44 @@ services:
       timeout: 5s
       retries: 3
 
-# postgres-standby.conf (template - use envsubst or init script to expand)
-hot_standby = on
-# Note: Replace REPLICATION_PASSWORD_VALUE with actual password via init script
-# Example init script: envsubst < postgres-standby.conf.template > postgres-standby.conf
-primary_conninfo = 'host=postgres-primary port=5432 user=replicator password=REPLICATION_PASSWORD_VALUE'
+# postgres-standby.conf configuration
 
-# Alternative: Use .pgpass file for password management
-# Create /root/.pgpass with: postgres-primary:5432:*:replicator:actual_password
+# ========================================
+# RECOMMENDED APPROACH: Use .pgpass file
+# ========================================
+# This keeps passwords out of config files and version control
+
+# 1. Create /root/.pgpass in the container with the following line:
+#    postgres-primary:5432:*:replicator:your_actual_password_here
+#
+# 2. Set proper permissions (REQUIRED - PostgreSQL will ignore .pgpass if not 0600):
+#    chmod 0600 /root/.pgpass
+#
+# 3. Use primary_conninfo WITHOUT password in the config:
+hot_standby = on
+primary_conninfo = 'host=postgres-primary port=5432 user=replicator'
+
+# PostgreSQL will automatically read credentials from .pgpass
+
+# ========================================
+# ALTERNATIVE: Environment variable substitution
+# ========================================
+# If you must use environment variables, use this template approach:
+
+# postgres-standby.conf.template:
+# hot_standby = on
+# primary_conninfo = 'host=postgres-primary port=5432 user=replicator password=${REPLICATION_PASSWORD}'
+
+# Then expand in container entrypoint/init script BEFORE postgres starts:
+# export REPLICATION_PASSWORD="your_actual_password"
+# envsubst < /etc/postgresql/postgres-standby.conf.template > /etc/postgresql/postgres-standby.conf
+# chmod 600 /etc/postgresql/postgres-standby.conf
+
+# SECURITY WARNINGS:
+# - NEVER commit plaintext passwords to version control
+# - NEVER use literal passwords in config files
+# - Always use secrets management (Kubernetes Secrets, Vault, .pgpass)
+# - Ensure config files with expanded passwords have 0600 permissions
 ```
 
 ---
