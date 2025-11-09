@@ -1,643 +1,431 @@
 """
-Learning Engine.
+Main Learning Engine for Morgan RAG.
 
-Main orchestrator for the learning system that coordinates all learning modules
-to provide comprehensive user learning and adaptation capabilities.
+Coordinates all learning activities including pattern analysis, preference extraction,
+behavioral adaptation, and feedback processing to continuously improve personalization.
 """
 
-from __future__ import annotations
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
-import asyncio
-import time
-from typing import Any, Dict, List, Optional, Tuple
+from ..emotional.models import CompanionProfile, ConversationContext, InteractionData
+from ..utils.logger import get_logger
+from .adaptation import AdaptationResult, BehavioralAdaptationEngine
+from .feedback import FeedbackProcessor, LearningUpdate, UserFeedback
+from .patterns import InteractionPatternAnalyzer, InteractionPatterns
+from .preferences import PreferenceExtractor, PreferenceStorage, UserPreferenceProfile
 
-from morgan.learning.base import BaseLearningModule, HealthStatus
-from morgan.learning.exceptions import LearningError, LearningResourceError
-from morgan.learning.modules import (
-    AdaptationModule,
-    ConsolidationModule,
-    FeedbackModule,
-    PatternModule,
-    PreferenceModule,
-)
-from morgan.learning.types import (
-    AdaptationResult,
-    AdaptationStrategy,
-    ConsolidationResult,
-    FeedbackSignal,
-    FeedbackType,
-    LearningContext,
-    LearningMetrics,
-    LearningPattern,
-    PreferenceDimension,
-    UserPreference,
-)
-from morgan.learning.utils import (
-    format_metrics_summary,
-    generate_correlation_id,
-)
+logger = get_logger(__name__)
 
 
-class LearningEngine(BaseLearningModule):
+@dataclass
+class LearningSession:
+    """Represents a learning session for a user."""
+
+    session_id: str
+    user_id: str
+    start_time: datetime
+    interactions_processed: int = 0
+    patterns_identified: int = 0
+    preferences_updated: int = 0
+    adaptations_applied: int = 0
+    feedback_processed: int = 0
+    learning_score: float = 0.0  # Overall learning effectiveness
+
+    def __post_init__(self):
+        """Initialize session ID if not provided."""
+        if not self.session_id:
+            self.session_id = str(uuid.uuid4())
+
+
+@dataclass
+class LearningMetrics:
+    """Metrics for learning effectiveness."""
+
+    total_interactions: int
+    successful_adaptations: int
+    user_satisfaction_trend: float  # -1.0 to 1.0
+    preference_stability: float  # 0.0 to 1.0
+    learning_velocity: float  # rate of improvement
+    personalization_accuracy: float  # 0.0 to 1.0
+    last_updated: datetime = field(default_factory=datetime.utcnow)
+
+
+class LearningEngine:
     """
-    Main learning engine that orchestrates all learning modules.
+    Main Learning Engine for continuous personalization.
 
-    Coordinates:
-    1. PatternModule - Behavioral pattern detection
-    2. FeedbackModule - Feedback processing and sentiment analysis
-    3. PreferenceModule - Preference learning and management
-    4. AdaptationModule - Response adaptation
-    5. ConsolidationModule - Knowledge consolidation
+    Coordinates all learning activities:
+    - Analyzes interaction patterns
+    - Extracts and updates user preferences
+    - Adapts behavior based on learning
+    - Processes feedback for improvement
 
-    Provides unified interface for:
-    - Learning from user interactions
-    - Detecting patterns and preferences
-    - Adapting responses
-    - Consolidating knowledge
-    - Monitoring learning effectiveness
+    Requirements addressed: 24.1, 24.2, 24.3, 24.4, 24.5
     """
 
-    def __init__(
-        self,
-        enable_pattern_detection: bool = True,
-        enable_feedback_processing: bool = True,
-        enable_preference_learning: bool = True,
-        enable_adaptation: bool = True,
-        enable_consolidation: bool = True,
-        consolidation_interval_hours: int = 24,
-        correlation_id: Optional[str] = None,
-    ) -> None:
+    def __init__(self):
+        """Initialize the learning engine with all components."""
+        self.pattern_analyzer = InteractionPatternAnalyzer()
+        self.preference_extractor = PreferenceExtractor()
+        self.preference_storage = PreferenceStorage()
+        self.adaptation_engine = BehavioralAdaptationEngine()
+        self.feedback_processor = FeedbackProcessor()
+
+        # Learning state
+        self.active_sessions: Dict[str, LearningSession] = {}
+        self.user_metrics: Dict[str, LearningMetrics] = {}
+
+        logger.info("Learning engine initialized")
+
+    def analyze_interaction_patterns(
+        self, user_id: str, interactions: List[InteractionData]
+    ) -> InteractionPatterns:
         """
-        Initialize learning engine.
+        Analyze user interaction patterns for learning insights.
 
-        Args:
-            enable_pattern_detection: Enable pattern detection module
-            enable_feedback_processing: Enable feedback processing module
-            enable_preference_learning: Enable preference learning module
-            enable_adaptation: Enable adaptation module
-            enable_consolidation: Enable consolidation module
-            consolidation_interval_hours: Hours between consolidations
-            correlation_id: Optional correlation ID for request tracing
-        """
-        super().__init__(
-            "LearningEngine",
-            correlation_id or generate_correlation_id(),
-        )
-
-        # Initialize modules
-        self._pattern_module = (
-            PatternModule(correlation_id=self.correlation_id)
-            if enable_pattern_detection
-            else None
-        )
-        self._feedback_module = (
-            FeedbackModule(correlation_id=self.correlation_id)
-            if enable_feedback_processing
-            else None
-        )
-        self._preference_module = (
-            PreferenceModule(correlation_id=self.correlation_id)
-            if enable_preference_learning
-            else None
-        )
-        self._adaptation_module = (
-            AdaptationModule(correlation_id=self.correlation_id)
-            if enable_adaptation
-            else None
-        )
-        self._consolidation_module = (
-            ConsolidationModule(
-                consolidation_interval_hours=consolidation_interval_hours,
-                correlation_id=self.correlation_id,
-            )
-            if enable_consolidation
-            else None
-        )
-
-        # Metrics tracking
-        self._metrics: Dict[str, LearningMetrics] = {}
-
-        # Concurrency control
-        self._semaphore = asyncio.Semaphore(5)
-
-    async def initialize(self) -> None:
-        """Initialize all learning modules."""
-        modules = self._get_active_modules()
-
-        try:
-            # Initialize all modules in parallel
-            await asyncio.gather(*[module.initialize() for module in modules])
-            self._log_info("All learning modules initialized successfully")
-
-        except Exception as e:
-            self._log_error("Failed to initialize learning modules", e)
-            raise LearningResourceError(
-                f"Failed to initialize learning engine: {str(e)}",
-                resource_type="modules",
-            )
-
-    async def cleanup(self) -> None:
-        """Cleanup all learning modules."""
-        modules = self._get_active_modules()
-        await asyncio.gather(*[module.cleanup() for module in modules])
-        self._log_info("All learning modules cleaned up")
-
-    async def health_check(self) -> HealthStatus:
-        """Check health of all modules."""
-        modules = self._get_active_modules()
-
-        try:
-            # Check all modules in parallel
-            health_results = await asyncio.gather(
-                *[module.health_check() for module in modules],
-                return_exceptions=True,
-            )
-
-            # Aggregate health status
-            all_healthy = all(
-                isinstance(result, HealthStatus) and result.healthy
-                for result in health_results
-            )
-
-            module_statuses = {}
-            for module, result in zip(modules, health_results):
-                if isinstance(result, HealthStatus):
-                    module_statuses[module.name] = {
-                        "healthy": result.healthy,
-                        "message": result.message,
-                    }
-                else:
-                    module_statuses[module.name] = {
-                        "healthy": False,
-                        "message": str(result),
-                    }
-
-            return HealthStatus(
-                healthy=all_healthy,
-                message=(
-                    "Learning engine healthy"
-                    if all_healthy
-                    else "Some modules unhealthy"
-                ),
-                details={
-                    "modules": module_statuses,
-                    "users_tracked": len(self._metrics),
-                },
-                last_check=asyncio.get_event_loop().time(),
-            )
-
-        except Exception as e:
-            return HealthStatus(
-                healthy=False,
-                message=f"Learning engine health check failed: {str(e)}",
-                details={},
-                last_check=asyncio.get_event_loop().time(),
-            )
-
-    async def learn_from_interaction(
-        self,
-        user_id: str,
-        action: str,
-        context: Optional[LearningContext] = None,
-        feedback: Optional[FeedbackSignal] = None,
-    ) -> None:
-        """
-        Learn from a user interaction.
+        Requirement 24.1: Analyze communication patterns and preferences
 
         Args:
             user_id: User identifier
-            action: Action performed
-            context: Optional learning context
-            feedback: Optional feedback signal
-        """
-        await self.ensure_initialized()
-
-        async with self._semaphore:
-            # Add event to pattern module
-            if self._pattern_module:
-                await self._pattern_module.add_event(
-                    user_id=user_id,
-                    action=action,
-                    context_tags=context.tags if context else None,
-                )
-
-            # Process feedback if provided
-            if feedback and self._feedback_module:
-                await self._feedback_module._store_feedback(feedback)
-
-                # Infer preferences from feedback
-                if self._preference_module:
-                    await self._preference_module.infer_preference_from_feedback(
-                        user_id=user_id,
-                        feedback=feedback,
-                        context=context,
-                    )
-
-            # Update metrics
-            await self._update_metrics(user_id)
-
-    async def process_feedback(
-        self,
-        user_id: str,
-        feedback_type: FeedbackType,
-        message_id: Optional[str] = None,
-        rating: Optional[float] = None,
-        text: Optional[str] = None,
-        correction: Optional[str] = None,
-        context: Optional[LearningContext] = None,
-    ) -> FeedbackSignal:
-        """
-        Process user feedback.
-
-        Args:
-            user_id: User identifier
-            feedback_type: Type of feedback
-            message_id: Optional message ID
-            rating: Optional numeric rating
-            text: Optional text feedback
-            correction: Optional correction
-            context: Optional learning context
+            interactions: List of interaction data to analyze
 
         Returns:
-            Processed feedback signal
-
-        Raises:
-            LearningError: If feedback processing fails
+            InteractionPatterns: Identified patterns and insights
         """
-        await self.ensure_initialized()
+        logger.info(f"Analyzing interaction patterns for user {user_id}")
 
-        if not self._feedback_module:
-            raise LearningError("Feedback module not enabled")
+        try:
+            # Use pattern analyzer to identify patterns
+            patterns = self.pattern_analyzer.analyze_patterns(
+                user_id=user_id, interactions=interactions
+            )
 
-        feedback = await self._feedback_module.process_feedback(
-            user_id=user_id,
-            feedback_type=feedback_type,
-            message_id=message_id,
-            rating=rating,
-            text=text,
-            correction=correction,
-            context=context,
-        )
-
-        # Infer preferences from feedback
-        if self._preference_module:
-            await self._preference_module.infer_preference_from_feedback(
+            # Update learning metrics
+            self._update_learning_metrics(
                 user_id=user_id,
-                feedback=feedback,
-                context=context,
+                patterns_identified=len(patterns.communication_patterns),
             )
 
-        return feedback
-
-    async def detect_patterns(
-        self,
-        user_id: str,
-        context: Optional[LearningContext] = None,
-    ) -> List[LearningPattern]:
-        """
-        Detect patterns for a user.
-
-        Args:
-            user_id: User identifier
-            context: Optional learning context
-
-        Returns:
-            List of detected patterns
-
-        Raises:
-            LearningError: If pattern detection fails
-        """
-        await self.ensure_initialized()
-
-        if not self._pattern_module:
-            raise LearningError("Pattern module not enabled")
-
-        return await self._pattern_module.detect_patterns(
-            user_id=user_id,
-            context=context,
-        )
-
-    async def get_user_preferences(
-        self,
-        user_id: str,
-        context: Optional[LearningContext] = None,
-    ) -> Dict[PreferenceDimension, UserPreference]:
-        """
-        Get user preferences.
-
-        Args:
-            user_id: User identifier
-            context: Optional learning context
-
-        Returns:
-            Dictionary of preferences by dimension
-
-        Raises:
-            LearningError: If preference retrieval fails
-        """
-        await self.ensure_initialized()
-
-        if not self._preference_module:
-            raise LearningError("Preference module not enabled")
-
-        return await self._preference_module.get_user_preferences(
-            user_id=user_id,
-            context=context,
-        )
-
-    async def adapt_response(
-        self,
-        user_id: str,
-        base_response: Dict[str, Any],
-        context: Optional[LearningContext] = None,
-        strategy: AdaptationStrategy = AdaptationStrategy.CONTEXTUAL,
-    ) -> Tuple[Dict[str, Any], Optional[AdaptationResult]]:
-        """
-        Adapt a response based on learned data.
-
-        Args:
-            user_id: User identifier
-            base_response: Base response to adapt
-            context: Optional learning context
-            strategy: Adaptation strategy
-
-        Returns:
-            Tuple of (adapted response, adaptation result)
-
-        Raises:
-            LearningError: If adaptation fails
-        """
-        await self.ensure_initialized()
-
-        if not self._adaptation_module:
-            return base_response, None
-
-        # Get patterns and preferences
-        patterns_task = (
-            self._pattern_module.detect_patterns(user_id, context)
-            if self._pattern_module
-            else asyncio.sleep(0, [])
-        )
-        preferences_task = (
-            self._preference_module.get_user_preferences(user_id, context)
-            if self._preference_module
-            else asyncio.sleep(0, {})
-        )
-
-        patterns, preferences = await asyncio.gather(
-            patterns_task,
-            preferences_task,
-        )
-
-        # Adapt response
-        adapted_response, adaptation_result = await self._adaptation_module.adapt_response(
-            user_id=user_id,
-            base_response=base_response,
-            patterns=patterns,
-            preferences=preferences,
-            context=context,
-            strategy=strategy,
-        )
-
-        return adapted_response, adaptation_result
-
-    async def consolidate_knowledge(
-        self,
-        user_id: str,
-    ) -> Optional[ConsolidationResult]:
-        """
-        Trigger knowledge consolidation for a user.
-
-        Args:
-            user_id: User identifier
-
-        Returns:
-            Consolidation result if run, None if skipped
-
-        Raises:
-            LearningError: If consolidation fails
-        """
-        await self.ensure_initialized()
-
-        if not self._consolidation_module:
-            raise LearningError("Consolidation module not enabled")
-
-        # Gather all data for consolidation
-        patterns = (
-            await self._pattern_module.get_active_patterns(user_id)
-            if self._pattern_module
-            else []
-        )
-        feedback = (
-            await self._feedback_module.get_user_feedback(user_id)
-            if self._feedback_module
-            else []
-        )
-        preferences = (
-            await self._preference_module.get_user_preferences(user_id)
-            if self._preference_module
-            else {}
-        )
-        metrics = self._get_user_metrics(user_id)
-
-        # Trigger consolidation if needed
-        result = await self._consolidation_module.trigger_consolidation(
-            user_id=user_id,
-            patterns=patterns,
-            feedback=feedback,
-            preferences=preferences,
-            metrics=metrics,
-        )
-
-        return result
-
-    async def get_learning_summary(
-        self,
-        user_id: str,
-    ) -> Dict[str, Any]:
-        """
-        Get comprehensive learning summary for a user.
-
-        Args:
-            user_id: User identifier
-
-        Returns:
-            Learning summary dictionary
-        """
-        await self.ensure_initialized()
-
-        summary = {
-            "user_id": user_id,
-            "metrics": self._get_user_metrics(user_id).__dict__,
-        }
-
-        # Get patterns
-        if self._pattern_module:
-            patterns = await self._pattern_module.get_active_patterns(user_id)
-            summary["patterns"] = {
-                "count": len(patterns),
-                "significant": sum(1 for p in patterns if p.is_significant),
-            }
-
-        # Get feedback summary
-        if self._feedback_module:
-            feedback_summary = await self._feedback_module.get_feedback_summary(
-                user_id
+            logger.info(
+                f"Identified {len(patterns.communication_patterns)} communication patterns "
+                f"and {len(patterns.topic_patterns)} topic patterns for user {user_id}"
             )
-            summary["feedback"] = feedback_summary
 
-        # Get preferences
-        if self._preference_module:
-            preferences = await self._preference_module.get_user_preferences(user_id)
-            summary["preferences"] = {
-                "count": len(preferences),
-                "stable": sum(1 for p in preferences.values() if p.is_stable),
-            }
+            return patterns
 
-        # Get adaptation stats
-        if self._adaptation_module:
-            adaptation_stats = await self._adaptation_module.get_adaptation_stats(
-                user_id
+        except Exception as e:
+            logger.error(f"Error analyzing patterns for user {user_id}: {e}")
+            # Return empty patterns on error
+            return InteractionPatterns(
+                user_id=user_id,
+                analysis_period=timedelta(days=30),
+                communication_patterns=[],
+                topic_patterns=[],
+                timing_patterns=[],
+                behavioral_patterns=[],
             )
-            summary["adaptations"] = adaptation_stats
 
-        return summary
-
-    async def clear_user_data(self, user_id: str) -> None:
+    def learn_from_feedback(
+        self, user_id: str, feedback: UserFeedback, context: ConversationContext
+    ) -> LearningUpdate:
         """
-        Clear all learning data for a user.
+        Process user feedback to improve personalization.
+
+        Requirement 24.2: Adjust response styles based on feedback
 
         Args:
             user_id: User identifier
+            feedback: User feedback data
+            context: Conversation context
+
+        Returns:
+            LearningUpdate: Learning updates applied
         """
-        tasks = []
+        logger.info(f"Processing feedback from user {user_id}")
 
-        if self._pattern_module:
-            tasks.append(self._pattern_module.clear_user_patterns(user_id))
+        try:
+            # Process feedback through feedback processor
+            learning_update = self.feedback_processor.process_feedback(
+                user_id=user_id, feedback=feedback, context=context
+            )
 
-        if self._feedback_module:
-            tasks.append(self._feedback_module.clear_user_feedback(user_id))
-
-        if self._preference_module:
-            tasks.append(self._preference_module.clear_user_preferences(user_id))
-
-        if self._adaptation_module:
-            tasks.append(self._adaptation_module.clear_user_adaptations(user_id))
-
-        if tasks:
-            await asyncio.gather(*tasks)
-
-        # Clear metrics
-        self._metrics.pop(user_id, None)
-
-    def _get_active_modules(self) -> List[BaseLearningModule]:
-        """Get list of active modules."""
-        modules = []
-
-        if self._pattern_module:
-            modules.append(self._pattern_module)
-        if self._feedback_module:
-            modules.append(self._feedback_module)
-        if self._preference_module:
-            modules.append(self._preference_module)
-        if self._adaptation_module:
-            modules.append(self._adaptation_module)
-        if self._consolidation_module:
-            modules.append(self._consolidation_module)
-
-        return modules
-
-    def _get_user_metrics(self, user_id: str) -> LearningMetrics:
-        """Get metrics for a user."""
-        if user_id not in self._metrics:
-            self._metrics[user_id] = LearningMetrics()
-
-        return self._metrics[user_id]
-
-    async def _update_metrics(self, user_id: str) -> None:
-        """Update metrics for a user."""
-        metrics = self._get_user_metrics(user_id)
-
-        # Update from modules
-        if self._pattern_module:
-            patterns = await self._pattern_module.get_active_patterns(user_id)
-            metrics.patterns_detected = len(patterns)
-            metrics.patterns_active = sum(1 for p in patterns if p.is_significant)
-            if patterns:
-                metrics.avg_pattern_confidence = sum(p.confidence for p in patterns) / len(
-                    patterns
+            # Apply learning updates to user preferences
+            if learning_update.preference_updates:
+                self._apply_preference_updates(
+                    user_id, learning_update.preference_updates
                 )
 
-        if self._feedback_module:
-            feedback = await self._feedback_module.get_user_feedback(user_id)
-            metrics.feedback_signals = len(feedback)
-            if feedback:
-                metrics.positive_feedback_ratio = sum(
-                    1 for f in feedback if f.is_positive
-                ) / len(feedback)
-                metrics.feedback_actionability = sum(
-                    1 for f in feedback if f.is_actionable
-                ) / len(feedback)
-
-        if self._preference_module:
-            preferences = await self._preference_module.get_user_preferences(user_id)
-            metrics.preferences_learned = len(preferences)
-            metrics.preferences_stable = sum(
-                1 for p in preferences.values() if p.is_stable
-            )
-            if preferences:
-                metrics.avg_preference_confidence = sum(
-                    p.confidence for p in preferences.values()
-                ) / len(preferences)
-
-        if self._adaptation_module:
-            adaptation_stats = await self._adaptation_module.get_adaptation_stats(
-                user_id
-            )
-            metrics.adaptations_applied = adaptation_stats.get("total", 0)
-            metrics.adaptations_successful = adaptation_stats.get("successful", 0)
-            metrics.adaptations_rolled_back = adaptation_stats.get("rolled_back", 0)
-            if metrics.adaptations_applied > 0:
-                metrics.avg_adaptation_improvement = adaptation_stats.get(
-                    "avg_improvement", 0.0
+            # Update adaptation strategies if needed
+            if learning_update.adaptation_changes:
+                self.adaptation_engine.update_strategies(
+                    user_id=user_id, changes=learning_update.adaptation_changes
                 )
 
-        self._metrics[user_id] = metrics
+            # Update learning metrics
+            self._update_learning_metrics(
+                user_id=user_id,
+                feedback_processed=1,
+                user_satisfaction=feedback.satisfaction_rating,
+            )
 
-    @property
-    def stats(self) -> Dict[str, Any]:
-        """Get learning engine statistics."""
-        module_stats = {}
+            logger.info(
+                f"Applied {len(learning_update.preference_updates)} preference updates"
+            )
 
-        if self._pattern_module:
-            module_stats["pattern_module"] = self._pattern_module.stats
+            return learning_update
 
-        if self._feedback_module:
-            module_stats["feedback_module"] = self._feedback_module.stats
+        except Exception as e:
+            logger.error(f"Error processing feedback for user {user_id}: {e}")
+            return LearningUpdate(
+                update_id=str(uuid.uuid4()),
+                user_id=user_id,
+                timestamp=datetime.utcnow(),
+                preference_updates=[],
+                adaptation_changes=[],
+                confidence_score=0.0,
+            )
 
-        if self._preference_module:
-            module_stats["preference_module"] = self._preference_module.stats
-
-        if self._adaptation_module:
-            module_stats["adaptation_module"] = self._adaptation_module.stats
-
-        if self._consolidation_module:
-            module_stats["consolidation_module"] = self._consolidation_module.stats
-
-        return {
-            "users_tracked": len(self._metrics),
-            "modules": module_stats,
-        }
-
-    def get_metrics_summary(self, user_id: str) -> str:
+    def adapt_behavior(
+        self,
+        user_id: str,
+        current_context: ConversationContext,
+        user_profile: CompanionProfile,
+    ) -> AdaptationResult:
         """
-        Get formatted metrics summary for a user.
+        Adapt behavior based on learned patterns and preferences.
+
+        Requirement 24.3: Customize search weights and result ranking
+        Requirement 24.4: Expand domain-specific vocabulary understanding
+
+        Args:
+            user_id: User identifier
+            current_context: Current conversation context
+            user_profile: User's companion profile
+
+        Returns:
+            AdaptationResult: Behavioral adaptations applied
+        """
+        logger.info(f"Adapting behavior for user {user_id}")
+
+        try:
+            # Get user preference profile
+            preference_profile = self.preference_storage.get_user_preferences(user_id)
+
+            # Apply behavioral adaptations
+            adaptation_result = self.adaptation_engine.adapt_behavior(
+                user_id=user_id,
+                context=current_context,
+                user_profile=user_profile,
+                preference_profile=preference_profile,
+            )
+
+            # Update learning metrics
+            self._update_learning_metrics(user_id=user_id, adaptations_applied=1)
+
+            logger.info(
+                f"Applied {len(adaptation_result.adaptations)} behavioral adaptations "
+                f"with confidence {adaptation_result.confidence_score:.2f}"
+            )
+
+            return adaptation_result
+
+        except Exception as e:
+            logger.error(f"Error adapting behavior for user {user_id}: {e}")
+            return AdaptationResult(
+                user_id=user_id,
+                adaptations=[],
+                confidence_score=0.0,
+                reasoning="Error occurred during adaptation",
+            )
+
+    def extract_preferences(
+        self, user_id: str, interactions: List[InteractionData]
+    ) -> UserPreferenceProfile:
+        """
+        Extract and update user preferences from interactions.
+
+        Requirement 24.5: Reference past preferences and successful patterns
+
+        Args:
+            user_id: User identifier
+            interactions: Recent interactions to analyze
+
+        Returns:
+            UserPreferenceProfile: Updated preference profile
+        """
+        logger.info(f"Extracting preferences for user {user_id}")
+
+        try:
+            # Extract preferences from interactions
+            preference_updates = self.preference_extractor.extract_preferences(
+                user_id=user_id, interactions=interactions
+            )
+
+            # Store updated preferences
+            for update in preference_updates:
+                self.preference_storage.update_preference(user_id, update)
+
+            # Get complete preference profile
+            preference_profile = self.preference_storage.get_user_preferences(user_id)
+
+            # Update learning metrics
+            self._update_learning_metrics(
+                user_id=user_id, preferences_updated=len(preference_updates)
+            )
+
+            logger.info(
+                f"Updated {len(preference_updates)} preferences for user {user_id}"
+            )
+
+            return preference_profile
+
+        except Exception as e:
+            logger.error(f"Error extracting preferences for user {user_id}: {e}")
+            # Return empty profile on error
+            return UserPreferenceProfile(
+                user_id=user_id,
+                preferences={},
+                confidence_scores={},
+                last_updated=datetime.utcnow(),
+            )
+
+    def start_learning_session(self, user_id: str) -> str:
+        """
+        Start a new learning session for a user.
 
         Args:
             user_id: User identifier
 
         Returns:
-            Formatted summary string
+            str: Session ID
         """
-        metrics = self._get_user_metrics(user_id)
-        return format_metrics_summary(metrics)
+        session = LearningSession(
+            session_id=str(uuid.uuid4()), user_id=user_id, start_time=datetime.utcnow()
+        )
+
+        self.active_sessions[session.session_id] = session
+        logger.info(f"Started learning session {session.session_id} for user {user_id}")
+
+        return session.session_id
+
+    def end_learning_session(self, session_id: str) -> Optional[LearningSession]:
+        """
+        End a learning session and return results.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            Optional[LearningSession]: Completed session data
+        """
+        session = self.active_sessions.pop(session_id, None)
+        if session:
+            # Calculate learning score based on session metrics
+            session.learning_score = self._calculate_learning_score(session)
+            logger.info(
+                f"Ended learning session {session_id} with score {session.learning_score:.2f}"
+            )
+
+        return session
+
+    def get_learning_metrics(self, user_id: str) -> Optional[LearningMetrics]:
+        """
+        Get learning metrics for a user.
+
+        Args:
+            user_id: User identifier
+
+        Returns:
+            Optional[LearningMetrics]: User's learning metrics
+        """
+        return self.user_metrics.get(user_id)
+
+    def _update_learning_metrics(
+        self,
+        user_id: str,
+        interactions_processed: int = 0,
+        patterns_identified: int = 0,
+        preferences_updated: int = 0,
+        adaptations_applied: int = 0,
+        feedback_processed: int = 0,
+        user_satisfaction: Optional[float] = None,
+    ):
+        """Update learning metrics for a user."""
+        if user_id not in self.user_metrics:
+            self.user_metrics[user_id] = LearningMetrics(
+                total_interactions=0,
+                successful_adaptations=0,
+                user_satisfaction_trend=0.0,
+                preference_stability=0.5,
+                learning_velocity=0.0,
+                personalization_accuracy=0.0,
+            )
+
+        metrics = self.user_metrics[user_id]
+        metrics.total_interactions += interactions_processed
+        metrics.successful_adaptations += adaptations_applied
+
+        # Update satisfaction trend if provided
+        if user_satisfaction is not None:
+            # Simple moving average for satisfaction trend
+            alpha = 0.1  # Learning rate
+            metrics.user_satisfaction_trend = (
+                alpha * user_satisfaction
+                + (1 - alpha) * metrics.user_satisfaction_trend
+            )
+
+        metrics.last_updated = datetime.utcnow()
+
+    def _apply_preference_updates(
+        self, user_id: str, preference_updates: List[Dict[str, Any]]
+    ):
+        """Apply preference updates to user profile."""
+        for update in preference_updates:
+            # Convert dict to preference update object if needed
+            # This would depend on the specific structure
+            pass
+
+    def _calculate_learning_score(self, session: LearningSession) -> float:
+        """Calculate overall learning effectiveness score for a session."""
+        if session.interactions_processed == 0:
+            return 0.0
+
+        # Weighted score based on different learning activities
+        pattern_score = min(
+            session.patterns_identified / session.interactions_processed, 1.0
+        )
+        preference_score = min(
+            session.preferences_updated / session.interactions_processed, 1.0
+        )
+        adaptation_score = min(
+            session.adaptations_applied / session.interactions_processed, 1.0
+        )
+        feedback_score = min(
+            session.feedback_processed / session.interactions_processed, 1.0
+        )
+
+        # Weighted average
+        weights = [0.3, 0.3, 0.2, 0.2]  # pattern, preference, adaptation, feedback
+        scores = [pattern_score, preference_score, adaptation_score, feedback_score]
+
+        return sum(w * s for w, s in zip(weights, scores))
+
+
+# Global learning engine instance
+_learning_engine: Optional[LearningEngine] = None
+
+
+def get_learning_engine() -> LearningEngine:
+    """
+    Get the global learning engine instance.
+
+    Returns:
+        LearningEngine: Global learning engine instance
+    """
+    global _learning_engine
+    if _learning_engine is None:
+        _learning_engine = LearningEngine()
+    return _learning_engine

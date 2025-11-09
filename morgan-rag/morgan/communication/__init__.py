@@ -1,22 +1,21 @@
 """
-Communication Module
+Communication system for emotional AI assistant.
 
-Handles various aspects of communication analysis including
-nonverbal cues (emojis, formatting) and conversational patterns.
+Provides communication style adaptation, user preference learning,
+emotional feedback processing, non-verbal cue detection, and cultural
+emotional awareness for enhanced human-AI interaction.
 """
 
-from morgan.communication.nonverbal import (
-    NonverbalCommunicationAnalyzer,
-    EmojiAnalysis,
-    analyze_emojis,
-    extract_emojis,
-    analyzer,
-)
+from .cultural import CulturalEmotionalAwareness
+from .feedback import EmotionalFeedbackProcessor
+from .nonverbal import NonVerbalCueDetector
+from .preferences import UserPreferenceLearner
+from .style import CommunicationStyleAdapter
 
 __all__ = [
-    "NonverbalCommunicationAnalyzer",
-    "EmojiAnalysis",
-    "analyze_emojis",
-    "extract_emojis",
-    "analyzer",
+    "CommunicationStyleAdapter",
+    "UserPreferenceLearner",
+    "EmotionalFeedbackProcessor",
+    "NonVerbalCueDetector",
+    "CulturalEmotionalAwareness",
 ]

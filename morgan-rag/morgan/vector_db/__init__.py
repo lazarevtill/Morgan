@@ -1,5 +1,7 @@
-"""Vector database client module."""
+"""
+Enhanced vector database integration for Morgan RAG with companion features.
+"""
 
-from morgan.vector_db.client import QdrantClient
+from .client import BatchOperationResult, CollectionInfo, SearchResult, VectorDBClient
 
-__all__ = ["QdrantClient"]
+__all__ = ["VectorDBClient", "SearchResult", "BatchOperationResult", "CollectionInfo"]

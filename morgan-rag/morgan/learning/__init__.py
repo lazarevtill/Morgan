@@ -1,92 +1,98 @@
 """
-Morgan Learning System.
+Learning and personalization module for Morgan RAG.
 
-Production-ready learning system for user behavior analysis, preference learning,
-and response adaptation with full async/await, circuit breakers, and fault tolerance.
-
-Main Components:
-- LearningEngine: Main orchestrator for all learning operations
-- PatternModule: Behavioral pattern detection and analysis
-- FeedbackModule: Feedback processing and sentiment analysis
-- PreferenceModule: User preference learning and management
-- AdaptationModule: Response adaptation with A/B testing
-- ConsolidationModule: Knowledge consolidation and meta-learning
-
-Usage:
-    from morgan.learning import LearningEngine, FeedbackType, AdaptationStrategy
-
-    # Initialize engine
-    engine = LearningEngine()
-    await engine.initialize()
-
-    # Process feedback
-    feedback = await engine.process_feedback(
-        user_id="user123",
-        feedback_type=FeedbackType.EXPLICIT_POSITIVE,
-        rating=0.9,
-        text="Great response!",
-    )
-
-    # Adapt response
-    adapted, result = await engine.adapt_response(
-        user_id="user123",
-        base_response={"text": "Hello"},
-        strategy=AdaptationStrategy.CONTEXTUAL,
-    )
-
-    # Get learning summary
-    summary = await engine.get_learning_summary("user123")
-
-    # Cleanup
-    await engine.cleanup()
+Provides continuous learning capabilities that analyze user interactions,
+extract preferences, adapt behavior, and process feedback to improve
+personalization over time.
 """
 
-from morgan.learning.engine import LearningEngine
-from morgan.learning.exceptions import (
-    AdaptationError,
-    ConsolidationError,
-    FeedbackProcessingError,
-    LearningError,
-    PatternDetectionError,
-    PreferenceLearningError,
-)
-from morgan.learning.types import (
+from .adaptation import (
     AdaptationResult,
     AdaptationStrategy,
+    BehavioralAdaptationEngine,
+    ContentSelectionAdapter,
+    ResponseStyleAdapter,
+)
+from .consolidation import (
+    ConsolidatedKnowledge,
+    ConsolidatedPattern,
+    ConsolidationEngine,
+    ConsolidationMetrics,
     ConsolidationResult,
-    FeedbackSignal,
+    ConsolidationScheduler,
+    ConsolidationType,
+    KnowledgeStability,
+    KnowledgeSynthesizer,
+    MetaPattern,
+    MetaPatternExtractor,
+    PatternConsolidator,
+    get_consolidation_engine,
+)
+from .engine import LearningEngine, get_learning_engine
+from .feedback import (
+    FeedbackAnalysis,
+    FeedbackProcessor,
     FeedbackType,
-    LearningContext,
-    LearningMetrics,
-    LearningPattern,
-    PatternType,
-    PreferenceDimension,
-    UserPreference,
+    LearningUpdate,
+    UserFeedback,
+)
+from .patterns import (
+    BehavioralPattern,
+    CommunicationPattern,
+    InteractionPatternAnalyzer,
+    InteractionPatterns,
+    TimingPattern,
+    TopicPattern,
+)
+from .preferences import (
+    PreferenceCategory,
+    PreferenceExtractor,
+    PreferenceStorage,
+    PreferenceUpdate,
+    UserPreferenceProfile,
 )
 
 __all__ = [
-    # Main engine
+    # Core engine
     "LearningEngine",
-    # Types
-    "AdaptationResult",
+    "get_learning_engine",
+    # Pattern analysis
+    "InteractionPatternAnalyzer",
+    "InteractionPatterns",
+    "CommunicationPattern",
+    "TopicPattern",
+    "TimingPattern",
+    "BehavioralPattern",
+    # Preference management
+    "PreferenceExtractor",
+    "PreferenceStorage",
+    "UserPreferenceProfile",
+    "PreferenceCategory",
+    "PreferenceUpdate",
+    # Behavioral adaptation
+    "BehavioralAdaptationEngine",
     "AdaptationStrategy",
-    "ConsolidationResult",
-    "FeedbackSignal",
+    "AdaptationResult",
+    "ResponseStyleAdapter",
+    "ContentSelectionAdapter",
+    # Feedback processing
+    "FeedbackProcessor",
+    "UserFeedback",
     "FeedbackType",
-    "LearningContext",
-    "LearningMetrics",
-    "LearningPattern",
-    "PatternType",
-    "PreferenceDimension",
-    "UserPreference",
-    # Exceptions
-    "LearningError",
-    "AdaptationError",
-    "ConsolidationError",
-    "FeedbackProcessingError",
-    "PatternDetectionError",
-    "PreferenceLearningError",
+    "FeedbackAnalysis",
+    "LearningUpdate",
+    # Consolidation
+    "ConsolidationEngine",
+    "get_consolidation_engine",
+    "ConsolidatedPattern",
+    "ConsolidatedKnowledge",
+    "MetaPattern",
+    "ConsolidationResult",
+    "ConsolidationMetrics",
+    "KnowledgeStability",
+    "ConsolidationType",
+    "PatternConsolidator",
+    "KnowledgeSynthesizer",
+    "MetaPatternExtractor",
+    "ConsolidationScheduler",
 ]
-
-__version__ = "2.0.0"
-__author__ = "Morgan Development Team"

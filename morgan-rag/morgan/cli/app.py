@@ -1,800 +1,1247 @@
 """
-Morgan CLI - Main User Interface.
+Morgan RAG CLI Application
 
-Provides interactive commands for:
-- Chat sessions
-- Document ingestion
-- Knowledge management
-- Configuration
-- History and session management
-- Learning and feedback
+Human-first command line interface with intuitive commands.
 
-Full async/await with Click 8.1+ support.
+KISS Principle: Simple commands that do exactly what humans expect.
 """
 
-from __future__ import annotations
-
-import asyncio
+import argparse
 import sys
-import uuid
-from datetime import datetime
-from pathlib import Path
-from typing import Optional
-
-# Try to import click with async support
-try:
-    import click
-    from click import Context, pass_context
-except ImportError:
-    print("Error: Click library not found. Please install: pip install click")
-    sys.exit(1)
-
-from morgan.cli.config import CLIConfig, ensure_config_exists, interactive_init
-from morgan.cli.formatters import ConsoleFormatter
-from morgan.cli.utils import (
-    GracefulShutdown,
-    SessionManager,
-    assistant_context,
-    check_health,
-    display_response,
-    format_duration,
-    get_user_input,
-    handle_cli_error,
-    setup_logging,
-    truncate_text,
-)
-from morgan.core.types import MessageRole
-from morgan.learning.types import FeedbackSignal, FeedbackType
-
-
-# Global state
-class GlobalState:
-    """Global CLI state."""
-
-    def __init__(self):
-        self.config: Optional[CLIConfig] = None
-        self.formatter: Optional[ConsoleFormatter] = None
-        self.session_manager: Optional[SessionManager] = None
-        self.current_session_id: Optional[str] = None
-        self.last_response_id: Optional[str] = None
-
-
-pass_state = click.make_pass_decorator(GlobalState, ensure=True)
-
-
-@click.group()
-@click.option(
-    "--config",
-    type=click.Path(exists=True, path_type=Path),
-    help="Path to configuration file",
-)
-@click.option(
-    "--verbose",
-    is_flag=True,
-    help="Enable verbose output",
-)
-@click.option(
-    "--no-rich",
-    is_flag=True,
-    help="Disable rich formatting",
-)
-@pass_context
-def cli(ctx: Context, config: Optional[Path], verbose: bool, no_rich: bool):
-    """
-    Morgan AI Assistant CLI.
-
-    An intelligent, emotionally-aware assistant with learning capabilities.
-    """
-    # Initialize global state
-    state = ctx.ensure_object(GlobalState)
-
-    # Load configuration
-    try:
-        if config:
-            state.config = CLIConfig.load(config)
-        else:
-            state.config = ensure_config_exists()
-
-        # Override verbose setting
-        if verbose:
-            state.config.verbose = True
-
-        # Override rich formatting
-        if no_rich:
-            state.config.use_rich_formatting = False
-
-        # Set up logging
-        setup_logging(state.config)
-
-        # Initialize formatter
-        state.formatter = ConsoleFormatter(use_rich=state.config.use_rich_formatting)
-
-        # Initialize session manager
-        state.session_manager = SessionManager(Path(state.config.storage_path))
-
-    except Exception as e:
-        print(f"Error initializing CLI: {e}")
-        sys.exit(1)
-
-
-@cli.command()
-@click.option(
-    "--session-id",
-    help="Session ID to use (creates new if not specified)",
-)
-@click.option(
-    "--streaming/--no-streaming",
-    default=True,
-    help="Enable streaming responses",
-)
-@pass_state
-def chat(state: GlobalState, session_id: Optional[str], streaming: bool):
-    """
-    Start an interactive chat session.
-
-    Press Ctrl+C or type 'exit', 'quit', or 'bye' to end the session.
-
-    Examples:
-        morgan chat                    # Start new session
-        morgan chat --session-id abc   # Resume session
-        morgan chat --no-streaming     # Disable streaming
-    """
-    asyncio.run(_chat_async(state, session_id, streaming))
-
-
-async def _chat_async(state: GlobalState, session_id: Optional[str], streaming: bool):
-    """Async implementation of chat command."""
-    config = state.config
-    formatter = state.formatter
-
-    # Generate or use provided session ID
-    if not session_id:
-        session_id = str(uuid.uuid4())
-        formatter.print(f"[dim]Starting new session: {session_id}[/dim]\n")
-    else:
-        formatter.print(f"[dim]Resuming session: {session_id}[/dim]\n")
-
-    state.current_session_id = session_id
-
-    # Welcome message
-    formatter.print("[bold green]Morgan AI Assistant[/bold green]")
-    formatter.print("[dim]Type 'exit', 'quit', or 'bye' to end the session.[/dim]\n")
-
-    # Initialize assistant
-    try:
-        async with assistant_context(config) as assistant:
-            # Set up graceful shutdown
-            with GracefulShutdown() as shutdown:
-                # Chat loop
-                while not shutdown.shutdown_requested:
-                    try:
-                        # Get user input
-                        user_message = await get_user_input("\n[bold cyan]You:[/bold cyan] ")
-
-                        # Check for exit commands
-                        if user_message.lower() in ("exit", "quit", "bye", "q"):
-                            formatter.print("\n[yellow]Goodbye! 👋[/yellow]")
-                            break
-
-                        if not user_message:
-                            continue
-
-                        # Show processing indicator
-                        if formatter.use_rich:
-                            progress = formatter.create_progress()
-                            if progress:
-                                with progress:
-                                    task = progress.add_task("Processing...", total=None)
-                                    # Small delay to show indicator
-                                    await asyncio.sleep(0.1)
-
-                        # Process message
-                        try:
-                            if streaming and config.use_streaming:
-                                # Streaming response
-                                formatter.print("\n[bold green]🤖 Morgan:[/bold green] ", end="")
-
-                                async for chunk in assistant.stream_response(
-                                    user_id="cli_user",
-                                    message=user_message,
-                                    session_id=session_id,
-                                ):
-                                    print(chunk, end="", flush=True)
-
-                                print("\n")
-
-                                # Note: In streaming mode, we don't have full response metadata
-                                # This is a trade-off for lower latency
-
-                            else:
-                                # Non-streaming response
-                                response = await assistant.process_message(
-                                    user_id="cli_user",
-                                    message=user_message,
-                                    session_id=session_id,
-                                )
-
-                                # Store response ID for feedback
-                                state.last_response_id = response.response_id
-
-                                # Display response
-                                display_response(
-                                    response,
-                                    formatter,
-                                    show_sources=config.show_sources,
-                                    show_emotion=config.show_emotions,
-                                    show_metrics=config.show_metrics,
-                                )
-
-                        except Exception as e:
-                            handle_cli_error(e, formatter, config.verbose, exit_code=0)
-                            continue
-
-                    except (KeyboardInterrupt, EOFError):
-                        formatter.print("\n\n[yellow]Session interrupted. Goodbye! 👋[/yellow]")
-                        break
-
-    except Exception as e:
-        handle_cli_error(e, formatter, config.verbose)
-
-
-@cli.command()
-@click.argument("question")
-@click.option(
-    "--session-id",
-    help="Session ID for context",
-)
-@pass_state
-def ask(state: GlobalState, question: str, session_id: Optional[str]):
-    """
-    Ask a single question.
-
-    Examples:
-        morgan ask "What is the capital of France?"
-        morgan ask "Explain quantum computing" --session-id abc
-    """
-    asyncio.run(_ask_async(state, question, session_id))
-
-
-async def _ask_async(state: GlobalState, question: str, session_id: Optional[str]):
-    """Async implementation of ask command."""
-    config = state.config
-    formatter = state.formatter
-
-    if not session_id:
-        session_id = str(uuid.uuid4())
-
-    try:
-        async with assistant_context(config) as assistant:
-            # Process message
-            response = await assistant.process_message(
-                user_id="cli_user",
-                message=question,
-                session_id=session_id,
-            )
-
-            # Display response
-            display_response(
-                response,
-                formatter,
-                show_sources=config.show_sources,
-                show_emotion=config.show_emotions,
-                show_metrics=config.show_metrics,
-            )
-
-    except Exception as e:
-        handle_cli_error(e, formatter, config.verbose)
-
-
-@cli.command()
-@pass_state
-def health(state: GlobalState):
-    """
-    Check system health.
-
-    Verifies all components are operational:
-    - Memory system
-    - Emotion detector
-    - Learning engine
-    - RAG search
-    - LLM connection
-    """
-    asyncio.run(_health_async(state))
-
-
-async def _health_async(state: GlobalState):
-    """Async implementation of health command."""
-    config = state.config
-    formatter = state.formatter
-
-    formatter.print("\n[bold cyan]Checking system health...[/bold cyan]\n")
-
-    try:
-        async with assistant_context(config) as assistant:
-            # Check health
-            health_status = await check_health(assistant)
-
-            # Display results
-            if formatter.use_rich:
-                table = formatter.format_health(health_status)
-                formatter.console.print(table)
-            else:
-                output = formatter.format_health(health_status)
-                print(output)
-
-            # Determine overall status
-            all_healthy = all(s.get("healthy", False) for s in health_status.values())
-
-            if all_healthy:
-                formatter.print("\n[bold green]✅ All systems operational[/bold green]")
-                sys.exit(0)
-            else:
-                formatter.print("\n[bold yellow]⚠️ Some systems degraded[/bold yellow]")
-                sys.exit(1)
-
-    except Exception as e:
-        handle_cli_error(e, formatter, config.verbose)
-
-
-@cli.command()
-@click.argument("path", type=click.Path(exists=True, path_type=Path))
-@click.option(
-    "--recursive",
-    is_flag=True,
-    help="Process directory recursively",
-)
-@click.option(
-    "--file-types",
-    multiple=True,
-    help="File types to process (e.g., .pdf, .txt)",
-)
-@pass_state
-def learn(state: GlobalState, path: Path, recursive: bool, file_types: tuple):
-    """
-    Ingest documents into the knowledge base.
-
-    Supports: PDF, TXT, DOCX, MD, and more.
-
-    Examples:
-        morgan learn document.pdf
-        morgan learn ./docs --recursive
-        morgan learn ./docs --file-types .pdf --file-types .txt
-    """
-    asyncio.run(_learn_async(state, path, recursive, file_types))
-
-
-async def _learn_async(
-    state: GlobalState,
-    path: Path,
-    recursive: bool,
-    file_types: tuple,
-):
-    """Async implementation of learn command."""
-    config = state.config
-    formatter = state.formatter
-
-    formatter.print(f"\n[bold cyan]Ingesting documents from:[/bold cyan] {path}\n")
-
-    # Collect files
-    files = []
-    if path.is_file():
-        files = [path]
-    else:
-        # Directory
-        pattern = "**/*" if recursive else "*"
-        for file_path in path.glob(pattern):
-            if file_path.is_file():
-                # Filter by file type if specified
-                if file_types and file_path.suffix not in file_types:
-                    continue
-                files.append(file_path)
-
-    if not files:
-        formatter.print("[yellow]No files found to process.[/yellow]")
-        return
-
-    formatter.print(f"[dim]Found {len(files)} file(s) to process...[/dim]\n")
-
-    # Process files
-    # Note: This would integrate with the ingestion system
-    # For now, we'll show a placeholder implementation
-
-    try:
-        from morgan.ingestion.processor import DocumentProcessor
-
-        processor = DocumentProcessor(
-            storage_path=Path(config.storage_path) / "documents",
+
+from rich.console import Console
+from rich.panel import Panel
+
+from morgan import create_assistant
+from morgan.utils.logger import get_logger, setup_logging
+
+logger = get_logger(__name__)
+
+console = Console()
+
+
+def create_parser() -> argparse.ArgumentParser:
+    """Create the main argument parser with human-friendly commands."""
+    parser = argparse.ArgumentParser(
+        prog="morgan",
+        description="🤖 Morgan - Your Human-First AI Assistant",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  morgan chat                           Start interactive chat with Morgan
+  morgan ask "How do I deploy Docker?"  Ask Morgan a single question
+  morgan learn ./docs                   Teach Morgan from documents
+  morgan learn --url https://docs.python.org  Learn from a website
+  morgan serve                          Start web interface
+  morgan health                         Check system health
+  morgan memory --stats                 View conversation statistics
+
+For more help on a specific command, use: morgan <command> --help
+        """,
+    )
+
+    # Global options
+    parser.add_argument("--config", type=str, help="Path to configuration file")
+
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable verbose output"
+    )
+
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+
+    # Subcommands
+    subparsers = parser.add_subparsers(
+        dest="command", help="Available commands", metavar="COMMAND"
+    )
+
+    # Chat command
+    chat_parser = subparsers.add_parser(
+        "chat",
+        help="Start interactive chat with Morgan",
+        description="Start an interactive conversation with Morgan. Perfect for exploring topics and getting help.",
+    )
+    chat_parser.add_argument(
+        "--topic", type=str, help="Initial topic for the conversation"
+    )
+
+    # Ask command
+    ask_parser = subparsers.add_parser(
+        "ask",
+        help="Ask Morgan a single question",
+        description="Ask Morgan a question and get an immediate answer. Great for quick queries.",
+    )
+    ask_parser.add_argument("question", type=str, help="The question to ask Morgan")
+    ask_parser.add_argument(
+        "--sources", action="store_true", help="Include source references in the answer"
+    )
+    ask_parser.add_argument(
+        "--stream", action="store_true", help="Stream the response in real-time"
+    )
+
+    # Learn command
+    learn_parser = subparsers.add_parser(
+        "learn",
+        help="Teach Morgan from documents or websites",
+        description="Add new knowledge to Morgan's knowledge base from various sources.",
+    )
+    learn_group = learn_parser.add_mutually_exclusive_group(required=True)
+    learn_group.add_argument(
+        "source",
+        nargs="?",
+        type=str,
+        help="Path to documents or directory to learn from",
+    )
+    learn_group.add_argument(
+        "--url", type=str, help="URL to learn from (website, documentation, etc.)"
+    )
+    learn_parser.add_argument(
+        "--type",
+        type=str,
+        default="auto",
+        choices=["auto", "pdf", "web", "code", "markdown", "text"],
+        help="Type of documents (auto-detect by default)",
+    )
+    learn_parser.add_argument(
+        "--progress",
+        action="store_true",
+        default=True,
+        help="Show progress during learning",
+    )
+
+    # Serve command
+    serve_parser = subparsers.add_parser(
+        "serve",
+        help="Start Morgan's web interface",
+        description="Start the web server for Morgan's chat interface and API.",
+    )
+    serve_parser.add_argument(
+        "--host", type=str, default="0.0.0.0", help="Host to bind to (default: 0.0.0.0)"
+    )
+    serve_parser.add_argument(
+        "--port", type=int, default=8080, help="Port to bind to (default: 8080)"
+    )
+    serve_parser.add_argument(
+        "--api-only",
+        action="store_true",
+        help="Start only the API server (no web interface)",
+    )
+
+    # Health command
+    health_parser = subparsers.add_parser(
+        "health",
+        help="Check Morgan's system health",
+        description="Check if all of Morgan's components are working properly.",
+    )
+    health_parser.add_argument(
+        "--detailed", action="store_true", help="Show detailed health information"
+    )
+
+    # Memory command
+    memory_parser = subparsers.add_parser(
+        "memory",
+        help="Manage Morgan's conversation memory",
+        description="View and manage Morgan's conversation history and learning.",
+    )
+    memory_group = memory_parser.add_mutually_exclusive_group()
+    memory_group.add_argument(
+        "--stats", action="store_true", help="Show memory and learning statistics"
+    )
+    memory_group.add_argument(
+        "--search", type=str, help="Search through conversation history"
+    )
+    memory_group.add_argument(
+        "--cleanup",
+        type=int,
+        metavar="DAYS",
+        help="Clean up conversations older than N days",
+    )
+
+    # Knowledge command
+    knowledge_parser = subparsers.add_parser(
+        "knowledge",
+        help="Manage Morgan's knowledge base",
+        description="View and manage Morgan's knowledge base.",
+    )
+    knowledge_group = knowledge_parser.add_mutually_exclusive_group()
+    knowledge_group.add_argument(
+        "--stats", action="store_true", help="Show knowledge base statistics"
+    )
+    knowledge_group.add_argument("--search", type=str, help="Search the knowledge base")
+    knowledge_group.add_argument(
+        "--clear",
+        action="store_true",
+        help="Clear all knowledge (requires confirmation)",
+    )
+
+    # Cache command (implements R1.3, R9.1)
+    cache_parser = subparsers.add_parser(
+        "cache",
+        help="Manage and monitor Git hash cache",
+        description="View cache performance metrics and manage cache storage.",
+    )
+    cache_group = cache_parser.add_mutually_exclusive_group()
+    cache_group.add_argument(
+        "--stats", action="store_true", help="Show cache performance statistics"
+    )
+    cache_group.add_argument(
+        "--metrics", action="store_true", help="Show detailed cache metrics"
+    )
+    cache_group.add_argument(
+        "--efficiency", action="store_true", help="Show cache efficiency report"
+    )
+    cache_group.add_argument(
+        "--clear",
+        action="store_true",
+        help="Clear cache metrics (requires confirmation)",
+    )
+    cache_group.add_argument(
+        "--cleanup",
+        type=int,
+        metavar="DAYS",
+        help="Clean up cache entries older than N days",
+    )
+
+    # Migration command (implements R10.4, R10.5)
+    migrate_parser = subparsers.add_parser(
+        "migrate",
+        help="Migrate knowledge bases to hierarchical format",
+        description="Migrate existing knowledge bases from legacy single-vector to hierarchical multi-scale embeddings.",
+    )
+    migrate_subparsers = migrate_parser.add_subparsers(
+        dest="migrate_action", help="Migration actions"
+    )
+
+    # Migrate analyze
+    analyze_parser = migrate_subparsers.add_parser(
+        "analyze", help="Analyze collections for migration readiness"
+    )
+    analyze_parser.add_argument(
+        "collection",
+        nargs="?",
+        help="Collection name to analyze (analyzes all if not specified)",
+    )
+
+    # Migrate plan
+    plan_parser = migrate_subparsers.add_parser(
+        "plan", help="Create migration plan for a collection"
+    )
+    plan_parser.add_argument("source_collection", help="Source collection name")
+    plan_parser.add_argument(
+        "--target", help="Target collection name (auto-generated if not specified)"
+    )
+    plan_parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=50,
+        help="Batch size for migration (default: 50)",
+    )
+
+    # Migrate execute
+    execute_parser = migrate_subparsers.add_parser(
+        "execute", help="Execute migration for a collection"
+    )
+    execute_parser.add_argument("source_collection", help="Source collection name")
+    execute_parser.add_argument(
+        "--target", help="Target collection name (auto-generated if not specified)"
+    )
+    execute_parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=50,
+        help="Batch size for migration (default: 50)",
+    )
+    execute_parser.add_argument(
+        "--dry-run", action="store_true", help="Perform dry run without making changes"
+    )
+    execute_parser.add_argument(
+        "--confirm", action="store_true", help="Confirm migration execution"
+    )
+
+    # Migrate validate
+    validate_parser = migrate_subparsers.add_parser(
+        "validate", help="Validate completed migration"
+    )
+    validate_parser.add_argument("source_collection", help="Source collection name")
+    validate_parser.add_argument("target_collection", help="Target collection name")
+    validate_parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=100,
+        help="Number of points to sample for validation (default: 100)",
+    )
+
+    # Migrate rollback
+    rollback_parser = migrate_subparsers.add_parser(
+        "rollback", help="Rollback migration using backup"
+    )
+    rollback_parser.add_argument("backup_path", help="Path to backup file")
+    rollback_parser.add_argument(
+        "--target",
+        help="Target collection name (uses backup collection name if not specified)",
+    )
+    rollback_parser.add_argument(
+        "--confirm", action="store_true", help="Confirm rollback execution"
+    )
+
+    # Migrate list-backups
+    migrate_subparsers.add_parser(
+        "list-backups", help="List available migration backups"
+    )
+
+    # Migrate cleanup
+    cleanup_parser = migrate_subparsers.add_parser(
+        "cleanup", help="Clean up old migration backups"
+    )
+    cleanup_parser.add_argument(
+        "--keep-days",
+        type=int,
+        default=30,
+        help="Number of days to keep backups (default: 30)",
+    )
+
+    # Init command
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Initialize Morgan in current directory",
+        description="Set up Morgan configuration and data directories.",
+    )
+    init_parser.add_argument(
+        "--force", action="store_true", help="Overwrite existing configuration"
+    )
+
+    return parser
+
+
+def cmd_chat(args, morgan):
+    """Handle the chat command."""
+    console.print(
+        Panel.fit(
+            "🤖 [bold blue]Morgan[/bold blue] - Your AI Assistant\n"
+            "Type your questions naturally. Type 'quit' to exit.",
+            title="Interactive Chat",
+            border_style="blue",
         )
+    )
 
-        # Process with progress
-        if formatter.use_rich:
-            from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
+    conversation_id = morgan.start_conversation(topic=args.topic)
 
-            with Progress(
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TimeRemainingColumn(),
-                console=formatter.console,
-            ) as progress:
-                task = progress.add_task("Processing documents...", total=len(files))
+    try:
+        while True:
+            # Get user input
+            try:
+                question = console.input("\n[bold green]You:[/bold green] ").strip()
+            except (EOFError, KeyboardInterrupt):
+                break
 
-                for file_path in files:
-                    try:
-                        # Process document (placeholder - actual implementation would be async)
-                        progress.update(
-                            task,
-                            description=f"Processing {file_path.name}",
-                            advance=0,
+            if question.lower() in ["quit", "exit", "bye", "q"]:
+                break
+
+            if not question:
+                continue
+
+            # Get Morgan's response
+            console.print("\n[bold blue]Morgan:[/bold blue] ", end="")
+
+            try:
+                if args.stream if hasattr(args, "stream") else True:
+                    # Stream response for natural conversation feel
+                    for chunk in morgan.ask_stream(question, conversation_id):
+                        console.print(chunk, end="", highlight=False)
+                    console.print()  # New line after response
+                else:
+                    # Get complete response
+                    response = morgan.ask(question, conversation_id)
+                    console.print(response.answer)
+
+                    if response.sources and len(response.sources) > 0:
+                        console.print(
+                            f"\n[dim]Sources: {', '.join(response.sources[:3])}[/dim]"
                         )
 
-                        # Simulate processing (replace with actual ingestion)
-                        await asyncio.sleep(0.1)
+            except Exception as e:
+                console.print(f"[red]Sorry, I encountered an error: {e}[/red]")
 
-                        progress.update(task, advance=1)
+    except KeyboardInterrupt:
+        pass
 
-                    except Exception as e:
-                        formatter.print(f"[yellow]Warning:[/yellow] Failed to process {file_path.name}: {e}")
+    console.print(
+        "\n[blue]Morgan:[/blue] Goodbye! Feel free to chat with me anytime. 👋"
+    )
 
+
+def cmd_ask(args, morgan):
+    """Handle the ask command."""
+    try:
+        if args.stream:
+            # Stream response
+            console.print("[bold blue]Morgan:[/bold blue] ", end="")
+            for chunk in morgan.ask_stream(args.question):
+                console.print(chunk, end="", highlight=False)
+            console.print()
         else:
-            # Plain text progress
-            for i, file_path in enumerate(files, 1):
-                print(f"Processing {i}/{len(files)}: {file_path.name}...")
-                await asyncio.sleep(0.1)  # Simulate processing
+            # Get complete response
+            response = morgan.ask(args.question, include_sources=args.sources)
 
-        formatter.print(f"\n[bold green]✅ Successfully processed {len(files)} document(s)[/bold green]")
+            console.print(f"[bold blue]Morgan:[/bold blue] {response.answer}")
 
-    except ImportError:
-        formatter.print("[yellow]⚠️ Document ingestion module not available.[/yellow]")
-        formatter.print("[dim]Install with: pip install morgan[ingestion][/dim]")
+            if args.sources and response.sources:
+                console.print("\n[dim]Sources:[/dim]")
+                for i, source in enumerate(response.sources[:5], 1):
+                    console.print(f"  [dim]{i}. {source}[/dim]")
+
+            if response.suggestions:
+                console.print("\n[dim]Related topics:[/dim]")
+                for suggestion in response.suggestions[:3]:
+                    console.print(f"  [dim]• {suggestion}[/dim]")
+
     except Exception as e:
-        handle_cli_error(e, formatter, config.verbose)
+        console.print(f"[red]Error: {e}[/red]")
+        sys.exit(1)
 
 
-@cli.command()
-@pass_state
-def knowledge(state: GlobalState):
-    """
-    Show knowledge base statistics.
+def cmd_learn(args, morgan):
+    """Handle the learn command."""
+    source = args.source or args.url
 
-    Displays:
-    - Number of documents
-    - Number of chunks
-    - Collections
-    - Storage usage
-    """
-    asyncio.run(_knowledge_async(state))
-
-
-async def _knowledge_async(state: GlobalState):
-    """Async implementation of knowledge command."""
-    config = state.config
-    formatter = state.formatter
-
-    formatter.print("\n[bold cyan]Knowledge Base Statistics[/bold cyan]\n")
+    console.print(f"[blue]Teaching Morgan from:[/blue] {source}")
 
     try:
-        # Connect to vector DB
-        from morgan.vector_db.client import QdrantClient
+        if args.url:
+            # Learn from URL
+            result = morgan.learn_from_documents(
+                source_path=args.url, document_type="web", show_progress=args.progress
+            )
+        else:
+            # Learn from local source
+            result = morgan.learn_from_documents(
+                source_path=source, document_type=args.type, show_progress=args.progress
+            )
 
-        client = QdrantClient(
-            url=config.vector_db_url,
-            collection_name=config.vector_db_collection,
+        if result["success"]:
+            console.print(
+                Panel.fit(
+                    f"✅ [green]Learning Complete![/green]\n\n"
+                    f"📚 Documents processed: {result['documents_processed']}\n"
+                    f"🧩 Knowledge chunks: {result['chunks_created']}\n"
+                    f"⏱️  Processing time: {result['learning_time']:.1f}s\n"
+                    f"🎯 Knowledge areas: {', '.join(result['knowledge_areas'][:5])}",
+                    title="Learning Results",
+                    border_style="green",
+                )
+            )
+        else:
+            console.print(
+                f"[red]Learning failed: {result.get('message', 'Unknown error')}[/red]"
+            )
+            sys.exit(1)
+
+    except Exception as e:
+        console.print(f"[red]Error during learning: {e}[/red]")
+        sys.exit(1)
+
+
+def cmd_serve(args, morgan):
+    """Handle the serve command."""
+    console.print("[blue]Starting Morgan web server...[/blue]")
+
+    try:
+        from morgan.web.app import create_app
+
+        app = create_app(morgan)
+
+        console.print(
+            Panel.fit(
+                f"🌐 [green]Morgan Web Interface[/green]\n\n"
+                f"🔗 Web Interface: http://{args.host}:{args.port}\n"
+                f"🔗 API Endpoint: http://{args.host}:{args.port}/api\n"
+                f"📖 API Docs: http://{args.host}:{args.port}/docs\n\n"
+                f"Press Ctrl+C to stop the server",
+                title="Server Started",
+                border_style="green",
+            )
         )
 
-        # Get collection info
-        info = await client.get_collection_info()
+        # Start the server
+        import uvicorn
 
-        if formatter.use_rich:
-            from rich.table import Table
+        uvicorn.run(
+            app,
+            host=args.host,
+            port=args.port,
+            log_level="info" if not args.debug else "debug",
+        )
 
-            table = Table(show_header=False, box=None, padding=(0, 2))
-            table.add_column("Metric", style="cyan")
-            table.add_column("Value", justify="right", style="green")
-
-            table.add_row("Collection", config.vector_db_collection)
-            table.add_row("Total Vectors", str(info.get("vectors_count", 0)))
-            table.add_row("Indexed Vectors", str(info.get("indexed_vectors_count", 0)))
-            table.add_row("Points Count", str(info.get("points_count", 0)))
-
-            formatter.console.print(table)
-        else:
-            print(f"Collection: {config.vector_db_collection}")
-            print(f"Total Vectors: {info.get('vectors_count', 0)}")
-            print(f"Indexed Vectors: {info.get('indexed_vectors_count', 0)}")
-            print(f"Points Count: {info.get('points_count', 0)}")
-
+    except ImportError:
+        console.print(
+            "[red]Web interface dependencies not installed. Install with: pip install 'morgan[web]'[/red]"
+        )
+        sys.exit(1)
     except Exception as e:
-        formatter.print(f"[yellow]Could not retrieve knowledge base stats: {e}[/yellow]")
-
-
-@cli.command()
-@pass_state
-def init(state: GlobalState):
-    """
-    Initialize Morgan configuration interactively.
-
-    Creates a configuration file with your preferences.
-    """
-    asyncio.run(_init_async(state))
-
-
-async def _init_async(state: GlobalState):
-    """Async implementation of init command."""
-    try:
-        config = await interactive_init()
-        print("\n✅ Configuration initialized successfully!")
-        print(f"Config file: {config.storage_path}/config.json")
-    except Exception as e:
-        print(f"❌ Configuration initialization failed: {e}")
+        console.print(f"[red]Failed to start server: {e}[/red]")
         sys.exit(1)
 
 
-@cli.command()
-@click.argument("key", required=False)
-@click.argument("value", required=False)
-@pass_state
-def config_cmd(state: GlobalState, key: Optional[str], value: Optional[str]):
-    """
-    View or edit configuration.
+def cmd_health(args, morgan):
+    """Handle the health command."""
+    console.print("[blue]Checking Morgan's health...[/blue]")
 
-    Examples:
-        morgan config                    # Show all config
-        morgan config llm_model          # Show specific value
-        morgan config llm_model llama3   # Set value
-    """
-    config = state.config
-    formatter = state.formatter
+    try:
+        from morgan.utils.health import HealthChecker
 
-    if not key:
-        # Show all configuration
-        formatter.print("\n[bold cyan]Morgan Configuration[/bold cyan]\n")
+        health_checker = HealthChecker()
+        health_status = health_checker.check_all_systems(detailed=args.detailed)
 
-        if formatter.use_rich:
-            from rich.table import Table
-
-            table = Table(show_header=True, header_style="bold cyan")
-            table.add_column("Key", style="cyan")
-            table.add_column("Value", style="green")
-
-            for k, v in config.to_dict().items():
-                table.add_row(k, str(v))
-
-            formatter.console.print(table)
+        if health_status["overall_status"] == "healthy":
+            status_color = "green"
+            status_icon = "✅"
+        elif health_status["overall_status"] == "warning":
+            status_color = "yellow"
+            status_icon = "⚠️"
         else:
-            for k, v in config.to_dict().items():
-                print(f"{k}: {v}")
+            status_color = "red"
+            status_icon = "❌"
 
-    elif not value:
-        # Show specific value
-        try:
-            val = config.get(key)
-            formatter.print(f"[cyan]{key}:[/cyan] {val}")
-        except AttributeError:
-            formatter.print(f"[red]Unknown configuration key:[/red] {key}")
+        console.print(
+            Panel.fit(
+                f"{status_icon} [bold {status_color}]Overall Status: {health_status['overall_status'].upper()}[/bold {status_color}]\n\n"
+                f"🧠 Knowledge Base: {health_status['components']['knowledge']['status']}\n"
+                f"💾 Memory System: {health_status['components']['memory']['status']}\n"
+                f"🔍 Search Engine: {health_status['components']['search']['status']}\n"
+                f"🤖 LLM Service: {health_status['components']['llm']['status']}\n"
+                f"📊 Vector Database: {health_status['components']['vector_db']['status']}",
+                title="System Health",
+                border_style=status_color,
+            )
+        )
+
+        if args.detailed:
+            for component, details in health_status["components"].items():
+                if details.get("details"):
+                    console.print(f"\n[bold]{component.title()}:[/bold]")
+                    for key, value in details["details"].items():
+                        console.print(f"  {key}: {value}")
+
+        if health_status["overall_status"] != "healthy":
             sys.exit(1)
 
-    else:
-        # Set value
-        try:
-            config.set(key, value)
-            config.save()
-            formatter.print(f"[green]✅ Set {key} = {value}[/green]")
-        except ValueError as e:
-            formatter.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-
-
-@cli.command()
-@click.option(
-    "--limit",
-    default=10,
-    help="Number of sessions to show",
-)
-@pass_state
-def history(state: GlobalState, limit: int):
-    """
-    Show conversation history.
-
-    Lists recent conversation sessions.
-    """
-    formatter = state.formatter
-    session_manager = state.session_manager
-
-    formatter.print("\n[bold cyan]Conversation History[/bold cyan]\n")
-
-    sessions = session_manager.list_sessions()
-
-    if not sessions:
-        formatter.print("[dim]No conversation history found.[/dim]")
-        return
-
-    # Show sessions
-    if formatter.use_rich:
-        from rich.table import Table
-
-        table = Table(show_header=True, header_style="bold cyan")
-        table.add_column("Session ID", style="cyan")
-        table.add_column("Created", style="yellow")
-        table.add_column("Messages", justify="right", style="green")
-
-        for session in sessions[:limit]:
-            table.add_row(
-                truncate_text(session["session_id"], 40),
-                session.get("created_at", "unknown"),
-                str(session.get("message_count", 0)),
-            )
-
-        formatter.console.print(table)
-    else:
-        for session in sessions[:limit]:
-            print(
-                f"{session['session_id'][:40]} | "
-                f"{session.get('created_at', 'unknown')} | "
-                f"{session.get('message_count', 0)} messages"
-            )
-
-
-@cli.command()
-@click.argument("session_id")
-@pass_state
-def resume(state: GlobalState, session_id: str):
-    """
-    Resume a conversation session.
-
-    Examples:
-        morgan resume abc123
-    """
-    formatter = state.formatter
-
-    # Check if session exists
-    session_data = state.session_manager.load_session(session_id)
-
-    if not session_data:
-        formatter.print(f"[red]Session not found:[/red] {session_id}")
+    except Exception as e:
+        console.print(f"[red]Health check failed: {e}[/red]")
         sys.exit(1)
 
-    formatter.print(f"\n[green]Resuming session:[/green] {session_id}")
-    formatter.print(f"[dim]Messages: {len(session_data.get('messages', []))}[/dim]\n")
 
-    # Start chat with this session
-    asyncio.run(_chat_async(state, session_id, streaming=True))
-
-
-@cli.command()
-@click.argument("rating", type=float)
-@click.option(
-    "--comment",
-    help="Optional feedback comment",
-)
-@pass_state
-def rate(state: GlobalState, rating: float, comment: Optional[str]):
-    """
-    Rate the last response.
-
-    Rating scale: 0.0 (poor) to 1.0 (excellent)
-
-    Examples:
-        morgan rate 0.9
-        morgan rate 0.5 --comment "Too verbose"
-    """
-    asyncio.run(_rate_async(state, rating, comment))
-
-
-async def _rate_async(state: GlobalState, rating: float, comment: Optional[str]):
-    """Async implementation of rate command."""
-    config = state.config
-    formatter = state.formatter
-
-    if not state.last_response_id:
-        formatter.print("[yellow]No recent response to rate.[/yellow]")
-        return
-
-    if not 0.0 <= rating <= 1.0:
-        formatter.print("[red]Rating must be between 0.0 and 1.0[/red]")
-        sys.exit(1)
-
+def cmd_memory(args, morgan):
+    """Handle the memory command."""
     try:
-        async with assistant_context(config) as assistant:
-            if not assistant.learning_engine:
-                formatter.print("[yellow]Learning system not enabled.[/yellow]")
-                return
+        if args.stats:
+            insights = morgan.memory.get_learning_insights()
 
-            # Create feedback signal
-            feedback = FeedbackSignal(
-                feedback_type=FeedbackType.EXPLICIT,
-                signal_value=rating,
-                timestamp=datetime.now(),
-                response_id=state.last_response_id,
-                user_id="cli_user",
-                session_id=state.current_session_id or "unknown",
-                context_data={"comment": comment} if comment else {},
+            console.print(
+                Panel.fit(
+                    f"🧠 [bold blue]Memory Statistics[/bold blue]\n\n"
+                    f"💬 Total conversations: {insights['total_conversations']}\n"
+                    f"🔄 Total turns: {insights['total_turns']}\n"
+                    f"⭐ Average rating: {insights['average_rating']:.1f}/5\n"
+                    f"📊 Feedback rate: {insights['feedback_percentage']:.1f}%\n"
+                    f"🏷️  Common topics: {', '.join(insights['common_topics'][:5])}",
+                    title="Conversation Memory",
+                    border_style="blue",
+                )
             )
 
-            # Submit feedback
-            await assistant.learning_engine.process_feedback(feedback)
+        elif args.search:
+            results = morgan.memory.search_conversations(args.search, max_results=10)
 
-            formatter.print(f"[green]✅ Feedback submitted: {rating:.1f}/1.0[/green]")
-            if comment:
-                formatter.print(f"[dim]Comment: {comment}[/dim]")
+            console.print(
+                f"[blue]Found {len(results)} relevant conversations:[/blue]\n"
+            )
+
+            for i, result in enumerate(results, 1):
+                console.print(f"[bold]{i}. Score: {result['score']:.2f}[/bold]")
+                console.print(f"   Q: {result['question']}")
+                console.print(f"   A: {result['answer'][:100]}...")
+                if result["feedback_rating"]:
+                    console.print(f"   Rating: {result['feedback_rating']}/5")
+                console.print()
+
+        elif args.cleanup:
+            cleaned = morgan.memory.cleanup_old_conversations(days_to_keep=args.cleanup)
+            console.print(
+                f"[green]Cleaned up {cleaned} old conversations (older than {args.cleanup} days)[/green]"
+            )
 
     except Exception as e:
-        handle_cli_error(e, formatter, config.verbose)
+        console.print(f"[red]Memory operation failed: {e}[/red]")
+        sys.exit(1)
 
 
-@cli.command()
-@pass_state
-def stats(state: GlobalState):
-    """
-    Show learning statistics.
-
-    Displays:
-    - Patterns detected
-    - Feedback processed
-    - Preferences learned
-    - Adaptations made
-    """
-    asyncio.run(_stats_async(state))
-
-
-async def _stats_async(state: GlobalState):
-    """Async implementation of stats command."""
-    config = state.config
-    formatter = state.formatter
-
-    formatter.print("\n[bold cyan]Learning Statistics[/bold cyan]\n")
-
+def cmd_knowledge(args, morgan):
+    """Handle the knowledge command."""
     try:
-        async with assistant_context(config) as assistant:
-            if not assistant.learning_engine:
-                formatter.print("[yellow]Learning system not enabled.[/yellow]")
-                return
+        if args.stats:
+            stats = morgan.get_knowledge_stats()
 
-            # Get metrics
-            metrics = await assistant.learning_engine.get_metrics()
+            console.print(
+                Panel.fit(
+                    f"📚 [bold blue]Knowledge Base Statistics[/bold blue]\n\n"
+                    f"📄 Total documents: {stats['total_documents']}\n"
+                    f"🧩 Knowledge chunks: {stats['knowledge_chunks']}\n"
+                    f"🏷️  Knowledge areas: {', '.join(stats['knowledge_areas'][:5])}\n"
+                    f"💾 Storage size: {stats['storage_size']:.1f} MB\n"
+                    f"🕒 Last updated: {stats['last_updated']}",
+                    title="Knowledge Base",
+                    border_style="blue",
+                )
+            )
 
-            # Display stats
-            if formatter.use_rich:
-                stats_panel = formatter.format_learning_stats(metrics)
-                formatter.console.print(stats_panel)
-            else:
-                output = formatter.format_learning_stats(metrics)
-                print(output)
+        elif args.search:
+            results = morgan.knowledge.search_knowledge(args.search, max_results=10)
 
-            # Get preferences
-            preferences = await assistant.learning_engine.get_user_preferences("cli_user")
-            if preferences:
-                formatter.print("")
-                pref_panel = formatter.format_preferences(preferences)
-                if formatter.use_rich:
-                    formatter.console.print(pref_panel)
+            console.print(
+                f"[blue]Found {len(results)} relevant knowledge chunks:[/blue]\n"
+            )
+
+            for i, result in enumerate(results, 1):
+                console.print(f"[bold]{i}. Score: {result['score']:.2f}[/bold]")
+                console.print(f"   Source: {result['source']}")
+                console.print(f"   Content: {result['content'][:150]}...")
+                console.print()
+
+        elif args.clear:
+            confirm = console.input(
+                "[red]Are you sure you want to clear ALL knowledge? Type 'yes' to confirm: [/red]"
+            )
+            if confirm.lower() == "yes":
+                success = morgan.knowledge.clear_knowledge(confirm=True)
+                if success:
+                    console.print("[green]Knowledge base cleared successfully[/green]")
                 else:
-                    print(pref_panel)
+                    console.print("[red]Failed to clear knowledge base[/red]")
+                    sys.exit(1)
+            else:
+                console.print("[yellow]Operation cancelled[/yellow]")
 
     except Exception as e:
-        handle_cli_error(e, formatter, config.verbose)
+        console.print(f"[red]Knowledge operation failed: {e}[/red]")
+        sys.exit(1)
 
 
-@cli.command()
-@pass_state
-def version(state: GlobalState):
-    """Show Morgan version information."""
-    formatter = state.formatter
+def cmd_cache(args, morgan):
+    """Handle the cache command (implements R1.3, R9.1)."""
+    try:
+        from pathlib import Path
 
-    formatter.print("\n[bold green]Morgan AI Assistant[/bold green]")
-    formatter.print("[dim]Version: 2.0.0[/dim]")
-    formatter.print("[dim]An intelligent, emotionally-aware assistant[/dim]\n")
+        from morgan.caching.git_hash_tracker import GitHashTracker
+        from morgan.caching.intelligent_cache import IntelligentCacheManager
+
+        # Initialize cache components
+        cache_dir = Path.home() / ".morgan" / "cache"
+        git_tracker = GitHashTracker(cache_dir)
+        cache_manager = IntelligentCacheManager(cache_dir)
+
+        if args.stats:
+            # Show basic cache statistics
+            metrics = git_tracker.get_cache_metrics()
+            cache_perf = metrics["cache_performance"]
+            collection_stats = metrics["collection_stats"]
+
+            console.print(
+                Panel.fit(
+                    f"📊 [bold blue]Git Hash Cache Statistics[/bold blue]\n\n"
+                    f"🎯 Hit Rate: {cache_perf['hit_rate']:.1%}\n"
+                    f"📈 Total Requests: {cache_perf['total_requests']}\n"
+                    f"✅ Cache Hits: {cache_perf['cache_hits']}\n"
+                    f"❌ Cache Misses: {cache_perf['cache_misses']}\n"
+                    f"🔢 Hash Calculations: {cache_perf['hash_calculations']}\n"
+                    f"🗑️  Invalidations: {cache_perf['invalidations']}\n\n"
+                    f"📚 Collections: {collection_stats['total_collections']}\n"
+                    f"📄 Documents: {collection_stats['total_documents']}\n"
+                    f"💾 Storage: {collection_stats['total_size_bytes'] / (1024*1024):.1f} MB",
+                    title="Cache Performance",
+                    border_style="blue",
+                )
+            )
+
+        elif args.metrics:
+            # Show detailed metrics
+            metrics = git_tracker.get_cache_metrics()
+            cache_stats = cache_manager.get_cache_statistics()
+
+            console.print(
+                Panel.fit(
+                    f"📊 [bold blue]Detailed Cache Metrics[/bold blue]\n\n"
+                    f"[bold]Performance Metrics:[/bold]\n"
+                    f"  Hit Rate: {metrics['cache_performance']['hit_rate']:.1%}\n"
+                    f"  Miss Rate: {1 - metrics['cache_performance']['hit_rate']:.1%}\n"
+                    f"  Total Requests: {metrics['cache_performance']['total_requests']}\n"
+                    f"  Hash Calculations: {metrics['cache_performance']['hash_calculations']}\n\n"
+                    f"[bold]Collection Statistics:[/bold]\n"
+                    f"  Total Collections: {metrics['collection_stats']['total_collections']}\n"
+                    f"  Total Documents: {metrics['collection_stats']['total_documents']}\n"
+                    f"  Average Docs/Collection: {metrics['collection_stats']['average_documents_per_collection']:.1f}\n"
+                    f"  Total Storage: {metrics['collection_stats']['total_size_bytes'] / (1024*1024):.1f} MB\n\n"
+                    f"[bold]System Metrics:[/bold]\n"
+                    f"  Cache Manager Hit Rate: {cache_stats['metrics']['hit_rate']:.1%}\n"
+                    f"  Cache Manager Requests: {cache_stats['metrics']['total_requests']}\n"
+                    f"  Collections in Cache: {cache_stats['collections']['total_collections']}",
+                    title="Detailed Cache Metrics",
+                    border_style="blue",
+                )
+            )
+
+        elif args.efficiency:
+            # Show efficiency report
+            efficiency_report = git_tracker.get_cache_efficiency_report()
+            summary = efficiency_report["summary"]
+
+            # Determine color based on efficiency level
+            if summary["efficiency_level"] == "Excellent":
+                color = "green"
+                icon = "🟢"
+            elif summary["efficiency_level"] == "Good":
+                color = "yellow"
+                icon = "🟡"
+            elif summary["efficiency_level"] == "Fair":
+                color = "orange"
+                icon = "🟠"
+            else:
+                color = "red"
+                icon = "🔴"
+
+            console.print(
+                Panel.fit(
+                    (
+                        f"{icon} [bold {color}]Cache Efficiency: {summary['efficiency_level']}[/bold {color}]\n\n"
+                        f"📊 Hit Rate: {summary['hit_rate_percentage']}\n"
+                        f"📈 Total Requests: {summary['total_requests']}\n"
+                        f"✅ Cache Hits: {summary['cache_hits']}\n"
+                        f"❌ Cache Misses: {summary['cache_misses']}\n\n"
+                        f"[bold]Recommendations:[/bold]\n"
+                        + "\n".join(
+                            f"  • {rec}" for rec in efficiency_report["recommendations"]
+                        )
+                        if efficiency_report["recommendations"]
+                        else "  • No recommendations - cache is performing well!"
+                    ),
+                    title="Cache Efficiency Report",
+                    border_style=color,
+                )
+            )
+
+        elif args.clear:
+            # Clear cache metrics
+            confirm = console.input(
+                "[red]Are you sure you want to clear cache metrics? Type 'yes' to confirm: [/red]"
+            )
+            if confirm.lower() == "yes":
+                success = git_tracker.reset_cache_metrics()
+                if success:
+                    console.print("[green]Cache metrics cleared successfully[/green]")
+                else:
+                    console.print("[red]Failed to clear cache metrics[/red]")
+                    sys.exit(1)
+            else:
+                console.print("[yellow]Operation cancelled[/yellow]")
+
+        elif args.cleanup:
+            # Clean up old cache entries
+            console.print(
+                f"[blue]Cleaning up cache entries older than {args.cleanup} days...[/blue]"
+            )
+            cleaned_count = cache_manager.cleanup_expired_cache(
+                max_age_days=args.cleanup
+            )
+            console.print(
+                f"[green]Cleaned up {cleaned_count} expired cache entries[/green]"
+            )
+
+        else:
+            # Default: show basic stats
+            metrics = git_tracker.get_cache_metrics()
+            cache_perf = metrics["cache_performance"]
+
+            console.print(
+                Panel.fit(
+                    f"📊 [bold blue]Cache Overview[/bold blue]\n\n"
+                    f"🎯 Hit Rate: {cache_perf['hit_rate']:.1%}\n"
+                    f"📈 Total Requests: {cache_perf['total_requests']}\n"
+                    f"📚 Collections: {metrics['collection_stats']['total_collections']}\n\n"
+                    f"Use --stats, --metrics, or --efficiency for more details",
+                    title="Git Hash Cache",
+                    border_style="blue",
+                )
+            )
+
+    except Exception as e:
+        console.print(f"[red]Cache operation failed: {e}[/red]")
+        sys.exit(1)
+
+
+def cmd_migrate(args, morgan):
+    """Handle the migrate command (implements R10.4, R10.5)."""
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+    from rich.table import Table
+
+    from morgan.migration import (
+        KnowledgeBaseMigrator,
+        MigrationValidator,
+        RollbackManager,
+    )
+
+    try:
+        if args.migrate_action == "analyze":
+            # Analyze collections for migration readiness
+            migrator = KnowledgeBaseMigrator()
+
+            if args.collection:
+                # Analyze specific collection
+                console.print(
+                    f"[blue]Analyzing collection '{args.collection}'...[/blue]"
+                )
+                analysis = migrator.analyze_collection(args.collection)
+
+                if not analysis.get("exists", False):
+                    console.print(
+                        f"[red]Error: {analysis.get('error', 'Collection not found')}[/red]"
+                    )
+                    return
+
+                # Display analysis results
+                table = Table(title=f"Migration Analysis: {args.collection}")
+                table.add_column("Property", style="cyan")
+                table.add_column("Value", style="white")
+
+                table.add_row("Total Points", str(analysis["total_points"]))
+                table.add_row("Has Legacy Format", str(analysis["has_legacy_format"]))
+                table.add_row(
+                    "Has Hierarchical Format", str(analysis["has_hierarchical_format"])
+                )
+                table.add_row("Migration Needed", analysis["migration_needed"])
+                table.add_row(
+                    "Estimated Time (min)",
+                    f"{analysis['estimated_migration_time_minutes']:.1f}",
+                )
+                table.add_row("Disk Usage (MB)", f"{analysis['disk_usage_mb']:.1f}")
+
+                console.print(table)
+
+                # Show recommendations
+                if analysis["migration_needed"] == "legacy_to_hierarchical":
+                    console.print(
+                        "\n[yellow]Recommendation: This collection can be migrated to hierarchical format[/yellow]"
+                    )
+                elif analysis["migration_needed"] == "already_hierarchical":
+                    console.print(
+                        "\n[green]This collection is already in hierarchical format[/green]"
+                    )
+                elif analysis["migration_needed"] == "mixed_format":
+                    console.print(
+                        "\n[orange]Warning: This collection has mixed formats and may need cleanup[/orange]"
+                    )
+
+            else:
+                # Analyze all collections
+                console.print("[blue]Analyzing all collections...[/blue]")
+                collections = migrator.list_collections()
+
+                if not collections:
+                    console.print("[yellow]No collections found[/yellow]")
+                    return
+
+                # Display results table
+                table = Table(title="Collection Migration Analysis")
+                table.add_column("Collection", style="cyan")
+                table.add_column("Points", justify="right")
+                table.add_column("Format", style="white")
+                table.add_column("Migration Needed", style="yellow")
+                table.add_column("Est. Time (min)", justify="right")
+
+                for analysis in collections:
+                    if analysis.get("exists", False):
+                        format_str = ""
+                        if analysis["has_legacy_format"]:
+                            format_str += "Legacy"
+                        if analysis["has_hierarchical_format"]:
+                            format_str += (
+                                " + Hierarchical" if format_str else "Hierarchical"
+                            )
+
+                        table.add_row(
+                            analysis["collection_name"],
+                            str(analysis["total_points"]),
+                            format_str,
+                            analysis["migration_needed"],
+                            f"{analysis['estimated_migration_time_minutes']:.1f}",
+                        )
+
+                console.print(table)
+
+        elif args.migrate_action == "plan":
+            # Create migration plan
+            migrator = KnowledgeBaseMigrator()
+
+            console.print(
+                f"[blue]Creating migration plan for '{args.source_collection}'...[/blue]"
+            )
+
+            try:
+                plan = migrator.create_migration_plan(
+                    source_collection=args.source_collection,
+                    target_collection=args.target,
+                    batch_size=args.batch_size,
+                )
+
+                # Display plan
+                table = Table(title="Migration Plan")
+                table.add_column("Property", style="cyan")
+                table.add_column("Value", style="white")
+
+                table.add_row("Source Collection", plan.source_collection)
+                table.add_row("Target Collection", plan.target_collection)
+                table.add_row("Total Points", str(plan.total_points))
+                table.add_row("Batch Size", str(plan.batch_size))
+                table.add_row(
+                    "Estimated Time (min)", f"{plan.estimated_time_minutes:.1f}"
+                )
+                table.add_row("Backup Path", plan.backup_path)
+
+                console.print(table)
+                console.print("\n[green]Migration plan created successfully[/green]")
+                console.print(
+                    f"[yellow]Use 'morgan migrate execute {args.source_collection}' to execute[/yellow]"
+                )
+
+            except Exception as e:
+                console.print(f"[red]Failed to create migration plan: {e}[/red]")
+
+        elif args.migrate_action == "execute":
+            # Execute migration
+            if not args.confirm and not args.dry_run:
+                console.print(
+                    "[red]Migration requires --confirm flag or --dry-run for safety[/red]"
+                )
+                console.print(
+                    "[yellow]Use --dry-run to test without making changes[/yellow]"
+                )
+                return
+
+            migrator = KnowledgeBaseMigrator()
+
+            console.print(
+                f"[blue]{'Dry run' if args.dry_run else 'Executing'} migration for '{args.source_collection}'...[/blue]"
+            )
+
+            try:
+                # Create plan
+                plan = migrator.create_migration_plan(
+                    source_collection=args.source_collection,
+                    target_collection=args.target,
+                    batch_size=args.batch_size,
+                    dry_run=args.dry_run,
+                )
+
+                # Show plan summary
+                console.print(
+                    f"Source: {plan.source_collection} -> Target: {plan.target_collection}"
+                )
+                console.print(f"Points to migrate: {plan.total_points}")
+
+                if not args.dry_run:
+                    console.print(
+                        f"[yellow]Backup will be created at: {plan.backup_path}[/yellow]"
+                    )
+
+                # Execute with progress
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    console=console,
+                ) as progress:
+                    progress.add_task("Migrating...", total=None)
+                    result = migrator.execute_migration(plan)
+
+                # Display results
+                if result.success:
+                    console.print(
+                        f"[green]Migration {'simulation' if args.dry_run else 'completed'} successfully![/green]"
+                    )
+                    console.print(f"Points migrated: {result.points_migrated}")
+                    if result.points_failed > 0:
+                        console.print(
+                            f"[yellow]Points failed: {result.points_failed}[/yellow]"
+                        )
+                    console.print(
+                        f"Execution time: {result.execution_time_seconds:.1f}s"
+                    )
+
+                    if result.backup_created:
+                        console.print("[green]Backup created successfully[/green]")
+
+                    if not args.dry_run:
+                        console.print(
+                            f"[yellow]Use 'morgan migrate validate {plan.source_collection} {plan.target_collection}' to verify[/yellow]"
+                        )
+                else:
+                    console.print(
+                        f"[red]Migration failed: {result.error_message}[/red]"
+                    )
+                    if result.backup_created:
+                        console.print(
+                            "[yellow]Backup was created and can be used for rollback[/yellow]"
+                        )
+
+            except Exception as e:
+                console.print(f"[red]Migration execution failed: {e}[/red]")
+
+        elif args.migrate_action == "validate":
+            # Validate migration
+            validator = MigrationValidator()
+
+            console.print(
+                f"[blue]Validating migration: {args.source_collection} -> {args.target_collection}...[/blue]"
+            )
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                progress.add_task("Validating...", total=None)
+                result = validator.validate_migration(
+                    args.source_collection,
+                    args.target_collection,
+                    sample_size=args.sample_size,
+                )
+
+            # Display validation results
+            if result.is_valid:
+                console.print("[green]Migration validation passed![/green]")
+            else:
+                console.print("[red]Migration validation failed![/red]")
+
+            table = Table(title="Validation Results")
+            table.add_column("Metric", style="cyan")
+            table.add_column("Value", style="white")
+
+            table.add_row("Points Checked", str(result.total_points_checked))
+            table.add_row("Valid Points", str(result.points_valid))
+            table.add_row("Invalid Points", str(result.points_invalid))
+            table.add_row(
+                "Validation Rate",
+                (
+                    f"{(result.points_valid / result.total_points_checked * 100):.1f}%"
+                    if result.total_points_checked > 0
+                    else "N/A"
+                ),
+            )
+
+            console.print(table)
+
+            if result.validation_errors:
+                console.print("\n[red]Validation Errors:[/red]")
+                for error in result.validation_errors[:10]:  # Show first 10 errors
+                    console.print(f"  • {error}")
+                if len(result.validation_errors) > 10:
+                    console.print(
+                        f"  ... and {len(result.validation_errors) - 10} more errors"
+                    )
+
+        elif args.migrate_action == "rollback":
+            # Execute rollback
+            if not args.confirm:
+                console.print("[red]Rollback requires --confirm flag for safety[/red]")
+                return
+
+            rollback_manager = RollbackManager()
+
+            console.print(f"[blue]Executing rollback from {args.backup_path}...[/blue]")
+
+            # Validate backup first
+            validation = rollback_manager.validate_backup_for_rollback(args.backup_path)
+            if not validation["is_valid"]:
+                console.print(
+                    f"[red]Backup validation failed: {validation.get('error', 'Unknown error')}[/red]"
+                )
+                return
+
+            # Show warnings
+            if validation.get("warnings"):
+                for warning in validation["warnings"]:
+                    console.print(f"[yellow]Warning: {warning}[/yellow]")
+
+            # Execute rollback
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                progress.add_task("Rolling back...", total=None)
+                result = rollback_manager.execute_rollback(
+                    args.backup_path,
+                    target_collection=args.target,
+                    confirm_overwrite=True,
+                )
+
+            # Display results
+            if result.success:
+                console.print("[green]Rollback completed successfully![/green]")
+                console.print(f"Points restored: {result.points_restored}")
+                console.print(f"Collection: {result.collection_restored}")
+                console.print(f"Execution time: {result.execution_time_seconds:.1f}s")
+            else:
+                console.print(f"[red]Rollback failed: {result.error_message}[/red]")
+
+        elif args.migrate_action == "list-backups":
+            # List available backups
+            rollback_manager = RollbackManager()
+
+            console.print("[blue]Listing available migration backups...[/blue]")
+            backups = rollback_manager.list_available_backups()
+
+            if not backups:
+                console.print("[yellow]No migration backups found[/yellow]")
+                return
+
+            table = Table(title="Available Migration Backups")
+            table.add_column("File Name", style="cyan")
+            table.add_column("Collection", style="white")
+            table.add_column("Points", justify="right")
+            table.add_column("Size (MB)", justify="right")
+            table.add_column("Created", style="dim")
+
+            for backup in backups:
+                table.add_row(
+                    backup["file_name"],
+                    backup["collection_name"],
+                    str(backup["total_points"]),
+                    f"{backup['file_size_mb']:.1f}",
+                    backup["backup_timestamp"][:19],  # Remove microseconds
+                )
+
+            console.print(table)
+
+        elif args.migrate_action == "cleanup":
+            # Clean up old backups
+            rollback_manager = RollbackManager()
+
+            console.print(
+                f"[blue]Cleaning up backups older than {args.keep_days} days...[/blue]"
+            )
+            result = rollback_manager.cleanup_old_backups(keep_days=args.keep_days)
+
+            if "error" in result:
+                console.print(f"[red]Cleanup failed: {result['error']}[/red]")
+            else:
+                console.print(f"[green]{result['message']}[/green]")
+
+        else:
+            console.print("[red]Unknown migration action[/red]")
+            console.print(
+                "[yellow]Use 'morgan migrate --help' for available actions[/yellow]"
+            )
+
+    except Exception as e:
+        console.print(f"[red]Migration command failed: {e}[/red]")
+        logger.error(f"Migration command error: {e}")
+
+
+def cmd_init(args):
+    """Handle the init command."""
+    console.print("[blue]Initializing Morgan in current directory...[/blue]")
+
+    try:
+        from morgan.utils.init import initialize_morgan
+
+        result = initialize_morgan(force=args.force)
+
+        if result["success"]:
+            console.print(
+                Panel.fit(
+                    f"✅ [green]Morgan Initialized Successfully![/green]\n\n"
+                    f"📁 Data directory: {result['data_dir']}\n"
+                    f"⚙️  Config file: {result['config_file']}\n"
+                    f"📝 Log directory: {result['log_dir']}\n\n"
+                    f"Next steps:\n"
+                    f"1. Edit .env to configure your LLM endpoint\n"
+                    f"2. Run 'morgan health' to check system status\n"
+                    f"3. Run 'morgan learn ./docs' to add knowledge\n"
+                    f"4. Run 'morgan chat' to start chatting!",
+                    title="Initialization Complete",
+                    border_style="green",
+                )
+            )
+        else:
+            console.print(
+                f"[red]Initialization failed: {result.get('message', 'Unknown error')}[/red]"
+            )
+            sys.exit(1)
+
+    except Exception as e:
+        console.print(f"[red]Initialization failed: {e}[/red]")
+        sys.exit(1)
 
 
 def main():
-    """Main entry point for the CLI."""
+    """Main CLI entry point."""
+    parser = create_parser()
+    args = parser.parse_args()
+
+    # Setup logging
+    log_level = "DEBUG" if args.debug else ("INFO" if args.verbose else "WARNING")
+    setup_logging(level=log_level)
+
+    # Handle init command separately (doesn't need Morgan instance)
+    if args.command == "init":
+        cmd_init(args)
+        return
+
+    # Show help if no command provided
+    if not args.command:
+        parser.print_help()
+        return
+
+    # Create Morgan instance
     try:
-        cli()
-    except KeyboardInterrupt:
-        print("\n\nInterrupted by user.")
-        sys.exit(130)
+        morgan = create_assistant(config_path=args.config)
     except Exception as e:
-        print(f"Fatal error: {e}")
+        console.print(f"[red]Failed to initialize Morgan: {e}[/red]")
+        console.print(
+            "[yellow]Try running 'morgan init' first, or check your configuration.[/yellow]"
+        )
+        sys.exit(1)
+
+    # Route to appropriate command handler
+    try:
+        if args.command == "chat":
+            cmd_chat(args, morgan)
+        elif args.command == "ask":
+            cmd_ask(args, morgan)
+        elif args.command == "learn":
+            cmd_learn(args, morgan)
+        elif args.command == "serve":
+            cmd_serve(args, morgan)
+        elif args.command == "health":
+            cmd_health(args, morgan)
+        elif args.command == "memory":
+            cmd_memory(args, morgan)
+        elif args.command == "knowledge":
+            cmd_knowledge(args, morgan)
+        elif args.command == "cache":
+            cmd_cache(args, morgan)
+        elif args.command == "migrate":
+            cmd_migrate(args, morgan)
+        else:
+            console.print(f"[red]Unknown command: {args.command}[/red]")
+            parser.print_help()
+            sys.exit(1)
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Operation cancelled by user[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Command failed: {e}[/red]")
+        if args.debug:
+            import traceback
+
+            console.print(traceback.format_exc())
         sys.exit(1)
 
 

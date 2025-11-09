@@ -1,5 +1,22 @@
-"""Jina reranking service module."""
+"""
+Jina AI Reranking Services
 
-from morgan.jina.reranking.service import RerankingService
+Advanced reranking services with Jina AI models, language detection,
+background processing, and quality metrics tracking.
+"""
 
-__all__ = ["RerankingService"]
+from .service import (
+    BackgroundTask,
+    JinaRerankingService,
+    PrecomputedResult,
+    RerankingMetrics,
+    SearchResult,
+)
+
+__all__ = [
+    "JinaRerankingService",
+    "SearchResult",
+    "RerankingMetrics",
+    "PrecomputedResult",
+    "BackgroundTask",
+]

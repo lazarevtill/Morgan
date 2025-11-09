@@ -1,9 +1,0 @@
-# Common CUDA service requirements for CUDA 13
-# CUDA 13.0.1 runtime with cuDNN (TTS + STT services)
-# Using PyTorch cu124 builds (CUDA 12.4 wheels are forward compatible with CUDA 13)
-# PyTorch 2.5.1 is compatible with CUDA 11.8 through CUDA 13+
---extra-index-url https://download.pytorch.org/whl/cu124
-torch==2.8.0+cu129
-torchaudio==2.5.1+cu129
-torchvision==0.20.1+cu129
-numpy==1.26.4

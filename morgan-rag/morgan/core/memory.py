@@ -1,673 +1,777 @@
 """
-Multi-layer memory system for the assistant.
+Conversation Memory - Learning from Human Interactions
 
-Provides:
-- Short-term memory (current conversation, in-memory)
-- Working memory (active processing, Redis/in-memory)
-- Long-term memory (historical, persistent storage)
-- Memory consolidation (background task)
+Simple, focused module for remembering conversations and learning from them.
+
+KISS Principle: One responsibility - remember conversations and learn from feedback.
+Human-First: Make conversations feel natural and continuous.
 """
 
-from __future__ import annotations
-
-import asyncio
-import hashlib
-import json
-import logging
-import time
-from collections import defaultdict
+import uuid
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional
 
-from morgan.core.types import (
-    ConversationContext,
-    EmotionalState,
-    MemoryEntry,
-    MemoryType,
-    Message,
-    MessageRole,
-    UserProfile,
-)
-from morgan.learning.exceptions import LearningStorageError
+from morgan.config import get_settings
+from morgan.services.embedding_service import get_embedding_service
+from morgan.utils.logger import get_logger
+from morgan.vector_db.client import VectorDBClient
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
-class MemoryError(Exception):
-    """Base exception for memory operations."""
-
-    def __init__(
-        self,
-        message: str,
-        correlation_id: Optional[str] = None,
-        recoverable: bool = True,
-    ):
-        super().__init__(message)
-        self.correlation_id = correlation_id
-        self.recoverable = recoverable
-
-
-class MemoryRetrievalError(MemoryError):
-    """Error during memory retrieval."""
-
-    pass
-
-
-class MemoryStorageError(MemoryError):
-    """Error during memory storage."""
-
-    pass
-
-
-class MemorySystem:
+@dataclass
+class ConversationTurn:
     """
-    Multi-layer memory system.
+    A single turn in a conversation.
 
-    Layers:
-    1. Short-term: Current conversation (fast, in-memory)
-    2. Working: Processing buffer (Redis/in-memory)
-    3. Long-term: Historical conversations (persistent)
-    4. Consolidated: Important patterns (background processed)
-
-    Features:
-    - Fast retrieval (< 100ms target)
-    - Automatic cleanup of expired memories
-    - Memory consolidation
-    - Importance-based storage
-    - Session management
+    Simple structure that captures the essence of human-AI interaction.
     """
 
-    def __init__(
-        self,
-        storage_path: Optional[Path] = None,
-        max_short_term_messages: int = 100,
-        max_working_memory_size: int = 1000,
-        cleanup_interval_seconds: int = 300,
-        consolidation_interval_hours: int = 24,
-        correlation_id: Optional[str] = None,
-    ):
+    turn_id: str
+    conversation_id: str
+    timestamp: str
+    question: str
+    answer: str
+    sources: List[str]
+    feedback_rating: Optional[int] = None
+    feedback_comment: Optional[str] = None
+
+    def __post_init__(self):
+        """Ensure sources is always a list."""
+        if self.sources is None:
+            self.sources = []
+
+
+@dataclass
+class Conversation:
+    """
+    A complete conversation between human and Morgan.
+
+    Human-friendly structure that makes conversations easy to understand.
+    """
+
+    conversation_id: str
+    started_at: str
+    topic: Optional[str]
+    turns: List[ConversationTurn]
+    last_activity: str
+    total_turns: int = 0
+    average_rating: float = 0.0
+
+    def __post_init__(self):
+        """Calculate derived fields."""
+        if self.turns is None:
+            self.turns = []
+        self.total_turns = len(self.turns)
+
+        # Calculate average rating from feedback
+        ratings = [
+            turn.feedback_rating
+            for turn in self.turns
+            if turn.feedback_rating is not None
+        ]
+        self.average_rating = sum(ratings) / len(ratings) if ratings else 0.0
+
+
+class ConversationMemory:
+    """
+    Morgan's Conversation Memory
+
+    Remembers conversations to:
+    - Provide context for ongoing chats
+    - Learn from human feedback
+    - Improve responses over time
+    - Make interactions feel natural and continuous
+
+    KISS: Single responsibility - manage conversation memory and learning.
+    """
+
+    def __init__(self):
+        """Initialize conversation memory."""
+        self.settings = get_settings()
+        self.embedding_service = get_embedding_service()
+        self.vector_db = VectorDBClient()
+
+        # Memory collections
+        self.conversation_collection = "morgan_conversations"
+        self.turn_collection = "morgan_turns"
+
+        # Memory settings
+        self.max_conversations = getattr(
+            self.settings, "morgan_memory_max_conversations", 1000
+        )
+        self.max_turns_per_conversation = getattr(
+            self.settings, "morgan_memory_max_turns_per_conversation", 100
+        )
+        self.context_window_turns = 5  # Number of recent turns to include in context
+
+        # Ensure collections exist
+        self._ensure_collections()
+
+        logger.info("Conversation memory initialized")
+
+    def create_conversation(self, topic: Optional[str] = None) -> str:
         """
-        Initialize memory system.
+        Start a new conversation.
 
         Args:
-            storage_path: Path for persistent storage
-            max_short_term_messages: Max messages per session in short-term
-            max_working_memory_size: Max entries in working memory
-            cleanup_interval_seconds: How often to cleanup expired memories
-            consolidation_interval_hours: How often to consolidate memories
-            correlation_id: Correlation ID for tracing
+            topic: Optional topic for the conversation
+
+        Returns:
+            Conversation ID for future reference
+
+        Example:
+            >>> memory = ConversationMemory()
+            >>> conv_id = memory.create_conversation("Docker deployment")
+            >>> print(f"Started conversation: {conv_id}")
         """
-        self.storage_path = storage_path or Path.home() / ".morgan" / "memory"
-        self.max_short_term_messages = max_short_term_messages
-        self.max_working_memory_size = max_working_memory_size
-        self.cleanup_interval = cleanup_interval_seconds
-        self.consolidation_interval = consolidation_interval_hours
-        self.correlation_id = correlation_id or self._generate_id()
+        conversation_id = str(uuid.uuid4())
+        timestamp = datetime.utcnow().isoformat()
 
-        # In-memory stores
-        self._short_term: Dict[str, List[Message]] = defaultdict(list)  # session_id -> messages
-        self._working: Dict[str, MemoryEntry] = {}  # entry_id -> entry
-        self._consolidated: Dict[str, List[MemoryEntry]] = defaultdict(list)  # user_id -> entries
-
-        # User profiles cache
-        self._user_profiles: Dict[str, UserProfile] = {}
-        self._emotional_states: Dict[str, EmotionalState] = {}
-
-        # Synchronization
-        self._lock = asyncio.Lock()
-        self._session_locks: Dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-
-        # Background tasks
-        self._cleanup_task: Optional[asyncio.Task] = None
-        self._consolidation_task: Optional[asyncio.Task] = None
-
-        # Metrics
-        self._metrics = {
-            "total_stores": 0,
-            "total_retrievals": 0,
-            "cache_hits": 0,
-            "cache_misses": 0,
-        }
-
-        # Ensure storage directory exists
-        self.storage_path.mkdir(parents=True, exist_ok=True)
-
-        logger.info(
-            "Memory system initialized",
-            extra={
-                "storage_path": str(self.storage_path),
-                "correlation_id": self.correlation_id,
-            },
+        conversation = Conversation(
+            conversation_id=conversation_id,
+            started_at=timestamp,
+            topic=topic,
+            turns=[],
+            last_activity=timestamp,
         )
 
-    def _generate_id(self) -> str:
-        """Generate a unique ID."""
-        return hashlib.sha256(
-            f"{time.time()}{id(self)}".encode()
-        ).hexdigest()[:16]
+        # Store conversation metadata
+        self._store_conversation_metadata(conversation)
 
-    async def initialize(self) -> None:
-        """Initialize background tasks."""
-        logger.info("Starting memory system background tasks")
+        logger.info(f"Created new conversation: {conversation_id} (topic: {topic})")
+        return conversation_id
 
-        # Start cleanup task
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
-
-        # Start consolidation task
-        self._consolidation_task = asyncio.create_task(self._consolidation_loop())
-
-    async def cleanup(self) -> None:
-        """Cleanup resources and stop background tasks."""
-        logger.info("Stopping memory system")
-
-        # Cancel background tasks
-        if self._cleanup_task:
-            self._cleanup_task.cancel()
-            try:
-                await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
-
-        if self._consolidation_task:
-            self._consolidation_task.cancel()
-            try:
-                await self._consolidation_task
-            except asyncio.CancelledError:
-                pass
-
-        # Persist remaining data
-        await self._persist_all()
-
-        logger.info("Memory system stopped")
-
-    async def store_message(
+    def add_turn(
         self,
-        session_id: str,
-        message: Message,
-        user_id: Optional[str] = None,
-    ) -> None:
+        conversation_id: str,
+        question: str,
+        answer: str,
+        sources: Optional[List[str]] = None,
+    ) -> str:
         """
-        Store a message in short-term memory.
+        Add a turn to an existing conversation.
 
         Args:
-            session_id: Session identifier
-            message: Message to store
-            user_id: Optional user identifier
-
-        Raises:
-            MemoryStorageError: If storage fails
-        """
-        try:
-            async with self._session_locks[session_id]:
-                # Add to short-term memory
-                self._short_term[session_id].append(message)
-
-                # Trim if too large
-                if len(self._short_term[session_id]) > self.max_short_term_messages:
-                    # Keep most recent messages
-                    self._short_term[session_id] = self._short_term[session_id][
-                        -self.max_short_term_messages :
-                    ]
-
-                self._metrics["total_stores"] += 1
-
-                logger.debug(
-                    "Message stored in short-term memory",
-                    extra={
-                        "session_id": session_id,
-                        "role": message.role.value,
-                        "message_id": message.message_id,
-                    },
-                )
-
-        except Exception as e:
-            logger.error(
-                "Failed to store message",
-                extra={"session_id": session_id, "error": str(e)},
-            )
-            raise MemoryStorageError(
-                f"Failed to store message: {e}",
-                correlation_id=self.correlation_id,
-            ) from e
-
-    async def retrieve_context(
-        self,
-        session_id: str,
-        n_messages: Optional[int] = None,
-    ) -> List[Message]:
-        """
-        Retrieve recent conversation context.
-
-        Args:
-            session_id: Session identifier
-            n_messages: Number of recent messages to retrieve
+            conversation_id: ID of the conversation
+            question: Human's question
+            answer: Morgan's answer
+            sources: Optional list of sources used
 
         Returns:
-            List of recent messages
+            Turn ID for future reference
 
-        Raises:
-            MemoryRetrievalError: If retrieval fails
+        Example:
+            >>> turn_id = memory.add_turn(
+            ...     conv_id,
+            ...     "How do I install Docker?",
+            ...     "You can install Docker by...",
+            ...     ["docker-docs.md"]
+            ... )
         """
-        start_time = time.time()
+        turn_id = str(uuid.uuid4())
+        timestamp = datetime.utcnow().isoformat()
 
-        try:
-            async with self._session_locks[session_id]:
-                messages = self._short_term.get(session_id, [])
+        turn = ConversationTurn(
+            turn_id=turn_id,
+            conversation_id=conversation_id,
+            timestamp=timestamp,
+            question=question,
+            answer=answer,
+            sources=sources or [],
+        )
 
-                if n_messages is not None:
-                    messages = messages[-n_messages:]
+        # Store turn in vector database for semantic search
+        self._store_turn(turn)
 
-                self._metrics["total_retrievals"] += 1
+        # Update conversation metadata
+        self._update_conversation_activity(conversation_id, timestamp)
 
-                duration_ms = (time.time() - start_time) * 1000
+        logger.debug(f"Added turn to conversation {conversation_id}: {turn_id}")
+        return turn_id
 
-                logger.debug(
-                    "Context retrieved",
-                    extra={
-                        "session_id": session_id,
-                        "messages": len(messages),
-                        "duration_ms": round(duration_ms, 2),
-                    },
-                )
-
-                return list(messages)  # Return copy
-
-        except Exception as e:
-            logger.error(
-                "Failed to retrieve context",
-                extra={"session_id": session_id, "error": str(e)},
-            )
-            raise MemoryRetrievalError(
-                f"Failed to retrieve context: {e}",
-                correlation_id=self.correlation_id,
-            ) from e
-
-    async def search_memories(
-        self,
-        user_id: str,
-        query: str,
-        limit: int = 10,
-        memory_types: Optional[List[MemoryType]] = None,
-    ) -> List[Message]:
+    def get_conversation_context(
+        self, conversation_id: str, max_turns: Optional[int] = None
+    ) -> str:
         """
-        Search memories by semantic similarity.
-
-        Note: This is a simplified implementation using keyword matching.
-        In production, you'd want to use embeddings for semantic search.
+        Get recent context from a conversation.
 
         Args:
-            user_id: User identifier
+            conversation_id: ID of the conversation
+            max_turns: Maximum number of recent turns to include
+
+        Returns:
+            Formatted conversation context for LLM
+
+        Example:
+            >>> context = memory.get_conversation_context(conv_id, max_turns=3)
+            >>> print(context)
+        """
+        if max_turns is None:
+            max_turns = self.context_window_turns
+
+        try:
+            # Get recent turns from this conversation
+            recent_turns = self._get_recent_turns(conversation_id, max_turns)
+
+            if not recent_turns:
+                return ""
+
+            # Format as conversation context
+            context_lines = []
+            for turn in recent_turns:
+                context_lines.append(f"Human: {turn.question}")
+                context_lines.append(f"Morgan: {turn.answer}")
+
+            return "\n".join(context_lines)
+
+        except Exception as e:
+            logger.error(f"Failed to get conversation context: {e}")
+            return ""
+
+    def get_conversation_history(self, conversation_id: str) -> List[Dict[str, Any]]:
+        """
+        Get complete history of a conversation.
+
+        Args:
+            conversation_id: ID of the conversation
+
+        Returns:
+            List of conversation turns in chronological order
+        """
+        try:
+            turns = self._get_all_turns(conversation_id)
+
+            # Convert to human-friendly format
+            history = []
+            for turn in turns:
+                history.append(
+                    {
+                        "turn_id": turn.turn_id,
+                        "timestamp": turn.timestamp,
+                        "question": turn.question,
+                        "answer": turn.answer,
+                        "sources": turn.sources,
+                        "feedback_rating": turn.feedback_rating,
+                        "feedback_comment": turn.feedback_comment,
+                    }
+                )
+
+            return history
+
+        except Exception as e:
+            logger.error(f"Failed to get conversation history: {e}")
+            return []
+
+    def add_feedback(
+        self,
+        conversation_id: str,
+        rating: int,
+        comment: Optional[str] = None,
+        turn_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Add feedback to help Morgan learn and improve.
+
+        Args:
+            conversation_id: ID of the conversation
+            rating: Rating from 1-5 (5 being excellent)
+            comment: Optional feedback comment
+            turn_id: Optional specific turn ID (uses last turn if None)
+
+        Returns:
+            True if feedback was recorded successfully
+
+        Example:
+            >>> success = memory.add_feedback(
+            ...     conv_id,
+            ...     5,
+            ...     "Very helpful explanation!"
+            ... )
+        """
+        try:
+            # Validate rating
+            if not 1 <= rating <= 5:
+                logger.error(f"Invalid rating: {rating}. Must be 1-5.")
+                return False
+
+            # Get the turn to update
+            if turn_id is None:
+                # Use the last turn in the conversation
+                recent_turns = self._get_recent_turns(conversation_id, 1)
+                if not recent_turns:
+                    logger.error(f"No turns found in conversation: {conversation_id}")
+                    return False
+                turn_id = recent_turns[0].turn_id
+
+            # Update turn with feedback
+            success = self._update_turn_feedback(turn_id, rating, comment)
+
+            if success:
+                logger.info(
+                    f"Recorded feedback for turn {turn_id}: {rating}/5 - {comment or 'No comment'}"
+                )
+
+                # Learn from feedback (simple approach for now)
+                self._learn_from_feedback(turn_id, rating, comment)
+
+                return True
+            else:
+                return False
+
+        except Exception as e:
+            logger.error(f"Failed to add feedback: {e}")
+            return False
+
+    def search_conversations(
+        self, query: str, max_results: int = 10, min_score: float = 0.7
+    ) -> List[Dict[str, Any]]:
+        """
+        Search through conversation history.
+
+        Args:
             query: Search query
-            limit: Maximum results
-            memory_types: Optional filter by memory types
+            max_results: Maximum number of results
+            min_score: Minimum similarity score
 
         Returns:
-            List of relevant messages
+            List of relevant conversation turns
+
+        Example:
+            >>> results = memory.search_conversations("Docker installation")
+            >>> for result in results:
+            ...     print(f"Q: {result['question']}")
+            ...     print(f"A: {result['answer'][:100]}...")
         """
-        start_time = time.time()
-
         try:
-            # Collect all relevant memories
-            all_messages: List[Message] = []
+            # Generate query embedding
+            query_embedding = self.embedding_service.encode(
+                text=query, instruction="query"
+            )
 
-            # Search short-term (all sessions for this user)
-            for session_id, messages in self._short_term.items():
-                # Simple session filtering - in production use proper user mapping
-                all_messages.extend(messages)
+            # Search conversation turns
+            search_results = self.vector_db.search(
+                collection_name=self.turn_collection,
+                query_vector=query_embedding,
+                limit=max_results,
+                score_threshold=min_score,
+            )
 
-            # Search working memory
-            for entry in self._working.values():
-                if entry.user_id == user_id:
-                    if memory_types is None or entry.memory_type in memory_types:
-                        all_messages.append(entry.message)
-
-            # Search consolidated
-            for entry in self._consolidated.get(user_id, []):
-                if memory_types is None or entry.memory_type in memory_types:
-                    all_messages.append(entry.message)
-
-            # Simple keyword-based scoring (replace with embedding search in production)
-            query_lower = query.lower()
-            scored_messages: List[Tuple[Message, float]] = []
-
-            for msg in all_messages:
-                content_lower = msg.content.lower()
-                # Simple scoring: count keyword matches
-                score = sum(
-                    word in content_lower for word in query_lower.split()
+            # Convert to human-friendly format
+            results = []
+            for result in search_results:
+                payload = result.get("payload", {})
+                results.append(
+                    {
+                        "turn_id": payload.get("turn_id", ""),
+                        "conversation_id": payload.get("conversation_id", ""),
+                        "timestamp": payload.get("timestamp", ""),
+                        "question": payload.get("question", ""),
+                        "answer": payload.get("answer", ""),
+                        "sources": payload.get("sources", []),
+                        "score": result.get("score", 0.0),
+                        "feedback_rating": payload.get("feedback_rating"),
+                        "feedback_comment": payload.get("feedback_comment"),
+                    }
                 )
-                if score > 0:
-                    scored_messages.append((msg, score))
-
-            # Sort by score
-            scored_messages.sort(key=lambda x: x[1], reverse=True)
-
-            # Return top results
-            results = [msg for msg, _ in scored_messages[:limit]]
-
-            duration_ms = (time.time() - start_time) * 1000
 
             logger.debug(
-                "Memory search completed",
-                extra={
-                    "user_id": user_id,
-                    "query_length": len(query),
-                    "results": len(results),
-                    "duration_ms": round(duration_ms, 2),
-                },
+                f"Found {len(results)} relevant conversation turns for: '{query}'"
             )
-
             return results
 
         except Exception as e:
-            logger.error(
-                "Memory search failed",
-                extra={"user_id": user_id, "error": str(e)},
-            )
+            logger.error(f"Conversation search failed: {e}")
             return []
 
-    async def get_user_profile(
-        self,
-        user_id: str,
-    ) -> Optional[UserProfile]:
+    def get_learning_insights(self) -> Dict[str, Any]:
         """
-        Get user profile from cache or storage.
-
-        Args:
-            user_id: User identifier
+        Get insights from conversation history and feedback.
 
         Returns:
-            User profile if found
+            Human-readable insights about Morgan's performance and learning
         """
-        # Check cache first
-        if user_id in self._user_profiles:
-            self._metrics["cache_hits"] += 1
-            return self._user_profiles[user_id]
-
-        self._metrics["cache_misses"] += 1
-
-        # Try to load from storage
-        profile_path = self.storage_path / "profiles" / f"{user_id}.json"
-
-        if profile_path.exists():
-            try:
-                with open(profile_path, "r") as f:
-                    data = json.load(f)
-
-                # Reconstruct profile (simplified - you'd want proper deserialization)
-                profile = UserProfile(
-                    user_id=data["user_id"],
-                    created_at=datetime.fromisoformat(data["created_at"]),
-                    last_active=datetime.fromisoformat(data["last_active"]),
-                    conversation_count=data.get("conversation_count", 0),
-                    total_messages=data.get("total_messages", 0),
-                    metadata=data.get("metadata", {}),
-                )
-
-                # Cache it
-                self._user_profiles[user_id] = profile
-
-                return profile
-
-            except Exception as e:
-                logger.error(
-                    "Failed to load user profile",
-                    extra={"user_id": user_id, "error": str(e)},
-                )
-
-        return None
-
-    async def update_user_profile(
-        self,
-        profile: UserProfile,
-    ) -> None:
-        """
-        Update user profile in cache and storage.
-
-        Args:
-            profile: User profile to update
-        """
-        # Update cache
-        self._user_profiles[profile.user_id] = profile
-
-        # Persist to storage
-        profile_path = self.storage_path / "profiles" / f"{profile.user_id}.json"
-        profile_path.parent.mkdir(parents=True, exist_ok=True)
-
         try:
-            data = {
-                "user_id": profile.user_id,
-                "created_at": profile.created_at.isoformat(),
-                "last_active": profile.last_active.isoformat(),
-                "conversation_count": profile.conversation_count,
-                "total_messages": profile.total_messages,
-                "metadata": profile.metadata,
+            # Get sample of recent conversations
+            recent_turns = self._get_recent_turns_all_conversations(limit=100)
+
+            if not recent_turns:
+                return {
+                    "total_conversations": 0,
+                    "total_turns": 0,
+                    "average_rating": 0.0,
+                    "message": "No conversation data available yet.",
+                }
+
+            # Calculate statistics
+            total_turns = len(recent_turns)
+            ratings = [
+                turn.feedback_rating
+                for turn in recent_turns
+                if turn.feedback_rating is not None
+            ]
+
+            # Count conversations
+            conversation_ids = {turn.conversation_id for turn in recent_turns}
+            total_conversations = len(conversation_ids)
+
+            # Calculate averages
+            average_rating = sum(ratings) / len(ratings) if ratings else 0.0
+            feedback_percentage = (
+                (len(ratings) / total_turns * 100) if total_turns > 0 else 0.0
+            )
+
+            # Find common topics
+            topics = []
+            for turn in recent_turns:
+                if len(turn.question) > 10:  # Skip very short questions
+                    # Simple topic extraction from questions
+                    words = turn.question.lower().split()
+                    for word in words:
+                        if len(word) > 4 and word.isalpha():
+                            topics.append(word)
+
+            # Count topic frequency
+            from collections import Counter
+
+            common_topics = [topic for topic, count in Counter(topics).most_common(10)]
+
+            return {
+                "total_conversations": total_conversations,
+                "total_turns": total_turns,
+                "average_rating": average_rating,
+                "feedback_percentage": feedback_percentage,
+                "common_topics": common_topics,
+                "recent_activity": recent_turns[0].timestamp if recent_turns else None,
+                "message": f"Morgan has had {total_conversations} conversations with {total_turns} turns. "
+                f"Average rating: {average_rating:.1f}/5 ({feedback_percentage:.1f}% feedback rate).",
             }
 
-            with open(profile_path, "w") as f:
-                json.dump(data, f, indent=2)
-
-            logger.debug(
-                "User profile updated",
-                extra={"user_id": profile.user_id},
-            )
-
         except Exception as e:
-            logger.error(
-                "Failed to persist user profile",
-                extra={"user_id": profile.user_id, "error": str(e)},
+            logger.error(f"Failed to get learning insights: {e}")
+            return {"error": str(e)}
+
+    def cleanup_old_conversations(self, days_to_keep: int = 30) -> int:
+        """
+        Clean up old conversations to manage storage.
+
+        Args:
+            days_to_keep: Number of days of conversations to keep
+
+        Returns:
+            Number of conversations cleaned up
+        """
+        try:
+            cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
+            cutoff_iso = cutoff_date.isoformat()
+
+            # Find old conversations
+            old_conversations = self.vector_db.search_with_filter(
+                collection_name=self.conversation_collection,
+                filter_conditions={"started_at": {"lt": cutoff_iso}},
+                limit=1000,
             )
 
-    async def get_emotional_state(
-        self,
-        user_id: str,
-    ) -> Optional[EmotionalState]:
-        """
-        Get current emotional state for user.
+            # Delete old conversation turns
+            deleted_count = 0
+            for conv in old_conversations:
+                conv_id = conv.get("payload", {}).get("conversation_id", "")
+                if conv_id:
+                    # Delete all turns for this conversation
+                    self._delete_conversation_turns(conv_id)
+                    deleted_count += 1
 
-        Args:
-            user_id: User identifier
+            # Delete conversation metadata
+            conv_ids = [
+                conv.get("payload", {}).get("conversation_id", "")
+                for conv in old_conversations
+            ]
+            conv_ids = [cid for cid in conv_ids if cid]
 
-        Returns:
-            Emotional state if available
-        """
-        return self._emotional_states.get(user_id)
-
-    async def update_emotional_state(
-        self,
-        state: EmotionalState,
-    ) -> None:
-        """
-        Update emotional state for user.
-
-        Args:
-            state: Emotional state to update
-        """
-        self._emotional_states[state.user_id] = state
-
-        logger.debug(
-            "Emotional state updated",
-            extra={"user_id": state.user_id},
-        )
-
-    async def consolidate_memories(
-        self,
-        user_id: str,
-    ) -> int:
-        """
-        Consolidate memories for a user.
-
-        This identifies important patterns and moves them to consolidated storage.
-
-        Args:
-            user_id: User identifier
-
-        Returns:
-            Number of memories consolidated
-        """
-        logger.info("Starting memory consolidation", extra={"user_id": user_id})
-
-        consolidated_count = 0
-
-        try:
-            # Collect all memories for user
-            all_entries: List[MemoryEntry] = []
-
-            # From working memory
-            for entry in self._working.values():
-                if entry.user_id == user_id:
-                    all_entries.append(entry)
-
-            # Sort by importance
-            all_entries.sort(key=lambda e: e.importance_score, reverse=True)
-
-            # Move top important ones to consolidated
-            consolidation_threshold = 0.7
-            for entry in all_entries:
-                if entry.importance_score >= consolidation_threshold:
-                    # Create consolidated entry
-                    consolidated_entry = MemoryEntry(
-                        entry_id=entry.entry_id,
-                        user_id=entry.user_id,
-                        session_id=entry.session_id,
-                        memory_type=MemoryType.CONSOLIDATED,
-                        message=entry.message,
-                        created_at=entry.created_at,
-                        importance_score=entry.importance_score,
-                        access_count=entry.access_count,
-                        last_accessed=entry.last_accessed,
-                        metadata=entry.metadata,
-                    )
-
-                    self._consolidated[user_id].append(consolidated_entry)
-                    consolidated_count += 1
+            if conv_ids:
+                self.vector_db.delete_points(self.conversation_collection, conv_ids)
 
             logger.info(
-                "Memory consolidation completed",
-                extra={
-                    "user_id": user_id,
-                    "consolidated": consolidated_count,
-                },
+                f"Cleaned up {deleted_count} old conversations (older than {days_to_keep} days)"
             )
-
-            return consolidated_count
+            return deleted_count
 
         except Exception as e:
-            logger.error(
-                "Memory consolidation failed",
-                extra={"user_id": user_id, "error": str(e)},
-            )
+            logger.error(f"Failed to cleanup old conversations: {e}")
             return 0
 
-    async def clear_session(
-        self,
-        session_id: str,
-    ) -> None:
-        """
-        Clear a session from short-term memory.
-
-        Args:
-            session_id: Session to clear
-        """
-        async with self._session_locks[session_id]:
-            if session_id in self._short_term:
-                del self._short_term[session_id]
-
-            logger.debug(
-                "Session cleared",
-                extra={"session_id": session_id},
-            )
-
-    async def _cleanup_loop(self) -> None:
-        """Background task to cleanup expired memories."""
-        while True:
-            try:
-                await asyncio.sleep(self.cleanup_interval)
-                await self._cleanup_expired()
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error("Cleanup loop error", extra={"error": str(e)})
-
-    async def _cleanup_expired(self) -> None:
-        """Remove expired entries from working memory."""
-        now = datetime.now()
-        expired_ids: List[str] = []
-
-        async with self._lock:
-            for entry_id, entry in self._working.items():
-                if entry.expires_at and entry.expires_at < now:
-                    expired_ids.append(entry_id)
-
-            for entry_id in expired_ids:
-                del self._working[entry_id]
-
-        if expired_ids:
-            logger.debug(
-                "Expired memories cleaned up",
-                extra={"count": len(expired_ids)},
-            )
-
-    async def _consolidation_loop(self) -> None:
-        """Background task for memory consolidation."""
-        while True:
-            try:
-                await asyncio.sleep(self.consolidation_interval * 3600)
-                await self._consolidate_all()
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error("Consolidation loop error", extra={"error": str(e)})
-
-    async def _consolidate_all(self) -> None:
-        """Consolidate memories for all users."""
-        # Get all unique user IDs
-        user_ids: Set[str] = set()
-
-        for entry in self._working.values():
-            user_ids.add(entry.user_id)
-
-        for user_id in self._consolidated.keys():
-            user_ids.add(user_id)
-
-        # Consolidate for each user
-        for user_id in user_ids:
-            await self.consolidate_memories(user_id)
-
-    async def _persist_all(self) -> None:
-        """Persist all in-memory data to storage."""
-        logger.info("Persisting all memory data")
-
+    def _ensure_collections(self):
+        """Ensure required collections exist."""
         try:
-            # Persist user profiles
-            for profile in self._user_profiles.values():
-                await self.update_user_profile(profile)
+            # Get embedding dimension
+            embedding_dim = self.embedding_service.get_embedding_dimension()
 
-            # Could also persist other data structures here
-            # For now, we just persist profiles
+            # Create conversation metadata collection
+            if not self.vector_db.collection_exists(self.conversation_collection):
+                self.vector_db.create_collection(
+                    name=self.conversation_collection,
+                    vector_size=embedding_dim,
+                    distance="cosine",
+                )
+                logger.info(
+                    f"Created conversation collection: {self.conversation_collection}"
+                )
+
+            # Create turn collection for semantic search
+            if not self.vector_db.collection_exists(self.turn_collection):
+                self.vector_db.create_collection(
+                    name=self.turn_collection,
+                    vector_size=embedding_dim,
+                    distance="cosine",
+                )
+                logger.info(f"Created turn collection: {self.turn_collection}")
 
         except Exception as e:
-            logger.error("Failed to persist data", extra={"error": str(e)})
+            logger.error(f"Failed to ensure collections: {e}")
+            raise
 
-    def get_stats(self) -> Dict[str, Any]:
-        """
-        Get memory system statistics.
+    def _store_conversation_metadata(self, conversation: Conversation):
+        """Store conversation metadata."""
+        try:
+            # Create a simple embedding for the conversation topic
+            topic_text = conversation.topic or "general conversation"
+            topic_embedding = self.embedding_service.encode(
+                text=topic_text, instruction="document"
+            )
 
-        Returns:
-            Statistics dictionary
+            point = {
+                "id": conversation.conversation_id,
+                "vector": topic_embedding,
+                "payload": asdict(conversation),
+            }
+
+            self.vector_db.upsert_points(self.conversation_collection, [point])
+
+        except Exception as e:
+            logger.error(f"Failed to store conversation metadata: {e}")
+
+    def _store_turn(self, turn: ConversationTurn):
+        """Store a conversation turn for semantic search."""
+        try:
+            # Create embedding from question and answer
+            turn_text = f"Question: {turn.question}\nAnswer: {turn.answer}"
+            turn_embedding = self.embedding_service.encode(
+                text=turn_text, instruction="document"
+            )
+
+            point = {
+                "id": turn.turn_id,
+                "vector": turn_embedding,
+                "payload": asdict(turn),
+            }
+
+            self.vector_db.upsert_points(self.turn_collection, [point])
+
+        except Exception as e:
+            logger.error(f"Failed to store turn: {e}")
+
+    def _update_conversation_activity(self, conversation_id: str, timestamp: str):
+        """Update last activity timestamp for a conversation."""
+        try:
+            # Get current conversation
+            result = self.vector_db.get_point(
+                self.conversation_collection, conversation_id
+            )
+            if result:
+                payload = result.get("payload", {})
+                payload["last_activity"] = timestamp
+                payload["total_turns"] = payload.get("total_turns", 0) + 1
+
+                # Update the point
+                point = {
+                    "id": conversation_id,
+                    "vector": result.get("vector"),
+                    "payload": payload,
+                }
+                self.vector_db.upsert_points(self.conversation_collection, [point])
+
+        except Exception as e:
+            logger.error(f"Failed to update conversation activity: {e}")
+
+    def _get_recent_turns(
+        self, conversation_id: str, max_turns: int
+    ) -> List[ConversationTurn]:
+        """Get recent turns from a specific conversation."""
+        try:
+            # Search for turns in this conversation
+            results = self.vector_db.search_with_filter(
+                collection_name=self.turn_collection,
+                filter_conditions={"conversation_id": conversation_id},
+                limit=max_turns,
+                order_by="timestamp",
+            )
+
+            # Convert to ConversationTurn objects
+            turns = []
+            for result in results:
+                payload = result.get("payload", {})
+                turn = ConversationTurn(**payload)
+                turns.append(turn)
+
+            # Sort by timestamp (most recent first)
+            turns.sort(key=lambda t: t.timestamp, reverse=True)
+            return turns[:max_turns]
+
+        except Exception as e:
+            logger.error(f"Failed to get recent turns: {e}")
+            return []
+
+    def _get_all_turns(self, conversation_id: str) -> List[ConversationTurn]:
+        """Get all turns from a specific conversation."""
+        return self._get_recent_turns(conversation_id, self.max_turns_per_conversation)
+
+    def _get_recent_turns_all_conversations(
+        self, limit: int = 100
+    ) -> List[ConversationTurn]:
+        """Get recent turns from all conversations."""
+        try:
+            results = self.vector_db.scroll_points(
+                collection_name=self.turn_collection, limit=limit
+            )
+
+            turns = []
+            for result in results:
+                payload = result.get("payload", {})
+                turn = ConversationTurn(**payload)
+                turns.append(turn)
+
+            # Sort by timestamp (most recent first)
+            turns.sort(key=lambda t: t.timestamp, reverse=True)
+            return turns
+
+        except Exception as e:
+            logger.error(f"Failed to get recent turns from all conversations: {e}")
+            return []
+
+    def _update_turn_feedback(
+        self, turn_id: str, rating: int, comment: Optional[str]
+    ) -> bool:
+        """Update a turn with feedback."""
+        try:
+            # Get current turn
+            result = self.vector_db.get_point(self.turn_collection, turn_id)
+            if not result:
+                logger.error(f"Turn not found: {turn_id}")
+                return False
+
+            # Update payload with feedback
+            payload = result.get("payload", {})
+            payload["feedback_rating"] = rating
+            payload["feedback_comment"] = comment
+
+            # Update the point
+            point = {"id": turn_id, "vector": result.get("vector"), "payload": payload}
+            self.vector_db.upsert_points(self.turn_collection, [point])
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to update turn feedback: {e}")
+            return False
+
+    def _learn_from_feedback(self, turn_id: str, rating: int, comment: Optional[str]):
         """
-        return {
-            "short_term_sessions": len(self._short_term),
-            "short_term_messages": sum(
-                len(msgs) for msgs in self._short_term.values()
-            ),
-            "working_memory_entries": len(self._working),
-            "consolidated_users": len(self._consolidated),
-            "consolidated_entries": sum(
-                len(entries) for entries in self._consolidated.values()
-            ),
-            "user_profiles_cached": len(self._user_profiles),
-            "emotional_states_cached": len(self._emotional_states),
-            "metrics": self._metrics.copy(),
-        }
+        Learn from user feedback.
+
+        Simple learning approach for now - could be enhanced with ML later.
+        """
+        try:
+            # For now, just log the feedback for analysis
+            logger.info(
+                f"Learning from feedback - Turn: {turn_id}, Rating: {rating}, Comment: {comment}"
+            )
+
+            # Future enhancements could include:
+            # - Adjusting response patterns based on feedback
+            # - Identifying common issues from low ratings
+            # - Improving source selection based on feedback
+            # - Fine-tuning retrieval based on successful responses
+
+        except Exception as e:
+            logger.error(f"Failed to learn from feedback: {e}")
+
+    def _delete_conversation_turns(self, conversation_id: str):
+        """Delete all turns for a conversation."""
+        try:
+            # Get all turn IDs for this conversation
+            turns = self._get_all_turns(conversation_id)
+            turn_ids = [turn.turn_id for turn in turns]
+
+            if turn_ids:
+                self.vector_db.delete_points(self.turn_collection, turn_ids)
+
+        except Exception as e:
+            logger.error(f"Failed to delete conversation turns: {e}")
+
+
+# Human-friendly helper functions
+def quick_memory_search(query: str, max_results: int = 5) -> List[str]:
+    """
+    Quick search through conversation memory.
+
+    Args:
+        query: Search query
+        max_results: Maximum results to return
+
+    Returns:
+        List of relevant answers from past conversations
+
+    Example:
+        >>> answers = quick_memory_search("Docker installation")
+        >>> for answer in answers:
+        ...     print(answer[:100] + "...")
+    """
+    memory = ConversationMemory()
+    results = memory.search_conversations(query, max_results=max_results)
+    return [result["answer"] for result in results]
+
+
+if __name__ == "__main__":
+    # Demo conversation memory capabilities
+    print("🧠 Morgan Conversation Memory Demo")
+    print("=" * 40)
+
+    memory = ConversationMemory()
+
+    # Create a test conversation
+    conv_id = memory.create_conversation("Docker Tutorial")
+    print(f"Created conversation: {conv_id}")
+
+    # Add some turns
+    turn1 = memory.add_turn(
+        conv_id,
+        "What is Docker?",
+        "Docker is a containerization platform that allows you to package applications...",
+        ["docker-intro.md"],
+    )
+
+    turn2 = memory.add_turn(
+        conv_id,
+        "How do I install it?",
+        "You can install Docker by downloading it from docker.com or using package managers...",
+        ["docker-install.md"],
+    )
+
+    print(f"Added turns: {turn1}, {turn2}")
+
+    # Add feedback
+    memory.add_feedback(conv_id, 5, "Very helpful!")
+    print("Added positive feedback")
+
+    # Get conversation context
+    context = memory.get_conversation_context(conv_id)
+    print(f"\nConversation context:\n{context}")
+
+    # Search conversations
+    results = memory.search_conversations("Docker installation")
+    print(f"\nSearch results for 'Docker installation': {len(results)} found")
+
+    # Get learning insights
+    insights = memory.get_learning_insights()
+    print(f"\nLearning insights: {insights['message']}")

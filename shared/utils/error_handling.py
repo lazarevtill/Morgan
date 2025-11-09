@@ -11,24 +11,25 @@ Provides:
 
 import logging
 import uuid
+from typing import Dict, Any, Optional, Union
 from datetime import datetime
 from http import HTTPStatus
-from typing import Any, Dict, Optional, Union
 
 from shared.utils.exceptions import (
-    AudioException,
-    ConfigurationException,
-    DatabaseException,
+    MorganException,
     ErrorCategory,
     ErrorSeverity,
-    ExternalIntegrationException,
-    ModelException,
-    MorganException,
-    NetworkException,
-    ResourceException,
     ServiceException,
+    ModelException,
+    AudioException,
+    NetworkException,
+    ConfigurationException,
     ValidationException,
+    ResourceException,
+    DatabaseException,
+    ExternalIntegrationException,
 )
+
 
 logger = logging.getLogger(__name__)
 

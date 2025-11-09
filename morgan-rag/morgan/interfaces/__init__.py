@@ -1,45 +1,11 @@
 """
-Morgan Interfaces Package.
+User interaction interfaces for Morgan RAG.
 
-Provides network interfaces for:
-- REST API (FastAPI)
-- WebSocket real-time communication
-- Streaming responses
-- Health monitoring
+Provides web-based and CLI interfaces with emotional awareness,
+personalization, relationship timeline visualization, and companion
+feedback systems.
 """
 
-from morgan.interfaces.web_interface import (
-    ChatRequest,
-    ChatResponse,
-    ErrorResponse,
-    FeedbackRequest,
-    FeedbackResponse,
-    HealthResponse,
-    MorganWebApp,
-    create_app,
-)
-from morgan.interfaces.websocket_interface import (
-    ConnectionManager,
-    MessageType,
-    WebSocketHandler,
-    WSMessage,
-    add_websocket_routes,
-)
+from .chat_interface import EmotionalChatInterface
 
-__all__ = [
-    # Web Interface
-    "MorganWebApp",
-    "create_app",
-    "ChatRequest",
-    "ChatResponse",
-    "ErrorResponse",
-    "FeedbackRequest",
-    "FeedbackResponse",
-    "HealthResponse",
-    # WebSocket Interface
-    "WebSocketHandler",
-    "ConnectionManager",
-    "MessageType",
-    "WSMessage",
-    "add_websocket_routes",
-]
+__all__ = ["EmotionalChatInterface"]
