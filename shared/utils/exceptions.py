@@ -8,11 +8,11 @@ This module provides a comprehensive exception system with:
 - Structured error responses
 """
 
-import traceback
 import uuid
-from datetime import datetime
+import traceback
+from typing import Dict, Any, Optional, List
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from datetime import datetime
 
 
 class ErrorSeverity(Enum):

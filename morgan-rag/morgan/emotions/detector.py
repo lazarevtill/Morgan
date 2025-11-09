@@ -1,394 +1,496 @@
 """
-Main Emotion Detector.
+Real-time emotion detection module.
 
-Orchestrates all 11 emotion detection modules to provide comprehensive
-emotion analysis with <200ms response time.
+Provides focused emotion detection from text using hybrid rule-based and LLM approaches
+with caching for performance optimization.
 """
 
-from __future__ import annotations
+import hashlib
+import json
+import re
+import threading
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
-import asyncio
-import time
-from pathlib import Path
-from typing import List, Optional
+from morgan.config import get_settings
+from morgan.emotional.models import ConversationContext, EmotionalState, EmotionType
+from morgan.services.llm_service import get_llm_service
+from morgan.utils.cache import FileCache
+from morgan.utils.logger import get_logger
 
-from morgan.emotions.base import CircuitBreaker, EmotionModule
-from morgan.emotions.exceptions import (
-    EmotionDetectionError,
-    EmotionResourceError,
-    EmotionValidationError,
-)
-from morgan.emotions.modules.aggregator import EmotionAggregator
-from morgan.emotions.modules.cache import EmotionCache
-from morgan.emotions.modules.classifier import EmotionClassifier
-from morgan.emotions.modules.context_analyzer import ContextAnalyzer
-from morgan.emotions.modules.history_tracker import EmotionHistoryTracker
-from morgan.emotions.modules.intensity import IntensityAnalyzer
-from morgan.emotions.modules.multi_emotion import MultiEmotionDetector
-from morgan.emotions.modules.pattern_detector import PatternDetector
-from morgan.emotions.modules.temporal_analyzer import TemporalAnalyzer
-from morgan.emotions.modules.trigger_detector import TriggerDetector
-from morgan.emotions.types import EmotionContext, EmotionResult
+logger = get_logger(__name__)
 
 
-class EmotionDetector(EmotionModule):
+class EmotionDetector:
     """
-    Main emotion detection system.
+    Real-time emotion detection from text analysis.
 
-    Orchestrates 11 specialized modules to provide comprehensive emotion analysis:
-    1. EmotionClassifier - Classifies text into emotion types
-    2. IntensityAnalyzer - Analyzes and adjusts emotion intensities
-    3. PatternDetector - Detects emotional patterns over time
-    4. TriggerDetector - Identifies emotional triggers
-    5. EmotionHistoryTracker - Maintains emotional history
-    6. ContextAnalyzer - Analyzes conversational context
-    7. MultiEmotionDetector - Handles multiple simultaneous emotions
-    8. TemporalAnalyzer - Analyzes temporal emotion changes
-    9. EmotionCache - Caches results for performance
-    10. EmotionAggregator - Aggregates all results
-    11. Main orchestration and error handling
-
-    Target: <200ms response time per message
+    Features:
+    - Hybrid rule-based and LLM emotion detection
+    - Performance-optimized caching
+    - Multi-pattern emotion recognition
+    - Confidence scoring and validation
     """
 
-    def __init__(
-        self,
-        enable_cache: bool = True,
-        enable_history: bool = True,
-        history_storage_path: Optional[Path] = None,
-        max_concurrent_operations: int = 5,
-    ) -> None:
-        """
-        Initialize emotion detector.
+    # Core emotion detection patterns
+    EMOTION_PATTERNS = {
+        EmotionType.JOY: [
+            r"\b(happy|joy|excited|thrilled|delighted|pleased|glad|cheerful|elated|wonderful)\b",
+            r"\b(awesome|amazing|fantastic|great|excellent|perfect|brilliant|outstanding)\b",
+            r"\b(love|adore|enjoy|celebrate|rejoice)\b",
+            r"[!]{2,}",  # Multiple exclamation marks
+            r":\)|:D|😊|😄|😃|🎉|❤️|🥳|✨",  # Joy emoticons and emojis
+        ],
+        EmotionType.SADNESS: [
+            r"\b(sad|depressed|down|upset|disappointed|heartbroken|miserable|devastated)\b",
+            r"\b(cry|crying|tears|weep|sob|mourn)\b",
+            r"\b(lonely|alone|isolated|empty|hopeless)\b",
+            r"\b(loss|grief|sorrow|despair)\b",
+            r":\(|😢|😭|💔|😞|😔",  # Sad emoticons
+        ],
+        EmotionType.ANGER: [
+            r"\b(angry|mad|furious|irritated|annoyed|frustrated|pissed|enraged)\b",
+            r"\b(hate|despise|can\'t stand|loathe|detest)\b",
+            r"\b(stupid|idiotic|ridiculous|absurd|outrageous)\b",
+            r"\b(damn|hell|shit|fuck)\b",  # Strong language indicators
+            r"[!]{3,}",  # Many exclamation marks (anger indicator)
+            r"😠|😡|🤬|👿|💢",  # Angry emojis
+        ],
+        EmotionType.FEAR: [
+            r"\b(scared|afraid|terrified|worried|anxious|nervous|panic|frightened)\b",
+            r"\b(fear|phobia|dread|terror|horror)\b",
+            r"\b(what if|concerned about|worried that|afraid that)\b",
+            r"\b(stress|stressed|overwhelmed|helpless)\b",
+            r"😰|😨|😱|😟|😧",  # Fear emojis
+        ],
+        EmotionType.SURPRISE: [
+            r"\b(surprised|shocked|amazed|astonished|wow|whoa|incredible|unbelievable)\b",
+            r"\b(unexpected|sudden|didn\'t expect|never thought)\b",
+            r"\b(blown away|mind blown|can\'t believe)\b",
+            r"😲|😮|🤯|😯|🙀",  # Surprise emojis
+        ],
+        EmotionType.DISGUST: [
+            r"\b(disgusting|gross|revolting|sick|nauseating|repulsive|vile)\b",
+            r"\b(ugh|eww|yuck|blech|nasty)\b",
+            r"\b(horrible|awful|terrible|dreadful)\b",
+            r"🤢|🤮|😷|🤧|😖",  # Disgust emojis
+        ],
+    }
 
-        Args:
-            enable_cache: Enable result caching
-            enable_history: Enable history tracking
-            history_storage_path: Optional path for history persistence
-            max_concurrent_operations: Max concurrent async operations
-        """
-        super().__init__("EmotionDetector")
+    # Intensity modifiers that affect emotion strength
+    INTENSITY_MODIFIERS = {
+        "extremely": 1.5,
+        "very": 1.3,
+        "really": 1.2,
+        "so": 1.2,
+        "quite": 1.1,
+        "pretty": 1.1,
+        "somewhat": 0.8,
+        "a bit": 0.7,
+        "slightly": 0.6,
+        "barely": 0.4,
+        "not very": 0.4,
+        "hardly": 0.3,
+    }
 
-        # Initialize all modules
-        self._classifier = EmotionClassifier()
-        self._intensity_analyzer = IntensityAnalyzer()
-        self._pattern_detector = PatternDetector()
-        self._trigger_detector = TriggerDetector()
-        self._context_analyzer = ContextAnalyzer()
-        self._multi_emotion_detector = MultiEmotionDetector()
-        self._temporal_analyzer = TemporalAnalyzer()
-        self._aggregator = EmotionAggregator()
+    # Negation patterns that can flip emotion polarity
+    NEGATION_PATTERNS = [
+        r"\b(not|no|never|nothing|nobody|nowhere|neither|nor)\b",
+        r"\b(don\'t|doesn\'t|didn\'t|won\'t|wouldn\'t|can\'t|couldn\'t)\b",
+        r"\b(isn\'t|aren\'t|wasn\'t|weren\'t|haven\'t|hasn\'t|hadn\'t)\b",
+    ]
 
-        # Optional modules
-        self._cache = EmotionCache() if enable_cache else None
-        self._history_tracker = (
-            EmotionHistoryTracker(storage_path=history_storage_path)
-            if enable_history
-            else None
-        )
+    def __init__(self):
+        """Initialize emotion detector with caching and LLM service."""
+        self.settings = get_settings()
+        self.llm_service = get_llm_service()
 
-        # Circuit breaker for resilience
-        self._circuit_breaker = CircuitBreaker(
-            failure_threshold=5,
-            recovery_timeout=60.0,
-            expected_exception=EmotionDetectionError,
-        )
+        # Setup cache for emotion detection results
+        cache_dir = self.settings.morgan_data_dir / "cache" / "emotions"
+        self.cache = FileCache(cache_dir)
 
-        # Concurrency control
-        self._semaphore = asyncio.Semaphore(max_concurrent_operations)
+        logger.info("Emotion Detector initialized")
 
-        # Performance tracking
-        self._total_detections = 0
-        self._total_processing_time = 0.0
-        self._cache_hits = 0
-
-    async def initialize(self) -> None:
-        """Initialize all modules in parallel."""
-        modules = [
-            self._classifier,
-            self._intensity_analyzer,
-            self._pattern_detector,
-            self._trigger_detector,
-            self._context_analyzer,
-            self._multi_emotion_detector,
-            self._temporal_analyzer,
-            self._aggregator,
-        ]
-
-        if self._cache:
-            modules.append(self._cache)
-        if self._history_tracker:
-            modules.append(self._history_tracker)
-
-        # Initialize all modules concurrently
-        try:
-            await asyncio.gather(*[module.initialize() for module in modules])
-        except Exception as e:
-            raise EmotionResourceError(
-                f"Failed to initialize emotion detector: {str(e)}",
-                resource_type="modules",
-            )
-
-    async def cleanup(self) -> None:
-        """Cleanup all modules."""
-        modules = [
-            self._classifier,
-            self._intensity_analyzer,
-            self._pattern_detector,
-            self._trigger_detector,
-            self._context_analyzer,
-            self._multi_emotion_detector,
-            self._temporal_analyzer,
-            self._aggregator,
-        ]
-
-        if self._cache:
-            modules.append(self._cache)
-        if self._history_tracker:
-            modules.append(self._history_tracker)
-
-        await asyncio.gather(*[module.cleanup() for module in modules])
-
-    async def detect(
+    def detect_emotion(
         self,
         text: str,
-        context: Optional[EmotionContext] = None,
+        context: Optional[ConversationContext] = None,
         use_cache: bool = True,
-    ) -> EmotionResult:
+    ) -> EmotionalState:
         """
-        Detect emotions in text.
+        Detect emotion from text using hybrid approach.
+
+        Args:
+            text: Text to analyze for emotion
+            context: Optional conversation context for better analysis
+            use_cache: Whether to use cached results
+
+        Returns:
+            Detected emotional state with confidence scores
+        """
+        if not text or not text.strip():
+            return self._create_neutral_emotion("empty text")
+
+        # Check cache first if enabled
+        if use_cache:
+            cache_key = self._get_cache_key(text, context)
+            cached_result = self.cache.get(cache_key)
+            if cached_result:
+                logger.debug("Emotion detection cache hit")
+                return self._deserialize_emotion(cached_result)
+
+        # Perform rule-based detection
+        rule_emotions = self._detect_emotions_rule_based(text)
+
+        # Use LLM for complex cases or low confidence results
+        llm_emotion = None
+        if self._should_use_llm(rule_emotions, text):
+            llm_emotion = self._detect_emotions_llm(text, context)
+
+        # Combine and validate results
+        final_emotion = self._combine_emotion_results(rule_emotions, llm_emotion, text)
+
+        # Cache the result if caching is enabled
+        if use_cache:
+            cache_key = self._get_cache_key(text, context)
+            self.cache.set(cache_key, self._serialize_emotion(final_emotion))
+
+        logger.debug(
+            f"Detected emotion: {final_emotion.primary_emotion.value} "
+            f"(intensity: {final_emotion.intensity:.2f}, "
+            f"confidence: {final_emotion.confidence:.2f})"
+        )
+
+        return final_emotion
+
+    def detect_emotions_batch(
+        self, texts: List[str], contexts: Optional[List[ConversationContext]] = None
+    ) -> List[EmotionalState]:
+        """
+        Detect emotions for multiple texts efficiently.
+
+        Args:
+            texts: List of texts to analyze
+            contexts: Optional list of conversation contexts
+
+        Returns:
+            List of detected emotional states
+        """
+        if not texts:
+            return []
+
+        contexts = contexts or [None] * len(texts)
+        results = []
+
+        for i, text in enumerate(texts):
+            context = contexts[i] if i < len(contexts) else None
+            emotion = self.detect_emotion(text, context)
+            results.append(emotion)
+
+        logger.info(f"Batch emotion detection completed for {len(texts)} texts")
+        return results
+
+    def _detect_emotions_rule_based(self, text: str) -> List[Tuple[EmotionType, float]]:
+        """
+        Detect emotions using rule-based pattern matching.
+
+        Args:
+            text: Text to analyze
+
+        Returns:
+            List of (emotion_type, score) tuples sorted by score
+        """
+        text_lower = text.lower()
+        emotion_scores = {}
+
+        # Check for negation context
+        has_negation = any(
+            re.search(pattern, text_lower) for pattern in self.NEGATION_PATTERNS
+        )
+
+        for emotion_type, patterns in self.EMOTION_PATTERNS.items():
+            score = 0.0
+            matched_patterns = []
+
+            for pattern in patterns:
+                matches = re.findall(pattern, text_lower)
+                if matches:
+                    matched_patterns.extend(matches)
+                    # Base score for each match
+                    score += len(matches) * 0.3
+
+            if score > 0:
+                # Apply intensity modifiers
+                score = self._apply_intensity_modifiers(score, text_lower)
+
+                # Apply negation effects (reduce positive emotions, boost negative ones)
+                if has_negation:
+                    if emotion_type in [EmotionType.JOY, EmotionType.SURPRISE]:
+                        score *= 0.5  # Reduce positive emotions
+                    elif emotion_type in [
+                        EmotionType.SADNESS,
+                        EmotionType.ANGER,
+                        EmotionType.FEAR,
+                    ]:
+                        score *= 1.2  # Boost negative emotions slightly
+
+                # Normalize score to 0-1 range
+                score = min(1.0, score)
+
+                if score > 0.1:  # Minimum threshold
+                    emotion_scores[emotion_type] = score
+
+        # Return sorted by score (highest first)
+        return sorted(emotion_scores.items(), key=lambda x: x[1], reverse=True)
+
+    def _detect_emotions_llm(
+        self, text: str, context: Optional[ConversationContext]
+    ) -> Optional[EmotionalState]:
+        """
+        Use LLM for sophisticated emotion detection.
 
         Args:
             text: Text to analyze
             context: Optional conversation context
-            use_cache: Whether to use cache (default: True)
 
         Returns:
-            EmotionResult with comprehensive analysis
-
-        Raises:
-            EmotionValidationError: If input is invalid
-            EmotionDetectionError: If detection fails
+            LLM-detected emotional state or None if failed
         """
-        await self.ensure_initialized()
+        try:
+            # Build context-aware prompt
+            context_info = ""
+            if context and context.previous_messages:
+                recent_messages = context.previous_messages[-2:]  # Last 2 messages
+                context_info = f"Previous context: {' | '.join(recent_messages)}"
 
-        # Validate input
-        if not text or not text.strip():
-            raise EmotionValidationError("Text cannot be empty", field="text")
+            prompt = f"""
+            Analyze the emotional state in this text. Consider subtle emotional cues, implied feelings, and context.
 
-        if len(text) > 10000:
-            raise EmotionValidationError(
-                "Text exceeds maximum length (10000 characters)", field="text"
+            Text to analyze: "{text}"
+            {context_info}
+
+            Respond with JSON format only:
+            {{
+                "primary_emotion": "joy|sadness|anger|fear|surprise|disgust|neutral",
+                "intensity": 0.0-1.0,
+                "confidence": 0.0-1.0,
+                "secondary_emotions": ["emotion1", "emotion2"],
+                "indicators": ["specific text pattern or phrase that indicated the emotion"]
+            }}
+
+            Focus on:
+            - Subtle emotional language and tone
+            - Contextual emotional cues
+            - Implied feelings beyond explicit words
+            - Cultural and conversational nuances
+            """
+
+            response = self.llm_service.generate(
+                prompt=prompt,
+                temperature=0.2,  # Lower temperature for more consistent results
+                max_tokens=200,
             )
 
-        # Use circuit breaker for resilience
-        return await self._circuit_breaker.call(
-            self._detect_internal, text, context, use_cache
-        )
+            # Parse JSON response
+            emotion_data = json.loads(response.content.strip())
 
-    async def _detect_internal(
-        self,
-        text: str,
-        context: Optional[EmotionContext],
-        use_cache: bool,
-    ) -> EmotionResult:
-        """Internal detection method with full pipeline."""
-        start_time = time.perf_counter()
-
-        # Acquire semaphore to limit concurrency
-        async with self._semaphore:
-            # Check cache first
-            if use_cache and self._cache:
-                context_key = self._get_context_key(context)
-                cached = await self._cache.get(text, context_key)
-                if cached:
-                    self._cache_hits += 1
-                    return cached
-
-            # Run detection pipeline
-            result = await self._run_detection_pipeline(text, context)
-
-            # Calculate processing time
-            processing_time = (time.perf_counter() - start_time) * 1000
-
-            # Update result with processing time
-            result = EmotionResult(
-                primary_emotions=result.primary_emotions,
-                dominant_emotion=result.dominant_emotion,
-                valence=result.valence,
-                arousal=result.arousal,
-                triggers=result.triggers,
-                patterns=result.patterns,
-                context=result.context,
-                timestamp=result.timestamp,
-                processing_time_ms=processing_time,
-                warnings=result.warnings,
+            return EmotionalState(
+                primary_emotion=EmotionType(emotion_data["primary_emotion"]),
+                intensity=float(emotion_data["intensity"]),
+                confidence=float(emotion_data["confidence"]),
+                secondary_emotions=[
+                    EmotionType(e) for e in emotion_data.get("secondary_emotions", [])
+                ],
+                emotional_indicators=emotion_data.get("indicators", []),
             )
 
-            # Cache result
-            if use_cache and self._cache:
-                context_key = self._get_context_key(context)
-                await self._cache.set(text, result, context_key)
-
-            # Update history
-            if self._history_tracker and context and context.user_id:
-                await self._history_tracker.add_result(context.user_id, result)
-
-            # Update temporal analyzer
-            if context and context.user_id:
-                await self._temporal_analyzer.add_result(context.user_id, result)
-
-            # Update stats
-            self._total_detections += 1
-            self._total_processing_time += processing_time
-
-            return result
-
-    async def _run_detection_pipeline(
-        self,
-        text: str,
-        context: Optional[EmotionContext],
-    ) -> EmotionResult:
-        """Run the complete detection pipeline."""
-        warnings: List[str] = []
-
-        # STAGE 1: Classification (async)
-        classified_emotions = await self._classifier.classify(text)
-
-        if not classified_emotions:
-            warnings.append("No emotions classified from text")
-
-        # STAGE 2: Intensity Analysis (async)
-        intensity_adjusted = await self._intensity_analyzer.analyze_intensity(
-            classified_emotions, text, context
-        )
-
-        # STAGE 3: Context Analysis (async, only if we have context)
-        if context:
-            context_adjusted = await self._context_analyzer.analyze_context(
-                intensity_adjusted, context
-            )
-        else:
-            context_adjusted = intensity_adjusted
-
-        # STAGE 4: Parallel analysis of triggers, patterns, multi-emotions
-        trigger_task = self._trigger_detector.detect_triggers(
-            text, context_adjusted
-        )
-        pattern_task = self._pattern_detector.detect_patterns(
-            context_adjusted, context
-        )
-        multi_emotion_task = self._multi_emotion_detector.analyze_multi_emotions(
-            context_adjusted
-        )
-
-        # Wait for all parallel tasks
-        triggers, patterns, (dominant, valence, arousal) = await asyncio.gather(
-            trigger_task,
-            pattern_task,
-            multi_emotion_task,
-        )
-
-        # STAGE 5: Aggregation
-        result = await self._aggregator.aggregate(
-            emotions=context_adjusted,
-            dominant_emotion=dominant,
-            valence=valence,
-            arousal=arousal,
-            triggers=triggers,
-            patterns=patterns,
-            context=context,
-            warnings=warnings,
-        )
-
-        return result
-
-    async def get_user_history(
-        self,
-        user_id: str,
-        limit: int = 10,
-    ) -> List[EmotionResult]:
-        """
-        Get emotion history for a user.
-
-        Args:
-            user_id: User identifier
-            limit: Maximum results to return
-
-        Returns:
-            List of recent emotion results
-        """
-        if not self._history_tracker:
-            return []
-
-        return await self._history_tracker.get_recent(user_id, limit)
-
-    async def get_user_trajectory(
-        self,
-        user_id: str,
-    ) -> dict:
-        """
-        Get emotional trajectory for a user.
-
-        Args:
-            user_id: User identifier
-
-        Returns:
-            Trajectory analysis dictionary
-        """
-        return await self._temporal_analyzer.analyze_trajectory(user_id)
-
-    async def clear_user_data(self, user_id: str) -> None:
-        """
-        Clear all data for a user.
-
-        Args:
-            user_id: User identifier
-        """
-        tasks = []
-
-        if self._history_tracker:
-            tasks.append(self._history_tracker.clear_history(user_id))
-
-        if self._pattern_detector:
-            tasks.append(self._pattern_detector.clear_history(user_id))
-
-        if tasks:
-            await asyncio.gather(*tasks)
-
-    def _get_context_key(self, context: Optional[EmotionContext]) -> Optional[str]:
-        """Generate cache key from context."""
-        if not context:
+        except Exception as e:
+            logger.warning(f"LLM emotion detection failed: {e}")
             return None
 
-        parts = []
-        if context.user_id:
-            parts.append(f"user:{context.user_id}")
-        if context.conversation_id:
-            parts.append(f"conv:{context.conversation_id}")
+    def _should_use_llm(
+        self, rule_emotions: List[Tuple[EmotionType, float]], text: str
+    ) -> bool:
+        """
+        Determine if LLM analysis is needed.
 
-        return "|".join(parts) if parts else None
+        Args:
+            rule_emotions: Results from rule-based detection
+            text: Original text
 
-    @property
-    def stats(self) -> dict:
-        """Get detector statistics."""
-        avg_time = (
-            self._total_processing_time / self._total_detections
-            if self._total_detections > 0
-            else 0.0
+        Returns:
+            True if LLM analysis should be used
+        """
+        # Use LLM if no strong rule-based results
+        if not rule_emotions or max(score for _, score in rule_emotions) < 0.6:
+            return True
+
+        # Use LLM for longer, complex texts
+        if len(text) > 100:
+            return True
+
+        # Use LLM if multiple emotions detected (ambiguous case)
+        if len(rule_emotions) > 2:
+            return True
+
+        return False
+
+    def _combine_emotion_results(
+        self,
+        rule_emotions: List[Tuple[EmotionType, float]],
+        llm_emotion: Optional[EmotionalState],
+        text: str,
+    ) -> EmotionalState:
+        """
+        Combine rule-based and LLM emotion detection results.
+
+        Args:
+            rule_emotions: Rule-based detection results
+            llm_emotion: LLM detection result
+            text: Original text
+
+        Returns:
+            Combined emotional state
+        """
+        if not rule_emotions and not llm_emotion:
+            return self._create_neutral_emotion("no clear emotional indicators")
+
+        if rule_emotions and not llm_emotion:
+            # Use rule-based result
+            primary_emotion, intensity = rule_emotions[0]
+            secondary_emotions = [emotion for emotion, _ in rule_emotions[1:3]]
+
+            return EmotionalState(
+                primary_emotion=primary_emotion,
+                intensity=intensity,
+                confidence=0.75,  # Good confidence for clear rule-based detection
+                secondary_emotions=secondary_emotions,
+                emotional_indicators=["pattern-based detection"],
+            )
+
+        if llm_emotion and not rule_emotions:
+            # Use LLM result with slightly reduced confidence
+            llm_emotion.confidence *= 0.9
+            return llm_emotion
+
+        # Combine both results
+        rule_primary, rule_intensity = rule_emotions[0]
+
+        # If they agree on primary emotion, boost confidence and average intensity
+        if rule_primary == llm_emotion.primary_emotion:
+            combined_intensity = (rule_intensity + llm_emotion.intensity) / 2
+            combined_confidence = min(1.0, llm_emotion.confidence + 0.15)
+
+            return EmotionalState(
+                primary_emotion=rule_primary,
+                intensity=combined_intensity,
+                confidence=combined_confidence,
+                secondary_emotions=llm_emotion.secondary_emotions,
+                emotional_indicators=llm_emotion.emotional_indicators
+                + ["hybrid detection"],
+            )
+        else:
+            # They disagree - use LLM result but with lower confidence
+            llm_emotion.confidence *= 0.7
+            llm_emotion.emotional_indicators.append("conflicting rule-based detection")
+            return llm_emotion
+
+    def _apply_intensity_modifiers(self, base_score: float, text: str) -> float:
+        """
+        Apply intensity modifiers to emotion score.
+
+        Args:
+            base_score: Base emotion score
+            text: Text to check for modifiers
+
+        Returns:
+            Modified score
+        """
+        modified_score = base_score
+
+        for modifier, multiplier in self.INTENSITY_MODIFIERS.items():
+            if modifier in text:
+                modified_score *= multiplier
+                break  # Apply only the first modifier found
+
+        return modified_score
+
+    def _create_neutral_emotion(self, reason: str) -> EmotionalState:
+        """
+        Create a neutral emotional state.
+
+        Args:
+            reason: Reason for neutral classification
+
+        Returns:
+            Neutral emotional state
+        """
+        return EmotionalState(
+            primary_emotion=EmotionType.NEUTRAL,
+            intensity=0.5,
+            confidence=0.8,
+            emotional_indicators=[reason],
         )
 
-        cache_hit_rate = (
-            self._cache_hits / self._total_detections
-            if self._total_detections > 0
-            else 0.0
-        )
+    def _get_cache_key(self, text: str, context: Optional[ConversationContext]) -> str:
+        """
+        Generate cache key for emotion detection.
 
+        Args:
+            text: Text being analyzed
+            context: Optional conversation context
+
+        Returns:
+            Cache key string
+        """
+        cache_input = text
+        if context:
+            cache_input += f":{context.user_id}"
+
+        return hashlib.sha256(cache_input.encode()).hexdigest()
+
+    def _serialize_emotion(self, emotion: EmotionalState) -> Dict[str, Any]:
+        """Serialize emotional state for caching."""
         return {
-            "total_detections": self._total_detections,
-            "average_processing_time_ms": avg_time,
-            "cache_enabled": self._cache is not None,
-            "cache_hits": self._cache_hits,
-            "cache_hit_rate": cache_hit_rate,
-            "circuit_breaker_state": self._circuit_breaker.state,
+            "primary_emotion": emotion.primary_emotion.value,
+            "intensity": emotion.intensity,
+            "confidence": emotion.confidence,
+            "secondary_emotions": [e.value for e in emotion.secondary_emotions],
+            "emotional_indicators": emotion.emotional_indicators,
+            "timestamp": emotion.timestamp.isoformat(),
         }
+
+    def _deserialize_emotion(self, data: Dict[str, Any]) -> EmotionalState:
+        """Deserialize emotional state from cache."""
+        return EmotionalState(
+            primary_emotion=EmotionType(data["primary_emotion"]),
+            intensity=data["intensity"],
+            confidence=data["confidence"],
+            secondary_emotions=[
+                EmotionType(e) for e in data.get("secondary_emotions", [])
+            ],
+            emotional_indicators=data.get("emotional_indicators", []),
+            timestamp=datetime.fromisoformat(data["timestamp"]),
+        )
+
+
+# Singleton instance
+_detector_instance = None
+_detector_lock = threading.Lock()
+
+
+def get_emotion_detector() -> EmotionDetector:
+    """
+    Get singleton emotion detector instance.
+
+    Returns:
+        Shared EmotionDetector instance
+    """
+    global _detector_instance
+
+    if _detector_instance is None:
+        with _detector_lock:
+            if _detector_instance is None:
+                _detector_instance = EmotionDetector()
+
+    return _detector_instance

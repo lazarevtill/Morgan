@@ -1,819 +1,691 @@
 """
-Morgan Assistant - Main orchestrator for the AI assistant.
+Morgan Assistant - Human-First AI Interface with Emotional Intelligence
 
-Coordinates:
-- Emotion detection
-- Memory retrieval
-- RAG search
-- Context building
-- Response generation
-- Learning updates
+The main interface for human interaction with Morgan RAG.
+Designed to be intuitive, helpful, conversational, and emotionally aware.
+Now includes companion features for building meaningful relationships.
 
-Target: < 2s response latency (P95)
+KISS Principle: Clean interface that orchestrates specialized modules.
 """
 
-from __future__ import annotations
-
-import asyncio
-import hashlib
-import logging
 import time
-from datetime import datetime
-from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
-from morgan.core.context import ContextManager, ContextOverflowError
-from morgan.core.memory import MemorySystem, MemoryRetrievalError
-from morgan.core.response_generator import ResponseGenerator, GenerationError
-from morgan.core.search import MultiStageSearch, SearchConfig, SearchResult
-from morgan.core.types import (
-    AssistantMetrics,
-    AssistantResponse,
-    ConversationContext,
-    EmotionalState,
-    Message,
-    MessageRole,
-    ProcessingContext,
-    UserProfile,
-)
-from morgan.emotions.detector import EmotionDetector
-from morgan.emotions.exceptions import EmotionDetectionError
-from morgan.emotions.types import EmotionResult
-from morgan.jina.reranking.service import RerankingService
-from morgan.learning.engine import LearningEngine
-from morgan.learning.exceptions import LearningError
-from morgan.learning.types import FeedbackSignal, FeedbackType, LearningContext
-from morgan.services.embedding_service import EmbeddingService
-from morgan.vector_db.client import QdrantClient
+from ..companion.relationship_manager import CompanionRelationshipManager
+from ..config import get_settings
+from ..core.knowledge import KnowledgeBase
+from ..core.memory import ConversationMemory
+from ..core.search import SmartSearch
+from ..emotional.intelligence_engine import get_emotional_intelligence_engine
+from ..memory.memory_processor import get_memory_processor
+from ..services.llm_service import LLMService
+from ..utils.logger import get_logger
+from .conversation_manager import ConversationManager
+from .emotional_processor import EmotionalProcessor
+from .milestone_tracker import MilestoneTracker
 
-logger = logging.getLogger(__name__)
+# Import our new modular components
+from .response_handler import Response, ResponseHandler
 
-
-class AssistantError(Exception):
-    """Base exception for assistant errors."""
-
-    def __init__(
-        self,
-        message: str,
-        correlation_id: Optional[str] = None,
-        recoverable: bool = True,
-    ):
-        super().__init__(message)
-        self.correlation_id = correlation_id
-        self.recoverable = recoverable
+logger = get_logger(__name__)
 
 
 class MorganAssistant:
     """
-    Main Morgan Assistant orchestrator.
+    Morgan - Your Human-First AI Assistant with Emotional Intelligence
 
-    Integrates:
-    - EmotionDetector: Emotion analysis
-    - LearningEngine: Adaptive learning
-    - MemorySystem: Multi-layer memory
-    - ContextManager: Context handling
-    - MultiStageSearch: RAG retrieval
-    - ResponseGenerator: LLM generation
+    Designed to be:
+    - Conversational and helpful
+    - Emotionally aware and empathetic
+    - Transparent about sources and reasoning
+    - Easy to interact with
+    - Continuously learning from conversations
+    - Building meaningful relationships over time
 
-    Features:
-    - Full async/await architecture
-    - Parallel processing where possible
-    - Circuit breakers for resilience
-    - Comprehensive error handling
-    - Performance tracking
-    - Graceful degradation
-
-    Performance targets:
-    - Total latency: < 2s (P95)
-    - Memory retrieval: < 100ms
-    - Context building: < 50ms
-    - Emotion detection: < 200ms
+    KISS: Clean orchestrator that coordinates specialized modules.
     """
 
-    def __init__(
-        self,
-        # Storage
-        storage_path: Optional[Path] = None,
-
-        # LLM configuration
-        llm_base_url: str = "http://localhost:11434",
-        llm_model: str = "llama3.2:latest",
-
-        # Vector DB
-        vector_db: Optional[QdrantClient] = None,
-
-        # Services
-        embedding_service: Optional[EmbeddingService] = None,
-        reranking_service: Optional[RerankingService] = None,
-
-        # Feature flags
-        enable_emotion_detection: bool = True,
-        enable_learning: bool = True,
-        enable_rag: bool = True,
-
-        # Performance tuning
-        max_concurrent_operations: int = 10,
-    ):
+    def __init__(self, config_path: Optional[str] = None):
         """
-        Initialize Morgan Assistant.
+        Initialize Morgan assistant with emotional intelligence.
 
         Args:
-            storage_path: Path for persistent storage
-            llm_base_url: LLM API base URL
-            llm_model: LLM model name
-            vector_db: Vector database client
-            embedding_service: Embedding service
-            reranking_service: Reranking service
-            enable_emotion_detection: Enable emotion detection
-            enable_learning: Enable learning system
-            enable_rag: Enable RAG search
-            max_concurrent_operations: Max concurrent operations
+            config_path: Optional configuration file path
         """
-        self.storage_path = storage_path or Path.home() / ".morgan"
-        self.storage_path.mkdir(parents=True, exist_ok=True)
+        self.settings = get_settings(config_path)
 
-        # Feature flags
-        self.enable_emotion_detection = enable_emotion_detection
-        self.enable_learning = enable_learning
-        self.enable_rag = enable_rag
+        # Core components - each with single responsibility
+        self.knowledge = KnowledgeBase()
+        self.memory = ConversationMemory()
+        self.search = SmartSearch()
+        self.llm = LLMService()
 
-        # Core components
-        self.memory_system = MemorySystem(
-            storage_path=self.storage_path / "memory",
+        # Enhanced companion components
+        self.emotional_engine = get_emotional_intelligence_engine()
+        self.relationship_manager = CompanionRelationshipManager()
+        self.memory_processor = get_memory_processor()
+
+        # Specialized processors (new modular approach)
+        self.response_handler = ResponseHandler()
+        self.conversation_manager = ConversationManager()
+        self.emotional_processor = EmotionalProcessor(
+            self.emotional_engine, self.relationship_manager, self.memory_processor
         )
+        self.milestone_tracker = MilestoneTracker()
 
-        self.context_manager = ContextManager(
-            max_context_tokens=8000,
-            target_context_tokens=6000,
+        # Human-friendly state
+        self.name = "Morgan"
+        self.personality = (
+            "helpful, knowledgeable, conversational, and emotionally aware"
         )
-
-        self.response_generator = ResponseGenerator(
-            llm_base_url=llm_base_url,
-            llm_model=llm_model,
-        )
-
-        # Optional components
-        self.emotion_detector: Optional[EmotionDetector] = None
-        if enable_emotion_detection:
-            self.emotion_detector = EmotionDetector(
-                enable_cache=True,
-                enable_history=True,
-                history_storage_path=self.storage_path / "emotions",
-            )
-
-        self.learning_engine: Optional[LearningEngine] = None
-        if enable_learning:
-            self.learning_engine = LearningEngine(
-                enable_pattern_detection=True,
-                enable_feedback_processing=True,
-                enable_preference_learning=True,
-                enable_adaptation=True,
-                enable_consolidation=True,
-            )
-
-        self.search_engine: Optional[MultiStageSearch] = None
-        if enable_rag and vector_db and embedding_service:
-            self.search_engine = MultiStageSearch(
-                vector_db=vector_db,
-                embedding_service=embedding_service,
-                reranking_service=reranking_service,
-                config=SearchConfig(),
-            )
-
-        # Concurrency control
-        self._semaphore = asyncio.Semaphore(max_concurrent_operations)
-
-        # Circuit breaker state
-        self._failure_counts: Dict[str, int] = {
-            "emotion": 0,
-            "learning": 0,
-            "rag": 0,
-            "generation": 0,
-        }
-        self._max_failures = 5
-
-        # Metrics
-        self._metrics = {
-            "total_requests": 0,
-            "successful_requests": 0,
-            "failed_requests": 0,
-            "degraded_requests": 0,
-        }
 
         logger.info(
-            "Morgan Assistant initialized",
-            extra={
-                "storage_path": str(self.storage_path),
-                "emotion_detection": enable_emotion_detection,
-                "learning": enable_learning,
-                "rag": enable_rag,
-            },
+            f"{self.name} assistant initialized with emotional intelligence and ready to help!"
         )
 
-    async def initialize(self) -> None:
-        """Initialize all components and start background tasks."""
-        logger.info("Initializing Morgan Assistant")
-
-        # Initialize memory system
-        await self.memory_system.initialize()
-
-        # Initialize emotion detector
-        if self.emotion_detector:
-            await self.emotion_detector.initialize()
-
-        # Initialize learning engine
-        if self.learning_engine:
-            await self.learning_engine.initialize()
-
-        logger.info("Morgan Assistant initialized successfully")
-
-    async def cleanup(self) -> None:
-        """Cleanup resources and stop background tasks."""
-        logger.info("Cleaning up Morgan Assistant")
-
-        # Cleanup components
-        await self.memory_system.cleanup()
-
-        if self.emotion_detector:
-            await self.emotion_detector.cleanup()
-
-        if self.learning_engine:
-            await self.learning_engine.cleanup()
-
-        await self.response_generator.cleanup()
-
-        logger.info("Morgan Assistant cleaned up")
-
-    async def process_message(
+    def ask(
         self,
-        user_id: str,
-        message: str,
-        session_id: str,
-    ) -> AssistantResponse:
+        question: str,
+        conversation_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        include_sources: bool = True,
+        max_context: Optional[int] = None,
+    ) -> Response:
         """
-        Process user message and generate response.
-
-        Main orchestration flow:
-        1. Detect emotion (parallel)
-        2. Retrieve memories (parallel)
-        3. RAG search (if needed)
-        4. Build context
-        5. Generate response
-        6. Update memory and learning
-        7. Return response
+        Ask Morgan a question with emotional intelligence and companion awareness.
 
         Args:
-            user_id: User identifier
-            message: User message
-            session_id: Session identifier
+            question: Your question in natural language
+            conversation_id: Optional conversation ID for context
+            user_id: Optional user ID for personalization
+            include_sources: Whether to include source references
+            max_context: Maximum context length to use
 
         Returns:
-            Assistant response
-
-        Raises:
-            AssistantError: If processing fails critically
+            Response with answer, sources, suggestions, and emotional context
         """
-        correlation_id = self._generate_correlation_id()
         start_time = time.time()
 
-        # Initialize metrics
-        metrics = AssistantMetrics(
-            correlation_id=correlation_id,
-            operation="process_message",
-            started_at=datetime.now(),
-        )
-
-        # Initialize processing context
-        ctx = ProcessingContext(
-            correlation_id=correlation_id,
-            user_id=user_id,
-            session_id=session_id,
-            message=message,
-            timestamp=datetime.now(),
-            metrics=metrics,
-        )
-
-        self._metrics["total_requests"] += 1
-
         try:
-            async with self._semaphore:
-                # Phase 1: Parallel emotion detection and memory retrieval
-                await self._phase1_gather_context(ctx)
+            # Step 1: Create conversation context
+            conversation_context = (
+                self.conversation_manager.create_conversation_context(
+                    question, conversation_id, user_id
+                )
+            )
 
-                # Phase 2: RAG search (if needed and enabled)
-                await self._phase2_rag_search(ctx)
+            # Step 2: Analyze emotional state
+            emotional_state = self.emotional_engine.analyze_emotion(
+                question, conversation_context
+            )
 
-                # Phase 3: Build conversation context
-                await self._phase3_build_context(ctx)
-
-                # Phase 4: Generate response
-                response = await self._phase4_generate_response(ctx)
-
-                # Phase 5: Update memory and learning (background)
-                asyncio.create_task(self._phase5_update_systems(ctx, response))
-
-                # Update metrics
-                metrics.total_duration_ms = (time.time() - start_time) * 1000
-                response.metadata["metrics"] = metrics.to_dict()
-
-                self._metrics["successful_requests"] += 1
-
-                logger.info(
-                    "Message processed successfully",
-                    extra={
-                        "correlation_id": correlation_id,
-                        "user_id": user_id,
-                        "duration_ms": round(metrics.total_duration_ms, 2),
-                        "degraded": metrics.degraded_mode,
-                    },
+            # Step 3: Handle user profile and personalization
+            user_profile = None
+            if user_id:
+                user_profile = self.emotional_processor.get_or_create_user_profile(
+                    user_id
                 )
 
-                return response
+                # Generate personalized greeting if needed
+                if self.emotional_processor.should_generate_greeting(user_profile):
+                    self.emotional_processor.generate_personalized_greeting(
+                        user_profile
+                    )
+                    logger.info("Generated personalized greeting for %s", user_id)
 
-        except Exception as e:
-            self._metrics["failed_requests"] += 1
-
-            logger.error(
-                "Failed to process message",
-                extra={
-                    "correlation_id": correlation_id,
-                    "user_id": user_id,
-                    "error": str(e),
-                },
-            )
-
-            # Return degraded response
-            return await self._create_fallback_response(
-                message,
-                correlation_id,
-                error=str(e),
-            )
-
-    async def stream_response(
-        self,
-        user_id: str,
-        message: str,
-        session_id: str,
-    ) -> AsyncIterator[str]:
-        """
-        Stream response to user.
-
-        Args:
-            user_id: User identifier
-            message: User message
-            session_id: Session identifier
-
-        Yields:
-            Response chunks
-        """
-        correlation_id = self._generate_correlation_id()
-
-        try:
-            # Build context (same as normal flow)
-            ctx = ProcessingContext(
-                correlation_id=correlation_id,
-                user_id=user_id,
-                session_id=session_id,
-                message=message,
-                timestamp=datetime.now(),
-            )
-
-            # Gather context
-            await self._phase1_gather_context(ctx)
-            await self._phase2_rag_search(ctx)
-            await self._phase3_build_context(ctx)
-
-            # Stream response
-            if not ctx.conversation_context:
-                raise AssistantError(
-                    "Failed to build context",
-                    correlation_id=correlation_id,
+            # Step 4: Adapt conversation style
+            conversation_style = None
+            if user_profile:
+                conversation_style = self.relationship_manager.adapt_conversation_style(
+                    user_profile, emotional_state
                 )
 
-            async for chunk in self.response_generator.generate_stream(
-                context=ctx.conversation_context,
-                user_message=message,
-                rag_results=ctx.rag_sources,
-                detected_emotion=ctx.detected_emotion,
-            ):
-                yield chunk
-
-        except Exception as e:
-            logger.error(
-                "Streaming failed",
-                extra={
-                    "correlation_id": correlation_id,
-                    "error": str(e),
-                },
-            )
-            yield f"\n\n[Error: {str(e)}]"
-
-    async def _phase1_gather_context(
-        self,
-        ctx: ProcessingContext,
-    ) -> None:
-        """
-        Phase 1: Gather emotion and memory context in parallel.
-
-        Args:
-            ctx: Processing context
-        """
-        start_time = time.time()
-
-        # Run in parallel
-        tasks = []
-
-        # Emotion detection
-        if self.emotion_detector and self.enable_emotion_detection:
-            tasks.append(self._detect_emotion_safe(ctx))
-
-        # Memory retrieval
-        tasks.append(self._retrieve_memories_safe(ctx))
-
-        # User profile
-        tasks.append(self._get_user_profile_safe(ctx))
-
-        # Execute in parallel
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-        ctx.metrics.emotion_detection_ms = (time.time() - start_time) * 1000
-
-    async def _phase2_rag_search(
-        self,
-        ctx: ProcessingContext,
-    ) -> None:
-        """
-        Phase 2: RAG search if needed.
-
-        Args:
-            ctx: Processing context
-        """
-        if not self.search_engine or not self.enable_rag:
-            return
-
-        start_time = time.time()
-
-        try:
-            # Perform search
-            results, search_metrics = await self.search_engine.search(
-                query=ctx.message,
-                top_k=5,
+            # Step 5: Search for relevant knowledge
+            search_results = self.search.find_relevant_info(
+                query=question, max_results=self.settings.morgan_max_search_results
             )
 
-            ctx.rag_sources = results
-            ctx.metrics.rag_sources_found = len(results)
+            # Step 6: Get conversation memory context
+            memory_context = ""
+            if conversation_id:
+                memory_context = self.memory.get_conversation_context(
+                    conversation_id, max_turns=5
+                )
 
-            # Reset failure count on success
-            self._failure_counts["rag"] = 0
-
-        except Exception as e:
-            logger.warning(
-                "RAG search failed, continuing without",
-                extra={
-                    "correlation_id": ctx.correlation_id,
-                    "error": str(e),
-                },
-            )
-            self._failure_counts["rag"] += 1
-            ctx.metrics.degraded_mode = True
-
-        ctx.metrics.rag_search_ms = (time.time() - start_time) * 1000
-
-    async def _phase3_build_context(
-        self,
-        ctx: ProcessingContext,
-    ) -> None:
-        """
-        Phase 3: Build conversation context.
-
-        Args:
-            ctx: Processing context
-        """
-        start_time = time.time()
-
-        try:
-            context = await self.context_manager.build_context(
-                messages=ctx.retrieved_memories,
-                user_id=ctx.user_id,
-                session_id=ctx.session_id,
-                user_profile=ctx.user_profile,
-                emotional_state=ctx.emotional_state,
+            # Step 7: Build context for LLM
+            context = self.conversation_manager.build_emotional_context(
+                question=question,
+                search_results=search_results,
+                memory_context=memory_context,
+                emotional_state=emotional_state,
+                conversation_style=conversation_style,
+                user_profile=user_profile,
+                max_context=max_context or self.settings.morgan_max_context,
             )
 
-            ctx.conversation_context = context
-
-        except ContextOverflowError as e:
-            logger.error(
-                "Context overflow",
-                extra={
-                    "correlation_id": ctx.correlation_id,
-                    "error": str(e),
-                },
-            )
-            raise
-
-        ctx.metrics.context_building_ms = (time.time() - start_time) * 1000
-
-    async def _phase4_generate_response(
-        self,
-        ctx: ProcessingContext,
-    ) -> AssistantResponse:
-        """
-        Phase 4: Generate response.
-
-        Args:
-            ctx: Processing context
-
-        Returns:
-            Assistant response
-        """
-        start_time = time.time()
-
-        if not ctx.conversation_context:
-            raise AssistantError(
-                "No conversation context available",
-                correlation_id=ctx.correlation_id,
+            # Step 8: Generate empathetic response
+            empathetic_response = self.emotional_engine.generate_empathetic_response(
+                emotional_state, context
             )
 
-        try:
-            response = await self.response_generator.generate(
-                context=ctx.conversation_context,
-                user_message=ctx.message,
-                rag_results=ctx.rag_sources,
-                detected_emotion=ctx.detected_emotion,
+            # Step 9: Generate main response
+            llm_response = self.llm.generate(
+                prompt=f"Question: {question}", system_prompt=context
             )
 
-            # Reset failure count
-            self._failure_counts["generation"] = 0
+            # Step 10: Process response
+            enhanced_response = self.response_handler.enhance_response_with_emotion(
+                llm_response.content, emotional_state, empathetic_response.empathy_level
+            )
+
+            # Step 11: Check for milestones
+            milestone = None
+            if user_profile:
+                milestone = self.milestone_tracker.check_milestones(
+                    user_profile, conversation_context, emotional_state
+                )
+                if milestone:
+                    user_profile.relationship_milestones.append(milestone)
+
+            # Step 12: Generate suggestions
+            topics_discussed = self.conversation_manager.extract_topics_from_question(
+                question
+            )
+            user_interests = (
+                user_profile.communication_preferences.topics_of_interest
+                if user_profile
+                else []
+            )
+            suggestions = self.response_handler.generate_suggestions(
+                question, context, user_interests
+            )
+
+            # Step 13: Create final response
+            response = self.response_handler.create_response(
+                answer=enhanced_response.get("answer", llm_response.content),
+                sources=(
+                    self.response_handler.extract_sources(search_results)
+                    if include_sources
+                    else []
+                ),
+                confidence=0.8,
+                thinking="Generated with emotional awareness",
+                suggestions=suggestions,
+                conversation_id=conversation_id,
+                emotional_tone=enhanced_response.get("emotional_tone"),
+                empathy_level=enhanced_response.get("empathy_level", 0.0),
+                personalization_elements=enhanced_response.get(
+                    "personalization_elements", []
+                ),
+                relationship_context=(
+                    empathetic_response.relationship_context
+                    if hasattr(empathetic_response, "relationship_context")
+                    else None
+                ),
+                milestone_celebration=milestone,
+            )
+
+            # Step 14: Process memories and update profile
+            if conversation_id:
+                self.emotional_processor.process_conversation_memory(
+                    conversation_context,
+                    emotional_state,
+                    response.answer,
+                    response.sources,
+                )
+
+            if user_profile:
+                self.emotional_processor.update_user_profile(
+                    user_profile,
+                    conversation_context,
+                    emotional_state,
+                    response.confidence,
+                    topics_discussed,
+                )
+
+            # Step 15: Log completion
+            elapsed = time.time() - start_time
+            logger.info(
+                f"Morgan answered in {elapsed:.2f}s "
+                f"(confidence: {response.confidence:.2f}, "
+                f"emotion: {emotional_state.primary_emotion.value})"
+            )
 
             return response
 
-        except GenerationError as e:
-            self._failure_counts["generation"] += 1
-            logger.error(
-                "Response generation failed",
-                extra={
-                    "correlation_id": ctx.correlation_id,
-                    "error": str(e),
-                },
-            )
-            raise
+        except Exception as e:
+            logger.error(f"Morgan encountered an error: {e}")
+            return self.response_handler.format_error_response(e)
 
-        finally:
-            ctx.metrics.response_generation_ms = (time.time() - start_time) * 1000
-
-    async def _phase5_update_systems(
+    def ask_stream(
         self,
-        ctx: ProcessingContext,
-        response: AssistantResponse,
-    ) -> None:
+        question: str,
+        conversation_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Iterator[str]:
         """
-        Phase 5: Update memory and learning systems (background).
+        Ask Morgan a question with streaming response.
+
+        Perfect for real-time chat interfaces where humans want to see
+        Morgan "thinking" and responding in real-time.
 
         Args:
-            ctx: Processing context
-            response: Generated response
+            question: Your question
+            conversation_id: Optional conversation ID
+            user_id: Optional user ID for personalization
+
+        Yields:
+            Chunks of the response as Morgan generates it
         """
-        start_time = time.time()
-
         try:
-            # Store user message
-            user_message = Message(
-                role=MessageRole.USER,
-                content=ctx.message,
-                timestamp=ctx.timestamp,
-                message_id=self._generate_id(),
-                emotion=ctx.detected_emotion,
+            # Prepare context using our modular approach
+            search_results = self.search.find_relevant_info(question)
+            memory_context = ""
+            if conversation_id:
+                memory_context = self.memory.get_conversation_context(conversation_id)
+
+            # Build context (use basic context for streaming to keep it fast)
+            context = self.conversation_manager.build_basic_context(
+                question, search_results, memory_context
             )
 
-            await self.memory_system.store_message(
-                session_id=ctx.session_id,
-                message=user_message,
-                user_id=ctx.user_id,
-            )
+            # Stream the response
+            full_response = ""
+            for chunk in self.llm.stream_generate(
+                prompt=f"Question: {question}", system_prompt=context
+            ):
+                chunk_text = chunk.content if hasattr(chunk, "content") else str(chunk)
+                full_response += chunk_text
+                yield chunk_text
 
-            # Store assistant response
-            assistant_message = Message(
-                role=MessageRole.ASSISTANT,
-                content=response.content,
-                timestamp=response.timestamp,
-                message_id=response.response_id,
-            )
-
-            await self.memory_system.store_message(
-                session_id=ctx.session_id,
-                message=assistant_message,
-                user_id=ctx.user_id,
-            )
-
-            # Update emotional state
-            if ctx.detected_emotion:
-                emotional_state = EmotionalState(
-                    user_id=ctx.user_id,
-                    timestamp=datetime.now(),
-                    current_emotions=ctx.detected_emotion,
+            # Remember the complete conversation
+            if conversation_id:
+                sources = self.response_handler.extract_sources(search_results)
+                self.memory.add_turn(
+                    conversation_id=conversation_id,
+                    question=question,
+                    answer=full_response,
+                    sources=sources,
                 )
-                await self.memory_system.update_emotional_state(emotional_state)
-
-            # Update learning system
-            if self.learning_engine and self.enable_learning:
-                await self._update_learning_safe(ctx, response)
 
         except Exception as e:
-            logger.error(
-                "Failed to update systems",
-                extra={
-                    "correlation_id": ctx.correlation_id,
-                    "error": str(e),
-                },
-            )
+            logger.error(f"Streaming error: {e}")
+            yield f"\n\nI apologize, but I encountered an error: {str(e)}"
 
-        ctx.metrics.learning_update_ms = (time.time() - start_time) * 1000
-
-    async def _detect_emotion_safe(
-        self,
-        ctx: ProcessingContext,
-    ) -> None:
-        """Detect emotion with error handling."""
-        if not self.emotion_detector:
-            return
-
-        try:
-            # Check circuit breaker
-            if self._failure_counts["emotion"] >= self._max_failures:
-                logger.warning("Emotion detection circuit breaker open")
-                ctx.metrics.degraded_mode = True
-                return
-
-            result = await self.emotion_detector.detect(
-                text=ctx.message,
-                user_id=ctx.user_id,
-            )
-
-            ctx.detected_emotion = result
-
-            # Reset failure count
-            self._failure_counts["emotion"] = 0
-
-        except Exception as e:
-            logger.warning(
-                "Emotion detection failed",
-                extra={
-                    "correlation_id": ctx.correlation_id,
-                    "error": str(e),
-                },
-            )
-            self._failure_counts["emotion"] += 1
-            ctx.metrics.degraded_mode = True
-
-    async def _retrieve_memories_safe(
-        self,
-        ctx: ProcessingContext,
-    ) -> None:
-        """Retrieve memories with error handling."""
-        try:
-            messages = await self.memory_system.retrieve_context(
-                session_id=ctx.session_id,
-                n_messages=20,
-            )
-
-            ctx.retrieved_memories = messages
-            ctx.metrics.messages_retrieved = len(messages)
-
-        except Exception as e:
-            logger.warning(
-                "Memory retrieval failed",
-                extra={
-                    "correlation_id": ctx.correlation_id,
-                    "error": str(e),
-                },
-            )
-            ctx.retrieved_memories = []
-            ctx.metrics.degraded_mode = True
-
-    async def _get_user_profile_safe(
-        self,
-        ctx: ProcessingContext,
-    ) -> None:
-        """Get user profile with error handling."""
-        try:
-            profile = await self.memory_system.get_user_profile(ctx.user_id)
-            ctx.user_profile = profile
-
-            emotional_state = await self.memory_system.get_emotional_state(ctx.user_id)
-            ctx.emotional_state = emotional_state
-
-        except Exception as e:
-            logger.warning(
-                "Failed to get user profile",
-                extra={
-                    "correlation_id": ctx.correlation_id,
-                    "error": str(e),
-                },
-            )
-
-    async def _update_learning_safe(
-        self,
-        ctx: ProcessingContext,
-        response: AssistantResponse,
-    ) -> None:
-        """Update learning system with error handling."""
-        if not self.learning_engine:
-            return
-
-        try:
-            # Create learning context
-            learning_ctx = LearningContext(
-                user_id=ctx.user_id,
-                session_id=ctx.session_id,
-                timestamp=datetime.now(),
-                interaction_type="message",
-                metadata={
-                    "message": ctx.message,
-                    "response": response.content,
-                    "emotion": ctx.detected_emotion.primary_emotion.emotion_type.value
-                    if ctx.detected_emotion and ctx.detected_emotion.primary_emotion
-                    else None,
-                },
-            )
-
-            # Process interaction
-            await self.learning_engine.learn_from_interaction(learning_ctx)
-
-        except Exception as e:
-            logger.warning(
-                "Learning update failed",
-                extra={
-                    "correlation_id": ctx.correlation_id,
-                    "error": str(e),
-                },
-            )
-
-    async def _create_fallback_response(
-        self,
-        message: str,
-        correlation_id: str,
-        error: str,
-    ) -> AssistantResponse:
+    def learn_from_documents(
+        self, source_path: str, document_type: str = "auto", show_progress: bool = True
+    ) -> Dict[str, Any]:
         """
-        Create fallback response when processing fails.
+        Teach Morgan new knowledge from documents.
+
+        Human-friendly learning interface that makes it easy to add knowledge.
 
         Args:
-            message: Original user message
-            correlation_id: Correlation ID
-            error: Error message
+            source_path: Path to documents or URL
+            document_type: Type of documents (auto-detect by default)
+            show_progress: Show progress to human
 
         Returns:
-            Fallback response
+            Learning summary with human-readable statistics
         """
-        return AssistantResponse(
-            content="I apologize, but I'm having trouble processing your request right now. Please try again in a moment.",
-            response_id=self._generate_id(),
-            timestamp=datetime.now(),
-            confidence=0.0,
-            metadata={
-                "fallback": True,
-                "error": error,
-                "correlation_id": correlation_id,
-            },
+        logger.info(f"Morgan is learning from: {source_path}")
+
+        try:
+            result = self.knowledge.ingest_documents(
+                source_path=source_path,
+                document_type=document_type,
+                show_progress=show_progress,
+            )
+
+            # Human-friendly summary
+            summary = {
+                "success": True,
+                "documents_processed": result.get("documents_processed", 0),
+                "chunks_created": result.get("chunks_created", 0),
+                "knowledge_areas": result.get("knowledge_areas", []),
+                "learning_time": result.get("processing_time", 0),
+                "message": f"Great! I've learned from {result.get('documents_processed', 0)} documents. "
+                f"I'm now more knowledgeable about: {', '.join(result.get('knowledge_areas', [])[:3])}",
+            }
+
+            logger.info(f"Morgan learned successfully: {summary['message']}")
+            return summary
+
+        except Exception as e:
+            logger.error(f"Learning failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "I had trouble learning from those documents. Could you check the path and try again?",
+            }
+
+    def start_conversation(
+        self, topic: Optional[str] = None, user_id: Optional[str] = None
+    ) -> str:
+        """
+        Start a new conversation with Morgan with companion awareness.
+
+        Args:
+            topic: Optional conversation topic
+            user_id: Optional user ID for personalization
+
+        Returns:
+            Conversation ID for continuing the chat
+        """
+        conversation_id = self.memory.create_conversation(topic=topic)
+
+        # Generate personalized greeting if user is known
+        if user_id:
+            user_profile = self.emotional_processor.get_or_create_user_profile(user_id)
+
+            # Check if we should generate a personalized greeting
+            if user_profile.interaction_count > 0:
+                greeting_obj = self.emotional_processor.generate_personalized_greeting(
+                    user_profile
+                )
+                greeting = (
+                    greeting_obj.greeting_text
+                    if hasattr(greeting_obj, "greeting_text")
+                    else f"Welcome back, {user_profile.preferred_name}!"
+                )
+            else:
+                greeting = f"Hello! I'm {self.name}, your emotionally intelligent AI companion."
+        else:
+            greeting = f"Hello! I'm {self.name}, your AI assistant with emotional intelligence."
+
+        if topic:
+            greeting += f" I understand you'd like to discuss {topic}."
+
+        greeting += " How can I help you today?"
+
+        logger.info(
+            f"Started new conversation: {conversation_id} (user: {user_id or 'anonymous'})"
+        )
+        return conversation_id
+
+    def get_conversation_history(self, conversation_id: str) -> List[Dict[str, Any]]:
+        """
+        Get the history of a conversation.
+
+        Args:
+            conversation_id: ID of the conversation
+
+        Returns:
+            List of conversation turns with questions and answers
+        """
+        return self.memory.get_conversation_history(conversation_id)
+
+    def provide_feedback(
+        self,
+        conversation_id: str,
+        rating: int,
+        comment: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Provide feedback to help Morgan learn and improve with emotional awareness.
+
+        Args:
+            conversation_id: ID of the conversation
+            rating: Rating from 1-5 (5 being excellent)
+            comment: Optional feedback comment
+            user_id: Optional user ID for relationship tracking
+
+        Returns:
+            True if feedback was recorded successfully
+        """
+        try:
+            success = self.memory.add_feedback(
+                conversation_id=conversation_id, rating=rating, comment=comment
+            )
+
+            # Process feedback for relationship building
+            if success and user_id and rating >= 4:
+                # High rating might indicate a milestone
+                milestone_message = self.emotional_processor.celebrate_milestone(
+                    user_id,
+                    "breakthrough_moment" if rating == 5 else "positive_feedback",
+                )
+                if milestone_message:
+                    logger.info(f"Feedback triggered celebration: {milestone_message}")
+
+            if success:
+                logger.info(
+                    f"Received feedback: {rating}/5 - {comment or 'No comment'}"
+                )
+                return True
+            else:
+                return False
+
+        except Exception as e:
+            logger.error(f"Failed to record feedback: {e}")
+            return False
+
+    def get_knowledge_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about Morgan's knowledge base.
+
+        Returns:
+            Human-readable statistics about what Morgan knows
+        """
+        try:
+            stats = self.knowledge.get_statistics()
+
+            return {
+                "total_documents": stats.get("document_count", 0),
+                "knowledge_chunks": stats.get("chunk_count", 0),
+                "knowledge_areas": stats.get("topics", []),
+                "last_updated": stats.get("last_updated", "Unknown"),
+                "storage_size": stats.get("storage_size_mb", 0),
+                "message": f"I have knowledge from {stats.get('document_count', 0)} documents "
+                f"covering {len(stats.get('topics', []))} different areas.",
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get knowledge stats: {e}")
+            return {"error": "Unable to retrieve knowledge statistics"}
+
+    def celebrate_milestone(
+        self, user_id: str, milestone_type: str, custom_message: Optional[str] = None
+    ) -> str:
+        """
+        Celebrate a relationship milestone with the user.
+
+        Args:
+            user_id: User identifier
+            milestone_type: Type of milestone to celebrate
+            custom_message: Optional custom celebration message
+
+        Returns:
+            Celebration message
+        """
+        return self.emotional_processor.celebrate_milestone(
+            user_id, milestone_type, custom_message
         )
 
-    def _generate_correlation_id(self) -> str:
-        """Generate unique correlation ID."""
-        return hashlib.sha256(
-            f"{time.time()}{id(self)}".encode()
-        ).hexdigest()[:16]
-
-    def _generate_id(self) -> str:
-        """Generate unique ID."""
-        return hashlib.sha256(
-            f"{time.time()}{id(self)}{asyncio.get_event_loop()}".encode()
-        ).hexdigest()[:16]
-
-    def get_stats(self) -> Dict[str, Any]:
+    def get_relationship_insights(self, user_id: str):
         """
-        Get assistant statistics.
+        Get insights about the relationship with a user.
+
+        Args:
+            user_id: User identifier
 
         Returns:
-            Statistics dictionary
+            Dictionary with relationship insights
         """
-        stats = {
-            "metrics": self._metrics.copy(),
-            "circuit_breakers": {
-                name: {
-                    "failure_count": count,
-                    "is_open": count >= self._max_failures,
-                }
-                for name, count in self._failure_counts.items()
-            },
-        }
+        return self.emotional_processor.get_relationship_insights(user_id)
 
-        # Add component stats
-        stats["memory"] = self.memory_system.get_stats()
-        stats["context"] = self.context_manager.get_stats()
-        stats["response_generator"] = self.response_generator.get_stats()
+    def suggest_conversation_topics(self, user_id: str) -> List[str]:
+        """
+        Suggest conversation topics based on user interests and history.
 
-        if self.search_engine:
-            stats["search"] = self.search_engine.get_stats()
+        Args:
+            user_id: User identifier
 
-        return stats
+        Returns:
+            List of suggested topics
+        """
+        return self.emotional_processor.suggest_conversation_topics(user_id)
+
+    def get_milestone_statistics(self, user_id: str):
+        """Get milestone statistics for a user."""
+        user_profile = self.emotional_processor.get_or_create_user_profile(user_id)
+        return self.milestone_tracker.get_milestone_statistics(user_profile)
+
+    def __str__(self) -> str:
+        """Human-friendly string representation."""
+        return f"{self.name} - Your Emotionally Intelligent AI Companion (Ready to help and understand!)"
+
+    def __repr__(self) -> str:
+        """Developer-friendly representation."""
+        return f"MorganAssistant(name='{self.name}', personality='{self.personality}', emotional_intelligence=True)"
+
+
+# Human-friendly helper functions
+def quick_ask(question: str, user_id: Optional[str] = None) -> str:
+    """
+    Quick way to ask Morgan a question with emotional intelligence.
+
+    Args:
+        question: Your question
+        user_id: Optional user ID for personalization
+
+    Returns:
+        Morgan's answer as a string
+    """
+    morgan = MorganAssistant()
+    response = morgan.ask(question, user_id=user_id)
+    return response.answer
+
+
+def chat_with_morgan(user_id: Optional[str] = None):
+    """
+    Start an interactive chat session with Morgan with emotional intelligence.
+
+    Perfect for command-line usage where humans want to have
+    a natural, emotionally aware conversation with Morgan.
+
+    Args:
+        user_id: Optional user ID for personalized experience
+    """
+    morgan = MorganAssistant()
+    conversation_id = morgan.start_conversation(user_id=user_id)
+
+    # Generate personalized greeting
+    if user_id:
+        user_profile = morgan.emotional_processor.get_or_create_user_profile(user_id)
+        if user_profile.interaction_count > 0:
+            greeting_obj = morgan.emotional_processor.generate_personalized_greeting(
+                user_profile
+            )
+            greeting = (
+                greeting_obj.greeting_text
+                if hasattr(greeting_obj, "greeting_text")
+                else f"Hello, {user_profile.preferred_name}!"
+            )
+        else:
+            greeting = f"Hello! I'm {morgan.name}, your emotionally intelligent AI companion. Type 'quit' to exit."
+    else:
+        greeting = f"Hello! I'm {morgan.name}, your AI assistant with emotional intelligence. Type 'quit' to exit."
+
+    print(f"\n🤖 {morgan.name}: {greeting}\n")
+
+    # Show conversation topics if user is known
+    if user_id:
+        topics = morgan.suggest_conversation_topics(user_id)
+        if topics and len(topics) > 1:
+            print("💡 Some things we could talk about:")
+            for i, topic in enumerate(topics[:3], 1):
+                print(f"   {i}. {topic}")
+            print()
+
+    while True:
+        try:
+            question = input("👤 You: ").strip()
+
+            if question.lower() in ["quit", "exit", "bye"]:
+                # Generate personalized goodbye
+                if user_id:
+                    user_profile = morgan.relationship_manager.profiles.get(user_id)
+                    if user_profile and user_profile.preferred_name != user_id:
+                        goodbye = f"Goodbye, {user_profile.preferred_name}! I've enjoyed our conversation."
+                    else:
+                        goodbye = "Goodbye! I've enjoyed getting to know you better."
+                else:
+                    goodbye = "Goodbye! Feel free to ask me anything anytime."
+
+                print(f"\n🤖 {morgan.name}: {goodbye}")
+                break
+
+            if not question:
+                continue
+
+            print(f"\n🤖 {morgan.name}: ", end="", flush=True)
+
+            # Get response with emotional intelligence
+            response = morgan.ask(question, conversation_id, user_id)
+
+            # Show emotional context if significant
+            if response.empathy_level > 0.7:
+                print(f"[Speaking with {response.emotional_tone}]")
+
+            print(response.answer)
+
+            # Show milestone celebration if any
+            if response.milestone_celebration:
+                celebration_msg = morgan.milestone_tracker.generate_celebration_message(
+                    response.milestone_celebration
+                )
+                print(f"\n🎉 Milestone: {celebration_msg}")
+
+            # Ask for feedback occasionally
+            import random
+
+            if random.random() < 0.1:  # 10% chance
+                feedback_prompt = input(
+                    "\n💭 How was that response? (1-5 or press Enter to skip): "
+                ).strip()
+                if feedback_prompt.isdigit() and 1 <= int(feedback_prompt) <= 5:
+                    morgan.provide_feedback(
+                        conversation_id, int(feedback_prompt), user_id=user_id
+                    )
+                    print("Thank you for the feedback! 😊")
+
+            print()
+
+        except KeyboardInterrupt:
+            print(f"\n\n🤖 {morgan.name}: Goodbye!")
+            break
+        except Exception as e:
+            print(f"\n🤖 {morgan.name}: I encountered an error: {e}")
+
+
+if __name__ == "__main__":
+    # Demo Morgan's enhanced capabilities with emotional intelligence
+    print("🤖 Morgan RAG Assistant with Emotional Intelligence Demo")
+    print("=" * 60)
+
+    # Quick test with emotional awareness
+    morgan = MorganAssistant()
+    print(f"Assistant: {morgan}")
+
+    # Test question with user ID for personalization
+    test_user_id = "demo_user"
+    response = morgan.ask("What is Docker?", user_id=test_user_id)
+    print("\nQuestion: What is Docker?")
+    print(f"Answer: {response.answer}")
+    print(f"Confidence: {response.confidence:.2f}")
+    print(f"Emotional Tone: {response.emotional_tone}")
+    print(f"Empathy Level: {response.empathy_level:.2f}")
+
+    # Show relationship insights
+    insights = morgan.get_relationship_insights(test_user_id)
+    print(f"\nRelationship Insights: {insights}")
+
+    # Show suggested topics
+    topics = morgan.suggest_conversation_topics(test_user_id)
+    print(f"\nSuggested Topics: {topics}")
+
+    # Interactive chat with emotional intelligence
+    print("\nStarting emotionally intelligent interactive chat...")
+    chat_with_morgan(test_user_id)

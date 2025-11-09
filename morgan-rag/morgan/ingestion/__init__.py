@@ -1,5 +1,8 @@
-"""Document ingestion and processing module."""
+"""
+Document ingestion and processing for Morgan RAG.
+"""
 
-from morgan.ingestion.enhanced_processor import EnhancedDocumentProcessor
+from .document_processor import DocumentProcessor
+from .enhanced_processor import EnhancedDocumentProcessor
 
-__all__ = ["EnhancedDocumentProcessor"]
+__all__ = ["EnhancedDocumentProcessor", "DocumentProcessor"]

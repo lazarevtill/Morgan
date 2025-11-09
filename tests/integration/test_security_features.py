@@ -25,7 +25,7 @@ class TestRateLimiting:
             responses = []
             for i in range(25):  # Exceed the 20 burst limit
                 response = await client.post(
-                    "/api/text",
+                    "/api/chat",
                     json={"text": f"test message {i}", "user_id": "test_user"},
                 )
                 responses.append(response)
@@ -69,7 +69,7 @@ class TestCORSConfiguration:
             base_url="http://localhost:8000", timeout=30.0
         ) as client:
             response = await client.options(
-                "/api/text", headers={"Origin": "http://localhost:3000"}
+                "/api/chat", headers={"Origin": "http://localhost:3000"}
             )
 
             # Should allow the request
@@ -82,7 +82,7 @@ class TestCORSConfiguration:
             base_url="http://localhost:8000", timeout=30.0
         ) as client:
             response = await client.post(
-                "/api/text",
+                "/api/chat",
                 json={"text": "test", "user_id": "test_user"},
                 headers={"Origin": "http://localhost:3000"},
             )
@@ -143,7 +143,7 @@ class TestRequestSizeLimits:
 
             try:
                 response = await client.post(
-                    "/api/text", json={"text": large_text, "user_id": "test_user"}
+                    "/api/chat", json={"text": large_text, "user_id": "test_user"}
                 )
 
                 # Should be rejected

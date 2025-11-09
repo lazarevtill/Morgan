@@ -27,7 +27,7 @@ class TestTextConversationWorkflow:
 
             # Turn 1: Initial question
             response1 = await client.post(
-                "/api/text",
+                "/api/chat",
                 json={"text": "Hello, my name is Alice", "user_id": user_id},
             )
             assert (
@@ -38,7 +38,7 @@ class TestTextConversationWorkflow:
 
             # Turn 2: Follow-up question (should remember context)
             response2 = await client.post(
-                "/api/text", json={"text": "What is my name?", "user_id": user_id}
+                "/api/chat", json={"text": "What is my name?", "user_id": user_id}
             )
             assert (
                 response2.status_code == 200
@@ -58,7 +58,7 @@ class TestTextConversationWorkflow:
 
             # Send initial message
             await client.post(
-                "/api/text",
+                "/api/chat",
                 json={"text": "Remember this: secret123", "user_id": user_id},
             )
 
@@ -70,7 +70,7 @@ class TestTextConversationWorkflow:
 
             # Send follow-up - should not remember previous context
             response = await client.post(
-                "/api/text", json={"text": "What was the secret?", "user_id": user_id}
+                "/api/chat", json={"text": "What was the secret?", "user_id": user_id}
             )
             assert response.status_code == 200
 
@@ -176,7 +176,7 @@ class TestServiceHealthAndResilience:
         ) as client:
             # Send request missing required fields
             response = await client.post(
-                "/api/text", json={"user_id": "test"}  # Missing 'text' field
+                "/api/chat", json={"user_id": "test"}  # Missing 'text' field
             )
 
             # Should return error
@@ -195,7 +195,7 @@ class TestServiceHealthAndResilience:
             tasks = []
             for i in range(10):
                 task = client.post(
-                    "/api/text",
+                    "/api/chat",
                     json={
                         "text": f"Concurrent test {i}",
                         "user_id": f"concurrent_user_{i}",

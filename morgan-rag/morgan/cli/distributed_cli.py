@@ -1,711 +1,276 @@
+#!/usr/bin/env python3
 """
-Morgan Admin CLI - Distributed System Management.
+Morgan Distributed Deployment CLI
 
-Provides administrative commands for:
-- Service deployment and management
-- Cluster monitoring
-- Metrics and alerting
-- Log viewing
-- Health monitoring
-- Resource management
+Easy-to-use command-line tool for managing Morgan across 6 hosts.
 
-Full async/await with Click 8.1+ support.
+Usage:
+    # Deploy to all hosts
+    python -m morgan.cli.distributed_cli deploy
+
+    # Update all hosts (rolling, zero-downtime)
+    python -m morgan.cli.distributed_cli update
+
+    # Health check
+    python -m morgan.cli.distributed_cli health
+
+    # Restart service
+    python -m morgan.cli.distributed_cli restart ollama
+
+    # Sync configuration
+    python -m morgan.cli.distributed_cli sync-config
+
+    # Show status
+    python -m morgan.cli.distributed_cli status
 """
-
-from __future__ import annotations
 
 import asyncio
+import json
 import sys
-from datetime import datetime
-from pathlib import Path
-from typing import Optional
 
 try:
     import click
-    from click import Context, pass_context
+
+    CLICK_AVAILABLE = True
 except ImportError:
-    print("Error: Click library not found. Please install: pip install click")
+    CLICK_AVAILABLE = False
+    print("click package required. Install with: pip install click")
     sys.exit(1)
 
-from morgan.cli.config import CLIConfig, ensure_config_exists
-from morgan.cli.formatters import ConsoleFormatter
-from morgan.cli.utils import (
-    format_duration,
-    handle_cli_error,
-    setup_logging,
-    truncate_text,
+from morgan.infrastructure.distributed_manager import (
+    ServiceType,
+    get_distributed_manager,
 )
+from morgan.utils.logger import get_logger
 
-
-class AdminState:
-    """Admin CLI state."""
-
-    def __init__(self):
-        self.config: Optional[CLIConfig] = None
-        self.formatter: Optional[ConsoleFormatter] = None
-
-
-pass_state = click.make_pass_decorator(AdminState, ensure=True)
+logger = get_logger(__name__)
 
 
 @click.group()
+@click.option("--ssh-key", default=None, help="Path to SSH private key")
+@click.pass_context
+def cli(ctx, ssh_key):
+    """Morgan Distributed Deployment Manager"""
+    ctx.ensure_object(dict)
+    ctx.obj["manager"] = get_distributed_manager(
+        ssh_key_path=ssh_key, auto_load_config=True
+    )
+
+
+@cli.command()
+@click.option("--branch", default="v2-0.0.1", help="Git branch to deploy")
+@click.option("--force", is_flag=True, help="Force update (discard local changes)")
+@click.option("--parallel", is_flag=True, help="Deploy in parallel (faster)")
+@click.pass_context
+def deploy(ctx, branch, force, parallel):
+    """Deploy Morgan to all hosts"""
+    manager = ctx.obj["manager"]
+
+    click.echo(f"Deploying Morgan (branch: {branch}) to all hosts...")
+    if force:
+        click.echo("⚠ WARNING: Force mode will discard local changes!")
+
+    results = asyncio.run(
+        manager.deploy_all(git_branch=branch, force=force, parallel=parallel)
+    )
+
+    # Display results
+    click.echo("\n" + "=" * 60)
+    click.echo("Deployment Results")
+    click.echo("=" * 60)
+
+    for result in results:
+        status = "✓" if result.success else "✗"
+        click.echo(f"{status} {result.host}: {result.message} ({result.duration:.2f}s)")
+
+        if result.error:
+            click.echo(f"   Error: {result.error}")
+
+    successful = sum(1 for r in results if r.success)
+    click.echo(f"\nTotal: {successful}/{len(results)} hosts deployed successfully")
+
+
+@cli.command()
+@click.option("--branch", default="v2-0.0.1", help="Git branch to update to")
 @click.option(
-    "--config",
-    type=click.Path(exists=True, path_type=Path),
-    help="Path to configuration file",
+    "--rolling/--parallel", default=True, help="Rolling update (zero-downtime)"
 )
-@click.option(
-    "--verbose",
-    is_flag=True,
-    help="Enable verbose output",
-)
-@pass_context
-def admin_cli(ctx: Context, config: Optional[Path], verbose: bool):
-    """
-    Morgan Admin CLI.
+@click.pass_context
+def update(ctx, branch, rolling):
+    """Update all hosts with latest code"""
+    manager = ctx.obj["manager"]
 
-    Administrative tools for managing Morgan distributed systems.
-    """
-    # Initialize state
-    state = ctx.ensure_object(AdminState)
-
-    # Load configuration
-    try:
-        if config:
-            state.config = CLIConfig.load(config)
-        else:
-            state.config = ensure_config_exists()
-
-        if verbose:
-            state.config.verbose = True
-
-        # Set up logging
-        setup_logging(state.config)
-
-        # Initialize formatter
-        state.formatter = ConsoleFormatter(use_rich=state.config.use_rich_formatting)
-
-    except Exception as e:
-        print(f"Error initializing admin CLI: {e}")
-        sys.exit(1)
-
-
-@admin_cli.command()
-@click.option(
-    "--environment",
-    default="production",
-    help="Target environment (production, staging, development)",
-)
-@click.option(
-    "--replicas",
-    default=3,
-    type=int,
-    help="Number of replicas to deploy",
-)
-@click.option(
-    "--force",
-    is_flag=True,
-    help="Force deployment without confirmation",
-)
-@pass_state
-def deploy(state: AdminState, environment: str, replicas: int, force: bool):
-    """
-    Deploy Morgan to cluster.
-
-    Deploys the Morgan assistant system to the specified environment
-    with the configured number of replicas.
-
-    Examples:
-        morgan-admin deploy --environment staging
-        morgan-admin deploy --replicas 5 --force
-    """
-    asyncio.run(_deploy_async(state, environment, replicas, force))
-
-
-async def _deploy_async(
-    state: AdminState,
-    environment: str,
-    replicas: int,
-    force: bool,
-):
-    """Async implementation of deploy command."""
-    formatter = state.formatter
-
-    formatter.print(f"\n[bold cyan]Deploying Morgan to {environment}[/bold cyan]\n")
-
-    # Confirm deployment
-    if not force:
-        formatter.print(f"[yellow]Environment:[/yellow] {environment}")
-        formatter.print(f"[yellow]Replicas:[/yellow] {replicas}\n")
-
-        from morgan.cli.utils import confirm
-        if not await confirm("Proceed with deployment?"):
-            formatter.print("[yellow]Deployment cancelled.[/yellow]")
-            return
-
-    # Simulate deployment steps
-    steps = [
-        "Validating configuration",
-        "Building container images",
-        "Pushing to registry",
-        "Updating Kubernetes manifests",
-        "Applying deployments",
-        "Waiting for rollout",
-        "Verifying health",
-    ]
-
-    if formatter.use_rich:
-        from rich.progress import Progress, SpinnerColumn, TextColumn
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=formatter.console,
-        ) as progress:
-            for step in steps:
-                task = progress.add_task(f"{step}...", total=None)
-                await asyncio.sleep(1)  # Simulate work
-                progress.update(task, completed=True)
-
+    if rolling:
+        click.echo("Starting rolling update (zero-downtime)...")
+        click.echo(
+            "Update order: Background → Reranking → Embeddings → LLM#2 → LLM#1 → Manager"
+        )
     else:
-        for step in steps:
-            print(f"⏳ {step}...")
-            await asyncio.sleep(1)
+        click.echo("Starting parallel update (faster, but downtime expected)...")
 
-    formatter.print("\n[bold green]✅ Deployment completed successfully![/bold green]")
-    formatter.print(f"[dim]Environment: {environment}[/dim]")
-    formatter.print(f"[dim]Replicas: {replicas}[/dim]")
+    results = asyncio.run(manager.update_all(git_branch=branch, rolling=rolling))
 
+    # Display results
+    click.echo("\n" + "=" * 60)
+    click.echo("Update Results")
+    click.echo("=" * 60)
 
-@admin_cli.command()
-@click.option(
-    "--environment",
-    default="production",
-    help="Target environment",
-)
-@click.option(
-    "--watch",
-    is_flag=True,
-    help="Watch for changes (refresh every 5s)",
-)
-@pass_state
-def status(state: AdminState, environment: str, watch: bool):
-    """
-    Show cluster status.
+    for result in results:
+        status = "✓" if result.success else "✗"
+        click.echo(f"{status} {result.host}: {result.message} ({result.duration:.2f}s)")
 
-    Displays current status of all Morgan services in the cluster.
-
-    Examples:
-        morgan-admin status
-        morgan-admin status --environment staging
-        morgan-admin status --watch
-    """
-    asyncio.run(_status_async(state, environment, watch))
+    successful = sum(1 for r in results if r.success)
+    click.echo(f"\nTotal: {successful}/{len(results)} hosts updated successfully")
 
 
-async def _status_async(state: AdminState, environment: str, watch: bool):
-    """Async implementation of status command."""
-    formatter = state.formatter
+@cli.command()
+@click.pass_context
+def health(ctx):
+    """Check health of all hosts"""
+    manager = ctx.obj["manager"]
 
-    async def show_status():
-        # Mock service status
-        services = [
-            {
-                "name": "morgan-api",
-                "replicas": "3/3",
-                "status": "Running",
-                "restarts": 0,
-                "age": "2d",
-            },
-            {
-                "name": "morgan-emotion",
-                "replicas": "2/2",
-                "status": "Running",
-                "restarts": 1,
-                "age": "2d",
-            },
-            {
-                "name": "morgan-learning",
-                "replicas": "2/2",
-                "status": "Running",
-                "restarts": 0,
-                "age": "2d",
-            },
-            {
-                "name": "morgan-rag",
-                "replicas": "3/3",
-                "status": "Running",
-                "restarts": 0,
-                "age": "2d",
-            },
-            {
-                "name": "qdrant",
-                "replicas": "1/1",
-                "status": "Running",
-                "restarts": 0,
-                "age": "7d",
-            },
-        ]
+    click.echo("Checking health of all hosts...")
 
-        formatter.print(f"\n[bold cyan]Cluster Status - {environment}[/bold cyan]\n")
+    status = asyncio.run(manager.health_check_all())
 
-        if formatter.use_rich:
-            from rich.table import Table
+    # Display results
+    click.echo("\n" + "=" * 60)
+    click.echo("Health Status")
+    click.echo("=" * 60)
 
-            table = Table(show_header=True, header_style="bold cyan")
-            table.add_column("Service", style="cyan")
-            table.add_column("Replicas", justify="center", style="green")
-            table.add_column("Status", justify="center")
-            table.add_column("Restarts", justify="right", style="yellow")
-            table.add_column("Age", justify="right", style="dim")
+    click.echo(f"Total Hosts: {status['total_hosts']}")
+    click.echo(f"Healthy: {status['healthy_hosts']}")
+    click.echo(f"Unhealthy: {status['unhealthy_hosts']}")
 
-            for service in services:
-                status_style = "green" if service["status"] == "Running" else "red"
-                restart_style = "green" if service["restarts"] == 0 else "yellow"
+    click.echo("\nDetailed Status:")
+    for host in status["hosts"]:
+        status_icon = "✓" if host.get("healthy") else "✗"
+        click.echo(f"\n{status_icon} {host['hostname']} ({host['role']})")
 
-                table.add_row(
-                    service["name"],
-                    service["replicas"],
-                    f"[{status_style}]{service['status']}[/{status_style}]",
-                    f"[{restart_style}]{service['restarts']}[/{restart_style}]",
-                    service["age"],
-                )
+        if host.get("error"):
+            click.echo(f"   Error: {host['error']}")
 
-            formatter.console.print(table)
-        else:
-            print(f"{'Service':<20} {'Replicas':<10} {'Status':<10} {'Restarts':<10} {'Age':<10}")
-            print("-" * 70)
-            for service in services:
-                print(
-                    f"{service['name']:<20} "
-                    f"{service['replicas']:<10} "
-                    f"{service['status']:<10} "
-                    f"{service['restarts']:<10} "
-                    f"{service['age']:<10}"
-                )
+        if host.get("services"):
+            click.echo("   Services:")
+            for service, active in host["services"].items():
+                service_icon = "✓" if active else "✗"
+                click.echo(f"     {service_icon} {service}")
 
-    if watch:
-        formatter.print("[dim]Watching for changes (Ctrl+C to stop)...[/dim]\n")
-        try:
-            while True:
-                await show_status()
-                await asyncio.sleep(5)
-                if formatter.use_rich:
-                    formatter.console.clear()
-        except KeyboardInterrupt:
-            formatter.print("\n[yellow]Stopped watching.[/yellow]")
-    else:
-        await show_status()
+        if host.get("gpu"):
+            gpu = host["gpu"]
+            click.echo(f"   GPU: {gpu['model']}")
+            click.echo(f"     Utilization: {gpu['utilization']}")
+            click.echo(f"     Memory: {gpu['memory_used']}")
 
 
-@admin_cli.command()
+@cli.command()
 @click.argument("service")
 @click.option(
-    "--environment",
-    default="production",
-    help="Target environment",
+    "--hosts", multiple=True, help="Specific hosts (default: all with service)"
 )
-@pass_state
-def restart(state: AdminState, service: str, environment: str):
-    """
-    Restart a service.
+@click.pass_context
+def restart(ctx, service, hosts):
+    """Restart a service on hosts"""
+    manager = ctx.obj["manager"]
 
-    Examples:
-        morgan-admin restart morgan-api
-        morgan-admin restart morgan-emotion --environment staging
-    """
-    asyncio.run(_restart_async(state, service, environment))
+    # Map service name to enum
+    service_map = {
+        "ollama": ServiceType.OLLAMA,
+        "morgan": ServiceType.MORGAN_CORE,
+        "qdrant": ServiceType.QDRANT,
+        "redis": ServiceType.REDIS,
+        "reranking": ServiceType.RERANKING_API,
+        "prometheus": ServiceType.PROMETHEUS,
+        "grafana": ServiceType.GRAFANA,
+    }
 
-
-async def _restart_async(state: AdminState, service: str, environment: str):
-    """Async implementation of restart command."""
-    formatter = state.formatter
-
-    formatter.print(f"\n[bold cyan]Restarting {service} in {environment}[/bold cyan]\n")
-
-    # Confirm restart
-    from morgan.cli.utils import confirm
-    if not await confirm(f"Restart {service}?"):
-        formatter.print("[yellow]Restart cancelled.[/yellow]")
-        return
-
-    # Simulate restart
-    if formatter.use_rich:
-        from rich.progress import Progress, SpinnerColumn, TextColumn
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=formatter.console,
-        ) as progress:
-            task = progress.add_task("Restarting service...", total=None)
-            await asyncio.sleep(2)
-    else:
-        print("⏳ Restarting service...")
-        await asyncio.sleep(2)
-
-    formatter.print(f"\n[bold green]✅ {service} restarted successfully[/bold green]")
-
-
-@admin_cli.command()
-@click.option(
-    "--service",
-    help="Filter by service name",
-)
-@click.option(
-    "--level",
-    default="INFO",
-    help="Minimum log level (DEBUG, INFO, WARNING, ERROR)",
-)
-@click.option(
-    "--follow",
-    is_flag=True,
-    help="Follow logs (tail -f)",
-)
-@click.option(
-    "--lines",
-    default=100,
-    type=int,
-    help="Number of lines to show",
-)
-@pass_state
-def logs(
-    state: AdminState,
-    service: Optional[str],
-    level: str,
-    follow: bool,
-    lines: int,
-):
-    """
-    View service logs.
-
-    Examples:
-        morgan-admin logs --service morgan-api
-        morgan-admin logs --follow --lines 50
-        morgan-admin logs --level ERROR
-    """
-    asyncio.run(_logs_async(state, service, level, follow, lines))
-
-
-async def _logs_async(
-    state: AdminState,
-    service: Optional[str],
-    level: str,
-    follow: bool,
-    lines: int,
-):
-    """Async implementation of logs command."""
-    formatter = state.formatter
-
-    service_filter = f" from {service}" if service else ""
-    formatter.print(f"\n[bold cyan]Logs{service_filter} (level: {level})[/bold cyan]\n")
-
-    # Mock log entries
-    async def generate_logs():
-        log_templates = [
-            "[{timestamp}] [{level}] {service}: Processing request id={request_id}",
-            "[{timestamp}] [{level}] {service}: Emotion detection completed in {latency}ms",
-            "[{timestamp}] [{level}] {service}: Learning update applied",
-            "[{timestamp}] [{level}] {service}: RAG search returned {count} results",
-        ]
-
-        import random
-        services = ["morgan-api", "morgan-emotion", "morgan-learning", "morgan-rag"]
-        levels = ["DEBUG", "INFO", "WARNING", "ERROR"]
-
-        for _ in range(lines):
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            log_service = service if service else random.choice(services)
-            log_level = random.choice(levels)
-            template = random.choice(log_templates)
-
-            log_entry = template.format(
-                timestamp=timestamp,
-                level=log_level,
-                service=log_service,
-                request_id=f"req_{random.randint(1000, 9999)}",
-                latency=random.randint(50, 200),
-                count=random.randint(1, 10),
-            )
-
-            # Filter by level
-            if levels.index(log_level) >= levels.index(level):
-                # Color code by level
-                if formatter.use_rich:
-                    level_colors = {
-                        "DEBUG": "dim",
-                        "INFO": "green",
-                        "WARNING": "yellow",
-                        "ERROR": "red",
-                    }
-                    color = level_colors.get(log_level, "white")
-                    formatter.print(f"[{color}]{log_entry}[/{color}]")
-                else:
-                    print(log_entry)
-
-            if follow:
-                await asyncio.sleep(0.1)
-
-    try:
-        await generate_logs()
-
-        if follow:
-            formatter.print("\n[dim]Following logs (Ctrl+C to stop)...[/dim]\n")
-            while True:
-                await asyncio.sleep(1)
-                # In real implementation, fetch new logs here
-                pass
-
-    except KeyboardInterrupt:
-        formatter.print("\n[yellow]Stopped following logs.[/yellow]")
-
-
-@admin_cli.command()
-@click.option(
-    "--service",
-    help="Filter by service name",
-)
-@click.option(
-    "--format",
-    "output_format",
-    default="table",
-    type=click.Choice(["table", "json"]),
-    help="Output format",
-)
-@pass_state
-def metrics(state: AdminState, service: Optional[str], output_format: str):
-    """
-    View system metrics.
-
-    Shows performance metrics for all services:
-    - Request rates
-    - Latencies
-    - Error rates
-    - Resource usage
-
-    Examples:
-        morgan-admin metrics
-        morgan-admin metrics --service morgan-api
-        morgan-admin metrics --format json
-    """
-    asyncio.run(_metrics_async(state, service, output_format))
-
-
-async def _metrics_async(state: AdminState, service: Optional[str], output_format: str):
-    """Async implementation of metrics command."""
-    formatter = state.formatter
-
-    # Mock metrics
-    metrics = [
-        {
-            "service": "morgan-api",
-            "requests_per_sec": 125.3,
-            "avg_latency_ms": 342,
-            "p95_latency_ms": 890,
-            "error_rate": 0.002,
-            "cpu_usage": 45.2,
-            "memory_mb": 1248,
-        },
-        {
-            "service": "morgan-emotion",
-            "requests_per_sec": 89.7,
-            "avg_latency_ms": 156,
-            "p95_latency_ms": 298,
-            "error_rate": 0.001,
-            "cpu_usage": 32.1,
-            "memory_mb": 892,
-        },
-        {
-            "service": "morgan-learning",
-            "requests_per_sec": 45.2,
-            "avg_latency_ms": 78,
-            "p95_latency_ms": 145,
-            "error_rate": 0.0,
-            "cpu_usage": 28.5,
-            "memory_mb": 756,
-        },
-        {
-            "service": "morgan-rag",
-            "requests_per_sec": 112.8,
-            "avg_latency_ms": 245,
-            "p95_latency_ms": 567,
-            "error_rate": 0.003,
-            "cpu_usage": 52.3,
-            "memory_mb": 2148,
-        },
-    ]
-
-    # Filter by service
-    if service:
-        metrics = [m for m in metrics if m["service"] == service]
-
-    if output_format == "json":
-        import json
-        print(json.dumps(metrics, indent=2))
-        return
-
-    # Table format
-    formatter.print("\n[bold cyan]Service Metrics[/bold cyan]\n")
-
-    if formatter.use_rich:
-        from rich.table import Table
-
-        table = Table(show_header=True, header_style="bold cyan")
-        table.add_column("Service", style="cyan")
-        table.add_column("RPS", justify="right", style="green")
-        table.add_column("Avg Latency", justify="right", style="yellow")
-        table.add_column("P95 Latency", justify="right", style="yellow")
-        table.add_column("Error Rate", justify="right", style="red")
-        table.add_column("CPU %", justify="right", style="blue")
-        table.add_column("Memory", justify="right", style="magenta")
-
-        for metric in metrics:
-            error_style = "red" if metric["error_rate"] > 0.01 else "green"
-            cpu_style = "red" if metric["cpu_usage"] > 80 else "green"
-
-            table.add_row(
-                metric["service"],
-                f"{metric['requests_per_sec']:.1f}",
-                f"{metric['avg_latency_ms']}ms",
-                f"{metric['p95_latency_ms']}ms",
-                f"[{error_style}]{metric['error_rate']:.3%}[/{error_style}]",
-                f"[{cpu_style}]{metric['cpu_usage']:.1f}%[/{cpu_style}]",
-                f"{metric['memory_mb']}MB",
-            )
-
-        formatter.console.print(table)
-    else:
-        # Plain text table
-        print(
-            f"{'Service':<20} {'RPS':<10} {'Avg Lat':<12} {'P95 Lat':<12} "
-            f"{'Error %':<10} {'CPU %':<10} {'Memory':<10}"
-        )
-        print("-" * 100)
-        for metric in metrics:
-            print(
-                f"{metric['service']:<20} "
-                f"{metric['requests_per_sec']:<10.1f} "
-                f"{metric['avg_latency_ms']:<12}ms "
-                f"{metric['p95_latency_ms']:<12}ms "
-                f"{metric['error_rate']:<10.3%} "
-                f"{metric['cpu_usage']:<10.1f}% "
-                f"{metric['memory_mb']:<10}MB"
-            )
-
-
-@admin_cli.command()
-@click.option(
-    "--severity",
-    default="warning",
-    type=click.Choice(["info", "warning", "critical"]),
-    help="Minimum severity",
-)
-@pass_state
-def alerts(state: AdminState, severity: str):
-    """
-    View active alerts.
-
-    Shows active alerts and warnings for the system.
-
-    Examples:
-        morgan-admin alerts
-        morgan-admin alerts --severity critical
-    """
-    asyncio.run(_alerts_async(state, severity))
-
-
-async def _alerts_async(state: AdminState, severity: str):
-    """Async implementation of alerts command."""
-    formatter = state.formatter
-
-    # Mock alerts
-    alerts = [
-        {
-            "severity": "warning",
-            "service": "morgan-api",
-            "message": "High memory usage (85%)",
-            "timestamp": "2025-11-08 10:30:15",
-        },
-        {
-            "severity": "info",
-            "service": "morgan-rag",
-            "message": "Slow query detected (>1s)",
-            "timestamp": "2025-11-08 10:25:42",
-        },
-        {
-            "severity": "critical",
-            "service": "morgan-emotion",
-            "message": "Circuit breaker open",
-            "timestamp": "2025-11-08 10:20:05",
-        },
-    ]
-
-    # Filter by severity
-    severity_levels = ["info", "warning", "critical"]
-    min_level = severity_levels.index(severity)
-    alerts = [a for a in alerts if severity_levels.index(a["severity"]) >= min_level]
-
-    formatter.print(f"\n[bold cyan]Active Alerts (severity: {severity}+)[/bold cyan]\n")
-
-    if not alerts:
-        formatter.print("[green]No active alerts ✅[/green]")
-        return
-
-    if formatter.use_rich:
-        from rich.table import Table
-
-        table = Table(show_header=True, header_style="bold cyan")
-        table.add_column("Severity", style="yellow")
-        table.add_column("Service", style="cyan")
-        table.add_column("Message", style="white")
-        table.add_column("Time", style="dim")
-
-        severity_colors = {
-            "info": "blue",
-            "warning": "yellow",
-            "critical": "red",
-        }
-
-        for alert in alerts:
-            color = severity_colors.get(alert["severity"], "white")
-            table.add_row(
-                f"[{color}]{alert['severity'].upper()}[/{color}]",
-                alert["service"],
-                alert["message"],
-                alert["timestamp"],
-            )
-
-        formatter.console.print(table)
-    else:
-        for alert in alerts:
-            print(
-                f"[{alert['severity'].upper()}] {alert['service']}: {alert['message']} "
-                f"({alert['timestamp']})"
-            )
-
-
-@admin_cli.command()
-@pass_state
-def version(state: AdminState):
-    """Show Morgan Admin CLI version."""
-    formatter = state.formatter
-
-    formatter.print("\n[bold green]Morgan Admin CLI[/bold green]")
-    formatter.print("[dim]Version: 2.0.0[/dim]")
-    formatter.print("[dim]Distributed system management tools[/dim]\n")
-
-
-def main():
-    """Main entry point for the admin CLI."""
-    try:
-        admin_cli()
-    except KeyboardInterrupt:
-        print("\n\nInterrupted by user.")
-        sys.exit(130)
-    except Exception as e:
-        print(f"Fatal error: {e}")
+    if service not in service_map:
+        click.echo(f"Unknown service: {service}")
+        click.echo(f"Available: {', '.join(service_map.keys())}")
         sys.exit(1)
+
+    service_type = service_map[service]
+    hosts_list = list(hosts) if hosts else None
+
+    click.echo(f"Restarting {service} on hosts...")
+
+    results = asyncio.run(
+        manager.restart_service(service=service_type, hosts=hosts_list)
+    )
+
+    # Display results
+    click.echo("\n" + "=" * 60)
+    click.echo("Restart Results")
+    click.echo("=" * 60)
+
+    for hostname, success in results.items():
+        status = "✓" if success else "✗"
+        click.echo(f"{status} {hostname}")
+
+    successful = sum(1 for s in results.values() if s)
+    click.echo(f"\nTotal: {successful}/{len(results)} hosts restarted successfully")
+
+
+@cli.command()
+@click.option("--config-file", default=".env", help="Config file to sync")
+@click.option("--source", default=None, help="Source host (default: local file)")
+@click.pass_context
+def sync_config(ctx, config_file, source):
+    """Synchronize configuration across all hosts"""
+    manager = ctx.obj["manager"]
+
+    if source:
+        click.echo(f"Syncing {config_file} from {source} to all hosts...")
+    else:
+        click.echo(f"Syncing {config_file} from local to all hosts...")
+
+    results = asyncio.run(
+        manager.sync_config(config_file=config_file, source_host=source)
+    )
+
+    # Display results
+    click.echo("\n" + "=" * 60)
+    click.echo("Sync Results")
+    click.echo("=" * 60)
+
+    for hostname, success in results.items():
+        status = "✓" if success else "✗"
+        click.echo(f"{status} {hostname}")
+
+    successful = sum(1 for s in results.values() if s)
+    click.echo(f"\nTotal: {successful}/{len(results)} hosts synced successfully")
+
+
+@cli.command()
+@click.pass_context
+def status(ctx):
+    """Show current configuration and status"""
+    manager = ctx.obj["manager"]
+
+    config = manager.get_config()
+
+    click.echo("=" * 60)
+    click.echo("Morgan Distributed Deployment Configuration")
+    click.echo("=" * 60)
+
+    click.echo(f"\nSSH Key: {config['ssh_key']}")
+    click.echo(f"Total Hosts: {config['total_hosts']}")
+
+    click.echo("\nHosts:")
+    for host in config["hosts"]:
+        click.echo(f"\n  {host['hostname']} ({host['role']})")
+        click.echo(f"    GPU: {host['gpu'] or 'None'}")
+        click.echo(f"    Services: {', '.join(host['services'])}")
+
+
+@cli.command()
+@click.pass_context
+def config(ctx):
+    """Show configuration as JSON"""
+    manager = ctx.obj["manager"]
+    config = manager.get_config()
+    click.echo(json.dumps(config, indent=2))
 
 
 if __name__ == "__main__":
-    main()
+    cli(obj={})
