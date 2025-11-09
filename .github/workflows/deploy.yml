@@ -27,15 +27,11 @@ env:
 
 jobs:
   build-and-push:
-    name: Build and Push Images
+    name: Build and Push Morgan RAG Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
-    strategy:
-      matrix:
-        service: [core, llm, tts, stt]
 
     steps:
       - name: Checkout code
@@ -64,7 +60,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-rag
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -74,25 +70,16 @@ jobs:
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Determine Dockerfile path
-        id: dockerfile
-        run: |
-          if [ "${{ matrix.service }}" == "core" ]; then
-            echo "path=core/Dockerfile" >> $GITHUB_OUTPUT
-          else
-            echo "path=services/${{ matrix.service }}/Dockerfile" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build and push
+      - name: Build and push Morgan RAG
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ${{ steps.dockerfile.outputs.path }}
+          context: ./morgan-rag
+          file: ./morgan-rag/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-rag:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-rag:buildcache,mode=max
           network: host
           allow: network.host
           build-args: |
@@ -464,7 +451,7 @@ jobs:
       - name: Test API endpoints
         run: |
           # Test basic API functionality
-          curl -X POST ${{ steps.env.outputs.url }}/api/text \
+          curl -X POST ${{ steps.env.outputs.url }}/api/chat \
             -H "Content-Type: application/json" \
             -d '{"text": "Hello Morgan", "user_id": "test_user"}' || true
 
