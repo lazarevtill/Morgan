@@ -56,6 +56,10 @@ jobs:
           name: safety-report
           path: safety-report.json
 
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
+
   secret-scanning:
     name: Secret Scanning
     runs-on: ubuntu-latest
@@ -115,6 +119,10 @@ jobs:
         with:
           name: bandit-report
           path: bandit-report.json
+
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
 
   docker-security:
     name: Docker Security Scan
@@ -257,6 +265,10 @@ jobs:
         with:
           name: license-report
           path: licenses.md
+
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
 
   summary:
     name: Security Summary

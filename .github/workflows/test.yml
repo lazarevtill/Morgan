@@ -76,6 +76,10 @@ jobs:
             coverage.xml
             .coverage
 
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
+
   integration-test:
     name: Integration Tests
     runs-on: ubuntu-latest
@@ -159,6 +163,10 @@ jobs:
             -m "integration" \
             --ignore=tests/manual/
 
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
+
   docker-build-test:
     name: Docker Build Test
     runs-on: ubuntu-latest
@@ -207,6 +215,10 @@ jobs:
       - name: Test Docker Compose
         run: |
           docker compose -f docker-compose.yml config
+
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
 
   summary:
     name: Test Summary
