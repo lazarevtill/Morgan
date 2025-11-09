@@ -100,6 +100,10 @@ jobs:
             COMMIT_SHA=${{ github.sha }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
 
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
+
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
