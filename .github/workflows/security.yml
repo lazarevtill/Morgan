@@ -45,8 +45,8 @@ jobs:
 
       - name: Run pip-audit
         run: |
-          pip-audit -r requirements-base.txt --desc || true
-          pip-audit -r requirements-core.txt --desc || true
+          pip-audit -r morgan-rag/requirements.txt --desc || true
+          pip-audit -r requirements-cli.txt --desc || true
         continue-on-error: true
 
       - name: Upload safety report
@@ -55,6 +55,10 @@ jobs:
         with:
           name: safety-report
           path: safety-report.json
+
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
 
   secret-scanning:
     name: Secret Scanning
@@ -105,8 +109,8 @@ jobs:
 
       - name: Run Bandit security scan
         run: |
-          bandit -r core/ services/ shared/ -f json -o bandit-report.json || true
-          bandit -r core/ services/ shared/ -ll || true
+          bandit -r morgan-rag/morgan/ -f json -o bandit-report.json || true
+          bandit -r morgan-rag/morgan/ -ll || true
         continue-on-error: true
 
       - name: Upload Bandit report
@@ -115,6 +119,10 @@ jobs:
         with:
           name: bandit-report
           path: bandit-report.json
+
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
 
   docker-security:
     name: Docker Security Scan
@@ -128,22 +136,22 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Core Service image
+      - name: Build Morgan RAG Service image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./core/Dockerfile
+          context: ./morgan-rag
+          file: ./morgan-rag/Dockerfile
           load: true
-          tags: morgan-core:scan
+          tags: morgan-rag:scan
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Run Trivy vulnerability scanner on Core
+      - name: Run Trivy vulnerability scanner on Morgan RAG
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: morgan-core:scan
+          image-ref: morgan-rag:scan
           format: 'sarif'
-          output: 'trivy-core-results.sarif'
+          output: 'trivy-morgan-rag-results.sarif'
           severity: 'CRITICAL,HIGH'
         continue-on-error: true
 
@@ -151,34 +159,8 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: 'trivy-core-results.sarif'
-          category: 'trivy-core'
-        continue-on-error: true
-
-      - name: Build LLM Service image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./services/llm/Dockerfile
-          load: true
-          tags: morgan-llm:scan
-          cache-from: type=gha
-
-      - name: Run Trivy on LLM Service
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: morgan-llm:scan
-          format: 'sarif'
-          output: 'trivy-llm-results.sarif'
-          severity: 'CRITICAL,HIGH'
-        continue-on-error: true
-
-      - name: Upload Trivy LLM results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: 'trivy-llm-results.sarif'
-          category: 'trivy-llm'
+          sarif_file: 'trivy-morgan-rag-results.sarif'
+          category: 'trivy-morgan-rag'
         continue-on-error: true
 
   codeql:
@@ -246,7 +228,8 @@ jobs:
 
       - name: Check licenses
         run: |
-          pip install -r requirements-base.txt
+          pip install -r morgan-rag/requirements.txt
+          pip install -r requirements-cli.txt
           pip-licenses --format=markdown --output-file=licenses.md || true
           pip-licenses --fail-on="GPL;LGPL" || true
         continue-on-error: true
@@ -257,6 +240,10 @@ jobs:
         with:
           name: license-report
           path: licenses.md
+
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
 
   summary:
     name: Security Summary

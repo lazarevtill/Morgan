@@ -44,12 +44,12 @@ jobs:
       - name: Install dependencies
         run: |
           uv pip install --system pytest pytest-cov pytest-asyncio pytest-mock httpx
-          uv pip install --system -r requirements-base.txt
-          uv pip install --system -r requirements-core.txt
+          uv pip install --system -r morgan-rag/requirements.txt
+          uv pip install --system -r requirements-cli.txt
 
       - name: Run unit tests
         run: |
-          pytest tests/ -v --tb=short --cov=core --cov=services --cov=shared \
+          pytest tests/ morgan-rag/tests/ -v --tb=short --cov=morgan-rag/morgan \
             --cov-report=term-missing --cov-report=xml --cov-report=html \
             -m "not integration and not slow" \
             --ignore=tests/manual/ \
@@ -75,6 +75,10 @@ jobs:
             htmlcov/
             coverage.xml
             .coverage
+
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
 
   integration-test:
     name: Integration Tests
@@ -135,8 +139,8 @@ jobs:
       - name: Install dependencies
         run: |
           uv pip install --system pytest pytest-asyncio pytest-mock httpx
-          uv pip install --system -r requirements-base.txt
-          uv pip install --system -r requirements-core.txt
+          uv pip install --system -r morgan-rag/requirements.txt
+          uv pip install --system -r requirements-cli.txt
 
       - name: Wait for services
         run: |
@@ -155,9 +159,13 @@ jobs:
           QDRANT_HOST: localhost
           QDRANT_PORT: 6333
         run: |
-          pytest tests/ -v --tb=short \
+          pytest tests/ morgan-rag/tests/ -v --tb=short \
             -m "integration" \
             --ignore=tests/manual/
+
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
 
   docker-build-test:
     name: Docker Build Test
@@ -180,33 +188,25 @@ jobs:
             network=host
           buildkitd-flags: --allow-insecure-entitlement network.host
 
-      - name: Build Core Service
+      - name: Build Morgan RAG Service
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./core/Dockerfile
+          context: ./morgan-rag
+          file: ./morgan-rag/Dockerfile
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          tags: morgan-core:test
-          network: host
-          allow: network.host
-
-      - name: Build LLM Service
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./services/llm/Dockerfile
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          tags: morgan-llm:test
+          tags: morgan-rag:test
           network: host
           allow: network.host
 
       - name: Test Docker Compose
         run: |
           docker compose -f docker-compose.yml config
+
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
 
   summary:
     name: Test Summary
