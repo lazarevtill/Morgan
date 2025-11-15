@@ -1,0 +1,21 @@
+name: 'Cleanup NetBird VPN'
+description: 'Disconnect and cleanup NetBird VPN connection (should be called at the end of jobs using NetBird)'
+runs:
+  using: 'composite'
+  steps:
+    - name: Cleanup NetBird VPN
+      shell: bash
+      run: |
+        echo "Cleaning up NetBird VPN connection..."
+
+        # Disconnect from VPN
+        sudo netbird down 2>/dev/null || true
+
+        # Stop NetBird service
+        sudo netbird service stop 2>/dev/null || true
+        sudo netbird service uninstall 2>/dev/null || true
+
+        # Clean up any leftover processes
+        sudo pkill -f netbird 2>/dev/null || true
+
+        echo "✓ NetBird VPN cleanup completed"

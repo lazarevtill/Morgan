@@ -40,33 +40,37 @@ jobs:
       - name: Install linting tools
         run: |
           uv pip install --system black isort ruff mypy types-PyYAML types-redis
-          uv pip install --system -r requirements-base.txt
+          uv pip install --system -r morgan-rag/requirements.txt
 
       - name: Run Black (format check)
         run: |
-          black --check --diff core/ services/ shared/ tests/
+          black --check --diff morgan-rag/morgan/ tests/
         continue-on-error: true
 
       - name: Run isort (import sort check)
         run: |
-          isort --check-only --diff core/ services/ shared/ tests/
+          isort --check-only --diff morgan-rag/morgan/ tests/
         continue-on-error: true
 
       - name: Run Ruff (linting)
         run: |
-          ruff check core/ services/ shared/ tests/ --output-format=github
+          ruff check morgan-rag/morgan/ tests/ --output-format=github
         continue-on-error: true
 
       - name: Run Mypy (type checking)
         run: |
           # Note: --ignore-missing-imports is used for third-party libraries without type stubs
           # Consider enabling --strict in future for more comprehensive type checking
-          mypy core/ services/ shared/ --ignore-missing-imports
+          mypy morgan-rag/morgan/ --ignore-missing-imports
         continue-on-error: true
 
       - name: Check Python syntax
         run: |
-          find core services shared -type f -name '*.py' -exec python -m py_compile {} +
+          find morgan-rag/morgan -type f -name '*.py' -exec python -m py_compile {} +
+
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
 
   format-check:
     name: Formatting Checks
@@ -98,7 +102,7 @@ jobs:
       - name: Check Black formatting
         id: black-check
         run: |
-          black --check core/ services/ shared/ tests/ || echo "needs_formatting=true" >> $GITHUB_OUTPUT
+          black --check morgan-rag/morgan/ tests/ || echo "needs_formatting=true" >> $GITHUB_OUTPUT
         continue-on-error: true
 
       - name: Comment on PR if formatting needed
@@ -110,8 +114,12 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '⚠️ Code formatting issues detected. Please run `make format` or `black core/ services/ shared/ tests/` to fix.'
+              body: '⚠️ Code formatting issues detected. Please run `make format` or `black morgan-rag/morgan/ tests/` to fix.'
             })
+
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
 
   yaml-lint:
     name: YAML Linting
@@ -135,6 +143,10 @@ jobs:
           yamllint -c .yamllint.yml config/ .github/workflows/ docker-compose.yml
         continue-on-error: true
 
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
+
   dockerfile-lint:
     name: Dockerfile Linting
     runs-on: ubuntu-latest
@@ -143,31 +155,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Hadolint (Dockerfile linter)
+      - name: Run Hadolint on Morgan RAG Dockerfile
         uses: hadolint/hadolint-action@v3.1.0
         with:
-          dockerfile: core/Dockerfile
-          ignore: DL3008,DL3013,DL3015
-        continue-on-error: true
-
-      - name: Lint LLM Service Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: services/llm/Dockerfile
-          ignore: DL3008,DL3013,DL3015
-        continue-on-error: true
-
-      - name: Lint TTS Service Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: services/tts/Dockerfile
-          ignore: DL3008,DL3013,DL3015
-        continue-on-error: true
-
-      - name: Lint STT Service Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: services/stt/Dockerfile
+          dockerfile: morgan-rag/Dockerfile
           ignore: DL3008,DL3013,DL3015
         continue-on-error: true
 
@@ -210,12 +201,16 @@ jobs:
 
       - name: Check cyclomatic complexity
         run: |
-          radon cc core/ services/ shared/ -a -nb || true
-          radon cc core/ services/ shared/ -nc || true
+          radon cc morgan-rag/morgan/ -a -nb || true
+          radon cc morgan-rag/morgan/ -nc || true
 
       - name: Check maintainability index
         run: |
-          radon mi core/ services/ shared/ -nb || true
+          radon mi morgan-rag/morgan/ -nb || true
+
+      - name: Cleanup NetBird VPN
+        if: always()
+        uses: ./.github/actions/cleanup-netbird
 
   summary:
     name: Lint Summary
