@@ -217,7 +217,17 @@ class VectorDBClient:
         Returns:
             True if successful
         """
+        def _vector_for_point(point: Dict[str, Any], target_dim: int) -> List[float]:
+            vector = point.get("vector")
+            if vector is None:
+                return [0.0] * target_dim
+            return vector
+
         try:
+            target_dim = self.get_collection_vector_size(collection_name) or len(
+                points[0].get("vector") or []
+            ) or 1
+
             # Use optimized batch processing for large point sets
             if use_batch_optimization and len(points) > 50:
                 try:
@@ -227,10 +237,11 @@ class VectorDBClient:
                     ) -> List[Any]:
                         qdrant_points = []
                         for point in batch_points:
+                            vector = _vector_for_point(point, target_dim)
                             qdrant_points.append(
                                 models.PointStruct(
                                     id=point["id"],
-                                    vector=point["vector"],
+                                    vector=vector,
                                     payload=point.get("payload", {}),
                                 )
                             )
@@ -286,10 +297,11 @@ class VectorDBClient:
             # Convert to Qdrant format
             qdrant_points = []
             for point in points:
+                vector = _vector_for_point(point, target_dim)
                 qdrant_points.append(
                     models.PointStruct(
                         id=point["id"],
-                        vector=point["vector"],
+                        vector=vector,
                         payload=point.get("payload", {}),
                     )
                 )
@@ -471,15 +483,37 @@ class VectorDBClient:
 
             return {
                 "name": collection_name,
-                "points_count": info.points_count,
-                "vectors_count": info.vectors_count,
+                "points_count": getattr(info, "points_count", 0),
+                "vectors_count": getattr(info, "vectors_count", 0),
                 "disk_usage": getattr(info, "disk_usage", 0),
-                "status": info.status,
+                "status": getattr(info, "status", "unknown"),
             }
 
         except Exception as e:
             logger.error(f"Failed to get collection info for '{collection_name}': {e}")
             return {"error": str(e)}
+
+    def get_collection_vector_size(self, collection_name: str) -> Optional[int]:
+        """Return configured vector size for a collection, if available."""
+        try:
+            info = self.client.get_collection(collection_name)
+            vectors = getattr(info, "config", None)
+            if vectors and getattr(vectors, "params", None):
+                vcfg = vectors.params.vectors
+                # Single vector config
+                if hasattr(vcfg, "size"):
+                    return vcfg.size
+                # Named vectors dict
+                if isinstance(vcfg, dict):
+                    first = next(iter(vcfg.values()))
+                    if hasattr(first, "size"):
+                        return first.size
+            return None
+        except Exception as exc:
+            logger.warning(
+                "Could not fetch vector size for %s: %s", collection_name, exc
+            )
+            return None
 
     def scroll_points(
         self, collection_name: str, limit: int = 100, offset: Optional[str] = None
@@ -535,6 +569,24 @@ class VectorDBClient:
         except Exception as e:
             logger.error(f"Qdrant health check failed: {e}")
             return False
+
+    def get_point(self, collection: str, point_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a single point by ID."""
+        try:
+            result = self.client.retrieve(collection_name=collection, ids=[point_id])
+            if result:
+                pt = result[0]
+                return {
+                    "id": getattr(pt, "id", point_id),
+                    "vector": getattr(pt, "vector", None),
+                    "payload": getattr(pt, "payload", {}),
+                }
+            return None
+        except Exception as exc:
+            logger.warning(
+                "Failed to get point %s from %s: %s", point_id, collection, exc
+            )
+            return None
 
     # ========================================
     # Companion Feature Methods

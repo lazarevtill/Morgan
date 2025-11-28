@@ -4,21 +4,27 @@ services:
   morgan:
     build: .
     container_name: morgan-rag
+    user: "0"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8080:8080"
       - "8000:8000"  # API port
     environment:
       # LLM Configuration
-      - LLM_BASE_URL=https://gpt.lazarev.cloud/ollama/v1
+      - LLM_BASE_URL=https://ai.ishosting.com/api
       - LLM_API_KEY=${LLM_API_KEY}
-      - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
+      - LLM_MODEL=${LLM_MODEL:-gemma3:latest}
       
       # Vector Database
       - QDRANT_URL=http://qdrant:6333
       - QDRANT_API_KEY=${QDRANT_API_KEY:-}
       
       # Embedding Service
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:8b}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
+      - EMBEDDING_LOCAL_MODEL=${EMBEDDING_LOCAL_MODEL:-all-MiniLM-L6-v2}
+      - EMBEDDING_FORCE_REMOTE=${EMBEDDING_FORCE_REMOTE:-true}
       - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE:-100}
       - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-cpu}
       
@@ -40,9 +46,21 @@ services:
       - ./logs:/app/logs
       - ./config:/app/config
       - ./knowledge:/app/knowledge  # Mount for document ingestion
+      - ./monitoring:/app/monitoring
     depends_on:
       - qdrant
       - redis
+      - consul
+    command:
+      - sh
+      - -c
+      - |
+        until curl -sf http://qdrant:6333/readyz; do
+          echo "Waiting for qdrant..."
+          sleep 1
+        done
+        sleep 3
+        python -m morgan serve --host 0.0.0.0 --port 8080
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-m", "morgan", "health"]
@@ -50,6 +68,57 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+
+  reranker:
+    build: .
+    container_name: morgan-reranker
+    user: "0"
+    environment:
+      - RERANK_HOST=0.0.0.0
+      - RERANK_PORT=8081
+      - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN:-}
+      - CONSUL_ENABLED=${CONSUL_ENABLED:-false}
+      - CONSUL_HTTP_ADDR=${CONSUL_HTTP_ADDR:-http://consul:8500}
+    depends_on:
+      - consul
+    command: ["python", "-m", "morgan.jina.reranking.api"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  background:
+    build: .
+    container_name: morgan-background
+    user: "0"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - MORGAN_LOG_LEVEL=${MORGAN_LOG_LEVEL:-INFO}
+      - MORGAN_DATA_DIR=/app/data
+      - MORGAN_DEBUG=${MORGAN_DEBUG:-false}
+      - RERANKING_API_URL=http://reranker:8081
+      - CONSUL_ENABLED=${CONSUL_ENABLED:-false}
+      - CONSUL_HTTP_ADDR=${CONSUL_HTTP_ADDR:-http://consul:8500}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+      - ./knowledge:/app/knowledge
+      - ./monitoring:/app/monitoring
+    depends_on:
+      - qdrant
+      - redis
+      - consul
+      - reranker
+    command:
+      - python
+      - scripts/run_background_service.py
+    restart: unless-stopped
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -64,11 +133,6 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   redis:
     image: redis:latest
@@ -84,6 +148,15 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  consul:
+    image: hashicorp/consul:1.20
+    container_name: morgan-consul
+    ports:
+      - "8500:8500"
+      - "8600:8600/udp"
+    command: agent -dev -ui -bind=0.0.0.0 -client=0.0.0.0
+    restart: unless-stopped
 
   # Optional: Nginx reverse proxy
   nginx:

@@ -34,6 +34,7 @@ class ConversationTurn:
     question: str
     answer: str
     sources: List[str]
+    tags: List[str]
     feedback_rating: Optional[int] = None
     feedback_comment: Optional[str] = None
 
@@ -41,6 +42,8 @@ class ConversationTurn:
         """Ensure sources is always a list."""
         if self.sources is None:
             self.sources = []
+        if self.tags is None:
+            self.tags = []
 
 
 @dataclass
@@ -58,12 +61,15 @@ class Conversation:
     last_activity: str
     total_turns: int = 0
     average_rating: float = 0.0
+    tags: List[str] = None
 
     def __post_init__(self):
         """Calculate derived fields."""
         if self.turns is None:
             self.turns = []
         self.total_turns = len(self.turns)
+        if self.tags is None:
+            self.tags = []
 
         # Calculate average rating from feedback
         ratings = [
@@ -135,6 +141,7 @@ class ConversationMemory:
             topic=topic,
             turns=[],
             last_activity=timestamp,
+            tags=[],
         )
 
         # Store conversation metadata
@@ -149,6 +156,7 @@ class ConversationMemory:
         question: str,
         answer: str,
         sources: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
     ) -> str:
         """
         Add a turn to an existing conversation.
@@ -180,6 +188,7 @@ class ConversationMemory:
             question=question,
             answer=answer,
             sources=sources or [],
+            tags=tags or [],
         )
 
         # Store turn in vector database for semantic search
@@ -508,6 +517,19 @@ class ConversationMemory:
             embedding_dim = self.embedding_service.get_embedding_dimension()
 
             # Create conversation metadata collection
+            if self.vector_db.collection_exists(self.conversation_collection):
+                current_dim = self.vector_db.get_collection_vector_size(
+                    self.conversation_collection
+                )
+                if current_dim and current_dim != embedding_dim:
+                    logger.warning(
+                        "Recreating collection %s due to dimension mismatch (%s != %s)",
+                        self.conversation_collection,
+                        current_dim,
+                        embedding_dim,
+                    )
+                    self.vector_db.delete_collection(self.conversation_collection)
+
             if not self.vector_db.collection_exists(self.conversation_collection):
                 self.vector_db.create_collection(
                     name=self.conversation_collection,
@@ -519,6 +541,19 @@ class ConversationMemory:
                 )
 
             # Create turn collection for semantic search
+            if self.vector_db.collection_exists(self.turn_collection):
+                current_dim = self.vector_db.get_collection_vector_size(
+                    self.turn_collection
+                )
+                if current_dim and current_dim != embedding_dim:
+                    logger.warning(
+                        "Recreating collection %s due to dimension mismatch (%s != %s)",
+                        self.turn_collection,
+                        current_dim,
+                        embedding_dim,
+                    )
+                    self.vector_db.delete_collection(self.turn_collection)
+
             if not self.vector_db.collection_exists(self.turn_collection):
                 self.vector_db.create_collection(
                     name=self.turn_collection,

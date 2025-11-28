@@ -420,7 +420,8 @@ class PrecomputedSearchCache:
 
     def _hash_query(self, query: str) -> str:
         """Generate hash for query."""
-        return hashlib.sha256(query.lower().strip().encode()).hexdigest()
+        # Use MD5 for a short, stable identifier (matches tests/analytics expectations)
+        return hashlib.md5(query.lower().strip().encode()).hexdigest()
 
     def _execute_search(
         self, query: str, collection_name: str, max_results: int = 10

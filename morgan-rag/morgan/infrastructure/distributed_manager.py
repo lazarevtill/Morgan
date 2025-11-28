@@ -18,6 +18,8 @@ Architecture:
 """
 
 import asyncio
+import json
+import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -124,20 +126,26 @@ class DistributedHostManager:
         >>> status = await manager.health_check_all()
     """
 
-    def __init__(self, ssh_key_path: Optional[str] = None):
+    def __init__(self, ssh_key_path: Optional[str] = None, inventory_path: Optional[Path] = None):
         """
         Initialize distributed host manager.
 
         Args:
             ssh_key_path: Path to SSH private key (default: ~/.ssh/id_rsa)
+            inventory_path: Optional path to hosts inventory JSON
         """
         if not ASYNCSSH_AVAILABLE:
             raise ImportError("asyncssh required. Install with: pip install asyncssh")
 
         self.ssh_key_path = ssh_key_path or str(Path.home() / ".ssh" / "id_rsa")
         self.hosts: Dict[str, HostConfig] = {}
+        default_inventory = Path(__file__).resolve().parents[2] / "config" / "hosts.json"
+        self.inventory_path = inventory_path or Path(os.getenv("MORGAN_HOSTS_FILE", default_inventory))
 
         logger.info("DistributedHostManager initialized")
+
+        if self.inventory_path.exists():
+            self.load_hosts(self.inventory_path)
 
     def add_host(
         self,
@@ -173,6 +181,50 @@ class DistributedHostManager:
         logger.info(
             f"Added host: {hostname} ({role.value}, GPU: {gpu_model or 'None'})"
         )
+
+    def load_hosts(self, path: Path):
+        """Load host definitions from JSON inventory."""
+        data = json.loads(path.read_text())
+        for host_key, info in data.items():
+            services = [ServiceType(s) for s in info.get("services", [])]
+            cfg = HostConfig(
+                hostname=info["hostname"],
+                role=HostRole(info["role"]) if "role" in info else HostRole(host_key),
+                ssh_user=info.get("ssh_user", "morgan"),
+                ssh_port=info.get("ssh_port", 22),
+                ssh_key=info.get("ssh_key"),
+                project_path=info.get("project_path", "/opt/Morgan"),
+                python_path=info.get("python_path", "/opt/Morgan/morgan-venv/bin/python"),
+                services=services,
+                gpu_available=info.get("gpu_available", False),
+                gpu_model=info.get("gpu_model"),
+                health_check_url=info.get("health_check_url"),
+                health_check_interval=info.get("health_check_interval", 60),
+            )
+            self.hosts[cfg.hostname] = cfg
+        logger.info("Loaded %d hosts from %s", len(self.hosts), path)
+
+    def save_hosts(self, path: Optional[Path] = None):
+        """Persist host inventory to JSON."""
+        target = path or self.inventory_path
+        serializable = {}
+        for host, cfg in self.hosts.items():
+            serializable[host] = {
+                "hostname": cfg.hostname,
+                "role": cfg.role.value,
+                "ssh_user": cfg.ssh_user,
+                "ssh_port": cfg.ssh_port,
+                "ssh_key": cfg.ssh_key,
+                "project_path": cfg.project_path,
+                "python_path": cfg.python_path,
+                "services": [s.value for s in cfg.services],
+                "gpu_available": cfg.gpu_available,
+                "gpu_model": cfg.gpu_model,
+                "health_check_url": cfg.health_check_url,
+                "health_check_interval": cfg.health_check_interval,
+            }
+        target.write_text(json.dumps(serializable, indent=2))
+        logger.info("Saved hosts inventory to %s", target)
 
     def load_default_config(self):
         """
