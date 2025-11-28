@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'morgan-core'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['morgan:8080']
+
+  - job_name: 'morgan-background'
+    metrics_path: /
+    static_configs:
+      - targets: ['morgan-background:9000']
+
+  - job_name: 'reranker'
+    metrics_path: /health
+    static_configs:
+      - targets: ['morgan-reranker:8081']

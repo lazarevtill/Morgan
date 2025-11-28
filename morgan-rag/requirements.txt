@@ -51,7 +51,6 @@ selenium>=4.15.0  # For dynamic content
 
 # Markdown and text
 markdown>=3.5.0
-python-markdown>=3.5.0
 
 # Code parsing
 tree-sitter>=0.20.0
@@ -79,6 +78,8 @@ websockets>=12.0
 # ============================================================================
 redis>=5.0.0
 diskcache>=5.6.0
+psutil>=5.9.0
+aiohttp>=3.9.0
 
 # ============================================================================
 # Utilities

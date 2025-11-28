@@ -1,3 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "morgan-rag"
+dynamic = ["version", "dependencies"]
+description = "Morgan RAG - Human-first AI assistant with emotional intelligence and background automation."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Morgan RAG Team" }]
+license = { text = "Proprietary" }
+keywords = ["rag", "assistant", "cli", "fastapi", "qdrant", "emotional-intelligence"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Operating System :: OS Independent",
+]
+
+[project.scripts]
+morgan = "morgan.cli.app:main"
+morgan-distributed = "morgan.cli.distributed_cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["morgan*"]
+
+[tool.setuptools.package-data]
+morgan = [
+  "interfaces/templates/*.html",
+  "interfaces/static/css/*.css",
+  "interfaces/static/js/*.js",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "morgan.__version__"}
+dependencies = {file = ["requirements.txt"]}
+
 [tool.black]
 line-length = 88
 target-version = ['py311', 'py312', 'py313']

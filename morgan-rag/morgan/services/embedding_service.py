@@ -67,6 +67,12 @@ class EmbeddingService:
 
     # Model configurations (same as InspecTor)
     MODELS = {
+        "qwen3:latest": {
+            "dimensions": 4096,
+            "max_tokens": 8192,
+            "type": "remote",
+            "supports_instructions": True,
+        },
         "qwen3-embedding:latest": {
             "dimensions": 4096,
             "max_tokens": 8192,
@@ -94,9 +100,9 @@ class EmbeddingService:
         },
     }
 
-    def __init__(self):
+    def __init__(self, settings=None):
         """Initialize embedding service with config and cache."""
-        self.settings = get_settings()
+        self.settings = settings or get_settings()
 
         # Setup cache
         cache_dir = Path(self.settings.morgan_data_dir) / "cache" / "embeddings"
@@ -112,6 +118,7 @@ class EmbeddingService:
         self._remote_available = None
         self._local_model = None
         self._local_available = None
+        self._remote_base_url = None
 
         # Get active model configuration
         self.model_name = self.settings.embedding_model
@@ -127,6 +134,33 @@ class EmbeddingService:
             f"rate_limit=100/min"
         )
 
+    def _get_remote_base_url(self) -> Optional[str]:
+        """
+        Get configured remote base URL for embeddings (allows override).
+
+        Returns:
+            Normalized base URL without trailing /v1 or slash.
+        """
+        if self._remote_base_url is not None:
+            return self._remote_base_url
+
+        base_url = getattr(self.settings, "embedding_base_url", None) or getattr(
+            self.settings, "llm_base_url", None
+        )
+        if not base_url:
+            self._remote_base_url = None
+            return None
+
+        base_url = base_url.rstrip("/")
+        if base_url.endswith("/v1"):
+            base_url = base_url[:-3]
+        # Normalize common OpenAI-compatible prefix to avoid double /api
+        if base_url.endswith("/api"):
+            base_url = base_url[:-4]
+
+        self._remote_base_url = base_url
+        return base_url
+
     def is_available(self) -> bool:
         """
         Check if embedding service is available.
@@ -138,11 +172,7 @@ class EmbeddingService:
         force_remote = getattr(self.settings, "embedding_force_remote", False)
 
         # Try remote first (if configured)
-        if (
-            hasattr(self.settings, "llm_base_url")
-            and self.settings.llm_base_url
-            and self._check_remote_available()
-        ):
+        if self._get_remote_base_url() and self._check_remote_available():
             return True
 
         # If force remote is enabled, don't check local
@@ -164,11 +194,7 @@ class EmbeddingService:
         Returns:
             Embedding dimension
         """
-        if (
-            hasattr(self.settings, "llm_base_url")
-            and self.settings.llm_base_url
-            and self._check_remote_available()
-        ):
+        if self._get_remote_base_url() and self._check_remote_available():
             return self.model_config["dimensions"]
         elif self._check_local_available():
             # Return local model dimensions
@@ -234,11 +260,7 @@ class EmbeddingService:
             force_remote = getattr(self.settings, "embedding_force_remote", False)
 
             # Try remote first (if configured)
-            if (
-                hasattr(self.settings, "llm_base_url")
-                and self.settings.llm_base_url
-                and self._check_remote_available()
-            ):
+            if self._get_remote_base_url() and self._check_remote_available():
                 embedding = self._encode_remote(text, request_id=request_id)
             # If force remote is enabled and remote failed, raise error instead of falling back
             elif force_remote:
@@ -521,11 +543,7 @@ class EmbeddingService:
                 force_remote = getattr(self.settings, "embedding_force_remote", False)
 
                 # Try remote first (if configured)
-                if (
-                    hasattr(self.settings, "llm_base_url")
-                    and self.settings.llm_base_url
-                    and self._check_remote_available()
-                ):
+                if self._get_remote_base_url() and self._check_remote_available():
                     new_embeddings = self._encode_batch_remote(uncached_texts)
                 # If force remote is enabled and remote failed, raise error instead of falling back
                 elif force_remote:
@@ -608,7 +626,8 @@ class EmbeddingService:
         if self._remote_available is not None:
             return self._remote_available
 
-        if not hasattr(self.settings, "llm_base_url") or not self.settings.llm_base_url:
+        base_url = self._get_remote_base_url()
+        if not base_url:
             logger.debug("LLM base URL not configured")
             self._remote_available = False
             return False
@@ -619,49 +638,70 @@ class EmbeddingService:
 
         for attempt in range(max_retries):
             try:
-                # Normalize URL - remove trailing /v1 if present
-                base_url = self.settings.llm_base_url.rstrip("/")
-                if base_url.endswith("/v1"):
-                    base_url = base_url[:-3]
-
-                # For Ollama-compatible endpoints, check /api/tags
-                url = f"{base_url}/api/tags"
+                # Prefer OpenAI-compatible /api/models (used by ai.ishosting.com)
+                model_urls = [f"{base_url}/api/models", f"{base_url}/api/tags"]
 
                 headers = {}
                 if hasattr(self.settings, "llm_api_key") and self.settings.llm_api_key:
                     headers["Authorization"] = f"Bearer {self.settings.llm_api_key}"
 
-                try:
-                    response = requests.get(url, headers=headers, timeout=5)
-                    response.raise_for_status()
-                except (
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.Timeout,
-                ) as e:
-                    if attempt < max_retries - 1:
-                        delay = delays[attempt]
-                        logger.debug(
-                            f"Connection to remote embedding service failed (attempt {attempt + 1}/{max_retries}), "
-                            f"retrying in {delay}s: {type(e).__name__}"
-                        )
-                        time.sleep(delay)
-                        continue
-                    else:
-                        # Final attempt failed - log with masked key
+                response = None
+                models: List[str] = []
+
+                for url in model_urls:
+                    try:
+                        response = requests.get(url, headers=headers, timeout=5)
+                        response.raise_for_status()
+                        break
+                    except (
+                        requests.exceptions.ConnectionError,
+                        requests.exceptions.Timeout,
+                    ) as e:
+                        if attempt < max_retries - 1:
+                            delay = delays[attempt]
+                            logger.debug(
+                                f"Connection to remote embedding service failed (attempt {attempt + 1}/{max_retries}), "
+                                f"retrying in {delay}s: {type(e).__name__}"
+                            )
+                            time.sleep(delay)
+                            response = None
+                            continue
                         logger.warning(
                             f"Remote embedding service not available after {max_retries} attempts: {e}"
                         )
                         self._remote_available = False
                         return False
-                except Exception as e:
-                    # Non-retryable error - do not log API key in error messages
-                    logger.warning(f"Remote embedding service not available: {e}")
+                    except Exception:
+                        # Try next URL
+                        response = None
+                        continue
+
+                if response is None:
                     self._remote_available = False
                     return False
 
-                # Check if embedding model is available
-                data = response.json()
-                models = [m.get("name", "") for m in data.get("models", [])]
+                try:
+                    data = response.json()
+                except ValueError:
+                    # Some providers occasionally return empty bodies with 200/204
+                    # responses. Treat this as transient but mark the service
+                    # available so downstream calls can retry with real payloads.
+                    logger.warning(
+                        "Remote embedding service returned non-JSON response "
+                        f"(status={response.status_code}, body={response.text[:200]!r})"
+                    )
+                    self._remote_available = response.ok
+                    return self._remote_available
+                # ai.ishosting.com returns {"data":[{"id": "..."}]}
+                if isinstance(data, dict) and "data" in data:
+                    models = [
+                        m.get("id") or m.get("name") or m.get("model", "")
+                        for m in data.get("data", [])
+                    ]
+                elif isinstance(data, dict) and "models" in data:
+                    models = [m.get("name", "") for m in data.get("models", [])]
+                elif isinstance(data, list):
+                    models = [m.get("id") or m.get("name") for m in data if isinstance(m, dict)]
 
                 if self.model_name not in models:
                     logger.warning(
@@ -731,18 +771,22 @@ class EmbeddingService:
                 f"(request_id={request_id})"
             )
 
-        # Normalize URL - remove trailing /v1 if present
-        base_url = self.settings.llm_base_url.rstrip("/")
-        if base_url.endswith("/v1"):
-            base_url = base_url[:-3]
+        base_url = self._get_remote_base_url()
+        if not base_url:
+            raise ValueError("Remote embedding base URL is not configured")
 
         url = f"{base_url}/api/embeddings"
+        is_ollama_style = "ollama" in base_url or base_url.endswith(":11434")
 
         headers = {}
         if hasattr(self.settings, "llm_api_key") and self.settings.llm_api_key:
             headers["Authorization"] = f"Bearer {self.settings.llm_api_key}"
 
-        payload = {"model": self.model_name, "prompt": text}
+        payload = (
+            {"model": self.model_name, "prompt": text}
+            if is_ollama_style
+            else {"model": self.model_name, "input": text}
+        )
 
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=30)
@@ -790,6 +834,11 @@ class EmbeddingService:
 
         data = response.json()
         embedding = data.get("embedding")
+        # OpenAI-style embeddings response: {"data":[{"embedding": [...] }]}
+        if not embedding and isinstance(data, dict) and "data" in data:
+            first = data.get("data")[0] if data.get("data") else {}
+            if isinstance(first, dict):
+                embedding = first.get("embedding")
 
         if not embedding:
             error_context = {
@@ -823,10 +872,9 @@ class EmbeddingService:
                 )
                 break
 
-        # Normalize URL - remove trailing /v1 if present
-        base_url = self.settings.llm_base_url.rstrip("/")
-        if base_url.endswith("/v1"):
-            base_url = base_url[:-3]
+        base_url = self._get_remote_base_url()
+        if not base_url:
+            raise ValueError("Remote embedding base URL is not configured")
 
         url = f"{base_url}/api/embeddings"
 
@@ -849,15 +897,26 @@ class EmbeddingService:
 
             from concurrent.futures import ThreadPoolExecutor, as_completed
 
+            is_ollama_style = "ollama" in base_url or base_url.endswith(":11434")
+
             def encode_single_text(text_with_index):
                 idx, text = text_with_index
-                payload = {"model": self.model_name, "prompt": text}
+                payload = (
+                    {"model": self.model_name, "prompt": text}
+                    if is_ollama_style
+                    else {"model": self.model_name, "input": text}
+                )
 
                 try:
                     response = session.post(url, json=payload, timeout=30)
                     response.raise_for_status()
                     data = response.json()
                     embedding = data.get("embedding")
+
+                    if not embedding and isinstance(data, dict) and "data" in data:
+                        first = data.get("data")[0] if data.get("data") else {}
+                        if isinstance(first, dict):
+                            embedding = first.get("embedding")
 
                     if not embedding:
                         raise ValueError(f"No embedding in response for text {idx}")

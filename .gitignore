@@ -10,3 +10,7 @@ data/
 logs/
 *.logs
 /.idea
+/morgan-rag/local_libs
+*.gz
+*.whl
+/morgan-rag/morgan_rag.egg-info

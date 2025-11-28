@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
+import requests
+
 logger = logging.getLogger(__name__)
 
 
@@ -103,6 +105,9 @@ class JinaRerankingService:
             os.path.join(os.path.expanduser("~"), ".cache", "morgan", "rerankers"),
         )
         self.hf_token = os.getenv("HUGGINGFACE_HUB_TOKEN")
+
+        # Optional remote reranking API (takes precedence if set)
+        self.remote_url = os.getenv("RERANKING_API_URL")
 
         # Language detection cache
         self._language_cache: Dict[str, str] = {}
@@ -352,6 +357,41 @@ class JinaRerankingService:
             return results, self._create_empty_metrics(query)
 
         start_time = time.time()
+
+        # Remote API path (if configured)
+        if self.remote_url:
+            try:
+                payload = {
+                    "query": query,
+                    "results": [r.__dict__ for r in results],
+                    "top_k": top_k or len(results),
+                }
+                resp = requests.post(f"{self.remote_url}/rerank", json=payload, timeout=10)
+                resp.raise_for_status()
+                data = resp.json()
+                remote_results = []
+                for item in data.get("results", []):
+                    remote_results.append(
+                        SearchResult(
+                            content=item.get("content", ""),
+                            score=float(item.get("score", 0.0)),
+                            metadata=item.get("metadata", {}) or {},
+                            source=item.get("source", ""),
+                            rerank_score=float(item.get("score", 0.0)),
+                        )
+                    )
+                elapsed = time.time() - start_time
+                metrics = self._create_metrics(
+                    query,
+                    "remote",
+                    self.detect_language(query),
+                    len(results),
+                    len(remote_results),
+                    elapsed,
+                )
+                return remote_results[: top_k or len(remote_results)], metrics
+            except Exception as exc:
+                logger.warning("Remote reranker failed, falling back to local: %s", exc)
 
         # Track query frequency for background processing
         self._track_query_usage(query)

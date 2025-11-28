@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # ============================================================================
 
     llm_base_url: str = Field(
-        default="https://gpt.lazarev.cloud/ollama/v1",
+        default="https://ai.ishosting.com/api",
         description="OpenAI-compatible LLM endpoint",
     )
 
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
         default=None, description="API key for LLM service"
     )
 
-    llm_model: str = Field(default="llama3.1:8b", description="LLM model name")
+    llm_model: str = Field(default="gemma3:latest", description="LLM model name")
 
     llm_max_tokens: int = Field(
         default=2048, description="Maximum tokens for responses", ge=100, le=32000
@@ -66,7 +66,12 @@ class Settings(BaseSettings):
     # ============================================================================
 
     embedding_model: str = Field(
-        default="qwen3-embedding:latest", description="Primary embedding model (remote)"
+        default="qwen3:latest", description="Primary embedding model (remote)"
+    )
+
+    embedding_base_url: Optional[str] = Field(
+        default=None,
+        description="Override base URL for embeddings (e.g., http://localhost:11434)",
     )
 
     embedding_local_model: str = Field(
@@ -276,12 +281,15 @@ class Settings(BaseSettings):
         v.mkdir(parents=True, exist_ok=True)
         return v
 
-    @field_validator("llm_base_url", "qdrant_url")
+    @field_validator("llm_base_url", "embedding_base_url", "qdrant_url")
     @classmethod
     def validate_service_urls(cls, v, info):
         """Validate service URLs for security."""
         if v is None:
             return v
+        if isinstance(v, str) and not v.strip():
+            # Treat empty strings as unset/None
+            return None
 
         try:
             validate_url(v, info.field_name)
