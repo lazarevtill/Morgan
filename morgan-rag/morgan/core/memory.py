@@ -370,7 +370,7 @@ class ConversationMemory:
             # Convert to human-friendly format
             results = []
             for result in search_results:
-                payload = result.get("payload", {})
+                payload = result.payload
                 results.append(
                     {
                         "turn_id": payload.get("turn_id", ""),
@@ -379,7 +379,7 @@ class ConversationMemory:
                         "question": payload.get("question", ""),
                         "answer": payload.get("answer", ""),
                         "sources": payload.get("sources", []),
-                        "score": result.get("score", 0.0),
+                        "score": result.score,
                         "feedback_rating": payload.get("feedback_rating"),
                         "feedback_comment": payload.get("feedback_comment"),
                     }
@@ -645,7 +645,10 @@ class ConversationMemory:
             # Convert to ConversationTurn objects
             turns = []
             for result in results:
-                payload = result.get("payload", {})
+                if hasattr(result, "payload"):
+                    payload = result.payload
+                else:
+                    payload = result.get("payload", {})
                 turn = ConversationTurn(**payload)
                 turns.append(turn)
 
@@ -672,7 +675,10 @@ class ConversationMemory:
 
             turns = []
             for result in results:
-                payload = result.get("payload", {})
+                if hasattr(result, "payload"):
+                    payload = result.payload
+                else:
+                    payload = result.get("payload", {})
                 turn = ConversationTurn(**payload)
                 turns.append(turn)
 

@@ -364,16 +364,16 @@ class VectorDBClient:
             List of search results
         """
         try:
-            results = self.client.search(
+            results = self.client.query_points(
                 collection_name=collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 limit=limit,
                 score_threshold=score_threshold,
             )
 
             # Convert to our format
             search_results = []
-            for result in results:
+            for result in results.points:
                 search_results.append(
                     SearchResult(
                         id=str(result.id),
@@ -996,12 +996,13 @@ class VectorDBClient:
             # Perform search
             if query_vector:
                 # Semantic search with filters
-                results = self.client.search(
+                result_response = self.client.query_points(
                     collection_name=self.MEMORIES_COLLECTION,
-                    query_vector=query_vector,
+                    query=query_vector,
                     query_filter=filter_obj,
                     limit=limit,
                 )
+                results = result_response.points
             else:
                 # Filter-only search
                 results = self.client.scroll(
@@ -1068,12 +1069,12 @@ class VectorDBClient:
 
             # Stage 1: Coarse filtering (if coarse vector provided)
             if coarse_vector:
-                coarse_results = self.client.search(
+                coarse_results = self.client.query_points(
                     collection_name=collection_name,
-                    query_vector=("coarse", coarse_vector),
+                    query=("coarse", coarse_vector),
                     limit=coarse_limit,
                 )
-                candidate_ids = [str(result.id) for result in coarse_results]
+                candidate_ids = [str(result.id) for result in coarse_results.points]
                 logger.debug(f"Coarse filtering: {len(candidate_ids)} candidates")
 
             # Stage 2: Medium filtering (if medium vector provided)
@@ -1082,13 +1083,13 @@ class VectorDBClient:
                     must=[models.HasIdCondition(has_id=candidate_ids)]
                 )
 
-                medium_results = self.client.search(
+                medium_results = self.client.query_points(
                     collection_name=collection_name,
-                    query_vector=("medium", medium_vector),
+                    query=("medium", medium_vector),
                     query_filter=medium_filter,
                     limit=medium_limit,
                 )
-                candidate_ids = [str(result.id) for result in medium_results]
+                candidate_ids = [str(result.id) for result in medium_results.points]
                 logger.debug(f"Medium filtering: {len(candidate_ids)} candidates")
 
             # Stage 3: Fine search (final results)
@@ -1099,13 +1100,13 @@ class VectorDBClient:
                         must=[models.HasIdCondition(has_id=candidate_ids)]
                     )
 
-                final_results = self.client.search(
+                final_results = self.client.query_points(
                     collection_name=collection_name,
-                    query_vector=("fine", fine_vector),
+                    query=("fine", fine_vector),
                     query_filter=final_filter,
                     limit=limit
                     * 2,  # Get more results for emotional/companion filtering
-                )
+                ).points
             else:
                 # If no fine vector, return medium results or coarse results
                 if candidate_ids:
@@ -1827,9 +1828,9 @@ class VectorDBClient:
                 query_filter = models.Filter(must=must_conditions)
 
             # Perform search with named vector
-            results = self.client.search(
+            result_response = self.client.query_points(
                 collection_name=collection_name,
-                query_vector=(vector_name, query_vector),
+                query=(vector_name, query_vector),
                 query_filter=query_filter,
                 limit=limit,
                 score_threshold=score_threshold,
@@ -1837,7 +1838,7 @@ class VectorDBClient:
 
             # Convert to our format
             search_results = []
-            for result in results:
+            for result in result_response.points:
                 search_results.append(
                     SearchResult(
                         id=str(result.id),

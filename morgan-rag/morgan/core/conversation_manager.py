@@ -112,8 +112,13 @@ User relationship context:
         if search_results:
             context_parts.append("\nRelevant Knowledge:")
             for i, result in enumerate(search_results[:5], 1):
-                source = result.get("source", "Unknown")
-                content = result.get("content", "")[:500]
+                # Handle both dict and SearchResult object
+                if hasattr(result, 'source'):
+                    source = result.source
+                    content = result.content[:500]
+                else:
+                    source = result.get("source", "Unknown")
+                    content = result.get("content", "")[:500]
                 context_parts.append(f"\n{i}. Source: {source}\n{content}")
 
         # The current question with emotional context
@@ -181,8 +186,13 @@ Provide follow-up suggestions when appropriate."""
         if search_results:
             context_parts.append("\nRelevant Knowledge:")
             for i, result in enumerate(search_results[:5], 1):
-                source = result.get("source", "Unknown")
-                content = result.get("content", "")[:500]  # Limit length
+                # Handle both dict and SearchResult object
+                if hasattr(result, 'source'):
+                    source = result.source
+                    content = result.content[:500]
+                else:
+                    source = result.get("source", "Unknown")
+                    content = result.get("content", "")[:500]  # Limit length
                 context_parts.append(f"\n{i}. Source: {source}\n{content}")
 
         # The current question

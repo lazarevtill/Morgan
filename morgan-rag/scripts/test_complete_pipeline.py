@@ -407,23 +407,28 @@ def test_complete_pipeline():
             progress.remove_task(task)
 
         console.print("\n  [bold green]✅ Complete Pipeline Response:[/bold green]")
+
+        # Response is a Response object with .answer
+        answer = response.answer if hasattr(response, 'answer') else str(response)
         console.print(Panel(
-            response.get("answer", "No response"),
+            answer,
             title="Morgan's Response",
             border_style="green"
         ))
 
-        # Show detected emotions
-        if "emotions" in response:
-            console.print("\n  [yellow]Detected Emotions:[/yellow]")
-            for emotion, intensity in response["emotions"].items():
-                console.print(f"    - {emotion}: {intensity:.2%}")
+        # Show emotional tone
+        if hasattr(response, 'emotional_tone') and response.emotional_tone:
+            console.print(f"\n  [yellow]Emotional Tone: {response.emotional_tone}[/yellow]")
+
+        # Show empathy level
+        if hasattr(response, 'empathy_level') and response.empathy_level > 0:
+            console.print(f"  [yellow]Empathy Level: {response.empathy_level:.0%}[/yellow]")
 
         # Show RAG sources
-        if "sources" in response:
+        if hasattr(response, 'sources') and response.sources:
             console.print("\n  [cyan]Knowledge Sources:[/cyan]")
-            for i, source in enumerate(response["sources"][:3], 1):
-                console.print(f"    {i}. {source.get('title', 'Unknown')} (score: {source.get('score', 0):.2f})")
+            for i, source in enumerate(response.sources[:3], 1):
+                console.print(f"    {i}. {source[:60]}...")
 
         return True
 

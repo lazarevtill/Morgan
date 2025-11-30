@@ -411,12 +411,12 @@ class KnowledgeBase:
             # Convert to human-friendly format
             results = []
             for result in search_results:
-                payload = result.get("payload", {})
+                payload = result.payload
                 results.append(
                     {
                         "content": payload.get("content", ""),
                         "source": payload.get("source", "Unknown"),
-                        "score": result.get("score", 0.0),
+                        "score": result.score,
                         "metadata": payload.get("metadata", {}),
                         "document_type": payload.get("document_type", "unknown"),
                     }
@@ -449,7 +449,7 @@ class KnowledgeBase:
 
             chunks = []
             for result in results:
-                payload = result.get("payload", {})
+                payload = result.payload
                 chunks.append(
                     {
                         "content": payload.get("content", ""),
@@ -517,7 +517,7 @@ class KnowledgeBase:
             document_types = set()
 
             for result in sample_results:
-                payload = result.get("payload", {})
+                payload = result.payload
                 source = payload.get("source", "")
                 doc_type = payload.get("document_type", "unknown")
                 metadata = payload.get("metadata", {})

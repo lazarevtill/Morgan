@@ -118,7 +118,11 @@ class ResponseHandler:
         """Extract source references from search results."""
         sources = []
         for result in search_results:
-            source = result.get("source", "")
+            # Handle both dict and SearchResult object
+            if hasattr(result, 'source'):
+                source = result.source
+            else:
+                source = result.get("source", "")
             if source and source not in sources:
                 sources.append(source)
         return sources[:5]  # Limit to top 5 sources

@@ -14,3 +14,4 @@ logs/
 *.gz
 *.whl
 /morgan-rag/morgan_rag.egg-info
+/morgan-rag/backups
