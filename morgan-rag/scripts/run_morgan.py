@@ -49,12 +49,14 @@ def main():
 
             console.print("\n[yellow]Morgan is thinking...[/yellow]")
 
-            response = assistant.process_query(
-                query=query,
-                user_id="default_user"
+            response = assistant.ask(
+                question=query,
+                user_id="default_user",
+                include_sources=True
             )
 
-            answer = response.get("answer", "I'm sorry, I couldn't process that.")
+            # Response object has .answer attribute
+            answer = response.answer if hasattr(response, 'answer') else str(response)
 
             console.print(Panel(
                 answer,
@@ -62,13 +64,25 @@ def main():
                 border_style="green"
             ))
 
-            # Show emotions if detected
-            if response.get("emotions"):
-                emotions_str = ", ".join([
-                    f"{e}: {i:.0%}"
-                    for e, i in list(response["emotions"].items())[:3]
-                ])
-                console.print(f"[dim]Emotions detected: {emotions_str}[/dim]")
+            # Show sources if available (from Response.sources)
+            if hasattr(response, 'sources') and response.sources:
+                console.print(f"\n[dim]📚 Sources: {len(response.sources)} documents[/dim]")
+                for i, source in enumerate(response.sources[:3], 1):
+                    console.print(f"[dim]  {i}. {source[:60]}...[/dim]")
+
+            # Show emotional tone if available
+            if hasattr(response, 'emotional_tone') and response.emotional_tone:
+                console.print(f"[dim]💙 Emotional tone: {response.emotional_tone}[/dim]")
+
+            # Show empathy level if available
+            if hasattr(response, 'empathy_level') and response.empathy_level > 0:
+                console.print(f"[dim]🤝 Empathy: {response.empathy_level:.0%}[/dim]")
+
+            # Show suggestions if available
+            if hasattr(response, 'suggestions') and response.suggestions:
+                console.print(f"\n[dim]💡 Suggestions:[/dim]")
+                for suggestion in response.suggestions[:3]:
+                    console.print(f"[dim]  • {suggestion}[/dim]")
 
         except KeyboardInterrupt:
             console.print("\n\n[yellow]Interrupted. Goodbye! 👋[/yellow]")

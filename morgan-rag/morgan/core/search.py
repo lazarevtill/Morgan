@@ -710,11 +710,11 @@ class SmartSearch:
             # Convert to SearchResult objects
             results = []
             for result in search_results:
-                payload = result.get("payload", {})
+                payload = result.payload
                 search_result = SearchResult(
                     content=payload.get("content", ""),
                     source=payload.get("source", "Unknown"),
-                    score=result.get("score", 0.0),
+                    score=result.score,
                     result_type="knowledge",
                     metadata=payload.get("metadata", {}),
                 )
@@ -747,7 +747,7 @@ class SmartSearch:
             # Convert to SearchResult objects
             results = []
             for result in search_results:
-                payload = result.get("payload", {})
+                payload = result.payload
 
                 # Format conversation turn as content
                 question = payload.get("question", "")
@@ -757,7 +757,7 @@ class SmartSearch:
                 search_result = SearchResult(
                     content=content,
                     source=f"Conversation ({payload.get('timestamp', 'Unknown')})",
-                    score=result.get("score", 0.0),
+                    score=result.score,
                     result_type="memory",
                     metadata={
                         "conversation_id": payload.get("conversation_id", ""),
@@ -893,7 +893,7 @@ class SmartSearch:
                 payload = (
                     result.payload
                     if hasattr(result, "payload")
-                    else result.get("payload", {})
+                    else result.payload
                 )
 
                 # Format conversation turn as content
@@ -908,7 +908,7 @@ class SmartSearch:
                     score=(
                         result.score
                         if hasattr(result, "score")
-                        else result.get("score", 0.0)
+                        else result.score
                     ),
                     result_type="memory",
                     metadata={
