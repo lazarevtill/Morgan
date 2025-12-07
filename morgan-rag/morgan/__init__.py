@@ -21,7 +21,7 @@ Modular Architecture:
 Requirements addressed: 23.1, 23.2, 23.3, 23.4, 23.5
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __author__ = "Morgan RAG Team"
 
 # Core components - simple imports

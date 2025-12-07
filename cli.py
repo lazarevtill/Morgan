@@ -8,6 +8,7 @@ Supports emotional awareness, memory, and personalized responses.
 
 import argparse
 import asyncio
+import os
 import sys
 from datetime import datetime
 from typing import Optional
@@ -69,15 +70,27 @@ class MorganCLI:
         except Exception as e:
             console.print(f"[red]Failed to connect to Morgan: {e}[/red]")
 
+        # Fallback to root URL
+        try:
+            async with self.session.get(
+                self.base_url,
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:
+            pass
+
         return False
 
     async def send_message(self, text: str, show_sources: bool = False) -> dict:
         """Send message to Morgan and get response"""
         try:
-            payload = {"text": text, "user_id": self.user_id, "metadata": {}}
+            payload = {"message": text, "user_id": self.user_id, "metadata": {}}
 
             if self.conversation_id:
                 payload["metadata"]["conversation_id"] = self.conversation_id
+                payload["conversation_id"] = self.conversation_id
 
             if show_sources:
                 payload["metadata"]["show_sources"] = show_sources
@@ -91,8 +104,10 @@ class MorganCLI:
                     data = await resp.json()
 
                     # Store conversation ID
-                    if "metadata" in data and "conversation_id" in data["metadata"]:
-                        self.conversation_id = data["metadata"]["conversation_id"]
+                    if "conversation_id" in data:
+                        self.conversation_id = data["conversation_id"]
+                    elif "metadata" in data and "conversation_id" in data["metadata"]:
+                         self.conversation_id = data["metadata"]["conversation_id"]
 
                     return data
                 else:
@@ -118,9 +133,9 @@ class MorganCLI:
             console.print(f"[dim]Starting conversation about: {topic}[/dim]\n")
             # Send initial topic message
             response = await self.send_message(f"I'd like to talk about {topic}")
-            if response and "text" in response:
+            if response and "answer" in response:
                 console.print(f"\n[bold magenta]Morgan[/bold magenta]:")
-                console.print(Markdown(response["text"]))
+                console.print(Markdown(response["answer"]))
 
         while True:
             try:
@@ -150,18 +165,22 @@ class MorganCLI:
                 # Send message
                 response = await self.send_message(user_input)
 
-                if response and "text" in response:
+                if response and "answer" in response:
                     # Display response with markdown rendering
                     console.print(
                         f"\n[bold magenta]Morgan[/bold magenta]: ", end=""
                     )
-                    md = Markdown(response["text"])
+                    md = Markdown(response["answer"])
                     console.print(md)
 
                     # Show metadata if available
                     if "metadata" in response and response["metadata"]:
                         console.print(
                             f"[dim]Conversation ID: {response['metadata'].get('conversation_id', 'N/A')}[/dim]"
+                        )
+                    elif "conversation_id" in response:
+                         console.print(
+                            f"[dim]Conversation ID: {response.get('conversation_id', 'N/A')}[/dim]"
                         )
 
             except KeyboardInterrupt:
@@ -176,8 +195,8 @@ class MorganCLI:
 
         response = await self.send_message(question, show_sources=show_sources)
 
-        if response and "text" in response:
-            console.print(Panel(Markdown(response["text"]), title="🤖 Morgan's Answer"))
+        if response and "answer" in response:
+            console.print(Panel(Markdown(response["answer"]), title="🤖 Morgan's Answer"))
 
             if show_sources and "metadata" in response:
                 console.print("\n[dim]Sources and metadata available in API response[/dim]")
@@ -247,8 +266,8 @@ For best experience, ensure Morgan service is running on http://localhost:8000
     parser.add_argument(
         "--url",
         type=str,
-        default="http://localhost:8000",
-        help="Morgan service URL (default: http://localhost:8000)",
+        default=os.getenv("MORGAN_URL", "http://localhost:8000"),
+        help="Morgan service URL (default: env MORGAN_URL or http://localhost:8000)",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
