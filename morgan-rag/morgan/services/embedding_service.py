@@ -144,9 +144,23 @@ class EmbeddingService:
         if self._remote_base_url is not None:
             return self._remote_base_url
 
-        base_url = getattr(self.settings, "embedding_base_url", None) or getattr(
-            self.settings, "llm_base_url", None
-        )
+        # Priority: embedding_base_url > ollama_host > llm_base_url
+        base_url = getattr(self.settings, "embedding_base_url", None)
+        
+        # If embedding_base_url is not set, try OLLAMA_HOST
+        if not base_url:
+            ollama_host = getattr(self.settings, "ollama_host", None)
+            if ollama_host:
+                # Normalize OLLAMA_HOST: add http:// if missing, ensure proper format
+                if not ollama_host.startswith(("http://", "https://")):
+                    base_url = f"http://{ollama_host}"
+                else:
+                    base_url = ollama_host
+        
+        # Fallback to LLM base URL if still not set
+        if not base_url:
+            base_url = getattr(self.settings, "llm_base_url", None)
+        
         if not base_url:
             self._remote_base_url = None
             return None

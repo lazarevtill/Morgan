@@ -69,9 +69,14 @@ class Settings(BaseSettings):
         default="qwen3:latest", description="Primary embedding model (remote)"
     )
 
+    ollama_host: Optional[str] = Field(
+        default=None,
+        description="Ollama host for embeddings (e.g., 192.168.100.88:11434 or http://192.168.100.88:11434)",
+    )
+
     embedding_base_url: Optional[str] = Field(
         default=None,
-        description="Override base URL for embeddings (e.g., http://localhost:11434)",
+        description="Override base URL for embeddings (e.g., http://localhost:11434). If not set, will use OLLAMA_HOST if available.",
     )
 
     embedding_local_model: str = Field(
