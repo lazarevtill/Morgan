@@ -10,37 +10,94 @@ services:
     ports:
       - "8080:8080"
       - "8000:8000"  # API port
+    env_file:
+      - .env
     environment:
       # LLM Configuration
-      - LLM_BASE_URL=https://ai.ishosting.com/api
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://ai.ishosting.com/api}
       - LLM_API_KEY=${LLM_API_KEY}
       - LLM_MODEL=${LLM_MODEL:-gemma3:latest}
+      - LLM_CHAT_MODEL=${LLM_CHAT_MODEL:-${LLM_MODEL:-gemma3:latest}}
+      - LLM_EMBEDDING_MODEL=${LLM_EMBEDDING_MODEL:-qwen3:latest}
       
-      # Vector Database
-      - QDRANT_URL=http://qdrant:6333
+      # Vector Database (use qdrant service name inside docker)
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
       - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT_DEFAULT_COLLECTION=${QDRANT_DEFAULT_COLLECTION:-morgan_knowledge}
+      - QDRANT_MEMORY_COLLECTION=${QDRANT_MEMORY_COLLECTION:-morgan_memory}
+      - QDRANT_LOG_LEVEL=${QDRANT_LOG_LEVEL:-INFO}
       
       # Embedding Service
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:8b}
-      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_HOST=${OLLAMA_HOST:-}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:latest}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-}
       - EMBEDDING_LOCAL_MODEL=${EMBEDDING_LOCAL_MODEL:-all-MiniLM-L6-v2}
-      - EMBEDDING_FORCE_REMOTE=${EMBEDDING_FORCE_REMOTE:-true}
+      - EMBEDDING_FORCE_REMOTE=${EMBEDDING_FORCE_REMOTE:-false}
       - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE:-100}
       - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-cpu}
+      - EMBEDDING_USE_INSTRUCTIONS=${EMBEDDING_USE_INSTRUCTIONS:-true}
       
       # System Settings
       - MORGAN_DATA_DIR=/app/data
       - MORGAN_LOG_LEVEL=${MORGAN_LOG_LEVEL:-INFO}
       - MORGAN_MAX_CONTEXT=${MORGAN_MAX_CONTEXT:-8192}
+      - MORGAN_MAX_RESPONSE_TOKENS=${MORGAN_MAX_RESPONSE_TOKENS:-2048}
       - MORGAN_DEBUG=${MORGAN_DEBUG:-false}
+      - MORGAN_DEV_MODE=${MORGAN_DEV_MODE:-false}
+      - MORGAN_AUTO_RELOAD=${MORGAN_AUTO_RELOAD:-false}
       
       # Performance
       - MORGAN_WORKERS=${MORGAN_WORKERS:-4}
       - MORGAN_CACHE_SIZE=${MORGAN_CACHE_SIZE:-1000}
+      - MORGAN_CACHE_TTL=${MORGAN_CACHE_TTL:-3600}
+      - MORGAN_MAX_SEARCH_RESULTS=${MORGAN_MAX_SEARCH_RESULTS:-50}
+      - MORGAN_DEFAULT_SEARCH_RESULTS=${MORGAN_DEFAULT_SEARCH_RESULTS:-10}
       
       # Security
       - MORGAN_API_KEY=${MORGAN_API_KEY:-}
       - MORGAN_CORS_ORIGINS=${MORGAN_CORS_ORIGINS:-*}
+      - MORGAN_ALLOW_FILE_UPLOAD=${MORGAN_ALLOW_FILE_UPLOAD:-true}
+      - MORGAN_ALLOW_URL_INGESTION=${MORGAN_ALLOW_URL_INGESTION:-true}
+      - MORGAN_ALLOW_CODE_EXECUTION=${MORGAN_ALLOW_CODE_EXECUTION:-false}
+      - MORGAN_SESSION_SECRET=${MORGAN_SESSION_SECRET:-change-me-in-production}
+      
+      # Web Interface
+      - MORGAN_HOST=${MORGAN_HOST:-0.0.0.0}
+      - MORGAN_PORT=${MORGAN_PORT:-8080}
+      - MORGAN_API_PORT=${MORGAN_API_PORT:-8000}
+      - MORGAN_WEB_ENABLED=${MORGAN_WEB_ENABLED:-true}
+      - MORGAN_DOCS_ENABLED=${MORGAN_DOCS_ENABLED:-true}
+      - MORGAN_REQUEST_LOGGING=${MORGAN_REQUEST_LOGGING:-false}
+      
+      # Ingestion Settings
+      - MORGAN_CHUNK_SIZE=${MORGAN_CHUNK_SIZE:-1000}
+      - MORGAN_CHUNK_OVERLAP=${MORGAN_CHUNK_OVERLAP:-200}
+      - MORGAN_MAX_FILE_SIZE=${MORGAN_MAX_FILE_SIZE:-100}
+      - MORGAN_SUPPORTED_TYPES=${MORGAN_SUPPORTED_TYPES:-pdf,docx,txt,md,html,py,js,ts,go,java,cpp,c,h}
+      - MORGAN_SCRAPE_DEPTH=${MORGAN_SCRAPE_DEPTH:-3}
+      - MORGAN_SCRAPE_DELAY=${MORGAN_SCRAPE_DELAY:-1}
+      - MORGAN_SCRAPE_TIMEOUT=${MORGAN_SCRAPE_TIMEOUT:-30}
+      
+      # Memory & Learning
+      - MORGAN_MEMORY_ENABLED=${MORGAN_MEMORY_ENABLED:-true}
+      - MORGAN_MEMORY_MAX_CONVERSATIONS=${MORGAN_MEMORY_MAX_CONVERSATIONS:-1000}
+      - MORGAN_MEMORY_MAX_TURNS_PER_CONVERSATION=${MORGAN_MEMORY_MAX_TURNS_PER_CONVERSATION:-100}
+      - MORGAN_LEARNING_ENABLED=${MORGAN_LEARNING_ENABLED:-true}
+      - MORGAN_FEEDBACK_WEIGHT=${MORGAN_FEEDBACK_WEIGHT:-0.1}
+      - MORGAN_KNOWLEDGE_GRAPH_ENABLED=${MORGAN_KNOWLEDGE_GRAPH_ENABLED:-true}
+      - MORGAN_ENTITY_EXTRACTION_ENABLED=${MORGAN_ENTITY_EXTRACTION_ENABLED:-true}
+      
+      # Monitoring & Analytics
+      - MORGAN_METRICS_ENABLED=${MORGAN_METRICS_ENABLED:-true}
+      - MORGAN_METRICS_PORT=${MORGAN_METRICS_PORT:-9000}
+      - MORGAN_HEALTH_CHECK_INTERVAL=${MORGAN_HEALTH_CHECK_INTERVAL:-30}
+      - MORGAN_ANALYTICS_RETENTION=${MORGAN_ANALYTICS_RETENTION:-90}
+      
+      # External Services
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - DATABASE_URL=${DATABASE_URL:-}
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-}
+      - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN:-}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -95,6 +152,8 @@ services:
     user: "0"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    env_file:
+      - .env
     environment:
       - QDRANT_URL=http://qdrant:6333
       - QDRANT_API_KEY=${QDRANT_API_KEY:-}
@@ -104,6 +163,7 @@ services:
       - RERANKING_API_URL=http://reranker:8081
       - CONSUL_ENABLED=${CONSUL_ENABLED:-false}
       - CONSUL_HTTP_ADDR=${CONSUL_HTTP_ADDR:-http://consul:8500}
+      - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN:-}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

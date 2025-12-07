@@ -1,5 +1,10 @@
 # Multi-stage build for optimal image size
-FROM python:3.11-slim as builder
+FROM harbor.in.lazarev.cloud/proxy/python:3.11-slim as builder
+
+# Configure apt sources - use standard Debian repos for faster builds
+RUN echo "deb http://deb.debian.org/debian bookworm main contrib non-free" > /etc/apt/sources.list && \
+    echo "deb http://deb.debian.org/debian-security bookworm-security main contrib non-free" >> /etc/apt/sources.list && \
+    echo "deb http://deb.debian.org/debian bookworm-updates main contrib non-free" >> /etc/apt/sources.list
 
 # Install system dependencies for building
 RUN apt-get update && apt-get install -y \
@@ -7,6 +12,16 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     && rm -rf /var/lib/apt/lists/*
+
+# Install UV package manager (pinned version for deterministic builds)
+COPY --from=harbor.in.lazarev.cloud/gh-proxy/astral-sh/uv:0.5.11 /uv /usr/local/bin/uv
+
+# Configure uv to use standard PyPI repositories
+ENV UV_INDEX_URL=https://pypi.org/simple \
+    UV_NO_CACHE=1
+
+# Upgrade pip to fix CVE-2025-8869
+RUN uv pip install --system "pip>=25.2"
 
 # Create virtual environment
 RUN python -m venv /opt/venv
@@ -20,7 +35,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Production stage
-FROM python:3.11-slim
+FROM harbor.in.lazarev.cloud/proxy/python:3.11-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \

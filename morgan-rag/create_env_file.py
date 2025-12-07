@@ -1,0 +1,256 @@
+#!/usr/bin/env python3
+"""
+Create .env file from template with user-provided configuration.
+"""
+
+import os
+from pathlib import Path
+
+# User-provided configuration
+ENV_CONTENT = """# Morgan RAG Configuration
+
+# =============================================================================
+# LLM Configuration (Required)
+# =============================================================================
+
+# Your LLM endpoint (OpenAI compatible)
+LLM_BASE_URL=https://ai.ishosting.com/api
+
+# API key for your LLM service
+LLM_API_KEY=sk-7903d76996ad42f7ade45455d92745c2
+
+# Default model to use
+LLM_MODEL=gemma3:latest
+
+# Alternative models for different tasks
+LLM_CHAT_MODEL=gemma3:latest
+LLM_EMBEDDING_MODEL=qwen3:latest
+
+# =============================================================================
+# Vector Database (Qdrant)
+# =============================================================================
+
+# Qdrant connection (use localhost for local development)
+QDRANT_URL=http://localhost:6333
+
+# Optional API key for Qdrant (leave empty for no auth)
+QDRANT_API_KEY=
+
+# Collection settings
+QDRANT_DEFAULT_COLLECTION=morgan_knowledge
+QDRANT_MEMORY_COLLECTION=morgan_memory
+
+# =============================================================================
+# Embedding Configuration (Same as InspecTor)
+# =============================================================================
+OLLAMA_HOST=192.168.100.88:11434
+
+# Primary embedding model (remote Ollama - high quality)
+EMBEDDING_MODEL=qwen3-embedding:latest
+
+# Force remote embeddings even in dev mode
+EMBEDDING_FORCE_REMOTE=false
+
+# Batch size for embedding operations (same as InspecTor)
+EMBEDDING_BATCH_SIZE=100
+
+# Use instruction prefixes for 22% better relevance
+EMBEDDING_USE_INSTRUCTIONS=true
+
+# Alternative models:
+# EMBEDDING_MODEL=nomic-embed-text                        # 768 dims, good quality
+# EMBEDDING_LOCAL_MODEL=sentence-transformers/all-mpnet-base-v2  # 768 dims, better quality
+
+# =============================================================================
+# System Configuration
+# =============================================================================
+
+# Data directory (where Morgan stores its data)
+MORGAN_DATA_DIR=./data
+
+# Log level (DEBUG, INFO, WARNING, ERROR)
+MORGAN_LOG_LEVEL=INFO
+
+# Enable debug mode (more verbose logging)
+MORGAN_DEBUG=false
+
+# Maximum context length for LLM
+MORGAN_MAX_CONTEXT=8192
+
+# Maximum tokens for responses
+MORGAN_MAX_RESPONSE_TOKENS=2048
+
+# =============================================================================
+# Performance Settings
+# =============================================================================
+
+# Number of worker processes
+MORGAN_WORKERS=4
+
+# Cache size (number of items to cache in memory)
+MORGAN_CACHE_SIZE=1000
+
+# Redis cache TTL (seconds)
+MORGAN_CACHE_TTL=3600
+
+# Search result limits
+MORGAN_MAX_SEARCH_RESULTS=50
+MORGAN_DEFAULT_SEARCH_RESULTS=10
+
+# =============================================================================
+# Security Settings
+# =============================================================================
+
+# API key for Morgan API (leave empty for no auth)
+MORGAN_API_KEY=
+
+# Allowed CORS origins (comma-separated)
+MORGAN_CORS_ORIGINS=*
+
+# Enable/disable certain features
+MORGAN_ALLOW_FILE_UPLOAD=true
+MORGAN_ALLOW_URL_INGESTION=true
+MORGAN_ALLOW_CODE_EXECUTION=false
+
+# =============================================================================
+# Web Interface
+# =============================================================================
+
+# Web server host and port
+MORGAN_HOST=0.0.0.0
+MORGAN_PORT=8080
+
+# API server port
+MORGAN_API_PORT=8000
+
+# Enable web interface
+MORGAN_WEB_ENABLED=true
+
+# Session secret (change in production)
+MORGAN_SESSION_SECRET=change-me-in-production
+
+# =============================================================================
+# Ingestion Settings
+# =============================================================================
+
+# Default chunk size for document splitting
+MORGAN_CHUNK_SIZE=1000
+
+# Chunk overlap for better context
+MORGAN_CHUNK_OVERLAP=200
+
+# Maximum file size for upload (MB)
+MORGAN_MAX_FILE_SIZE=100
+
+# Supported file types (comma-separated)
+MORGAN_SUPPORTED_TYPES=pdf,docx,txt,md,html,py,js,ts,go,java,cpp,c,h
+
+# Web scraping settings
+MORGAN_SCRAPE_DEPTH=3
+MORGAN_SCRAPE_DELAY=1
+MORGAN_SCRAPE_TIMEOUT=30
+
+# =============================================================================
+# Memory & Learning
+# =============================================================================
+
+# Conversation memory settings
+MORGAN_MEMORY_ENABLED=true
+MORGAN_MEMORY_MAX_CONVERSATIONS=1000
+MORGAN_MEMORY_MAX_TURNS_PER_CONVERSATION=100
+
+# Learning from feedback
+MORGAN_LEARNING_ENABLED=true
+MORGAN_FEEDBACK_WEIGHT=0.1
+
+# Knowledge graph settings
+MORGAN_KNOWLEDGE_GRAPH_ENABLED=true
+MORGAN_ENTITY_EXTRACTION_ENABLED=true
+
+# =============================================================================
+# Monitoring & Analytics
+# =============================================================================
+
+# Enable metrics collection
+MORGAN_METRICS_ENABLED=true
+
+# Prometheus metrics port
+MORGAN_METRICS_PORT=9000
+
+# Health check settings
+MORGAN_HEALTH_CHECK_INTERVAL=30
+
+# Analytics retention (days)
+MORGAN_ANALYTICS_RETENTION=90
+
+# =============================================================================
+# Optional: External Services
+# =============================================================================
+
+# Redis for caching (leave empty to use in-memory cache)
+REDIS_URL=redis://localhost:6379
+
+# PostgreSQL for metadata (leave empty to use SQLite)
+DATABASE_URL=
+
+# Elasticsearch for full-text search (optional)
+ELASTICSEARCH_URL=
+
+# =============================================================================
+# Optional: Monitoring
+# =============================================================================
+
+# Grafana admin password
+GRAFANA_PASSWORD=admin
+
+# Qdrant log level
+QDRANT_LOG_LEVEL=INFO
+
+# =============================================================================
+# Development Settings
+# =============================================================================
+
+# Enable development mode
+MORGAN_DEV_MODE=false
+
+# Auto-reload on code changes
+MORGAN_AUTO_RELOAD=false
+
+# Enable API documentation
+MORGAN_DOCS_ENABLED=true
+
+# Enable request logging
+MORGAN_REQUEST_LOGGING=false
+"""
+
+
+def main():
+    """Create .env file in morgan-rag directory."""
+    # Get the script directory
+    script_dir = Path(__file__).parent
+    env_file = script_dir / ".env"
+    
+    # Check if .env already exists
+    if env_file.exists():
+        response = input(f".env file already exists at {env_file}. Overwrite? (y/N): ")
+        if response.lower() != 'y':
+            print("Aborted. .env file not created.")
+            return
+    
+    # Write .env file
+    try:
+        env_file.write_text(ENV_CONTENT, encoding='utf-8')
+        print(f"✅ Created .env file at {env_file}")
+        print("\n📝 Next steps:")
+        print("1. Review the .env file and adjust settings if needed")
+        print("2. Run: docker-compose up -d")
+        print("3. Check logs: docker-compose logs -f morgan")
+    except Exception as e:
+        print(f"❌ Error creating .env file: {e}")
+        exit(1)
+
+
+if __name__ == "__main__":
+    main()
+
+
