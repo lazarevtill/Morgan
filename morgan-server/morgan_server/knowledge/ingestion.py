@@ -13,8 +13,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
+import os
 
 import structlog
+
+# Change this root as appropriate for your deployment/environment.
+SAFE_DOCUMENT_ROOT = Path("/data").resolve()
 
 logger = structlog.get_logger(__name__)
 
@@ -87,27 +91,40 @@ class TextLoader(DocumentLoader):
 
     def load(self, source: Union[str, Path]) -> Document:
         """Load a text file."""
+        # --- Path traversal protection ---
         path = Path(source)
         logger.info("loading_text_file", path=str(path))
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            resolved_path = path.resolve(strict=True)
+        except FileNotFoundError:
+            logger.error("file_not_found", path=str(path))
+            raise FileNotFoundError(f"File not found: {path}")
+        # is_relative_to is only available in Python 3.9+, use fallback for compatibility
+        try:
+            resolved_path.relative_to(SAFE_DOCUMENT_ROOT)
+        except ValueError:
+            logger.error("path_outside_safe_root", path=str(resolved_path), root=str(SAFE_DOCUMENT_ROOT))
+            raise PermissionError(f"Access to file outside allowed directory: {resolved_path}")
+
+        try:
+            with open(resolved_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
             metadata = {
-                "filename": path.name,
-                "file_size": path.stat().st_size,
-                "file_modified": datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+                "filename": resolved_path.name,
+                "file_size": resolved_path.stat().st_size,
+                "file_modified": datetime.fromtimestamp(resolved_path.stat().st_mtime).isoformat(),
             }
 
             return Document(
                 content=content,
-                source=str(path),
+                source=str(resolved_path),
                 doc_type="text",
                 metadata=metadata,
             )
         except Exception as e:
-            logger.error("failed_to_load_text", path=str(path), error=str(e))
+            logger.error("failed_to_load_text", path=str(resolved_path), error=str(e))
             raise
 
 
