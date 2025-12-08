@@ -6,9 +6,12 @@ Run the Morgan server directly using:
 
 Or with custom configuration:
     python -m morgan_server --host 0.0.0.0 --port 8080
+
+**Validates: Requirements 1.2, 1.5**
 """
 
 import argparse
+import signal
 import sys
 from pathlib import Path
 
@@ -96,9 +99,45 @@ For more information, visit: http://localhost:8080/docs
     return parser.parse_args()
 
 
+def setup_signal_handlers():
+    """
+    Setup signal handlers for graceful shutdown.
+    
+    Handles SIGTERM and SIGINT signals to ensure proper cleanup.
+    
+    **Validates: Requirements 1.5**
+    """
+    def signal_handler(signum, _frame):
+        """Handle shutdown signals gracefully."""
+        signal_name = signal.Signals(signum).name
+        print(
+            f"\n{signal_name} received. "
+            "Shutting down Morgan Server gracefully..."
+        )
+        sys.exit(0)
+    
+    # Register signal handlers
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+
 def main():
-    """Main entry point for the server."""
+    """
+    Main entry point for the server.
+    
+    This function:
+    1. Parses command-line arguments
+    2. Loads configuration from multiple sources
+    3. Creates the FastAPI application
+    4. Sets up signal handlers for graceful shutdown
+    5. Starts the Uvicorn server
+    
+    **Validates: Requirements 1.2, 1.5**
+    """
     args = parse_args()
+    
+    # Setup signal handlers for graceful shutdown
+    setup_signal_handlers()
     
     try:
         # Build configuration overrides from command-line args
@@ -137,11 +176,16 @@ def main():
         print(f"  LLM Endpoint: {config.llm_endpoint}")
         print(f"  Vector DB: {config.vector_db_url}")
         print()
-        print(f"Documentation: http://{config.host}:{config.port}/docs")
-        print(f"Health Check: http://{config.host}:{config.port}/health")
+        print(
+            f"Documentation: http://{config.host}:{config.port}/docs"
+        )
+        print(
+            f"Health Check: http://{config.host}:{config.port}/health"
+        )
         print()
         
-        # Run server
+        # Run server with graceful shutdown support
+        # Uvicorn will handle SIGTERM/SIGINT and trigger the lifespan shutdown
         uvicorn.run(
             app,
             host=config.host,
@@ -152,8 +196,14 @@ def main():
     
     except ConfigurationError as e:
         print(f"Configuration Error: {e}", file=sys.stderr)
-        print("\nPlease check your configuration and try again.", file=sys.stderr)
-        print("For help, run: python -m morgan_server --help", file=sys.stderr)
+        print(
+            "\nPlease check your configuration and try again.",
+            file=sys.stderr
+        )
+        print(
+            "For help, run: python -m morgan_server --help",
+            file=sys.stderr
+        )
         sys.exit(1)
     
     except KeyboardInterrupt:
