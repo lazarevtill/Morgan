@@ -94,7 +94,8 @@ class RelationshipProfile:
 
 class RelationshipManager:
     """
-    Relationship management system for tracking and nurturing user relationships.
+    Relationship management system for tracking and nurturing user
+    relationships.
 
     This class provides:
     - Interaction history tracking
