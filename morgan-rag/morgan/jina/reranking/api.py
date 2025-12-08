@@ -49,6 +49,7 @@ def _load_service() -> Any:
 
 def _simple_rerank(query: str, results: List[dict], top_k: int) -> List[dict]:
     """Deterministic fallback reranker based on length/score."""
+
     def score(item: dict) -> float:
         base = float(item.get("score", 0.0))
         content = str(item.get("content", ""))

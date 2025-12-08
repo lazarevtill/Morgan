@@ -7,4 +7,3 @@ import ``create_app`` without failing.
 """
 
 from .app import create_app  # noqa: F401
-
