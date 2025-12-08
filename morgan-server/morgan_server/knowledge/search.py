@@ -144,19 +144,43 @@ class KeywordSearcher:
 
 
 class ResultReranker:
-    """Reranks search results using cross-encoder or heuristic methods."""
+    """
+    Reranks search results using advanced reranking service.
+    
+    Supports:
+    - Heuristic reranking (fast, no model required)
+    - Local CrossEncoder reranking (high quality)
+    - Remote reranking service (distributed setups)
+    """
 
-    def __init__(self, use_cross_encoder: bool = False):
+    def __init__(
+        self,
+        use_advanced_reranking: bool = False,
+        remote_endpoint: Optional[str] = None,
+        model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
+        local_device: str = "cpu",
+    ):
         """
         Initialize the reranker.
 
         Args:
-            use_cross_encoder: Whether to use a cross-encoder model
+            use_advanced_reranking: Whether to use advanced reranking service
+            remote_endpoint: Remote reranking endpoint URL (optional)
+            model: Model name for local CrossEncoder
+            local_device: Device for local model ("cpu", "cuda", "mps")
         """
-        self.use_cross_encoder = use_cross_encoder
-        self._model = None
+        self.use_advanced_reranking = use_advanced_reranking
+        self._reranking_service = None
+        
+        if use_advanced_reranking:
+            from morgan_server.knowledge.reranking import RerankingService
+            self._reranking_service = RerankingService(
+                remote_endpoint=remote_endpoint,
+                model=model,
+                local_device=local_device,
+            )
 
-    def rerank(
+    async def rerank(
         self,
         query: str,
         results: List[RankedResult],
@@ -178,8 +202,8 @@ class ResultReranker:
 
         logger.info("reranking_results", num_results=len(results))
 
-        if self.use_cross_encoder:
-            reranked = self._rerank_with_cross_encoder(query, results)
+        if self.use_advanced_reranking and self._reranking_service:
+            reranked = await self._rerank_with_service(query, results)
         else:
             reranked = self._rerank_heuristic(query, results)
 
@@ -192,6 +216,42 @@ class ResultReranker:
             reranked = reranked[:top_k]
 
         logger.info("reranking_complete", num_results=len(reranked))
+        return reranked
+
+    async def _rerank_with_service(
+        self,
+        query: str,
+        results: List[RankedResult],
+    ) -> List[RankedResult]:
+        """
+        Rerank using advanced reranking service.
+
+        Args:
+            query: Search query
+            results: Results to rerank
+
+        Returns:
+            Reranked results
+        """
+        # Extract documents and metadata
+        documents = [result.content for result in results]
+        metadata = [result.metadata for result in results]
+
+        # Rerank using service
+        reranked_results = await self._reranking_service.rerank(
+            query=query,
+            documents=documents,
+            metadata=metadata,
+        )
+
+        # Map back to RankedResult objects
+        reranked = []
+        for rerank_result in reranked_results:
+            original_result = results[rerank_result.original_index]
+            original_result.rerank_score = rerank_result.score
+            original_result.score = rerank_result.score
+            reranked.append(original_result)
+
         return reranked
 
     def _rerank_heuristic(
@@ -246,41 +306,6 @@ class ResultReranker:
         results.sort(key=lambda x: x.rerank_score or x.score, reverse=True)
         return results
 
-    def _rerank_with_cross_encoder(
-        self,
-        query: str,
-        results: List[RankedResult],
-    ) -> List[RankedResult]:
-        """
-        Rerank using a cross-encoder model.
-
-        Args:
-            query: Search query
-            results: Results to rerank
-
-        Returns:
-            Reranked results
-        """
-        # Load model if not already loaded
-        if self._model is None:
-            from sentence_transformers import CrossEncoder
-            self._model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
-
-        # Prepare pairs for cross-encoder
-        pairs = [[query, result.content] for result in results]
-
-        # Get scores
-        scores = self._model.predict(pairs)
-
-        # Update results with rerank scores
-        for result, score in zip(results, scores):
-            result.rerank_score = float(score)
-            result.score = float(score)
-
-        # Sort by rerank score
-        results.sort(key=lambda x: x.rerank_score or x.score, reverse=True)
-        return results
-
 
 class SearchSystem:
     """
@@ -297,7 +322,10 @@ class SearchSystem:
         self,
         vectordb_client: VectorDBClient,
         collection_name: str = "knowledge_base",
-        use_cross_encoder: bool = False,
+        use_advanced_reranking: bool = False,
+        reranking_remote_endpoint: Optional[str] = None,
+        reranking_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
+        reranking_device: str = "cpu",
     ):
         """
         Initialize the search system.
@@ -305,17 +333,26 @@ class SearchSystem:
         Args:
             vectordb_client: Vector database client
             collection_name: Name of the collection to search
-            use_cross_encoder: Whether to use cross-encoder for reranking
+            use_advanced_reranking: Whether to use advanced reranking service
+            reranking_remote_endpoint: Remote reranking endpoint URL (optional)
+            reranking_model: Model name for local reranking
+            reranking_device: Device for local reranking ("cpu", "cuda", "mps")
         """
         self.vectordb_client = vectordb_client
         self.collection_name = collection_name
         self.keyword_searcher = KeywordSearcher()
-        self.reranker = ResultReranker(use_cross_encoder=use_cross_encoder)
+        self.reranker = ResultReranker(
+            use_advanced_reranking=use_advanced_reranking,
+            remote_endpoint=reranking_remote_endpoint,
+            model=reranking_model,
+            local_device=reranking_device,
+        )
 
         logger.info(
             "search_system_initialized",
             collection_name=collection_name,
-            use_cross_encoder=use_cross_encoder,
+            use_advanced_reranking=use_advanced_reranking,
+            reranking_remote_endpoint=reranking_remote_endpoint,
         )
 
     async def search(
@@ -357,7 +394,7 @@ class SearchSystem:
 
             # Apply reranking if requested
             if query.rerank and len(results) > 1:
-                results = self.reranker.rerank(
+                results = await self.reranker.rerank(
                     query.query,
                     results,
                     top_k=query.limit,

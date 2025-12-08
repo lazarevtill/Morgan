@@ -98,38 +98,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         
         # Initialize LLM client
         logger.info("Initializing LLM client...")
-        # TODO: Initialize LLM client and register with health system
-        # llm_client = create_llm_client(config)
-        # await llm_client.connect()
-        # health_system.register_component("llm", llm_client)
-        # app.state.llm_client = llm_client
+        from morgan_server.llm import create_llm_client
+        llm_client = create_llm_client(config)
+        app.state.llm_client = llm_client
+        logger.info(f"LLM client initialized: {config.llm_provider}")
         
-        # Initialize embedding service
-        logger.info("Initializing embedding service...")
-        # TODO: Initialize embedding service
-        # embedding_service = create_embedding_service(config)
-        # await embedding_service.initialize()
-        # health_system.register_component("embeddings", embedding_service)
-        # app.state.embedding_service = embedding_service
-        
-        # Initialize memory system
-        logger.info("Initializing memory system...")
-        # TODO: Initialize memory system
-        # memory_system = MemorySystem(config)
-        # await memory_system.initialize()
-        # app.state.memory_system = memory_system
-        
-        # Initialize assistant
+        # Initialize assistant with basic components
         logger.info("Initializing Morgan assistant...")
-        # TODO: Initialize assistant with all components
-        # assistant = MorganAssistant(
-        #     llm_client=llm_client,
-        #     vector_db=vector_db,
-        #     embedding_service=embedding_service,
-        #     memory_system=memory_system,
-        #     config=config
-        # )
-        # app.state.assistant = assistant
+        from morgan_server.assistant import MorganAssistant
+        from morgan_server.api.routes.chat import set_assistant
+        
+        assistant = MorganAssistant(
+            llm_client=llm_client,
+        )
+        app.state.assistant = assistant
+        
+        # Set assistant in chat routes
+        set_assistant(assistant)
+        logger.info("Morgan assistant initialized successfully")
         
         logger.info(
             "Morgan Server started successfully",

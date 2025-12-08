@@ -257,8 +257,15 @@ def test_container_configuration_file_formats(
                 json.dump(config_dict, f)
         
         try:
-            # Load configuration from file
-            config = load_config(config_file=config_path)
+            # For .env files, we need to load them into environment variables
+            if config_format == "env":
+                # Load .env file into environment
+                from dotenv import load_dotenv
+                load_dotenv(config_path)
+                config = load_config()
+            else:
+                # Load configuration from file
+                config = load_config(config_file=config_path)
             
             # Verify configuration
             assert config.host == host, \

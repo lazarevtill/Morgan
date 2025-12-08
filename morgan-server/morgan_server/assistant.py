@@ -210,8 +210,9 @@ class MorganAssistant:
                     "content": f"{msg.role.value}: {msg.content}",
                     "timestamp": msg.timestamp.isoformat(),
                     "conversation_id": conv.conversation_id,
+                    "relevance_score": score,
                 }
-                for conv, msg in search_results
+                for conv, msg, score in search_results
             ]
         
         # 5. Retrieve relevant knowledge
@@ -220,23 +221,29 @@ class MorganAssistant:
                 query=message,
                 limit=3,
             )
-            context.knowledge_context = knowledge_results
+            # Extract sources from RAG results
+            if isinstance(knowledge_results, dict):
+                context.knowledge_context = knowledge_results.get("sources", [])
+            else:
+                context.knowledge_context = knowledge_results
         
         # 6. Apply personality
-        personality_config = self.personality_system.get_config()
         context.personality_application = self.personality_system.apply_personality(
-            message=message,
-            config=personality_config,
-            user_profile=context.user_profile,
+            response=message,
+            user_id=user_id,
+            relationship_depth=context.user_profile.trust_level if context.user_profile else 0.0,
         )
         
         # 7. Apply roleplay configuration
-        roleplay_config = self.roleplay_system.get_config()
-        context.roleplay_response = self.roleplay_system.generate_response_guidance(
-            message=message,
-            config=roleplay_config,
-            emotional_tone=context.emotional_detection.primary_tone,
-            user_profile=context.user_profile,
+        from morgan_server.empathic.roleplay import RoleplayContext
+        roleplay_context = RoleplayContext(
+            user_id=user_id,
+            relationship_depth=context.user_profile.trust_level if context.user_profile else 0.0,
+            emotional_state=context.emotional_detection,
+        )
+        context.roleplay_response = self.roleplay_system.generate_response(
+            base_response=message,
+            context=roleplay_context,
         )
         
         return context
@@ -278,7 +285,7 @@ class MorganAssistant:
             metadata={
                 "emotional_detection": context.emotional_detection.__dict__ if context.emotional_detection else None,
                 "personality_traits": context.personality_application.traits_applied if context.personality_application else [],
-                "roleplay_tone": context.roleplay_response.tone.value if context.roleplay_response else None,
+                "roleplay_tone": context.roleplay_response.tone_applied.value if context.roleplay_response else None,
             },
         )
         
@@ -290,15 +297,19 @@ class MorganAssistant:
         
         # Base personality
         if context.personality_application:
-            prompt_parts.append(f"Personality: {context.personality_application.description}")
-            prompt_parts.append(f"Traits: {', '.join(context.personality_application.traits_applied)}")
+            traits_str = ', '.join([f"{k.value}={v:.2f}" for k, v in context.personality_application.traits_applied.items()])
+            prompt_parts.append(f"Personality Traits: {traits_str}")
+            if context.personality_application.style_notes:
+                prompt_parts.append(f"Style: {', '.join(context.personality_application.style_notes)}")
         
         # Roleplay configuration
         if context.roleplay_response:
-            prompt_parts.append(f"Tone: {context.roleplay_response.tone.value}")
-            prompt_parts.append(f"Style: {context.roleplay_response.style.value}")
-            if context.roleplay_response.guidance:
-                prompt_parts.append(f"Guidance: {', '.join(context.roleplay_response.guidance)}")
+            prompt_parts.append(f"Tone: {context.roleplay_response.tone_applied.value}")
+            prompt_parts.append(f"Style: {context.roleplay_response.style_applied.value}")
+            if context.roleplay_response.relationship_notes:
+                prompt_parts.append(f"Relationship: {', '.join(context.roleplay_response.relationship_notes)}")
+            if context.roleplay_response.personality_notes:
+                prompt_parts.append(f"Personality Notes: {', '.join(context.roleplay_response.personality_notes)}")
         
         # Emotional adjustment
         if context.emotional_adjustment:
@@ -353,8 +364,8 @@ class MorganAssistant:
             elements.extend([f"trait:{trait}" for trait in context.personality_application.traits_applied])
         
         if context.roleplay_response:
-            elements.append(f"roleplay_tone:{context.roleplay_response.tone.value}")
-            elements.append(f"roleplay_style:{context.roleplay_response.style.value}")
+            elements.append(f"roleplay_tone:{context.roleplay_response.tone_applied.value}")
+            elements.append(f"roleplay_style:{context.roleplay_response.style_applied.value}")
         
         if context.user_profile:
             elements.append(f"communication_style:{context.user_profile.communication_style}")
