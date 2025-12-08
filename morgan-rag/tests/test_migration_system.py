@@ -126,7 +126,7 @@ class TestMigrationValidator:
             }
             mock_point.payload = {
                 "content": "test",
-                "migrated_at": "2024-01-01T00:00:00",
+                "migrated_at": "2025-01-01T00:00:00",
                 "embedding_type": "hierarchical",
             }
             mock_qdrant_client.retrieve.return_value = [mock_point]
@@ -142,7 +142,7 @@ class TestMigrationValidator:
         """Test validating a valid backup file."""
         backup_data = {
             "collection_name": "test_collection",
-            "backup_timestamp": "2024-01-01T00:00:00",
+            "backup_timestamp": "2025-01-01T00:00:00",
             "total_points": 2,
             "points": [
                 {"id": "1", "vector": [0.1, 0.2], "payload": {"content": "test1"}},
@@ -193,7 +193,7 @@ class TestRollbackManager:
         """Test validating a backup for rollback."""
         backup_data = {
             "collection_name": "test_collection",
-            "backup_timestamp": "2024-01-01T00:00:00",
+            "backup_timestamp": "2025-01-01T00:00:00",
             "total_points": 1,
             "points": [
                 {"id": "1", "vector": [0.1, 0.2], "payload": {"content": "test"}}

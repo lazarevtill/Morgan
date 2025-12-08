@@ -28,8 +28,8 @@ def mock_memory_manager():
     manager.get_memory_stats.return_value = {
         "total_conversations": 5,
         "total_messages": 50,
-        "oldest_conversation": "2024-01-01T10:00:00",
-        "newest_conversation": "2024-12-08T10:00:00",
+        "oldest_conversation": "2025-01-01T10:00:00",
+        "newest_conversation": "2025-12-08T10:00:00",
     }
     
     # Mock search_conversations
@@ -40,12 +40,12 @@ def mock_memory_manager():
     test_message = Message(
         role=MessageRole.USER,
         content="Test user message",
-        timestamp=datetime(2024, 12, 8, 10, 0, 0),
+        timestamp=datetime(2025, 12, 8, 10, 0, 0),
     )
     test_response = Message(
         role=MessageRole.ASSISTANT,
         content="Test assistant response",
-        timestamp=datetime(2024, 12, 8, 10, 0, 1),
+        timestamp=datetime(2025, 12, 8, 10, 0, 1),
     )
     test_conversation.messages = [test_message, test_response]
     
@@ -281,7 +281,7 @@ class TestMemorySearchEndpoint:
         test_message = Message(
             role=MessageRole.USER,
             content="User message without response",
-            timestamp=datetime(2024, 12, 8, 10, 0, 0),
+            timestamp=datetime(2025, 12, 8, 10, 0, 0),
         )
         test_conversation.messages = [test_message]
         

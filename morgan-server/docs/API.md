@@ -40,7 +40,7 @@ All API responses follow a consistent JSON format:
 {
   "status": "success",
   "data": { ... },
-  "timestamp": "2024-12-08T10:30:00Z"
+  "timestamp": "2025-12-08T10:30:00Z"
 }
 ```
 
@@ -50,7 +50,7 @@ All API responses follow a consistent JSON format:
   "error": "ERROR_CODE",
   "message": "Human-readable error message",
   "details": { ... },
-  "timestamp": "2024-12-08T10:30:00Z",
+  "timestamp": "2025-12-08T10:30:00Z",
   "request_id": "req_123abc"
 }
 ```
@@ -175,8 +175,8 @@ Get memory statistics for the current user.
   "total_conversations": 42,
   "active_conversations": 5,
   "total_messages": 1234,
-  "oldest_conversation": "2024-01-01T00:00:00Z",
-  "newest_conversation": "2024-12-08T10:30:00Z",
+  "oldest_conversation": "2025-01-01T00:00:00Z",
+  "newest_conversation": "2025-12-08T10:30:00Z",
   "storage_size_mb": 15.7
 }
 ```
@@ -204,7 +204,7 @@ Search conversation history.
   "results": [
     {
       "conversation_id": "conv456",
-      "timestamp": "2024-12-08T10:00:00Z",
+      "timestamp": "2025-12-08T10:00:00Z",
       "message": "User message...",
       "response": "Morgan's response...",
       "relevance_score": 0.92
@@ -365,7 +365,7 @@ Get knowledge base statistics.
   "total_chunks": 3420,
   "total_size_bytes": 52428800,
   "collections": ["main", "archive"],
-  "last_updated": "2024-12-08T10:30:00Z"
+  "last_updated": "2025-12-08T10:30:00Z"
 }
 ```
 
@@ -396,8 +396,8 @@ Get user profile and preferences.
     "Python",
     "Machine Learning"
   ],
-  "created_at": "2024-10-24T00:00:00Z",
-  "last_interaction": "2024-12-08T10:30:00Z"
+  "created_at": "2025-10-24T00:00:00Z",
+  "last_interaction": "2025-12-08T10:30:00Z"
 }
 ```
 
@@ -462,17 +462,17 @@ Get relationship timeline and milestones.
   "milestones": [
     {
       "type": "first_conversation",
-      "timestamp": "2024-10-24T00:00:00Z",
+      "timestamp": "2025-10-24T00:00:00Z",
       "description": "First conversation with Morgan"
     },
     {
       "type": "trust_milestone",
-      "timestamp": "2024-11-15T00:00:00Z",
+      "timestamp": "2025-11-15T00:00:00Z",
       "description": "Reached trust level 0.5"
     },
     {
       "type": "interaction_milestone",
-      "timestamp": "2024-12-01T00:00:00Z",
+      "timestamp": "2025-12-01T00:00:00Z",
       "description": "100 interactions completed"
     }
   ],
@@ -499,7 +499,7 @@ Simple health check endpoint.
 ```json
 {
   "status": "healthy",
-  "timestamp": "2024-12-08T10:30:00Z",
+  "timestamp": "2025-12-08T10:30:00Z",
   "version": "0.1.0",
   "uptime_seconds": 3600.0
 }
@@ -523,7 +523,7 @@ Detailed system status.
 ```json
 {
   "status": "healthy",
-  "timestamp": "2024-12-08T10:30:00Z",
+  "timestamp": "2025-12-08T10:30:00Z",
   "components": {
     "vector_db": {
       "name": "Qdrant",

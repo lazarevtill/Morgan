@@ -1,10 +1,23 @@
-# Morgan RAG - Human-First AI Assistant
+# ⚠️ DEPRECATED - Morgan RAG (Old System)
 
-## Overview
+> **This directory contains the old monolithic Morgan implementation and is DEPRECATED as of December 8, 2025.**
+>
+> **Please use the new client-server architecture:**
+> - **Server:** `../morgan-server/`
+> - **Client:** `../morgan-cli/`
+> - **Migration Guide:** `../MIGRATION.md`
+>
+> See [DEPRECATED.md](./DEPRECATED.md) for details.
 
-Morgan RAG is a **human-first** AI assistant built with KISS principles (Keep It Simple, Stupid). Unlike complex RAG systems that focus on technical features, Morgan is designed to be genuinely helpful, easy to use, and simple to maintain.
+---
 
-Built on proven patterns from InspecTor but redesigned for human interaction, Morgan provides intelligent conversation, learning from documents, and continuous improvement through feedback.
+## Overview (Historical)
+
+Morgan RAG was a **human-first** AI assistant built with KISS principles (Keep It Simple, Stupid). Unlike complex RAG systems that focus on technical features, Morgan was designed to be genuinely helpful, easy to use, and simple to maintain.
+
+Built on proven patterns from InspecTor but redesigned for human interaction, Morgan provided intelligent conversation, learning from documents, and continuous improvement through feedback.
+
+**This implementation has been replaced by a new client-server architecture with enhanced features and better deployment options.**
 
 ## Philosophy: Human-First, Not Code-First
 
