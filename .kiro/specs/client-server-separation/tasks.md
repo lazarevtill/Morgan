@@ -787,14 +787,20 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
 
 
-- [ ] 27. Checkpoint - Ensure all server tests pass
+- [x] 27. Checkpoint - Ensure all server tests pass
+
+
 
   - Ensure all tests pass, ask the user if questions arise.
 
 
 
 
-- [ ] 28. Create TUI client - HTTP/WebSocket client
+
+- [x] 28. Create TUI client - HTTP/WebSocket client
+
+
+
 
   - Create `morgan_cli/client.py`
   - Implement HTTP client for REST API calls
@@ -806,7 +812,13 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
 
 
-- [ ] 28.1 Write property test for client API-only communication
+
+- [x] 28.1 Write property test for client API-only communication
+
+
+
+
+
 
 
   - **Property 5: Client API-only communication**
@@ -817,7 +829,12 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
 
 
-- [ ] 28.2 Write property test for client configuration flexibility
+
+- [x] 28.2 Write property test for client configuration flexibility
+
+
+
+
 
   - **Property 6: Client configuration flexibility**
   - **Validates: Requirements 2.2**
@@ -825,7 +842,12 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
 
 
-- [ ] 28.3 Write property test for client error handling
+
+- [x] 28.3 Write property test for client error handling
+
+
+
+
 
 
   - **Property 7: Client error handling**
@@ -834,7 +856,12 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
 
 
-- [ ] 28.4 Write property test for client cleanup isolation
+- [x] 28.4 Write property test for client cleanup isolation
+
+
+
+
+
 
 
 
@@ -849,7 +876,11 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
 
 
-- [ ] 29. Create TUI client - Rich UI components
+- [x] 29. Create TUI client - Rich UI components
+
+
+
+
   - Create `morgan_cli/ui.py`
   - Implement markdown rendering using Rich
   - Implement typing indicators and progress feedback
@@ -859,18 +890,33 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
   - _Requirements: 9.1, 9.2, 9.4, 9.5_
 
-- [ ] 29.1 Write property test for markdown rendering
+
+
+
+- [x] 29.1 Write property test for markdown rendering
+
+
 
 
 
   - **Property 20: Markdown rendering**
 
 
+
+
+
   - **Validates: Requirements 9.1**
+
   - Use Hypothesis library with minimum 100 iterations
 
 
-- [ ] 29.2 Write property test for error message clarity
+- [x] 29.2 Write property test for error message clarity
+
+
+
+
+
+
 
 
   - **Property 22: Error message clarity**
@@ -879,11 +925,15 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
   - Use Hypothesis library with minimum 100 iterations
 
-- [ ] 30. Create TUI client - Click CLI
+- [x] 30. Create TUI client - Click CLI
+
 
 
   - Create `morgan_cli/cli.py`
+
   - Implement `chat` command for interactive chat
+
+
   - Implement `ask` command for single questions
   - Implement `learn` command for document ingestion
   - Implement `memory` command for memory management
@@ -895,7 +945,7 @@ This implementation plan outlines the tasks for creating a complete client-serve
   - _Requirements: 2.1, 2.2, 9.3_
 
 
-- [ ] 30.1 Write property test for command history
+- [x] 30.1 Write property test for command history (✓ passed)
 
 
   - **Property 21: Command history**
@@ -904,7 +954,10 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
   - Use Hypothesis library with minimum 100 iterations
 
-- [ ] 31. Create TUI client - Configuration
+- [x] 31. Create TUI client - Configuration
+
+
+
 
 
   - Create `morgan_cli/config.py`
@@ -916,7 +969,12 @@ This implementation plan outlines the tasks for creating a complete client-serve
   - _Requirements: 2.2_
 
 
-- [ ] 31.1 Write unit tests for client configuration
+
+- [x] 31.1 Write unit tests for client configuration
+
+
+
+
 
   - Test environment variable loading
   - Test command-line argument parsing
@@ -928,14 +986,21 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
 
 
-- [ ] 32. Checkpoint - Ensure all client tests pass
+
+- [x] 32. Checkpoint - Ensure all client tests pass
+
+
+
 
   - Ensure all tests pass, ask the user if questions arise.
 
 
 
 
-- [ ] 33. Create Docker configuration for server
+- [-] 33. Create Docker configuration for server
+
+
+
   - Create `docker/Dockerfile.server`
   - Configure production-ready image with only server dependencies
   - Add non-root user
@@ -945,7 +1010,9 @@ This implementation plan outlines the tasks for creating a complete client-serve
   - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
 
-- [ ] 33.1 Write property test for container configuration
+- [-] 33.1 Write property test for container configuration
+
+
 
 
   - **Property 18: Container configuration**
@@ -957,6 +1024,7 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
 - [ ] 33.2 Write property test for container signal handling
 
+
   - **Property 19: Container signal handling**
   - **Validates: Requirements 8.4**
 
@@ -964,6 +1032,7 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
 
 - [ ] 34. Create Docker Compose configuration
+
 
   - Create `docker/docker-compose.yml`
   - Add morgan-server service
@@ -977,6 +1046,7 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
 - [ ] 35. Create server entry point
 
+
   - Create `morgan_server/__main__.py`
   - Add CLI for starting server
 
@@ -985,6 +1055,7 @@ This implementation plan outlines the tasks for creating a complete client-serve
   - Add graceful shutdown handling
   - _Requirements: 1.2, 1.5_
 
+
 - [-] 36. Create client entry point
 
 
@@ -992,6 +1063,7 @@ This implementation plan outlines the tasks for creating a complete client-serve
   - Add CLI entry point
   - Configure as console script in pyproject.toml
   - _Requirements: 11.4_
+
 
 
 - [ ] 37. Write integration tests
@@ -1003,6 +1075,7 @@ This implementation plan outlines the tasks for creating a complete client-serve
   - Test memory and knowledge retrieval
   - Test error scenarios
   - _Requirements: All_
+
 
 
 
