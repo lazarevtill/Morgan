@@ -211,3 +211,22 @@ For issues or questions:
 2. Gradually migrate data and configurations
 3. Update any custom integrations to use the new APIs
 4. Consider containerized deployment for production
+
+## Documentation
+
+### Server Documentation
+
+- **[Server README](./morgan-server/README.md)** - Overview and quick start
+- **[Configuration Guide](./morgan-server/docs/CONFIGURATION.md)** - Complete configuration reference
+- **[Embedding Configuration](./morgan-server/docs/EMBEDDING_CONFIGURATION.md)** - Embedding provider setup
+- **[Deployment Guide](./morgan-server/docs/DEPLOYMENT.md)** - Docker and bare metal deployment
+- **[API Documentation](./morgan-server/docs/API.md)** - REST and WebSocket API reference
+
+### Client Documentation
+
+- **[Client README](./morgan-cli/README.md)** - Client overview and usage
+- **[Client API Reference](./morgan-cli/README.md#api-methods)** - Python client library
+
+### Docker Documentation
+
+- **[Docker README](./docker/README.md)** - Docker deployment guide

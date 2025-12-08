@@ -70,9 +70,11 @@ Morgan Server supports multiple configuration sources with the following precede
 2. **Configuration files** (YAML, JSON, .env)
 3. **Default values** (lowest precedence)
 
-For detailed configuration options, see:
+For detailed information, see:
 - **[Configuration Guide](docs/CONFIGURATION.md)** - Complete configuration reference
 - **[Embedding Configuration](docs/EMBEDDING_CONFIGURATION.md)** - Embedding provider setup
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Docker and bare metal deployment
+- **[API Documentation](docs/API.md)** - REST and WebSocket API reference
 
 ### Quick Configuration Example
 
