@@ -119,7 +119,7 @@ class ResponseHandler:
         sources = []
         for result in search_results:
             # Handle both dict and SearchResult object
-            if hasattr(result, 'source'):
+            if hasattr(result, "source"):
                 source = result.source
             else:
                 source = result.get("source", "")

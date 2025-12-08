@@ -25,15 +25,15 @@ class RemoteMorganClient:
         if api_key:
             self.session.headers.update({"Authorization": f"Bearer {api_key}"})
 
-    def chat(self, message: str, conversation_id: Optional[str], user_id: Optional[str]):
+    def chat(
+        self, message: str, conversation_id: Optional[str], user_id: Optional[str]
+    ):
         payload = {
             "message": message,
             "conversation_id": conversation_id,
             "user_id": user_id,
         }
-        resp = self.session.post(
-            f"{self.base_url}/api/chat", json=payload, timeout=60
-        )
+        resp = self.session.post(f"{self.base_url}/api/chat", json=payload, timeout=60)
         resp.raise_for_status()
         return resp.json()
 
@@ -210,7 +210,15 @@ def health(ctx: click.Context, detailed: bool):
 @click.argument(
     "action",
     type=click.Choice(
-        ["analyze", "plan", "execute", "validate", "rollback", "list-backups", "cleanup"]
+        [
+            "analyze",
+            "plan",
+            "execute",
+            "validate",
+            "rollback",
+            "list-backups",
+            "cleanup",
+        ]
     ),
 )
 @click.option("--collection", help="Collection name (analyze)")
@@ -251,7 +259,9 @@ def migrate(
 @click.option("--search", help="Search conversation history")
 @click.option("--cleanup", type=int, help="Clean conversations older than N days")
 @click.pass_context
-def memory(ctx: click.Context, stats: bool, search: Optional[str], cleanup: Optional[int]):
+def memory(
+    ctx: click.Context, stats: bool, search: Optional[str], cleanup: Optional[int]
+):
     """Manage conversation memory."""
     args = SimpleNamespace(stats=stats, search=search, cleanup=cleanup)
     legacy_app.cmd_memory(args, _get_morgan(ctx))

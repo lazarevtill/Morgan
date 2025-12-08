@@ -891,9 +891,7 @@ class SmartSearch:
             results = []
             for result in search_results:
                 payload = (
-                    result.payload
-                    if hasattr(result, "payload")
-                    else result.payload
+                    result.payload if hasattr(result, "payload") else result.payload
                 )
 
                 # Format conversation turn as content
@@ -905,11 +903,7 @@ class SmartSearch:
                 search_result = SearchResult(
                     content=content,
                     source=f"Conversation ({payload.get('timestamp', 'Unknown')})",
-                    score=(
-                        result.score
-                        if hasattr(result, "score")
-                        else result.score
-                    ),
+                    score=(result.score if hasattr(result, "score") else result.score),
                     result_type="memory",
                     metadata={
                         "conversation_id": payload.get("conversation_id", ""),

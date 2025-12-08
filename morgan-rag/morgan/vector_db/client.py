@@ -217,6 +217,7 @@ class VectorDBClient:
         Returns:
             True if successful
         """
+
         def _vector_for_point(point: Dict[str, Any], target_dim: int) -> List[float]:
             vector = point.get("vector")
             if vector is None:
@@ -224,9 +225,11 @@ class VectorDBClient:
             return vector
 
         try:
-            target_dim = self.get_collection_vector_size(collection_name) or len(
-                points[0].get("vector") or []
-            ) or 1
+            target_dim = (
+                self.get_collection_vector_size(collection_name)
+                or len(points[0].get("vector") or [])
+                or 1
+            )
 
             # Use optimized batch processing for large point sets
             if use_batch_optimization and len(points) > 50:

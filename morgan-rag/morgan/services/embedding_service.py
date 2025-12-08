@@ -146,7 +146,7 @@ class EmbeddingService:
 
         # Priority: embedding_base_url > ollama_host > llm_base_url
         base_url = getattr(self.settings, "embedding_base_url", None)
-        
+
         # If embedding_base_url is not set, try OLLAMA_HOST
         if not base_url:
             ollama_host = getattr(self.settings, "ollama_host", None)
@@ -156,11 +156,11 @@ class EmbeddingService:
                     base_url = f"http://{ollama_host}"
                 else:
                     base_url = ollama_host
-        
+
         # Fallback to LLM base URL if still not set
         if not base_url:
             base_url = getattr(self.settings, "llm_base_url", None)
-        
+
         if not base_url:
             self._remote_base_url = None
             return None
@@ -715,7 +715,11 @@ class EmbeddingService:
                 elif isinstance(data, dict) and "models" in data:
                     models = [m.get("name", "") for m in data.get("models", [])]
                 elif isinstance(data, list):
-                    models = [m.get("id") or m.get("name") for m in data if isinstance(m, dict)]
+                    models = [
+                        m.get("id") or m.get("name")
+                        for m in data
+                        if isinstance(m, dict)
+                    ]
 
                 if self.model_name not in models:
                     logger.warning(
