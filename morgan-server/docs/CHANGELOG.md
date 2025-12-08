@@ -111,4 +111,4 @@ Not applicable - this is the initial release.
 
 ## Version History
 
-- **0.1.0** (2024-12-08) - Initial release with configuration system and remote embedding support
+- **0.1.0** (2025-12-08) - Initial release with configuration system and remote embedding support

@@ -58,7 +58,7 @@ def main():
             ],
             'metadata': {
                 'total_docs': 3,
-                'processed_at': '2024-01-01T12:00:00'
+                'processed_at': '2025-01-01T12:00:00'
             }
         }
         

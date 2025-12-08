@@ -827,7 +827,7 @@ class ErrorResponse(BaseModel):
 
 ```python
 {
-    "timestamp": "2024-12-08T10:30:00Z",
+    "timestamp": "2025-12-08T10:30:00Z",
     "level": "INFO",
     "logger": "morgan.api.chat",
     "message": "Chat request processed",

@@ -1,5 +1,7 @@
 # Migration Guide: Old Morgan to Client-Server Architecture
 
+> **⚠️ IMPORTANT:** The old Morgan system (`morgan-rag/` directory and `cli.py.old`) is **DEPRECATED** as of December 8, 2025. Please migrate to the new client-server architecture as soon as possible.
+
 This guide helps you migrate from the old monolithic Morgan implementation to the new client-server architecture.
 
 ## Overview
@@ -8,6 +10,23 @@ The new architecture separates Morgan into:
 - **morgan-server**: Standalone server with all core functionality
 - **morgan-cli**: Lightweight terminal client
 - **docker**: Containerized deployment
+
+### Deprecation Timeline
+
+- **December 8, 2025:** Old system marked as deprecated
+- **Future Release:** Old system moved to `archive/` directory
+- **Future Release:** Old system removed from main repository (available in git history)
+
+### Why Migrate?
+
+The new system provides:
+- ✅ Clean client-server separation
+- ✅ Multiple client support (TUI, web, custom)
+- ✅ Better deployment options (Docker, systemd)
+- ✅ Enhanced features (improved empathic engine, knowledge engine)
+- ✅ Production-ready (health checks, metrics, structured logging)
+- ✅ Better performance and scalability
+- ✅ Comprehensive API for custom integrations
 
 ## Key Changes
 
@@ -211,6 +230,40 @@ For issues or questions:
 2. Gradually migrate data and configurations
 3. Update any custom integrations to use the new APIs
 4. Consider containerized deployment for production
+
+## Deprecated Components
+
+The following components are deprecated and should not be used:
+
+### Deprecated Files and Directories
+
+- **`morgan-rag/`** - Old monolithic system (see `morgan-rag/DEPRECATED.md`)
+- **`cli.py.old`** - Old CLI (renamed from `cli.py`)
+- **`cli.py`** - Now shows deprecation warning and exits
+
+### What Replaces What
+
+| Deprecated | Replacement | Notes |
+|------------|-------------|-------|
+| `morgan-rag/` | `morgan-server/` | Complete rewrite with clean architecture |
+| `cli.py` | `morgan-cli/` | New CLI with better UX and features |
+| `morgan/cli/click_cli.py` | `morgan-cli/morgan_cli/cli.py` | Rewritten as pure client |
+| Direct imports from `morgan/` | API calls to server | Use HTTP/WebSocket APIs |
+
+### Using Old System (Not Recommended)
+
+If you must use the old system temporarily:
+
+```bash
+# Use old CLI
+python cli.py.old
+
+# Or use old morgan-rag directly
+cd morgan-rag
+python -m morgan.cli.click_cli
+```
+
+**Warning:** The old system receives no new features and only critical bug fixes.
 
 ## Documentation
 

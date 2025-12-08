@@ -2,6 +2,8 @@
 
 Morgan is a personal AI assistant with empathic intelligence, knowledge management, and natural conversation capabilities. Built with a clean client-server architecture for self-hosted deployment.
 
+> **⚠️ Important:** The old monolithic system in `morgan-rag/` and `cli.py.old` is **DEPRECATED**. Please use the new client-server architecture (`morgan-server/` and `morgan-cli/`). See [MIGRATION.md](./MIGRATION.md) for migration instructions.
+
 ## Features
 
 - **Empathic Engine** - Emotional intelligence, personality system, and relationship management
@@ -366,4 +368,4 @@ MIT License - see LICENSE file for details.
 
 Current version: 0.1.0
 
-Last updated: December 8, 2024
+Last updated: December 8, 2025

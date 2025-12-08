@@ -2,6 +2,8 @@
 
 Complete documentation for the Morgan AI Assistant client-server architecture.
 
+> **⚠️ Important:** The old monolithic system in `morgan-rag/` and `cli.py.old` is **DEPRECATED**. See [DEPRECATION_NOTICE.md](./DEPRECATION_NOTICE.md) for details and [MIGRATION.md](./MIGRATION.md) for migration instructions.
+
 ## Quick Start
 
 - **[Server Quick Start](./morgan-server/README.md#quick-start)** - Get the server running in 5 minutes
@@ -204,8 +206,21 @@ Morgan uses a clean client-server architecture:
 - **Testing** - Run tests and add new ones
 - **Code Style** - Follow code style guidelines
 
+## Deprecated Documentation
+
+The following documentation is for the old system and is deprecated:
+
+- **[Old CI/CD Guide](./docs/CI_CD.md)** - For old system (deprecated)
+- **[Old Error Handling Guide](./docs/ERROR_HANDLING_GUIDE.md)** - For old system (deprecated)
+- **[Old Error Handling Reference](./docs/ERROR_HANDLING_QUICK_REFERENCE.md)** - For old system (deprecated)
+- **[Old Morgan RAG README](./morgan-rag/README.md)** - Old system overview (deprecated)
+
+For current documentation, see the sections above.
+
+See **[DEPRECATION_NOTICE.md](./DEPRECATION_NOTICE.md)** for complete deprecation information.
+
 ## Version
 
-This documentation is for Morgan v0.1.0.
+This documentation is for Morgan v0.1.0 (new client-server architecture).
 
-Last updated: December 8, 2024
+Last updated: December 8, 2025
