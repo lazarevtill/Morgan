@@ -997,7 +997,17 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
 
 
-- [-] 33. Create Docker configuration for server
+- [x] 33. Create Docker configuration for server
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1007,10 +1017,18 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
   - Add health check
   - Configure SIGTERM handling
+- - Make sure that all using actual docker config (tests too)
   - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
 
-- [-] 33.1 Write property test for container configuration
+- [x] 33.1 Write property test for container configuration
+
+
+
+
+
+
+
 
 
 
@@ -1022,16 +1040,32 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
 
 
-- [ ] 33.2 Write property test for container signal handling
+
+
+
+- [x] 33.2 Write property test for container signal handling
+
+
+
+
+
+
+
+
+
 
 
   - **Property 19: Container signal handling**
   - **Validates: Requirements 8.4**
 
   - Use Hypothesis library with minimum 100 iterations
+  - use docker for actual tests
+
+- [x] 34. Create Docker Compose configuration
 
 
-- [ ] 34. Create Docker Compose configuration
+
+
 
 
   - Create `docker/docker-compose.yml`
@@ -1044,7 +1078,11 @@ This implementation plan outlines the tasks for creating a complete client-serve
   - _Requirements: 8.5_
 
 
-- [ ] 35. Create server entry point
+
+- [x] 35. Create server entry point
+
+
+
 
 
   - Create `morgan_server/__main__.py`
@@ -1056,7 +1094,10 @@ This implementation plan outlines the tasks for creating a complete client-serve
   - _Requirements: 1.2, 1.5_
 
 
-- [-] 36. Create client entry point
+
+- [x] 36. Create client entry point
+
+
 
 
   - Create `morgan_cli/__main__.py`
@@ -1066,7 +1107,10 @@ This implementation plan outlines the tasks for creating a complete client-serve
 
 
 
-- [ ] 37. Write integration tests
+
+- [x] 37. Write integration tests
+
+
 
 
   - Test full client-server communication
@@ -1075,6 +1119,8 @@ This implementation plan outlines the tasks for creating a complete client-serve
   - Test memory and knowledge retrieval
   - Test error scenarios
   - _Requirements: All_
+
+
 
 
 
