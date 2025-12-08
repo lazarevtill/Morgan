@@ -781,7 +781,7 @@ class LocalModelManager:
     
     def load_local_language_model(
         self,
-        model_name: str = "ollama/llama2"
+        model_name: str = "ollama/gemma3"
     ) -> LocalLanguageModel
     
     def generate_embeddings_offline(
@@ -1945,7 +1945,7 @@ graph TD
    - Custom fine-tuned models for domain-specific content
 
 2. **Language Models**:
-   - Primary: Ollama (llama2, codellama, mistral)
+   - Primary: Ollama (gemma3, codellama, mistral)
    - Alternative: Local Transformers (GPT-J, FLAN-T5)
    - Reasoning-optimized models for complex analysis
 
