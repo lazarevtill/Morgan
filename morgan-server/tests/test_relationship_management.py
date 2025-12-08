@@ -171,8 +171,12 @@ class TestRelationshipManager:
                 sentiment="positive"
             )
 
-        trust_with_support = manager.calculate_trust_level(user_with_support)
-        trust_without_support = manager.calculate_trust_level(user_without_support)
+        trust_with_support = manager.calculate_trust_level(
+            user_with_support
+        )
+        trust_without_support = manager.calculate_trust_level(
+            user_without_support
+        )
 
         assert trust_with_support > trust_without_support
 
@@ -339,7 +343,6 @@ class TestRelationshipManager:
     def test_celebrate_milestone(self):
         """Test milestone celebration message generation."""
         manager = RelationshipManager()
-        user_id = "user123"
 
         milestone = Milestone(
             milestone_type=MilestoneType.CONVERSATIONS_10,
@@ -347,7 +350,7 @@ class TestRelationshipManager:
             description="10 conversations"
         )
 
-        message = manager.celebrate_milestone(user_id, milestone)
+        message = manager.celebrate_milestone(milestone)
         assert isinstance(message, str)
         assert len(message) > 0
         assert "10" in message or "conversations" in message.lower()
@@ -355,7 +358,6 @@ class TestRelationshipManager:
     def test_milestone_celebration_messages_unique(self):
         """Test that different milestones have different messages."""
         manager = RelationshipManager()
-        user_id = "user123"
 
         milestone_10 = Milestone(
             milestone_type=MilestoneType.CONVERSATIONS_10,
@@ -369,8 +371,8 @@ class TestRelationshipManager:
             description="50 conversations"
         )
 
-        message_10 = manager.celebrate_milestone(user_id, milestone_10)
-        message_50 = manager.celebrate_milestone(user_id, milestone_50)
+        message_10 = manager.celebrate_milestone(milestone_10)
+        message_50 = manager.celebrate_milestone(milestone_50)
 
         assert message_10 != message_50
 
@@ -439,7 +441,7 @@ class TestRelationshipManager:
         user_id = "user123"
 
         # Track many positive interactions to build trust
-        for i in range(50):
+        for _ in range(50):
             manager.track_interaction(
                 user_id=user_id,
                 interaction_type=InteractionType.EMOTIONAL_SUPPORT,
@@ -468,7 +470,7 @@ class TestRelationshipManager:
 
         # Track varied interactions frequently
         interaction_types = list(InteractionType)
-        for i in range(20):
+        for _ in range(20):
             for interaction_type in interaction_types:
                 manager.track_interaction(
                     user_id=user_id,
@@ -489,14 +491,14 @@ class TestRelationshipManager:
         user2 = "user2"
 
         # Track interactions for user1
-        for i in range(5):
+        for _ in range(5):
             manager.track_interaction(
                 user_id=user1,
                 interaction_type=InteractionType.CHAT
             )
 
         # Track interactions for user2
-        for i in range(10):
+        for _ in range(10):
             manager.track_interaction(
                 user_id=user2,
                 interaction_type=InteractionType.CHAT
@@ -529,7 +531,7 @@ class TestRelationshipManager:
         user_id = "user123"
 
         # Track 10 interactions
-        for i in range(10):
+        for _ in range(10):
             manager.track_interaction(
                 user_id=user_id,
                 interaction_type=InteractionType.CHAT
@@ -546,14 +548,14 @@ class TestRelationshipManager:
         user_id = "user123"
 
         # Track 7 positive and 3 negative interactions
-        for i in range(7):
+        for _ in range(7):
             manager.track_interaction(
                 user_id=user_id,
                 interaction_type=InteractionType.CHAT,
                 sentiment="positive"
             )
 
-        for i in range(3):
+        for _ in range(3):
             manager.track_interaction(
                 user_id=user_id,
                 interaction_type=InteractionType.CHAT,
@@ -569,7 +571,7 @@ class TestRelationshipManager:
         user_id = "user123"
 
         # Track enough interactions to calculate trend
-        for i in range(15):
+        for _ in range(15):
             manager.track_interaction(
                 user_id=user_id,
                 interaction_type=InteractionType.CHAT
