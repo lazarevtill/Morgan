@@ -1,0 +1,37 @@
+# Morgan Server Configuration Example
+# Copy this file to config.yaml and customize as needed
+
+# Server settings
+host: "0.0.0.0"  # Bind to all interfaces (use 127.0.0.1 for localhost only)
+port: 8080
+workers: 4
+
+# LLM settings (self-hosted only)
+llm_provider: "ollama"  # Options: "ollama", "openai-compatible"
+llm_endpoint: "http://localhost:11434"  # Self-hosted LLM endpoint
+llm_model: "gemma3"  # Model name to use
+# llm_api_key: "your-api-key"  # Optional for self-hosted
+
+# Vector database settings
+vector_db_url: "http://localhost:6333"  # Qdrant URL
+# vector_db_api_key: "your-api-key"  # Optional
+
+# Embedding settings
+embedding_provider: "local"  # Options: "local", "ollama", "openai-compatible"
+embedding_model: "sentence-transformers/all-MiniLM-L6-v2"  # Model name
+embedding_device: "cpu"  # For local only. Options: "cpu", "cuda", "mps"
+# embedding_endpoint: "http://localhost:11434"  # Required for remote providers (ollama/openai-compatible)
+# embedding_api_key: "your-api-key"  # Optional for remote providers
+
+# Cache settings
+cache_dir: "./data/cache"
+cache_size_mb: 1000
+
+# Logging settings
+log_level: "INFO"  # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+log_format: "json"  # Options: "json", "text"
+
+# Performance settings
+max_concurrent_requests: 100
+request_timeout_seconds: 60
+session_timeout_minutes: 60

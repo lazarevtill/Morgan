@@ -1,0 +1,10 @@
+# Prometheus configuration for Morgan monitoring
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'morgan-server'
+    static_configs:
+      - targets: ['morgan-server:8080']
+    metrics_path: '/metrics'

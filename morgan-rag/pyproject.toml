@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "morgan-rag"
-dynamic = ["version", "dependencies"]
+dynamic = ["version"]
 description = "Morgan RAG - Human-first AI assistant with emotional intelligence and background automation."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -15,6 +15,82 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
   "Operating System :: OS Independent",
+]
+
+# Core dependencies (Lightweight - CLI Friendly)
+dependencies = [
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "httpx>=0.25.0",
+    "rich>=13.7.0",
+    "typer>=0.9.0",
+    "click>=8.1.0",
+    "tqdm>=4.66.0",
+    "aiohttp>=3.9.0",
+    "pathlib2>=2.3.7; python_version < '3.4'",
+    "typing-extensions>=4.8.0",
+    "python-dateutil>=2.8.0",
+    "structlog>=23.2.0",
+    # OpenAI/Anthropic SDKs are lightweight enough to keep in core for client connectivity
+    "openai>=1.12.0",
+    "anthropic>=0.18.0",
+]
+
+[project.optional-dependencies]
+server = [
+    # Heavy ML/AI Dependencies
+    "torch>=2.0.0",
+    "numpy>=1.24.0",
+    "transformers>=4.30.0",
+    "sentence-transformers>=2.2.2",
+    "einops>=0.7.0",
+    "huggingface_hub[hf_xet]>=0.20.0",
+    
+    # Vector DB
+    "qdrant-client>=1.7.0",
+    
+    # Web / API
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.24.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.6",
+    "websockets>=12.0",
+    
+    # Document Processing
+    "PyPDF2>=3.0.1",
+    "pdfplumber>=0.9.0",
+    "python-docx>=0.8.11",
+    "openpyxl>=3.1.0",
+    "beautifulsoup4>=4.12.0",
+    "requests-html>=0.10.0",
+    "html2text>=2020.1.16",
+    "selenium>=4.15.0",
+    "markdown>=3.5.0",
+    "tree-sitter>=0.20.0",
+    "pygments>=2.16.0",
+    
+    # Caching & Security
+    "redis>=5.0.0",
+    "diskcache>=5.6.0",
+    "psutil>=5.9.0",
+    "cryptography>=41.0.0",
+    "validators>=0.22.0",
+    "prometheus-client>=0.19.0",
+    
+    # Multimodal
+    "Pillow>=10.0.0",
+    "pytesseract>=0.3.10",
+]
+
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.9.0",
+    "isort>=5.12.0",
+    "mypy>=1.6.0",
 ]
 
 [project.scripts]
@@ -34,7 +110,6 @@ morgan = [
 
 [tool.setuptools.dynamic]
 version = {attr = "morgan.__version__"}
-dependencies = {file = ["requirements.txt"]}
 
 [tool.black]
 line-length = 88
@@ -66,4 +141,3 @@ include_trailing_comma = true
 force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
-
