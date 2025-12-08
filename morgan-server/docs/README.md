@@ -29,17 +29,25 @@ Welcome to the Morgan Server documentation. This directory contains comprehensiv
   - Migration guide
   - Troubleshooting
 
-### Deployment (Coming Soon)
+### Deployment
 
-- **Deployment Guide** - Docker, Kubernetes, bare metal
-- **Security Guide** - Best practices for production
-- **Monitoring Guide** - Metrics, logging, alerting
+- **[Deployment Guide](DEPLOYMENT.md)**
+  - Docker deployment (Docker Compose and standalone)
+  - Bare metal deployment (Linux, macOS, Windows)
+  - Production considerations (security, performance, HA)
+  - Monitoring and maintenance
+  - Backup and recovery
+  - Troubleshooting
 
-### API Reference (Coming Soon)
+### API Reference
 
-- **API Documentation** - REST and WebSocket endpoints
-- **Client Guide** - Using the TUI client
-- **Integration Guide** - Building custom clients
+- **[API Documentation](API.md)**
+  - REST API endpoints (chat, memory, knowledge, profile, system)
+  - WebSocket API for real-time chat
+  - Request/response formats
+  - Error handling
+  - Client libraries (Python, JavaScript)
+  - Best practices
 
 ## Quick Links
 
