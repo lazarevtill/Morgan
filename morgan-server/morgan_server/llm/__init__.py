@@ -121,6 +121,34 @@ from .ollama import OllamaClient
 from .openai_compatible import OpenAICompatibleClient
 
 
+def create_llm_client(config) -> LLMClient:
+    """
+    Create an LLM client based on configuration.
+    
+    Args:
+        config: ServerConfig instance with LLM configuration
+        
+    Returns:
+        LLMClient instance (OllamaClient or OpenAICompatibleClient)
+        
+    Raises:
+        ValueError: If provider is not supported
+    """
+    if config.llm_provider == "ollama":
+        return OllamaClient(
+            base_url=config.llm_endpoint,
+            model=config.llm_model,
+        )
+    elif config.llm_provider == "openai-compatible":
+        return OpenAICompatibleClient(
+            endpoint=config.llm_endpoint,
+            api_key=config.llm_api_key,
+            model=config.llm_model,
+        )
+    else:
+        raise ValueError(f"Unsupported LLM provider: {config.llm_provider}")
+
+
 __all__ = [
     "LLMClient",
     "LLMMessage",
@@ -131,4 +159,5 @@ __all__ = [
     "LLMRateLimitError",
     "OllamaClient",
     "OpenAICompatibleClient",
+    "create_llm_client",
 ]

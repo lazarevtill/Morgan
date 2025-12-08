@@ -5,13 +5,11 @@ This module tests the full integration of the assistant with all engines.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime
+from unittest.mock import AsyncMock
 
 from morgan_server.assistant import MorganAssistant
 from morgan_server.empathic.emotional import EmotionalIntelligence
 from morgan_server.empathic.personality import PersonalitySystem
-from morgan_server.empathic.relationships import RelationshipManager
 from morgan_server.personalization.memory import MemoryManager
 from morgan_server.personalization.preferences import PreferenceManager
 from morgan_server.personalization.profile import ProfileManager
@@ -23,15 +21,20 @@ class TestAssistantIntegration:
     @pytest.fixture
     def mock_llm_client(self):
         """Create a mock LLM client."""
+        from morgan_server.llm import LLMResponse
+        
         client = AsyncMock()
-        client.generate = AsyncMock(return_value="This is a test response from the assistant.")
+        client.generate = AsyncMock(return_value=LLMResponse(
+            content="This is a test response from the assistant.",
+            model="test-model"
+        ))
         return client
 
     @pytest.fixture
     def mock_rag_system(self):
         """Create a mock RAG system."""
-        rag = Mock()
-        rag.retrieve = Mock(return_value={
+        rag = AsyncMock()
+        rag.retrieve = AsyncMock(return_value={
             "context": "Test context",
             "sources": [],
             "confidence": 0.8
@@ -43,8 +46,7 @@ class TestAssistantIntegration:
         """Create an assistant instance with mocked dependencies."""
         emotional_intelligence = EmotionalIntelligence()
         personality_system = PersonalitySystem()
-        relationship_manager = RelationshipManager()
-        memory_manager = MemoryManager(str(tmp_path / "memory"))
+        memory_system = MemoryManager(str(tmp_path / "memory"))
         preference_manager = PreferenceManager(str(tmp_path / "preferences"))
         profile_manager = ProfileManager(str(tmp_path / "profiles"))
 
@@ -53,8 +55,7 @@ class TestAssistantIntegration:
             rag_system=mock_rag_system,
             emotional_intelligence=emotional_intelligence,
             personality_system=personality_system,
-            relationship_manager=relationship_manager,
-            memory_manager=memory_manager,
+            memory_system=memory_system,
             preference_manager=preference_manager,
             profile_manager=profile_manager
         )
@@ -70,9 +71,10 @@ class TestAssistantIntegration:
         response = await assistant.chat(user_id=user_id, message=message)
 
         # Verify response structure
-        assert "answer" in response
-        assert "conversation_id" in response
-        assert response["answer"] == "This is a test response from the assistant."
+        assert hasattr(response, "answer")
+        assert hasattr(response, "conversation_id")
+        assert response.answer == "This is a test response from the assistant."
+        assert response.conversation_id.startswith("conv_")
 
         # Verify LLM was called
         mock_llm_client.generate.assert_called_once()
@@ -86,11 +88,11 @@ class TestAssistantIntegration:
         response = await assistant.chat(user_id=user_id, message=message)
 
         # Verify emotional intelligence detected tone
-        assert "emotional_tone" in response
+        assert hasattr(response, "emotional_tone")
 
         # Verify response was generated
-        assert "answer" in response
-        assert len(response["answer"]) > 0
+        assert hasattr(response, "answer")
+        assert len(response.answer) > 0
 
     @pytest.mark.asyncio
     async def test_context_management(self, assistant):
@@ -99,7 +101,7 @@ class TestAssistantIntegration:
 
         # Send first message
         response1 = await assistant.chat(user_id=user_id, message="Hello")
-        conversation_id = response1["conversation_id"]
+        conversation_id = response1.conversation_id
 
         # Send second message in same conversation
         response2 = await assistant.chat(
@@ -109,4 +111,4 @@ class TestAssistantIntegration:
         )
 
         # Verify same conversation
-        assert response2["conversation_id"] == conversation_id
+        assert response2.conversation_id == conversation_id
