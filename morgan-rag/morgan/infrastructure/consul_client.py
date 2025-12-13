@@ -27,8 +27,12 @@ class ConsulConfig:
         default_factory=lambda: str(os.getenv("CONSUL_ENABLED", "false")).lower()
         in {"1", "true", "yes"}
     )
-    address: str = field(default_factory=lambda: os.getenv("CONSUL_HTTP_ADDR", "http://consul:8500"))
-    datacenter: Optional[str] = field(default_factory=lambda: os.getenv("CONSUL_DATACENTER"))
+    address: str = field(
+        default_factory=lambda: os.getenv("CONSUL_HTTP_ADDR", "http://consul:8500")
+    )
+    datacenter: Optional[str] = field(
+        default_factory=lambda: os.getenv("CONSUL_DATACENTER")
+    )
     token: Optional[str] = field(default_factory=lambda: os.getenv("CONSUL_HTTP_TOKEN"))
 
 
@@ -75,9 +79,15 @@ class ConsulServiceRegistry:
             }
 
         try:
-            resp = self.session.put(f"{self.config.address}/v1/agent/service/register", json=payload, timeout=5)
+            resp = self.session.put(
+                f"{self.config.address}/v1/agent/service/register",
+                json=payload,
+                timeout=5,
+            )
             resp.raise_for_status()
-            logger.info("Registered service '%s' with Consul at %s", name, self.config.address)
+            logger.info(
+                "Registered service '%s' with Consul at %s", name, self.config.address
+            )
             return True
         except Exception as exc:  # pragma: no cover - networking guard
             logger.warning("Consul registration failed for %s: %s", name, exc)
@@ -88,7 +98,9 @@ class ConsulServiceRegistry:
         if not self.config.enabled:
             return False
         try:
-            resp = self.session.put(f"{self.config.address}/v1/agent/service/deregister/{name}", timeout=5)
+            resp = self.session.put(
+                f"{self.config.address}/v1/agent/service/deregister/{name}", timeout=5
+            )
             resp.raise_for_status()
             logger.info("Deregistered service '%s' from Consul", name)
             return True

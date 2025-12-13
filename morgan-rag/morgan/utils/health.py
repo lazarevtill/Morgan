@@ -25,7 +25,8 @@ class HealthChecker:
         # Qdrant
         try:
             q_client = QdrantClient(
-                url=self.settings.qdrant_url, api_key=self.settings.qdrant_api_key or None
+                url=self.settings.qdrant_url,
+                api_key=self.settings.qdrant_api_key or None,
             )
             q_client.get_collections()
             qdrant_ok = True
@@ -75,14 +76,19 @@ class HealthChecker:
                 results["redis"] = {"status": "error", "detail": str(exc)}
                 overall_status = "error"
         else:
-            results["redis"] = {"status": "skipped", "detail": "No REDIS_URL configured"}
+            results["redis"] = {
+                "status": "skipped",
+                "detail": "No REDIS_URL configured",
+            }
 
         # High-level systems expected by CLI health output
         results["knowledge"] = {
             "status": "healthy" if qdrant_ok and embed_ok else "warning"
         }
         results["memory"] = {"status": "healthy" if qdrant_ok else "error"}
-        results["search"] = {"status": "healthy" if qdrant_ok and embed_ok else "warning"}
+        results["search"] = {
+            "status": "healthy" if qdrant_ok and embed_ok else "warning"
+        }
 
         return {
             "overall_status": overall_status,

@@ -29,7 +29,7 @@ class ModelSelector:
                 "local": "all-MiniLM-L6-v2",
                 "lazarev": "text-embedding-ada-002",
             },
-            "llm": {"local": "ollama/llama2", "lazarev": "gpt-3.5-turbo"},
+            "llm": {"local": "ollama/gemma3", "lazarev": "gpt-3.5-turbo"},
             "emotional": {
                 "local": "all-MiniLM-L6-v2",
                 "lazarev": "text-embedding-ada-002",
@@ -50,7 +50,7 @@ class ModelSelector:
             "jina-reranker-v3": "lazarev",
             "jina-reranker-v2-base-multilingual": "lazarev",
             # Ollama models - use local manager (handles local/remote Ollama)
-            "llama2": "local",
+            "gemma3": "local",
             "llama3": "local",
             "llama3.1": "local",
             "mistral": "local",
@@ -188,7 +188,7 @@ class ModelSelector:
             },
             "llm": {
                 "local": [
-                    "llama2",
+                    "gemma3",
                     "llama3",
                     "llama3.1",
                     "mistral",

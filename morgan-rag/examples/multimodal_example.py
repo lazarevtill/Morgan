@@ -167,7 +167,7 @@ def create_sample_documents() -> List[Dict[str, Any]]:
                 "title": "Computer Vision in Healthcare",
                 "category": "healthcare",
                 "author": "Dr. Smith",
-                "date": "2024-01-15"
+                "date": "2025-01-15"
             }
         },
         {
@@ -190,7 +190,7 @@ def create_sample_documents() -> List[Dict[str, Any]]:
                 "title": "NLP Advances",
                 "category": "nlp",
                 "author": "Prof. Johnson",
-                "date": "2024-01-20"
+                "date": "2025-01-20"
             }
         },
         {
@@ -213,7 +213,7 @@ def create_sample_documents() -> List[Dict[str, Any]]:
                 "title": "ML in Finance",
                 "category": "finance",
                 "author": "Jane Doe",
-                "date": "2024-01-25"
+                "date": "2025-01-25"
             }
         }
     ]
@@ -282,7 +282,7 @@ def demonstrate_multimodal_processing():
                     "title": "AI Performance Dashboard",
                     "category": "analytics",
                     "author": "Data Team",
-                    "date": "2024-01-30",
+                    "date": "2025-01-30",
                     "has_visualizations": True
                 }
             )

@@ -113,7 +113,7 @@ User relationship context:
             context_parts.append("\nRelevant Knowledge:")
             for i, result in enumerate(search_results[:5], 1):
                 # Handle both dict and SearchResult object
-                if hasattr(result, 'source'):
+                if hasattr(result, "source"):
                     source = result.source
                     content = result.content[:500]
                 else:
@@ -187,7 +187,7 @@ Provide follow-up suggestions when appropriate."""
             context_parts.append("\nRelevant Knowledge:")
             for i, result in enumerate(search_results[:5], 1):
                 # Handle both dict and SearchResult object
-                if hasattr(result, 'source'):
+                if hasattr(result, "source"):
                     source = result.source
                     content = result.content[:500]
                 else:

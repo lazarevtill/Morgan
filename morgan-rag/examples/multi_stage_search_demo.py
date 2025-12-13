@@ -147,7 +147,7 @@ def demo_search_result_features():
         ),
         SearchResult(
             content="Q: How do I start a Docker container?\nA: Use the 'docker run' command with your image name.",
-            source="Conversation (2024-01-15)",
+            source="Conversation (2025-01-15)",
             score=0.85,
             result_type="memory",
             metadata={"conversation_id": "conv123", "feedback_rating": 5},

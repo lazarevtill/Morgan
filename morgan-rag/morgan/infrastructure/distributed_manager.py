@@ -126,7 +126,9 @@ class DistributedHostManager:
         >>> status = await manager.health_check_all()
     """
 
-    def __init__(self, ssh_key_path: Optional[str] = None, inventory_path: Optional[Path] = None):
+    def __init__(
+        self, ssh_key_path: Optional[str] = None, inventory_path: Optional[Path] = None
+    ):
         """
         Initialize distributed host manager.
 
@@ -139,8 +141,12 @@ class DistributedHostManager:
 
         self.ssh_key_path = ssh_key_path or str(Path.home() / ".ssh" / "id_rsa")
         self.hosts: Dict[str, HostConfig] = {}
-        default_inventory = Path(__file__).resolve().parents[2] / "config" / "hosts.json"
-        self.inventory_path = inventory_path or Path(os.getenv("MORGAN_HOSTS_FILE", default_inventory))
+        default_inventory = (
+            Path(__file__).resolve().parents[2] / "config" / "hosts.json"
+        )
+        self.inventory_path = inventory_path or Path(
+            os.getenv("MORGAN_HOSTS_FILE", default_inventory)
+        )
 
         logger.info("DistributedHostManager initialized")
 
@@ -194,7 +200,9 @@ class DistributedHostManager:
                 ssh_port=info.get("ssh_port", 22),
                 ssh_key=info.get("ssh_key"),
                 project_path=info.get("project_path", "/opt/Morgan"),
-                python_path=info.get("python_path", "/opt/Morgan/morgan-venv/bin/python"),
+                python_path=info.get(
+                    "python_path", "/opt/Morgan/morgan-venv/bin/python"
+                ),
                 services=services,
                 gpu_available=info.get("gpu_available", False),
                 gpu_model=info.get("gpu_model"),

@@ -148,7 +148,11 @@ class EmotionalIntelligenceEngine:
         final_emotion = self._combine_emotion_results(rule_emotions, llm_emotion, text)
 
         # Store in cache
-        timestamp_str = final_emotion.timestamp.isoformat() if isinstance(final_emotion.timestamp, datetime) else final_emotion.timestamp
+        timestamp_str = (
+            final_emotion.timestamp.isoformat()
+            if isinstance(final_emotion.timestamp, datetime)
+            else final_emotion.timestamp
+        )
         emotion_dict = {
             "primary_emotion": final_emotion.primary_emotion,
             "intensity": final_emotion.intensity,
@@ -731,7 +735,11 @@ class EmotionalIntelligenceEngine:
             profile.emotional_patterns["recent_emotions"] = []
 
         # Keep last 20 emotional states
-        timestamp_str = emotional_state.timestamp.isoformat() if isinstance(emotional_state.timestamp, datetime) else emotional_state.timestamp
+        timestamp_str = (
+            emotional_state.timestamp.isoformat()
+            if isinstance(emotional_state.timestamp, datetime)
+            else emotional_state.timestamp
+        )
         profile.emotional_patterns["recent_emotions"].append(
             {
                 "emotion": emotional_state.primary_emotion.value,

@@ -366,7 +366,9 @@ class JinaRerankingService:
                     "results": [r.__dict__ for r in results],
                     "top_k": top_k or len(results),
                 }
-                resp = requests.post(f"{self.remote_url}/rerank", json=payload, timeout=10)
+                resp = requests.post(
+                    f"{self.remote_url}/rerank", json=payload, timeout=10
+                )
                 resp.raise_for_status()
                 data = resp.json()
                 remote_results = []

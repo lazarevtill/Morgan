@@ -1,25 +1,3 @@
-# Morgan RAG - Production Dependencies
-# Based on InspecTor's proven stack with human-first additions
-
-# ============================================================================
-# Core Framework
-# ============================================================================
-pydantic>=2.5.0
-pydantic-settings>=2.1.0
-python-dotenv>=1.0.0
-
-# ============================================================================
-# LLM Integration (OpenAI Compatible)
-# ============================================================================
-openai>=1.12.0
-anthropic>=0.18.0  # For Claude compatibility
-httpx>=0.25.0
-requests>=2.31.0
-
-# ============================================================================
-# Embedding Service (Same as InspecTor)
-# ============================================================================
-sentence-transformers>=2.2.2
 torch>=2.0.0
 numpy>=1.24.0
 transformers>=4.30.0
