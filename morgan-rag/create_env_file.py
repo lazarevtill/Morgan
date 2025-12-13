@@ -17,7 +17,7 @@ ENV_CONTENT = """# Morgan RAG Configuration
 LLM_BASE_URL=https://ai.ishosting.com/api
 
 # API key for your LLM service
-LLM_API_KEY=sk-7903d76996ad42f7ade45455d92745c2
+LLM_API_KEY=sk-***
 
 # Default model to use
 LLM_MODEL=gemma3:latest
