@@ -1,6 +1,11 @@
 # Error Handling Quick Reference
 
-Quick reference card for using Morgan's production-grade error handling system.
+> **⚠️ DEPRECATED:** This document is for the old Morgan system. For the new client-server architecture, see:
+> - [Server Documentation](../morgan-server/README.md)
+> - [API Documentation](../morgan-server/docs/API.md)
+> - [Migration Guide](../MIGRATION.md)
+
+Quick reference card for using Morgan's production-grade error handling system (deprecated).
 
 ## Import Statements
 

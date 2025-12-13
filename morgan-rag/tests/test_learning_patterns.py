@@ -262,11 +262,11 @@ class TestInteractionPatternAnalyzer:
     def test_analyze_active_hours(self, analyzer):
         """Test analyzing active hours from timestamps."""
         timestamps = [
-            datetime(2024, 1, 1, 9, 0),
-            datetime(2024, 1, 1, 10, 0),
-            datetime(2024, 1, 1, 9, 30),
-            datetime(2024, 1, 1, 14, 0),
-            datetime(2024, 1, 1, 14, 15),
+            datetime(2025, 1, 1, 9, 0),
+            datetime(2025, 1, 1, 10, 0),
+            datetime(2025, 1, 1, 9, 30),
+            datetime(2025, 1, 1, 14, 0),
+            datetime(2025, 1, 1, 14, 15),
         ]
 
         active_hours = analyzer._analyze_active_hours(timestamps)

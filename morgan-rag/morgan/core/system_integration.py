@@ -15,7 +15,7 @@ Key Features:
 - Integrated error handling and monitoring
 
 > [!NOTE]
-> This module has been refactored to use a Facade pattern. 
+> This module has been refactored to use a Facade pattern.
 > Core logic has moved to `morgan.integration`.
 """
 
@@ -42,7 +42,7 @@ IntegrationWorkflowResult = IntegrationWorkflowResult
 class ComprehensiveSystemIntegration:
     """
     Comprehensive system integration for Morgan RAG.
-    
+
     Acts as a Facade to the IntegrationOrchestrator.
 
     Provides:
@@ -55,10 +55,10 @@ class ComprehensiveSystemIntegration:
     def __init__(self):
         """Initialize comprehensive system integration facade."""
         self.settings = get_settings()
-        
+
         # Initialize the orchestrator (which initializes the container)
         self.orchestrator = IntegrationOrchestrator()
-        
+
         # Expose services for backward compatibility
         services = self.orchestrator.services
         self.batch_optimizer = services.batch_optimizer
@@ -67,14 +67,14 @@ class ComprehensiveSystemIntegration:
         self.scraping_service = services.scraping_service
         self.multimodal_service = services.multimodal_service
         self.code_service = services.code_service
-        
+
         self.emotional_engine = services.emotional_engine
         self.companion_manager = services.companion_manager
         self.memory_processor = services.memory_processor
-        
+
         self.search_engine = services.search_engine
         self.background_service = services.background_service
-        
+
         # Facade performance targets (read-only view)
         self.performance_targets = self.orchestrator.performance_targets
 
@@ -92,4 +92,3 @@ class ComprehensiveSystemIntegration:
 
     # Legacy private methods are removed as they are now encapsulated in the orchestrator.
     # The public API is preserved via the run_comprehensive_integration_test method.
-

@@ -16,3 +16,5 @@ logs/
 /morgan-rag/morgan_rag.egg-info
 /morgan-rag/backups
 conversations.json
+morgan-server/.hypothesis/
+.hypothesis/

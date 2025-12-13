@@ -43,7 +43,7 @@ class IntegrationWorkflowResult:
 @dataclass
 class IntegrationEvent:
     """Base class for integration lifecycle events."""
-    
+
     event_type: str
     timestamp: datetime = field(default_factory=datetime.now)
     details: dict = field(default_factory=dict)
