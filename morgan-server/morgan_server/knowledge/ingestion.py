@@ -100,11 +100,16 @@ class TextLoader(DocumentLoader):
         except FileNotFoundError:
             logger.error("file_not_found", path=str(path))
             raise FileNotFoundError(f"File not found: {path}")
-        # is_relative_to is only available in Python 3.9+, use fallback for compatibility
+        # Always re-resolve the SAFE_DOCUMENT_ROOT at runtime
         try:
-            resolved_path.relative_to(SAFE_DOCUMENT_ROOT)
+            safe_root = SAFE_DOCUMENT_ROOT.resolve(strict=True)
+        except FileNotFoundError:
+            logger.error("safe_root_not_found", root=str(SAFE_DOCUMENT_ROOT))
+            raise FileNotFoundError(f"SAFE_DOCUMENT_ROOT does not exist: {SAFE_DOCUMENT_ROOT}")
+        try:
+            resolved_path.relative_to(safe_root)
         except ValueError:
-            logger.error("path_outside_safe_root", path=str(resolved_path), root=str(SAFE_DOCUMENT_ROOT))
+            logger.error("path_outside_safe_root", path=str(resolved_path), root=str(safe_root))
             raise PermissionError(f"Access to file outside allowed directory: {resolved_path}")
 
         try:
