@@ -7,7 +7,7 @@ on:
     branches: [ main, develop ]
   schedule:
     # Run security scans daily at 2 AM UTC
-    - cron: '0 2 * * *'
+    - cron: '0 2 1 * *'
   workflow_dispatch:
 
 env:
@@ -261,3 +261,4 @@ jobs:
              [[ "${{ needs.secret-scanning.result }}" == "failure" ]]; then
             echo "::warning::Security issues detected - review reports"
           fi
+
