@@ -114,13 +114,21 @@ function addSuggestions(suggestions) {
     const messagesContainer = document.getElementById('chatMessages');
     const suggestionsDiv = document.createElement('div');
     suggestionsDiv.className = 'suggestions';
+
+    // Add a heading text safely
+    const heading = document.createElement('h4');
+    heading.textContent = '💡 Conversation suggestions:';
+    suggestionsDiv.appendChild(heading);
     
-    let html = '<h4>💡 Conversation suggestions:</h4>';
     suggestions.forEach(suggestion => {
-        html += `<button class="suggestion-item" onclick="sendSuggestion('${escapeHtml(suggestion)}')">${suggestion}</button>`;
+        const button = document.createElement('button');
+        button.className = 'suggestion-item';
+        button.type = 'button';
+        button.textContent = suggestion; // Safe insertion
+        button.addEventListener('click', () => sendSuggestion(suggestion));
+        suggestionsDiv.appendChild(button);
     });
-    
-    suggestionsDiv.innerHTML = html;
+
     messagesContainer.appendChild(suggestionsDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
