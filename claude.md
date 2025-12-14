@@ -18,7 +18,7 @@ Morgan is a fully self-hosted, distributed personal AI assistant with:
 
 ## Project Structure
 
-```
+```text
 Morgan/
 ├── morgan-rag/               # Main application
 │   ├── morgan/
@@ -44,7 +44,7 @@ Morgan/
 ├── .github/                 # CI/CD workflows
 ├── README.md                # Project documentation
 └── CLAUDE.md               # This file
-```
+```text
 
 ---
 

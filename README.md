@@ -88,7 +88,7 @@ LLM_LOAD_BALANCING_STRATEGY=round_robin
 
 ### 6-Host Architecture Example
 
-```
+```text
 Host 1 (192.168.1.10): Morgan Core + Qdrant + Redis
 Host 2 (192.168.1.11): Background Services + Monitoring
 Host 3 (192.168.1.20): RTX 3090 - Main LLM #1

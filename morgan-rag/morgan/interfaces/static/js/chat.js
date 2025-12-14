@@ -1,7 +1,18 @@
 // Morgan Chat Interface JavaScript
 
 let ws = null;
-let userId = 'user_' + generateSecureRandomId(9);
+
+function generateSecureRandomId(length = 9) {
+    // Use crypto for strong randomness when available; fall back to Math.random otherwise.
+    if (window.crypto && window.crypto.getRandomValues) {
+        const array = new Uint32Array(length);
+        window.crypto.getRandomValues(array);
+        return Array.from(array, (n) => (n % 36).toString(36)).join('').slice(0, length);
+    }
+    return Math.random().toString(36).substring(2, 2 + length);
+}
+
+const userId = 'user_' + generateSecureRandomId(9);
 let conversationId = null;
 let selectedRating = 0;
 
