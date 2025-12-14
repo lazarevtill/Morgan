@@ -464,6 +464,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [deploy-staging, deploy-production]
     if: always()
+    permissions: {}
 
     steps:
       - name: Send Slack notification
