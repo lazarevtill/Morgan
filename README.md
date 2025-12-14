@@ -1,371 +1,187 @@
 # Morgan AI Assistant
 
-Morgan is a personal AI assistant with empathic intelligence, knowledge management, and natural conversation capabilities. Built with a clean client-server architecture for self-hosted deployment.
+Morgan is a fully self-hosted, distributed personal AI assistant with emotional intelligence, deep knowledge management, and natural conversation capabilities.
 
-> **⚠️ Important:** The old monolithic system in `morgan-rag/` and `cli.py.old` is **DEPRECATED**. Please use the new client-server architecture (`morgan-server/` and `morgan-cli/`). See [MIGRATION.md](./MIGRATION.md) for migration instructions.
+## Key Features
 
-## Features
-
-- **Empathic Engine** - Emotional intelligence, personality system, and relationship management
-- **Knowledge Engine** - RAG system with vector database and semantic search
-- **Personalization Layer** - User profiles, preferences, and conversation memory
-- **Self-Hosted** - Run on your own hardware with Ollama or OpenAI-compatible LLMs
-- **Clean Architecture** - Separate server and client for flexibility
-- **Production Ready** - Docker support, health checks, metrics, and structured logging
+- **Emotional Intelligence** - Understands and responds empathetically
+- **Self-Hosted** - Complete privacy, all processing on your local hardware
+- **Distributed Architecture** - Supports multi-host GPU deployment with load balancing
+- **Separate Providers** - Configure different hosts for LLM, Embeddings, and Reranking
+- **No External APIs** - Zero dependency on cloud services
 
 ## Quick Start
 
-### Using Docker Compose (Recommended)
+### 1. Configure Environment
+
+Copy the example configuration:
 
 ```bash
-# Clone repository
-git clone https://github.com/your-repo/morgan.git
-cd morgan
-
-# Start services
-cd docker
-docker-compose up -d
-
-# Pull LLM model
-docker-compose exec ollama ollama pull gemma3
-
-# Install client
-pip install morgan-cli
-
-# Start chatting
-export MORGAN_SERVER_URL=http://localhost:8080
-morgan chat
+cd morgan-rag
+cp .env.example .env
 ```
 
-### Manual Installation
-
-**1. Install Dependencies:**
+Edit `.env` with your settings:
 
 ```bash
-# Start Qdrant
+# LLM Provider (for chat/generation)
+LLM_BASE_URL=http://192.168.1.20:11434/v1
+LLM_MODEL=qwen2.5:32b-instruct-q4_K_M
+
+# Embedding Provider (can be different host)
+EMBEDDING_BASE_URL=http://192.168.1.22:11434
+EMBEDDING_MODEL=nomic-embed-text
+
+# Vector Database
+QDRANT_URL=http://localhost:6333
+```
+
+### 2. Start Dependencies
+
+```bash
+# Start Qdrant vector database
 docker run -d -p 6333:6333 qdrant/qdrant
 
-# Start Ollama
-ollama serve &
-ollama pull gemma3
+# Start Ollama (on your LLM host)
+ollama serve
+ollama pull qwen2.5:32b-instruct-q4_K_M
+
+# Start Ollama (on your Embedding host if separate)
+ollama pull nomic-embed-text
 ```
 
-**2. Install Server:**
+### 3. Install and Run
 
 ```bash
-cd morgan-server
-pip install -e .
-python -m morgan_server
+cd morgan-rag
+pip install -r requirements.txt
+python -m morgan chat
 ```
 
-**3. Install Client:**
+### Docker Deployment
 
 ```bash
-cd morgan-cli
-pip install -e .
-morgan chat
+cd morgan-rag
+docker-compose up -d
 ```
-
-## Documentation
-
-### 📚 Complete Documentation
-
-- **[Documentation Index](./DOCUMENTATION.md)** - Complete documentation index
-- **[Migration Guide](./MIGRATION.md)** - Migrate from old Morgan system
-
-### 🚀 Getting Started
-
-- **[Server Quick Start](./morgan-server/README.md#quick-start)** - Get the server running
-- **[Client Quick Start](./morgan-cli/README.md#quick-start)** - Start chatting
-- **[Docker Quick Start](./docker/README.md#quick-start)** - Deploy with Docker
-
-### ⚙️ Configuration
-
-- **[Configuration Guide](./morgan-server/docs/CONFIGURATION.md)** - Complete configuration reference
-- **[Embedding Configuration](./morgan-server/docs/EMBEDDING_CONFIGURATION.md)** - Embedding provider setup
-
-### 🚢 Deployment
-
-- **[Deployment Guide](./morgan-server/docs/DEPLOYMENT.md)** - Docker and bare metal deployment
-- **[Docker README](./docker/README.md)** - Docker deployment guide
-
-### 🔌 API
-
-- **[API Documentation](./morgan-server/docs/API.md)** - REST and WebSocket API reference
-- **[Client Library](./morgan-cli/README.md)** - Python client library
-
-## Architecture
-
-```
-┌─────────────┐
-│   Clients   │
-│  (TUI, Web) │
-└──────┬──────┘
-       │ HTTP/WebSocket
-       │
-┌──────▼──────────────────────┐
-│     Morgan Server           │
-│  ┌────────────────────────┐ │
-│  │   API Gateway          │ │
-│  │   (FastAPI)            │ │
-│  └───────┬────────────────┘ │
-│          │                   │
-│  ┌───────▼────────────────┐ │
-│  │  Empathic Engine       │ │
-│  │  - Emotional Intel     │ │
-│  │  - Personality         │ │
-│  │  - Relationships       │ │
-│  └────────────────────────┘ │
-│  ┌────────────────────────┐ │
-│  │  Knowledge Engine      │ │
-│  │  - RAG System          │ │
-│  │  - Vector Search       │ │
-│  │  - Doc Processing      │ │
-│  └────────────────────────┘ │
-│  ┌────────────────────────┐ │
-│  │  Personalization       │ │
-│  │  - User Profiles       │ │
-│  │  - Preferences         │ │
-│  │  - Memory              │ │
-│  └────────────────────────┘ │
-└─────────────────────────────┘
-       │
-       │
-┌──────▼──────────────────────┐
-│   External Services         │
-│  - Ollama (LLM)             │
-│  - Qdrant (Vector DB)       │
-└─────────────────────────────┘
-```
-
-## Components
-
-### Morgan Server
-
-Standalone FastAPI server with all core functionality:
-
-- **Empathic Engine** - Emotional intelligence and personality
-- **Knowledge Engine** - RAG and semantic search
-- **Personalization** - User profiles and preferences
-- **API Gateway** - REST and WebSocket endpoints
-- **Health Checks** - Monitoring and metrics
-
-[Server Documentation →](./morgan-server/README.md)
-
-### Morgan CLI
-
-Lightweight terminal client:
-
-- **Rich TUI** - Beautiful terminal interface
-- **HTTP/WebSocket** - Server communication
-- **Commands** - Chat, learn, memory, knowledge, health
-- **Configuration** - Flexible server connection
-
-[Client Documentation →](./morgan-cli/README.md)
-
-### Docker
-
-Containerized deployment:
-
-- **Docker Compose** - Full stack with all dependencies
-- **Standalone** - Server-only container
-- **Monitoring** - Optional Prometheus integration
-
-[Docker Documentation →](./docker/README.md)
-
-## Requirements
-
-### System Requirements
-
-- **CPU:** 2+ cores (4+ recommended)
-- **RAM:** 4+ GB (8+ GB recommended)
-- **Disk:** 10+ GB free space (50+ GB recommended)
-- **OS:** Linux, macOS, or Windows
-
-### Software Requirements
-
-- **Python:** 3.11+
-- **Docker:** 20.10+ (for Docker deployment)
-- **Ollama:** Latest (or other OpenAI-compatible LLM)
-- **Qdrant:** Latest (vector database)
 
 ## Configuration
 
-Morgan Server supports multiple configuration sources:
+Morgan supports **separate hosts** for each provider:
 
-1. **Environment variables** (highest precedence)
-2. **Configuration files** (YAML, JSON, .env)
-3. **Default values** (lowest precedence)
+| Service | Environment Variable | Description |
+|---------|---------------------|-------------|
+| LLM | `LLM_BASE_URL` | OpenAI-compatible endpoint for chat |
+| Embedding | `EMBEDDING_BASE_URL` | Endpoint for vector embeddings |
+| Reranking | `RERANKING_ENDPOINT` | Endpoint for result reranking |
+| Vector DB | `QDRANT_URL` | Qdrant vector database |
 
-**Example Configuration:**
+### Distributed LLM (Load Balancing)
 
-```yaml
-# Server settings
-host: "0.0.0.0"
-port: 8080
-
-# LLM settings
-llm_provider: "ollama"
-llm_endpoint: "http://localhost:11434"
-llm_model: "gemma3"
-
-# Vector database
-vector_db_url: "http://localhost:6333"
-
-# Embedding settings
-embedding_provider: "local"
-embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
-```
-
-[Configuration Guide →](./morgan-server/docs/CONFIGURATION.md)
-
-## API
-
-Morgan exposes a comprehensive REST and WebSocket API:
-
-### Chat
+Enable load balancing across multiple LLM hosts:
 
 ```bash
-curl -X POST http://localhost:8080/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Hello, Morgan!"}'
+LLM_DISTRIBUTED_ENABLED=true
+LLM_ENDPOINTS=http://192.168.1.20:11434/v1,http://192.168.1.21:11434/v1
+LLM_LOAD_BALANCING_STRATEGY=round_robin
 ```
 
-### Knowledge
+### 6-Host Architecture Example
+
+```
+Host 1 (192.168.1.10): Morgan Core + Qdrant + Redis
+Host 2 (192.168.1.11): Background Services + Monitoring
+Host 3 (192.168.1.20): RTX 3090 - Main LLM #1
+Host 4 (192.168.1.21): RTX 3090 - Main LLM #2 (load balanced)
+Host 5 (192.168.1.22): RTX 4070 - Embeddings
+Host 6 (192.168.1.23): RTX 2060 - Reranking
+```
+
+## CLI Commands
 
 ```bash
-curl -X POST http://localhost:8080/api/knowledge/learn \
-  -H "Content-Type: application/json" \
-  -d '{"source": "/path/to/document.pdf"}'
+# Interactive chat
+python -m morgan chat
+
+# Ask a single question
+python -m morgan ask "What is Python?"
+
+# Learn from documents
+python -m morgan learn ./documents
+
+# Check system health
+python -m morgan health
+
+# Start web interface
+python -m morgan serve
 ```
 
-### WebSocket
+## Health Check
 
-```javascript
-const ws = new WebSocket('ws://localhost:8080/ws/user123');
-ws.send(JSON.stringify({
-  type: 'message',
-  message: 'Hello, Morgan!'
-}));
-```
-
-[API Documentation →](./morgan-server/docs/API.md)
-
-## Development
-
-### Running Tests
+Check all providers:
 
 ```bash
-# Server tests
-cd morgan-server
-pytest
-
-# Client tests
-cd morgan-cli
-pytest
-
-# Integration tests
-cd morgan-server
-pytest tests/test_integration_e2e.py
+python -m morgan.utils.health
 ```
 
-### Code Quality
+Output:
+```
+Morgan System Health
+============================================================
+Overall Status: [OK] HEALTHY
 
-```bash
-# Format code
-black morgan_server tests
+[OK] LLM
+    Endpoint: http://192.168.1.20:11434/v1
+    Mode: single
+    Model: qwen2.5:32b-instruct-q4_K_M
 
-# Lint code
-ruff check morgan_server tests
+[OK] EMBEDDING
+    Endpoint: http://192.168.1.22:11434
+    Mode: remote
+    Model: nomic-embed-text
 
-# Type check
-mypy morgan_server
+[OK] VECTOR_DB
+    Endpoint: http://localhost:6333
+    Collections: 2
 ```
 
-## Deployment
+## Project Structure
 
-### Docker Compose (Recommended)
-
-```bash
-cd docker
-docker-compose up -d
+```
+morgan-rag/
+├── morgan/
+│   ├── config/           # Settings and configuration
+│   ├── infrastructure/   # Distributed LLM, embeddings, reranking
+│   ├── services/         # LLM, embedding, and service factory
+│   ├── emotional/        # Emotion detection engine
+│   ├── memory/           # Conversation memory
+│   ├── search/           # Multi-stage search pipeline
+│   ├── cli/              # Command-line interface
+│   └── core/             # Main assistant logic
+├── .env.example          # Configuration template
+├── docker-compose.yml    # Docker deployment
+├── requirements.txt      # Python dependencies
+└── Dockerfile            # Container build
 ```
 
-### Bare Metal
+## Requirements
 
-```bash
-# Install server
-cd morgan-server
-pip install -e .
-python -m morgan_server
+- **Python:** 3.11+
+- **GPU:** Optional (for local embedding/reranking)
+- **Ollama:** For LLM serving
+- **Qdrant:** Vector database
 
-# Install client
-cd morgan-cli
-pip install -e .
-morgan chat
-```
+## Performance Targets
 
-### Production
-
-For production deployments:
-
-- Use Docker or systemd service
-- Configure reverse proxy (nginx, traefik)
-- Enable HTTPS
-- Set up monitoring (Prometheus)
-- Configure backups
-- Review security settings
-
-[Deployment Guide →](./morgan-server/docs/DEPLOYMENT.md)
-
-## Troubleshooting
-
-### Server Won't Start
-
-```bash
-# Check logs
-docker-compose logs morgan-server
-
-# Verify configuration
-python -m morgan_server --check-config
-
-# Test dependencies
-curl http://localhost:11434/api/tags  # Ollama
-curl http://localhost:6333/healthz    # Qdrant
-```
-
-### Connection Issues
-
-```bash
-# Test server health
-curl http://localhost:8080/health
-
-# Check server status
-curl http://localhost:8080/api/status
-```
-
-[Troubleshooting Guide →](./morgan-server/docs/DEPLOYMENT.md#troubleshooting)
-
-## Migration
-
-Migrating from the old Morgan system? See the [Migration Guide](./MIGRATION.md).
-
-## Contributing
-
-Contributions are welcome! Please read the contributing guidelines (coming soon).
+- Embeddings: <200ms batch
+- Search + rerank: <500ms
+- Simple queries: 1-2s
+- Complex reasoning: 5-10s (acceptable for quality)
 
 ## License
 
-MIT License - see LICENSE file for details.
-
-## Support
-
-- **Documentation:** [Complete Documentation Index](./DOCUMENTATION.md)
-- **GitHub Issues:** Report bugs or request features
-- **Discussions:** Ask questions and share ideas
+MIT License
 
 ## Version
 
-Current version: 0.1.0
-
-Last updated: December 8, 2025
+2.0.0-alpha

@@ -138,33 +138,23 @@ class EmbeddingService:
         """
         Get configured remote base URL for embeddings (allows override).
 
+        Uses the settings helper method which handles priority:
+        embedding_base_url > ollama_host > llm_base_url
+
         Returns:
             Normalized base URL without trailing /v1 or slash.
         """
         if self._remote_base_url is not None:
             return self._remote_base_url
 
-        # Priority: embedding_base_url > ollama_host > llm_base_url
-        base_url = getattr(self.settings, "embedding_base_url", None)
-
-        # If embedding_base_url is not set, try OLLAMA_HOST
-        if not base_url:
-            ollama_host = getattr(self.settings, "ollama_host", None)
-            if ollama_host:
-                # Normalize OLLAMA_HOST: add http:// if missing, ensure proper format
-                if not ollama_host.startswith(("http://", "https://")):
-                    base_url = f"http://{ollama_host}"
-                else:
-                    base_url = ollama_host
-
-        # Fallback to LLM base URL if still not set
-        if not base_url:
-            base_url = getattr(self.settings, "llm_base_url", None)
+        # Use settings helper method for consistent URL resolution
+        base_url = self.settings.get_embedding_base_url()
 
         if not base_url:
             self._remote_base_url = None
             return None
 
+        # Normalize URL
         base_url = base_url.rstrip("/")
         if base_url.endswith("/v1"):
             base_url = base_url[:-3]
@@ -173,6 +163,7 @@ class EmbeddingService:
             base_url = base_url[:-4]
 
         self._remote_base_url = base_url
+        logger.debug(f"Embedding base URL resolved to: {base_url}")
         return base_url
 
     def is_available(self) -> bool:
@@ -208,7 +199,13 @@ class EmbeddingService:
         Returns:
             Embedding dimension
         """
+        # Check if dimensions are explicitly configured in settings
+        configured_dims = getattr(self.settings, "embedding_dimensions", None)
+
         if self._get_remote_base_url() and self._check_remote_available():
+            # Use configured dimensions if set, otherwise use model config
+            if configured_dims:
+                return configured_dims
             return self.model_config["dimensions"]
         elif self._check_local_available():
             # Return local model dimensions
@@ -219,7 +216,10 @@ class EmbeddingService:
                 "dimensions"
             ]
         else:
-            raise RuntimeError("No embedding service available")
+            # Return configured or default dimensions even if service unavailable
+            if configured_dims:
+                return configured_dims
+            return self.model_config.get("dimensions", 768)
 
     def encode(
         self,

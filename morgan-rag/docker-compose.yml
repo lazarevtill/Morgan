@@ -1,6 +1,16 @@
 version: '3.8'
 
+# =============================================================================
+# Morgan RAG - Docker Compose Configuration
+# =============================================================================
+# Supports separate hosts for LLM and Embedding providers.
+# Configure endpoints in .env file.
+# =============================================================================
+
 services:
+  # ===========================================================================
+  # Morgan Core Application
+  # ===========================================================================
   morgan:
     build: .
     container_name: morgan-rag
@@ -13,30 +23,45 @@ services:
     env_file:
       - .env
     environment:
-      # LLM Configuration
-      - LLM_BASE_URL=${LLM_BASE_URL:-https://ai.ishosting.com/api}
-      - LLM_API_KEY=${LLM_API_KEY}
-      - LLM_MODEL=${LLM_MODEL:-gemma3:latest}
-      - LLM_CHAT_MODEL=${LLM_CHAT_MODEL:-${LLM_MODEL:-gemma3:latest}}
-      - LLM_EMBEDDING_MODEL=${LLM_EMBEDDING_MODEL:-qwen3:latest}
-      
-      # Vector Database (use qdrant service name inside docker)
-      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
-      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
-      - QDRANT_DEFAULT_COLLECTION=${QDRANT_DEFAULT_COLLECTION:-morgan_knowledge}
-      - QDRANT_MEMORY_COLLECTION=${QDRANT_MEMORY_COLLECTION:-morgan_memory}
-      - QDRANT_LOG_LEVEL=${QDRANT_LOG_LEVEL:-INFO}
-      
-      # Embedding Service
-      - OLLAMA_HOST=${OLLAMA_HOST:-}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:latest}
+      # LLM Configuration (Primary LLM provider)
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      - LLM_API_KEY=${LLM_API_KEY:-ollama}
+      - LLM_MODEL=${LLM_MODEL:-qwen2.5:32b-instruct-q4_K_M}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-2048}
+      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-60}
+
+      # Distributed LLM Configuration (Optional)
+      - LLM_DISTRIBUTED_ENABLED=${LLM_DISTRIBUTED_ENABLED:-false}
+      - LLM_ENDPOINTS=${LLM_ENDPOINTS:-}
+      - LLM_LOAD_BALANCING_STRATEGY=${LLM_LOAD_BALANCING_STRATEGY:-round_robin}
+      - LLM_HEALTH_CHECK_INTERVAL=${LLM_HEALTH_CHECK_INTERVAL:-60}
+
+      # Embedding Configuration (SEPARATE from LLM)
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-}
+      - OLLAMA_HOST=${OLLAMA_HOST:-}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-768}
       - EMBEDDING_LOCAL_MODEL=${EMBEDDING_LOCAL_MODEL:-all-MiniLM-L6-v2}
       - EMBEDDING_FORCE_REMOTE=${EMBEDDING_FORCE_REMOTE:-false}
       - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE:-100}
       - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-cpu}
       - EMBEDDING_USE_INSTRUCTIONS=${EMBEDDING_USE_INSTRUCTIONS:-true}
-      
+
+      # Reranking Configuration (SEPARATE from LLM and Embedding)
+      - RERANKING_ENABLED=${RERANKING_ENABLED:-true}
+      - RERANKING_ENDPOINT=${RERANKING_ENDPOINT:-http://reranker:8081/rerank}
+      - RERANKING_MODEL=${RERANKING_MODEL:-cross-encoder/ms-marco-MiniLM-L-6-v2}
+      - RERANKING_FORCE_REMOTE=${RERANKING_FORCE_REMOTE:-false}
+      - RERANKING_TIMEOUT=${RERANKING_TIMEOUT:-30}
+
+      # Vector Database (Qdrant)
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT_DEFAULT_COLLECTION=${QDRANT_DEFAULT_COLLECTION:-morgan_knowledge}
+      - QDRANT_MEMORY_COLLECTION=${QDRANT_MEMORY_COLLECTION:-morgan_memory}
+      - QDRANT_LOG_LEVEL=${QDRANT_LOG_LEVEL:-INFO}
+
       # System Settings
       - MORGAN_DATA_DIR=/app/data
       - MORGAN_LOG_LEVEL=${MORGAN_LOG_LEVEL:-INFO}
@@ -45,22 +70,23 @@ services:
       - MORGAN_DEBUG=${MORGAN_DEBUG:-false}
       - MORGAN_DEV_MODE=${MORGAN_DEV_MODE:-false}
       - MORGAN_AUTO_RELOAD=${MORGAN_AUTO_RELOAD:-false}
-      
+
       # Performance
       - MORGAN_WORKERS=${MORGAN_WORKERS:-4}
       - MORGAN_CACHE_SIZE=${MORGAN_CACHE_SIZE:-1000}
       - MORGAN_CACHE_TTL=${MORGAN_CACHE_TTL:-3600}
       - MORGAN_MAX_SEARCH_RESULTS=${MORGAN_MAX_SEARCH_RESULTS:-50}
       - MORGAN_DEFAULT_SEARCH_RESULTS=${MORGAN_DEFAULT_SEARCH_RESULTS:-10}
-      
+      - MORGAN_MIN_SEARCH_SCORE=${MORGAN_MIN_SEARCH_SCORE:-0.7}
+
       # Security
       - MORGAN_API_KEY=${MORGAN_API_KEY:-}
       - MORGAN_CORS_ORIGINS=${MORGAN_CORS_ORIGINS:-*}
       - MORGAN_ALLOW_FILE_UPLOAD=${MORGAN_ALLOW_FILE_UPLOAD:-true}
       - MORGAN_ALLOW_URL_INGESTION=${MORGAN_ALLOW_URL_INGESTION:-true}
       - MORGAN_ALLOW_CODE_EXECUTION=${MORGAN_ALLOW_CODE_EXECUTION:-false}
-      - MORGAN_SESSION_SECRET=${MORGAN_SESSION_SECRET:-change-me-in-production}
-      
+      - MORGAN_SESSION_SECRET=${MORGAN_SESSION_SECRET:-change-me-in-production-use-strong-secret}
+
       # Web Interface
       - MORGAN_HOST=${MORGAN_HOST:-0.0.0.0}
       - MORGAN_PORT=${MORGAN_PORT:-8080}
@@ -68,16 +94,16 @@ services:
       - MORGAN_WEB_ENABLED=${MORGAN_WEB_ENABLED:-true}
       - MORGAN_DOCS_ENABLED=${MORGAN_DOCS_ENABLED:-true}
       - MORGAN_REQUEST_LOGGING=${MORGAN_REQUEST_LOGGING:-false}
-      
-      # Ingestion Settings
+
+      # Document Processing
       - MORGAN_CHUNK_SIZE=${MORGAN_CHUNK_SIZE:-1000}
       - MORGAN_CHUNK_OVERLAP=${MORGAN_CHUNK_OVERLAP:-200}
       - MORGAN_MAX_FILE_SIZE=${MORGAN_MAX_FILE_SIZE:-100}
-      - MORGAN_SUPPORTED_TYPES=${MORGAN_SUPPORTED_TYPES:-pdf,docx,txt,md,html,py,js,ts,go,java,cpp,c,h}
+      - MORGAN_SUPPORTED_TYPES=${MORGAN_SUPPORTED_TYPES:-pdf,docx,txt,md,html,py,js,ts,go,java,cpp,c,h,json,yaml,yml}
       - MORGAN_SCRAPE_DEPTH=${MORGAN_SCRAPE_DEPTH:-3}
       - MORGAN_SCRAPE_DELAY=${MORGAN_SCRAPE_DELAY:-1}
       - MORGAN_SCRAPE_TIMEOUT=${MORGAN_SCRAPE_TIMEOUT:-30}
-      
+
       # Memory & Learning
       - MORGAN_MEMORY_ENABLED=${MORGAN_MEMORY_ENABLED:-true}
       - MORGAN_MEMORY_MAX_CONVERSATIONS=${MORGAN_MEMORY_MAX_CONVERSATIONS:-1000}
@@ -86,28 +112,29 @@ services:
       - MORGAN_FEEDBACK_WEIGHT=${MORGAN_FEEDBACK_WEIGHT:-0.1}
       - MORGAN_KNOWLEDGE_GRAPH_ENABLED=${MORGAN_KNOWLEDGE_GRAPH_ENABLED:-true}
       - MORGAN_ENTITY_EXTRACTION_ENABLED=${MORGAN_ENTITY_EXTRACTION_ENABLED:-true}
-      
-      # Monitoring & Analytics
+
+      # Monitoring
       - MORGAN_METRICS_ENABLED=${MORGAN_METRICS_ENABLED:-true}
       - MORGAN_METRICS_PORT=${MORGAN_METRICS_PORT:-9000}
       - MORGAN_HEALTH_CHECK_INTERVAL=${MORGAN_HEALTH_CHECK_INTERVAL:-30}
       - MORGAN_ANALYTICS_RETENTION=${MORGAN_ANALYTICS_RETENTION:-90}
-      
+
       # External Services
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - DATABASE_URL=${DATABASE_URL:-}
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-}
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN:-}
+      - CONSUL_ENABLED=${CONSUL_ENABLED:-false}
+      - CONSUL_HTTP_ADDR=${CONSUL_HTTP_ADDR:-http://consul:8500}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./config:/app/config
-      - ./knowledge:/app/knowledge  # Mount for document ingestion
+      - ./knowledge:/app/knowledge
       - ./monitoring:/app/monitoring
     depends_on:
       - qdrant
       - redis
-      - consul
     command:
       - sh
       - -c
@@ -126,18 +153,21 @@ services:
       retries: 3
       start_period: 60s
 
+  # ===========================================================================
+  # Reranking Service (Optional - can run on separate host)
+  # ===========================================================================
   reranker:
     build: .
     container_name: morgan-reranker
     user: "0"
+    ports:
+      - "8081:8081"
     environment:
       - RERANK_HOST=0.0.0.0
       - RERANK_PORT=8081
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN:-}
       - CONSUL_ENABLED=${CONSUL_ENABLED:-false}
       - CONSUL_HTTP_ADDR=${CONSUL_HTTP_ADDR:-http://consul:8500}
-    depends_on:
-      - consul
     command: ["python", "-m", "morgan.jina.reranking.api"]
     restart: unless-stopped
     healthcheck:
@@ -145,7 +175,12 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    profiles:
+      - with-reranker
 
+  # ===========================================================================
+  # Background Processing Service
+  # ===========================================================================
   background:
     build: .
     container_name: morgan-background
@@ -160,7 +195,7 @@ services:
       - MORGAN_LOG_LEVEL=${MORGAN_LOG_LEVEL:-INFO}
       - MORGAN_DATA_DIR=/app/data
       - MORGAN_DEBUG=${MORGAN_DEBUG:-false}
-      - RERANKING_API_URL=http://reranker:8081
+      - RERANKING_ENDPOINT=${RERANKING_ENDPOINT:-http://reranker:8081/rerank}
       - CONSUL_ENABLED=${CONSUL_ENABLED:-false}
       - CONSUL_HTTP_ADDR=${CONSUL_HTTP_ADDR:-http://consul:8500}
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN:-}
@@ -173,13 +208,16 @@ services:
     depends_on:
       - qdrant
       - redis
-      - consul
-      - reranker
     command:
       - python
       - scripts/run_background_service.py
     restart: unless-stopped
+    profiles:
+      - with-background
 
+  # ===========================================================================
+  # Vector Database (Qdrant)
+  # ===========================================================================
   qdrant:
     image: qdrant/qdrant:latest
     container_name: morgan-qdrant
@@ -194,6 +232,9 @@ services:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
 
+  # ===========================================================================
+  # Redis Cache
+  # ===========================================================================
   redis:
     image: redis:latest
     container_name: morgan-redis
@@ -209,6 +250,9 @@ services:
       timeout: 10s
       retries: 3
 
+  # ===========================================================================
+  # Consul Service Discovery (Optional)
+  # ===========================================================================
   consul:
     image: hashicorp/consul:1.20
     container_name: morgan-consul
@@ -217,8 +261,12 @@ services:
       - "8600:8600/udp"
     command: agent -dev -ui -bind=0.0.0.0 -client=0.0.0.0
     restart: unless-stopped
+    profiles:
+      - with-consul
 
-  # Optional: Nginx reverse proxy
+  # ===========================================================================
+  # Nginx Reverse Proxy (Optional - Production)
+  # ===========================================================================
   nginx:
     image: nginx:latest
     container_name: morgan-nginx
@@ -234,7 +282,9 @@ services:
     profiles:
       - production
 
-  # Optional: Monitoring with Prometheus
+  # ===========================================================================
+  # Prometheus Monitoring (Optional)
+  # ===========================================================================
   prometheus:
     image: prom/prometheus:latest
     container_name: morgan-prometheus
@@ -254,7 +304,9 @@ services:
     profiles:
       - monitoring
 
-  # Optional: Grafana for visualization
+  # ===========================================================================
+  # Grafana Dashboard (Optional)
+  # ===========================================================================
   grafana:
     image: grafana/grafana:latest
     container_name: morgan-grafana
@@ -286,3 +338,27 @@ networks:
   default:
     name: morgan-network
     driver: bridge
+
+# =============================================================================
+# Usage Examples:
+# =============================================================================
+#
+# Basic startup (Morgan + Qdrant + Redis):
+#   docker-compose up -d
+#
+# With reranker:
+#   docker-compose --profile with-reranker up -d
+#
+# With background processing:
+#   docker-compose --profile with-background up -d
+#
+# With monitoring:
+#   docker-compose --profile monitoring up -d
+#
+# Production with nginx:
+#   docker-compose --profile production up -d
+#
+# Full stack:
+#   docker-compose --profile with-reranker --profile with-background --profile monitoring up -d
+#
+# =============================================================================

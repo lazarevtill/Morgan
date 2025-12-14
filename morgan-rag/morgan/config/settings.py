@@ -2,14 +2,14 @@
 Settings for Morgan RAG - Human-First Configuration
 
 Simple, secure configuration with sensible defaults.
-Based on InspecTor's proven configuration patterns but simplified for human use.
+Supports SEPARATE hosts for LLM and Embedding providers.
 
 KISS Principle: Easy to configure, secure by default, human-readable.
 """
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from dotenv import load_dotenv
 from pydantic import Field, field_validator
@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     Morgan RAG Settings
 
     Human-friendly configuration with secure defaults.
+    Supports SEPARATE hosts for LLM and Embedding providers.
     All settings can be overridden via environment variables.
     """
 
@@ -40,15 +41,17 @@ class Settings(BaseSettings):
     # ============================================================================
 
     llm_base_url: str = Field(
-        default="https://ai.ishosting.com/api",
-        description="OpenAI-compatible LLM endpoint",
+        default="http://localhost:11434/v1",
+        description="OpenAI-compatible LLM endpoint for chat/generation",
     )
 
     llm_api_key: Optional[str] = Field(
-        default=None, description="API key for LLM service"
+        default="ollama", description="API key for LLM service"
     )
 
-    llm_model: str = Field(default="gemma3:latest", description="LLM model name")
+    llm_model: str = Field(
+        default="qwen2.5:32b-instruct-q4_K_M", description="LLM model name"
+    )
 
     llm_max_tokens: int = Field(
         default=2048, description="Maximum tokens for responses", ge=100, le=32000
@@ -61,22 +64,55 @@ class Settings(BaseSettings):
         le=2.0,
     )
 
+    llm_timeout: float = Field(
+        default=60.0, description="LLM request timeout in seconds", ge=5.0, le=600.0
+    )
+
     # ============================================================================
-    # Embedding Configuration (Same as InspecTor)
+    # Distributed LLM Configuration (Optional - for load balancing)
     # ============================================================================
 
-    embedding_model: str = Field(
-        default="qwen3:latest", description="Primary embedding model (remote)"
+    llm_distributed_enabled: bool = Field(
+        default=False, description="Enable distributed LLM with load balancing"
+    )
+
+    llm_endpoints: Optional[str] = Field(
+        default=None,
+        description="Comma-separated list of LLM endpoints for load balancing",
+    )
+
+    llm_load_balancing_strategy: str = Field(
+        default="round_robin",
+        description="Load balancing strategy: round_robin, random, least_loaded",
+    )
+
+    llm_health_check_interval: int = Field(
+        default=60,
+        description="Health check interval in seconds for distributed LLM",
+        ge=10,
+        le=600,
+    )
+
+    # ============================================================================
+    # Embedding Configuration (SEPARATE from LLM)
+    # ============================================================================
+
+    embedding_base_url: Optional[str] = Field(
+        default=None,
+        description="Embedding endpoint URL (SEPARATE from LLM). e.g., http://192.168.1.22:11434",
     )
 
     ollama_host: Optional[str] = Field(
         default=None,
-        description="Ollama host for embeddings (e.g., 192.168.100.88:11434 or http://192.168.100.88:11434)",
+        description="Ollama host for embeddings (alternative to embedding_base_url)",
     )
 
-    embedding_base_url: Optional[str] = Field(
-        default=None,
-        description="Override base URL for embeddings (e.g., http://localhost:11434). If not set, will use OLLAMA_HOST if available.",
+    embedding_model: str = Field(
+        default="nomic-embed-text", description="Primary embedding model (remote)"
+    )
+
+    embedding_dimensions: int = Field(
+        default=768, description="Embedding dimensions (768 for nomic, 4096 for qwen3)"
     )
 
     embedding_local_model: str = Field(
@@ -97,7 +133,33 @@ class Settings(BaseSettings):
 
     embedding_force_remote: bool = Field(
         default=False,
-        description="Force remote embeddings even in dev mode (no local fallback)",
+        description="Force remote embeddings only (no local fallback)",
+    )
+
+    # ============================================================================
+    # Reranking Configuration (SEPARATE from LLM and Embedding)
+    # ============================================================================
+
+    reranking_enabled: bool = Field(
+        default=True, description="Enable reranking for better search results"
+    )
+
+    reranking_endpoint: Optional[str] = Field(
+        default=None,
+        description="Reranking endpoint URL (e.g., http://192.168.1.23:8081/rerank)",
+    )
+
+    reranking_model: str = Field(
+        default="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        description="Reranking model for local fallback",
+    )
+
+    reranking_force_remote: bool = Field(
+        default=False, description="Force remote reranking only (no local fallback)"
+    )
+
+    reranking_timeout: float = Field(
+        default=30.0, description="Reranking request timeout in seconds"
     )
 
     # ============================================================================
@@ -411,6 +473,59 @@ class Settings(BaseSettings):
 
         return v
 
+    # ============================================================================
+    # Helper Methods
+    # ============================================================================
+
+    def get_llm_endpoints(self) -> List[str]:
+        """
+        Get list of LLM endpoints for distributed setup.
+
+        Returns:
+            List of endpoint URLs
+        """
+        if self.llm_distributed_enabled and self.llm_endpoints:
+            return [e.strip() for e in self.llm_endpoints.split(",") if e.strip()]
+        return [self.llm_base_url]
+
+    def get_embedding_base_url(self) -> Optional[str]:
+        """
+        Get the effective embedding base URL.
+
+        Priority: embedding_base_url > ollama_host > llm_base_url (without /v1)
+
+        Returns:
+            Embedding base URL or None
+        """
+        if self.embedding_base_url:
+            return self.embedding_base_url.rstrip("/")
+
+        if self.ollama_host:
+            host = self.ollama_host
+            if not host.startswith(("http://", "https://")):
+                host = f"http://{host}"
+            return host.rstrip("/")
+
+        # Fallback to LLM base URL without /v1
+        if self.llm_base_url:
+            url = self.llm_base_url.rstrip("/")
+            if url.endswith("/v1"):
+                url = url[:-3]
+            return url
+
+        return None
+
+    def get_reranking_endpoint(self) -> Optional[str]:
+        """
+        Get the reranking endpoint URL.
+
+        Returns:
+            Reranking endpoint URL or None
+        """
+        if self.reranking_enabled and self.reranking_endpoint:
+            return self.reranking_endpoint
+        return None
+
 
 @lru_cache()
 def get_settings(config_path: Optional[str] = None) -> Settings:
@@ -455,7 +570,7 @@ def get_settings(config_path: Optional[str] = None) -> Settings:
     return settings
 
 
-def validate_settings(settings: Settings) -> bool:
+def validate_settings(settings: Settings) -> dict:
     """
     Validate that all required services are accessible.
 
@@ -463,31 +578,72 @@ def validate_settings(settings: Settings) -> bool:
         settings: Settings object to validate
 
     Returns:
-        bool: True if all services are accessible
+        dict: Status of each service (healthy/unhealthy)
 
     Raises:
-        ConnectionError: If any required service is not accessible
+        ConnectionError: If critical services are not accessible
     """
     import requests
     from openai import OpenAI
 
-    errors = []
+    status = {
+        "llm": {"healthy": False, "error": None, "endpoint": settings.llm_base_url},
+        "embedding": {"healthy": False, "error": None, "endpoint": None},
+        "reranking": {"healthy": False, "error": None, "endpoint": None},
+        "qdrant": {"healthy": False, "error": None, "endpoint": settings.qdrant_url},
+    }
 
     # Check LLM API (OpenAI compatible)
     try:
         client = OpenAI(
-            base_url=settings.llm_base_url, api_key=settings.llm_api_key or "dummy-key"
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key or "ollama",
+            timeout=10.0,
         )
 
         # Test with a minimal request
         response = client.chat.completions.create(
             model=settings.llm_model,
             messages=[{"role": "user", "content": "test"}],
-            max_tokens=10,
+            max_tokens=5,
         )
+        status["llm"]["healthy"] = True
 
     except Exception as e:
-        errors.append(f"LLM API error: {e}")
+        status["llm"]["error"] = str(e)
+
+    # Check Embedding endpoint (if separate from LLM)
+    embedding_url = settings.get_embedding_base_url()
+    status["embedding"]["endpoint"] = embedding_url
+
+    if embedding_url:
+        try:
+            # Try Ollama-style endpoint
+            response = requests.get(f"{embedding_url}/api/tags", timeout=5)
+            if response.status_code == 200:
+                status["embedding"]["healthy"] = True
+            else:
+                # Try OpenAI-style endpoint
+                response = requests.get(f"{embedding_url}/v1/models", timeout=5)
+                status["embedding"]["healthy"] = response.status_code == 200
+        except Exception as e:
+            status["embedding"]["error"] = str(e)
+
+    # Check Reranking endpoint (if enabled)
+    reranking_url = settings.get_reranking_endpoint()
+    status["reranking"]["endpoint"] = reranking_url
+
+    if reranking_url:
+        try:
+            # Health check endpoint
+            base_url = reranking_url.replace("/rerank", "")
+            response = requests.get(f"{base_url}/health", timeout=5)
+            status["reranking"]["healthy"] = response.status_code == 200
+        except Exception as e:
+            status["reranking"]["error"] = str(e)
+    else:
+        status["reranking"]["healthy"] = True  # Not configured, not an error
+        status["reranking"]["error"] = "Not configured (using local fallback)"
 
     # Check Qdrant
     try:
@@ -499,34 +655,82 @@ def validate_settings(settings: Settings) -> bool:
             f"{settings.qdrant_url}/collections", headers=headers, timeout=5
         )
         response.raise_for_status()
+        status["qdrant"]["healthy"] = True
 
     except Exception as e:
-        errors.append(f"Qdrant error: {e}")
+        status["qdrant"]["error"] = str(e)
 
-    if errors:
+    # Check critical services
+    critical_errors = []
+    if not status["llm"]["healthy"]:
+        critical_errors.append(f"LLM API: {status['llm']['error']}")
+    if not status["qdrant"]["healthy"]:
+        critical_errors.append(f"Qdrant: {status['qdrant']['error']}")
+
+    if critical_errors:
         raise ConnectionError(
-            "Service validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+            "Critical service validation failed:\n"
+            + "\n".join(f"  - {e}" for e in critical_errors)
         )
 
-    return True
+    return status
 
 
 if __name__ == "__main__":
     # Test settings loading
     try:
         settings = get_settings()
-        print("✅ Settings loaded successfully")
-        print(f"  - LLM Model: {settings.llm_model}")
-        print(f"  - Embedding Model: {settings.embedding_model}")
-        print(f"  - Qdrant URL: {settings.qdrant_url}")
-        print(f"  - Data Directory: {settings.morgan_data_dir}")
-        print(f"  - Debug Mode: {settings.morgan_debug}")
+        print("=" * 60)
+        print("Morgan RAG Settings")
+        print("=" * 60)
+
+        print("\n[LLM Configuration]")
+        print(f"  Base URL: {settings.llm_base_url}")
+        print(f"  Model: {settings.llm_model}")
+        print(f"  Distributed: {settings.llm_distributed_enabled}")
+        if settings.llm_distributed_enabled:
+            print(f"  Endpoints: {settings.get_llm_endpoints()}")
+            print(f"  Strategy: {settings.llm_load_balancing_strategy}")
+
+        print("\n[Embedding Configuration]")
+        print(f"  Base URL: {settings.get_embedding_base_url()}")
+        print(f"  Model: {settings.embedding_model}")
+        print(f"  Dimensions: {settings.embedding_dimensions}")
+        print(f"  Force Remote: {settings.embedding_force_remote}")
+
+        print("\n[Reranking Configuration]")
+        print(f"  Enabled: {settings.reranking_enabled}")
+        print(f"  Endpoint: {settings.get_reranking_endpoint()}")
+        print(f"  Model: {settings.reranking_model}")
+
+        print("\n[Vector Database]")
+        print(f"  Qdrant URL: {settings.qdrant_url}")
+
+        print("\n[System Settings]")
+        print(f"  Data Directory: {settings.morgan_data_dir}")
+        print(f"  Debug Mode: {settings.morgan_debug}")
 
         # Validate services
-        print("\n🔍 Validating services...")
-        validate_settings(settings)
-        print("✅ All services accessible")
+        print("\n" + "=" * 60)
+        print("Validating Services...")
+        print("=" * 60)
 
+        status = validate_settings(settings)
+
+        for service, info in status.items():
+            icon = "OK" if info["healthy"] else "FAIL"
+            print(f"\n[{icon}] {service.upper()}")
+            print(f"  Endpoint: {info['endpoint']}")
+            if info["error"]:
+                print(f"  Error: {info['error']}")
+
+        print("\n" + "=" * 60)
+        print("All critical services accessible!")
+        print("=" * 60)
+
+    except ConnectionError as e:
+        print(f"\n[FAIL] {e}")
+        exit(1)
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"\n[ERROR] {e}")
         exit(1)

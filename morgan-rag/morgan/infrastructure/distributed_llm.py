@@ -7,7 +7,7 @@ Manages LLM requests across multiple hosts with:
 - Health monitoring
 - Performance tracking
 
-This enables Morgan JARVIS to run across separate GPU hosts.
+This enables Morgan to run across separate GPU hosts.
 """
 
 import asyncio
@@ -99,7 +99,7 @@ class LLMEndpoint:
 
 class DistributedLLMClient:
     """
-    Distributed LLM client for multi-host JARVIS setup.
+    Distributed LLM client for multi-host Morgan setup.
 
     Manages LLM inference across multiple hosts with load balancing,
     failover, and health monitoring.
