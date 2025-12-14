@@ -11,6 +11,8 @@ import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+from morgan.config import get_settings
+
 from .executor import BackgroundTaskExecutor
 from .monitor import ResourceMonitor
 from .precomputed_cache import PrecomputedSearchCache
@@ -52,6 +54,7 @@ class BackgroundProcessingService:
         self.reranking_service = reranking_service
         self.check_interval = check_interval_seconds
         self.enable_auto_scheduling = enable_auto_scheduling
+        self.settings = get_settings()
 
         # Initialize components
         self.scheduler = SimpleTaskScheduler()
@@ -73,8 +76,8 @@ class BackgroundProcessingService:
 
         # Default collections to process
         self.default_collections = [
-            "morgan_knowledge",
-            "morgan_memories",
+            self.settings.get_knowledge_collection(),
+            self.settings.get_memory_collection(),
             "morgan_web_content",
             "morgan_code",
         ]

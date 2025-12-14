@@ -116,6 +116,7 @@ class ServiceFactory:
                         endpoint=self.settings.get_reranking_endpoint(),
                         model=self.settings.reranking_model,
                         timeout=self.settings.reranking_timeout,
+                        force_remote=self.settings.reranking_force_remote,
                     )
                     logger.info("Reranking service created")
 

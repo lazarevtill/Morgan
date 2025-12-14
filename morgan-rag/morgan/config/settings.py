@@ -174,6 +174,25 @@ class Settings(BaseSettings):
         default=None, description="Qdrant API key (optional)"
     )
 
+    qdrant_default_collection: str = Field(
+        default="morgan_knowledge",
+        description="Primary Qdrant collection for knowledge documents",
+    )
+
+    qdrant_memory_collection: str = Field(
+        default="morgan_memories",
+        description="Qdrant collection for conversation memories",
+    )
+
+    qdrant_hierarchical_collection: Optional[str] = Field(
+        default=None,
+        description="Override for hierarchical collection (defaults to <knowledge>_hierarchical)",
+    )
+
+    qdrant_log_level: str = Field(
+        default="INFO", description="Log level for Qdrant (INFO, WARN, ERROR, DEBUG)"
+    )
+
     # ============================================================================
     # Morgan System Settings
     # ============================================================================
@@ -194,6 +213,15 @@ class Settings(BaseSettings):
 
     morgan_max_response_tokens: int = Field(
         default=2048, description="Maximum tokens for responses", ge=100, le=8000
+    )
+
+    morgan_dev_mode: bool = Field(
+        default=False, description="Enable developer mode with extra diagnostics"
+    )
+
+    morgan_auto_reload: bool = Field(
+        default=False,
+        description="Reload services automatically on code/config changes (dev only)",
     )
 
     # ============================================================================
@@ -238,6 +266,21 @@ class Settings(BaseSettings):
         default=True, description="Enable learning from feedback"
     )
 
+    morgan_feedback_weight: float = Field(
+        default=0.1,
+        description="Weight applied to human feedback when learning",
+        ge=0.0,
+        le=1.0,
+    )
+
+    morgan_knowledge_graph_enabled: bool = Field(
+        default=True, description="Enable knowledge graph extraction"
+    )
+
+    morgan_entity_extraction_enabled: bool = Field(
+        default=True, description="Enable entity extraction during ingestion"
+    )
+
     # ============================================================================
     # Document Processing Settings
     # ============================================================================
@@ -262,6 +305,18 @@ class Settings(BaseSettings):
         description="Supported file types (comma-separated)",
     )
 
+    morgan_scrape_depth: int = Field(
+        default=3, description="Maximum crawl depth for web scraping", ge=1, le=10
+    )
+
+    morgan_scrape_delay: int = Field(
+        default=1, description="Delay between web scrape requests (seconds)", ge=0, le=30
+    )
+
+    morgan_scrape_timeout: int = Field(
+        default=30, description="Timeout for web scraping (seconds)", ge=5, le=300
+    )
+
     # ============================================================================
     # Web Interface Settings
     # ============================================================================
@@ -278,12 +333,20 @@ class Settings(BaseSettings):
 
     morgan_web_enabled: bool = Field(default=True, description="Enable web interface")
 
+    morgan_docs_enabled: bool = Field(
+        default=True, description="Expose interactive API docs"
+    )
+
     morgan_api_key: Optional[str] = Field(
         default=None, description="API key for Morgan API (optional)"
     )
 
     morgan_cors_origins: str = Field(
         default="*", description="Allowed CORS origins (comma-separated)"
+    )
+
+    morgan_request_logging: bool = Field(
+        default=False, description="Enable request logging (debugging only)"
     )
 
     # ============================================================================
@@ -324,10 +387,63 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # External Services
+    # ============================================================================
+
+    redis_url: Optional[str] = Field(
+        default="redis://localhost:6379",
+        description="Redis connection string for caching",
+    )
+
+    database_url: Optional[str] = Field(
+        default=None, description="Optional PostgreSQL database URL"
+    )
+
+    elasticsearch_url: Optional[str] = Field(
+        default=None, description="Optional Elasticsearch URL for full-text search"
+    )
+
+    consul_enabled: bool = Field(
+        default=False, description="Enable Consul service discovery"
+    )
+
+    consul_http_addr: str = Field(
+        default="http://localhost:8500", description="Consul HTTP address"
+    )
+
+    huggingface_hub_token: Optional[str] = Field(
+        default=None, description="HuggingFace token for private models"
+    )
+
+    # ============================================================================
+    # Monitoring & Analytics
+    # ============================================================================
+
+    morgan_metrics_enabled: bool = Field(
+        default=True, description="Enable Prometheus metrics endpoint"
+    )
+
+    morgan_metrics_port: int = Field(
+        default=9000, description="Prometheus metrics port", ge=1024, le=65535
+    )
+
+    morgan_health_check_interval: int = Field(
+        default=30, description="Health check interval (seconds)", ge=5, le=600
+    )
+
+    morgan_analytics_retention: int = Field(
+        default=90, description="Analytics retention (days)", ge=1, le=365
+    )
+
+    grafana_password: str = Field(
+        default="admin", description="Grafana admin password (for docker-compose)"
+    )
+
+    # ============================================================================
     # Validators (Security & Correctness)
     # ============================================================================
 
-    @field_validator("morgan_log_level")
+    @field_validator("morgan_log_level", "qdrant_log_level")
     @classmethod
     def validate_log_level(cls, v):
         """Validate log level."""
@@ -348,7 +464,13 @@ class Settings(BaseSettings):
         v.mkdir(parents=True, exist_ok=True)
         return v
 
-    @field_validator("llm_base_url", "embedding_base_url", "qdrant_url")
+    @field_validator(
+        "llm_base_url",
+        "embedding_base_url",
+        "qdrant_url",
+        "reranking_endpoint",
+        "consul_http_addr",
+    )
     @classmethod
     def validate_service_urls(cls, v, info):
         """Validate service URLs for security."""
@@ -364,7 +486,7 @@ class Settings(BaseSettings):
         except ValidatorError as e:
             raise ValueError(f"Invalid URL for {info.field_name}: {e}")
 
-    @field_validator("morgan_port", "morgan_api_port")
+    @field_validator("morgan_port", "morgan_api_port", "morgan_metrics_port")
     @classmethod
     def validate_port_range(cls, v, info):
         """Validate port is in valid range."""
@@ -385,6 +507,10 @@ class Settings(BaseSettings):
 
         try:
             validate_string_not_empty(v, info.field_name)
+
+            # Allow short local defaults for LLM dev setups
+            if info.field_name == "llm_api_key" and v.lower() == "ollama":
+                return v
 
             # Check minimum length
             if len(v) < 8:
@@ -525,6 +651,22 @@ class Settings(BaseSettings):
         if self.reranking_enabled and self.reranking_endpoint:
             return self.reranking_endpoint
         return None
+
+    def get_knowledge_collection(self) -> str:
+        """Get configured knowledge collection name."""
+        return (self.qdrant_default_collection or "morgan_knowledge").strip()
+
+    def get_memory_collection(self) -> str:
+        """Get configured memory collection name."""
+        return (self.qdrant_memory_collection or "morgan_memories").strip()
+
+    def get_hierarchical_collection(self) -> str:
+        """Get configured hierarchical knowledge collection name."""
+        if self.qdrant_hierarchical_collection:
+            candidate = self.qdrant_hierarchical_collection.strip()
+            if candidate:
+                return candidate
+        return f"{self.get_knowledge_collection()}_hierarchical"
 
 
 @lru_cache()

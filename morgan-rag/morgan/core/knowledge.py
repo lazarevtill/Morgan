@@ -69,11 +69,11 @@ class KnowledgeBase:
         self.metrics_collector = MetricsCollector()
 
         # Knowledge collections
-        self.main_collection = "morgan_knowledge"
-        self.memory_collection = "morgan_memory"
+        self.main_collection = self.settings.get_knowledge_collection()
+        self.memory_collection = self.settings.get_memory_collection()
 
         # Hierarchical collection names
-        self.hierarchical_collection = "morgan_knowledge_hierarchical"
+        self.hierarchical_collection = self.settings.get_hierarchical_collection()
 
         # Ensure collections exist
         self._ensure_collections()

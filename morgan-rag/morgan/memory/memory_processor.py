@@ -119,7 +119,7 @@ class MemoryProcessor:
         self.emotional_engine = get_emotional_intelligence_engine()
 
         # Memory collections
-        self.memory_collection = "morgan_memories"
+        self.memory_collection = self.settings.get_memory_collection()
 
         # Processing settings
         self.min_importance_threshold = 0.3

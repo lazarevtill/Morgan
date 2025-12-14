@@ -98,6 +98,7 @@ class LocalRerankingService:
         timeout: float = 30.0,
         batch_size: int = 100,
         local_device: str = "cpu",
+        force_remote: bool = False,
     ):
         """
         Initialize local reranking service.
@@ -108,6 +109,7 @@ class LocalRerankingService:
             timeout: Request timeout in seconds
             batch_size: Batch size for processing
             local_device: Device for local model ("cpu" or "cuda")
+            force_remote: Require remote reranking; disable local fallback
         """
         if not REQUESTS_AVAILABLE:
             logger.warning("requests package not available, remote reranking disabled")
@@ -117,6 +119,7 @@ class LocalRerankingService:
         self.timeout = timeout
         self.batch_size = batch_size
         self.local_device = local_device
+        self.force_remote = force_remote
 
         # Initialize local model (lazy)
         self._local_model = None
@@ -139,16 +142,18 @@ class LocalRerankingService:
         # Check remote first
         if self.endpoint and REQUESTS_AVAILABLE:
             try:
-                response = requests.get(
-                    f"{self.endpoint.rstrip('/rerank')}/health", timeout=5.0
-                )
+                response = requests.get(self._health_url(), timeout=5.0)
                 if response.status_code == 200:
                     logger.info("Remote reranking service available")
                     return True
             except Exception as e:
                 logger.warning(f"Remote reranking service not available: {e}")
 
-        # Check local fallback
+        if self.force_remote:
+            logger.error("Reranking forced to remote but endpoint unavailable")
+            return False
+
+        # Check local fallback (only if allowed)
         if self._check_local_available():
             logger.info("Local reranking service available")
             return True
@@ -183,11 +188,11 @@ class LocalRerankingService:
             if self.endpoint and REQUESTS_AVAILABLE:
                 results = await self._rerank_remote(query, documents, top_k)
             # Fallback to local
-            elif self._check_local_available():
+            elif not self.force_remote and self._check_local_available():
                 results = self._rerank_local(query, documents, top_k)
             else:
                 self.stats.errors += 1
-                raise RuntimeError("No reranking service available")
+                raise RuntimeError("No reranking service available (remote unreachable)")
 
             # Update stats
             elapsed = time.time() - start_time
@@ -303,7 +308,17 @@ class LocalRerankingService:
             "errors": self.stats.errors,
             "endpoint": self.endpoint,
             "model": self.model,
+            "force_remote": self.force_remote,
         }
+
+    def _health_url(self) -> str:
+        """Build health check URL for remote reranker."""
+        if not self.endpoint:
+            return ""
+        base = self.endpoint.rstrip("/")
+        if base.endswith("/rerank"):
+            base = base[: -len("/rerank")]
+        return f"{base}/health"
 
 
 # Global instance for singleton pattern

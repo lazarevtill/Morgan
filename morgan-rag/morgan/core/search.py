@@ -84,12 +84,10 @@ class SmartSearch:
         self.emotional_optimizer = get_emotional_optimizer()
 
         # Search settings
-        self.default_max_results = getattr(
-            self.settings, "morgan_default_search_results", 10
-        )
-        self.min_score_threshold = 0.7
-        self.knowledge_collection = "morgan_knowledge"
-        self.memory_collection = "morgan_turns"
+        self.default_max_results = self.settings.morgan_default_search_results
+        self.min_score_threshold = self.settings.morgan_min_search_score
+        self.knowledge_collection = self.settings.get_knowledge_collection()
+        self.memory_collection = self.settings.get_memory_collection()
 
         logger.info("Smart search initialized with optimization support")
 

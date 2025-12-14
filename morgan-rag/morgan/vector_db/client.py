@@ -95,6 +95,10 @@ class VectorDBClient:
         """Initialize enhanced Qdrant client with companion support and connection pooling."""
         self.settings = get_settings()
 
+        # Respect configured collection names
+        self.KNOWLEDGE_COLLECTION = self.settings.get_knowledge_collection()
+        self.MEMORIES_COLLECTION = self.settings.get_memory_collection()
+
         # Initialize connection pool manager
         self.pool_manager = get_connection_pool_manager()
 

@@ -49,6 +49,7 @@ class CompanionStorage:
         """
         self.vector_client = vector_client or VectorDBClient()
         self.embedding_service = embedding_service or EmbeddingService()
+        self.MEMORIES_COLLECTION = self.vector_client.MEMORIES_COLLECTION
 
         # Initialize collections
         self._ensure_collections_exist()

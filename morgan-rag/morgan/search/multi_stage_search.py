@@ -24,6 +24,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
+from morgan.config import get_settings
 from morgan.services.embedding_service import get_embedding_service
 from morgan.utils.logger import get_logger
 from morgan.utils.request_context import get_request_id, set_request_id
@@ -167,13 +168,14 @@ class MultiStageSearchEngine:
 
     def __init__(self):
         """Initialize multi-stage search engine."""
+        self.settings = get_settings()
         self.embedding_service = get_embedding_service()
         self.hierarchical_service = get_hierarchical_embedding_service()
         self.vector_db = VectorDBClient()
 
         # Collection names
-        self.knowledge_collection = "morgan_knowledge"
-        self.memory_collection = "morgan_turns"
+        self.knowledge_collection = self.settings.get_knowledge_collection()
+        self.memory_collection = self.settings.get_memory_collection()
 
         # Search configuration
         self.coarse_filter_ratio = (
