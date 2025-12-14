@@ -125,7 +125,7 @@ python -m morgan.utils.health
 ```
 
 Output:
-```
+```text
 Morgan System Health
 ============================================================
 Overall Status: [OK] HEALTHY
@@ -147,7 +147,7 @@ Overall Status: [OK] HEALTHY
 
 ## Project Structure
 
-```
+```text
 morgan-rag/
 ├── morgan/
 │   ├── config/           # Settings and configuration
