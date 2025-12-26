@@ -8,13 +8,13 @@ relationship milestones, and empathetic responses using Qdrant vector database.
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     CompanionProfile,
     EmotionalState,
     RelationshipMilestone,
     UserPreferences,
 )
-from morgan.services.embedding_service import EmbeddingService
+from morgan.embeddings import EmbeddingService
 from morgan.utils.logger import get_logger
 from morgan.vector_db.client import VectorDBClient
 
@@ -386,7 +386,7 @@ class CompanionStorage:
         self, payload: Dict[str, Any]
     ) -> CompanionProfile:
         """Build CompanionProfile from vector database payload."""
-        from morgan.emotional.models import CommunicationStyle, ResponseLength
+        from morgan.intelligence.core.models import CommunicationStyle, ResponseLength
 
         # Parse communication preferences
         communication_preferences = UserPreferences(
@@ -427,7 +427,7 @@ class CompanionStorage:
         self, payload: Dict[str, Any]
     ) -> EmotionalState:
         """Build EmotionalState from vector database payload."""
-        from morgan.emotional.models import EmotionType
+        from morgan.intelligence.core.models import EmotionType
 
         return EmotionalState(
             primary_emotion=EmotionType(payload["primary_emotion"]),
@@ -444,7 +444,7 @@ class CompanionStorage:
         self, payload: Dict[str, Any]
     ) -> RelationshipMilestone:
         """Build RelationshipMilestone from vector database payload."""
-        from morgan.emotional.models import MilestoneType
+        from morgan.intelligence.core.models import MilestoneType
 
         return RelationshipMilestone(
             milestone_id=payload["milestone_id"],

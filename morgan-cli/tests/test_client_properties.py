@@ -10,15 +10,15 @@ from typing import Any, Dict, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, strategies as st, settings
 
 from morgan_cli.client import (
     ClientConfig,
     ConnectionStatus,
     HTTPClient,
     MorganClient,
-    WebSocketClient,
-    ConnectionError as ClientConnectionError,
+    # These are now aliases to shared exceptions but maintain backward compatibility
+    ConnectionError,
     RequestError,
     TimeoutError as ClientTimeoutError,
 )

@@ -7,7 +7,7 @@ used throughout the integration service.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 
 @dataclass

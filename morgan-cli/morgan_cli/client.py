@@ -8,14 +8,31 @@ It handles HTTP REST API calls and WebSocket connections for real-time chat.
 import asyncio
 import json
 import logging
+import sys
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional, Callable
 from urllib.parse import urljoin
 
 import aiohttp
 import websockets
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError as PydanticValidationError
+
+# Add shared package to path if not already there
+_shared_path = Path(__file__).parent.parent.parent / "shared"
+if _shared_path.exists() and str(_shared_path) not in sys.path:
+    sys.path.insert(0, str(_shared_path))
+
+from shared.utils.exceptions import (
+    MorganException,
+    NetworkConnectionError,
+    NetworkTimeoutError,
+    ExternalAPIError,
+    ValidationError as MorganValidationError,
+    ErrorCategory,
+    ErrorSeverity,
+)
 
 
 # ============================================================================
@@ -50,36 +67,15 @@ class ConnectionStatus(str, Enum):
 
 
 # ============================================================================
-# Exceptions
+# Backward Compatibility Aliases
 # ============================================================================
 
-class MorganClientError(Exception):
-    """Base exception for Morgan client errors."""
-    pass
-
-
-class ConnectionError(MorganClientError):
-    """Raised when connection to server fails."""
-    pass
-
-
-class RequestError(MorganClientError):
-    """Raised when a request fails."""
-    
-    def __init__(self, message: str, status_code: Optional[int] = None, details: Optional[Dict[str, Any]] = None):
-        super().__init__(message)
-        self.status_code = status_code
-        self.details = details or {}
-
-
-class TimeoutError(MorganClientError):
-    """Raised when a request times out."""
-    pass
-
-
-class ValidationError(MorganClientError):
-    """Raised when response validation fails."""
-    pass
+# Provide backward compatibility for existing code
+MorganClientError = MorganException
+ConnectionError = NetworkConnectionError
+RequestError = ExternalAPIError
+TimeoutError = NetworkTimeoutError
+ValidationError = MorganValidationError
 
 
 # ============================================================================
@@ -226,10 +222,23 @@ class HTTPClient:
                         await asyncio.sleep(self.config.retry_delay_seconds)
                         return await self._request(method, endpoint, json_data, params, retry_count + 1)
                     
-                    raise RequestError(
-                        error_msg,
+                    # Use ExternalAPIError with rich context
+                    raise ExternalAPIError(
+                        api_name="morgan-server",
                         status_code=response.status,
-                        details=response_data.get("details", {})
+                        message=error_msg,
+                        context={
+                            "endpoint": endpoint,
+                            "method": method,
+                            "error_code": error_code,
+                            "details": response_data.get("details", {})
+                        },
+                        user_message=f"Server request failed: {error_msg}",
+                        recovery_suggestions=[
+                            "Check your request parameters",
+                            "Verify server is running correctly",
+                            "Try again in a moment"
+                        ]
                     )
                 
                 return response_data
@@ -242,7 +251,22 @@ class HTTPClient:
                 await asyncio.sleep(self.config.retry_delay_seconds)
                 return await self._request(method, endpoint, json_data, params, retry_count + 1)
             
-            raise TimeoutError(f"Request to {endpoint} timed out after {self.config.timeout_seconds}s")
+            # Use NetworkTimeoutError with rich context
+            raise NetworkTimeoutError(
+                message=f"Request to {endpoint} timed out after {self.config.timeout_seconds}s",
+                timeout_seconds=float(self.config.timeout_seconds),
+                context={
+                    "endpoint": endpoint,
+                    "method": method,
+                    "retry_attempts": retry_count
+                },
+                user_message=f"The request took too long to complete ({self.config.timeout_seconds}s)",
+                recovery_suggestions=[
+                    "Check your network connection",
+                    "Try again with a simpler request",
+                    "Increase timeout if needed"
+                ]
+            )
         
         except aiohttp.ClientError as e:
             if retry_count < self.config.retry_attempts:
@@ -255,7 +279,23 @@ class HTTPClient:
                 return await self._request(method, endpoint, json_data, params, retry_count + 1)
             
             self._set_status(ConnectionStatus.ERROR)
-            raise ConnectionError(f"Failed to connect to {url}: {e}")
+            # Use NetworkConnectionError with rich context
+            raise NetworkConnectionError(
+                message=f"Failed to connect to {url}: {e}",
+                host=self.config.server_url,
+                context={
+                    "endpoint": endpoint,
+                    "method": method,
+                    "retry_attempts": retry_count,
+                    "error_type": type(e).__name__
+                },
+                user_message="Unable to connect to Morgan server",
+                recovery_suggestions=[
+                    "Verify the server is running",
+                    "Check the server URL configuration",
+                    "Ensure network connectivity"
+                ]
+            )
     
     async def get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -622,7 +662,20 @@ class WebSocketClient:
             self.logger.info(f"WebSocket connected to {ws_url}")
         except Exception as e:
             self._set_status(ConnectionStatus.ERROR)
-            raise ConnectionError(f"Failed to connect to WebSocket: {e}")
+            raise NetworkConnectionError(
+                message=f"Failed to connect to WebSocket: {e}",
+                host=self.config.server_url,
+                context={
+                    "ws_url": ws_url,
+                    "error_type": type(e).__name__
+                },
+                user_message="Unable to establish real-time connection",
+                recovery_suggestions=[
+                    "Verify the server supports WebSocket connections",
+                    "Check the server URL configuration",
+                    "Ensure network connectivity"
+                ]
+            )
     
     async def close(self) -> None:
         """Close WebSocket connection."""
@@ -698,7 +751,16 @@ class WebSocketClient:
                 await self._reconnect()
         except Exception as e:
             self._set_status(ConnectionStatus.ERROR)
-            raise ConnectionError(f"WebSocket error: {e}")
+            raise NetworkConnectionError(
+                message=f"WebSocket error: {e}",
+                host=self.config.server_url,
+                context={"error_type": type(e).__name__},
+                user_message="Real-time connection error",
+                recovery_suggestions=[
+                    "Try reconnecting",
+                    "Check network stability"
+                ]
+            )
     
     async def _reconnect(self) -> None:
         """Attempt to reconnect with exponential backoff."""

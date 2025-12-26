@@ -17,7 +17,7 @@ from morgan.optimization.batch_processor import get_batch_processor, BatchConfig
 from morgan.optimization.connection_pool import get_connection_pool_manager
 from morgan.optimization.async_processor import get_async_processor, TaskPriority
 from morgan.optimization.emotional_optimizer import get_emotional_optimizer
-from morgan.services.embedding_service import get_embedding_service
+from morgan.embeddings.service import get_embedding_service
 from morgan.vector_db.client import VectorDBClient
 from morgan.core.search import SmartSearch
 from morgan.utils.logger import get_logger

@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from morgan.config import get_settings
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     CommunicationStyle,
     ConversationContext,
     EmotionalState,

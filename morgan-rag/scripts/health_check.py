@@ -58,7 +58,7 @@ def check_llm():
 def check_embeddings():
     """Check embedding service"""
     try:
-        from morgan.services.embedding_service import EmbeddingService
+        from morgan.embeddings.service import EmbeddingService
         service = EmbeddingService()
         emb = service.encode("test")
         console.print(f"✅ Embedding service working")

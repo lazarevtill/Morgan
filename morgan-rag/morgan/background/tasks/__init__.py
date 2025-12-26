@@ -1,11 +1,10 @@
 """
 Background Tasks
 
-Individual task implementations following KISS principles.
-Each task class has single responsibility.
+Individual task implementations following DDD principles.
 """
 
-from .reindexing import ReindexingTask
-from .reranking import RerankingTask
+from morgan.background.tasks.reindexing import ReindexingTask
+from morgan.background.tasks.reranking import RerankingTask
 
 __all__ = ["ReindexingTask", "RerankingTask"]

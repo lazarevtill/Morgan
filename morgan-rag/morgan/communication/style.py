@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     CommunicationStyle,
     CompanionProfile,
     ConversationContext,
