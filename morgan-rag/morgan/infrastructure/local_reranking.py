@@ -13,6 +13,7 @@ dedicated host (Host 6 with RTX 2060).
 Model weights are cached locally to avoid re-downloading on each startup.
 """
 
+import asyncio
 import os
 import time
 from dataclasses import dataclass
@@ -135,11 +136,11 @@ class LocalRerankingService:
 
     100% Self-Hosted - No API Keys Required.
 
-    Supports:
-    - Remote FastAPI reranking endpoint (primary)
-    - Local CrossEncoder via sentence-transformers (fallback)
-    - Batch processing with configurable size
-    - Performance tracking
+    Supports (in order of preference):
+    1. Remote FastAPI reranking endpoint (primary)
+    2. Local CrossEncoder via sentence-transformers (high quality fallback)
+    3. Local embedding-based reranking (fast fallback)
+    4. BM25-style lexical matching (last resort)
 
     Self-hosted models (via sentence-transformers CrossEncoder):
     - cross-encoder/ms-marco-MiniLM-L-6-v2: Fast, English (recommended)
@@ -174,6 +175,7 @@ class LocalRerankingService:
         local_device: str = "cpu",
         model_cache_dir: Optional[str] = None,
         preload_model: bool = False,
+        embedding_model: str = "all-MiniLM-L6-v2",
     ):
         """
         Initialize local reranking service.
@@ -186,6 +188,7 @@ class LocalRerankingService:
             local_device: Device for local model ("cpu" or "cuda")
             model_cache_dir: Directory for model weights cache
             preload_model: If True, load model immediately
+            embedding_model: Model for embedding-based fallback
         """
         if not REQUESTS_AVAILABLE:
             logger.warning("requests package not available, remote reranking disabled")
@@ -195,13 +198,16 @@ class LocalRerankingService:
 
         self.endpoint = endpoint
         self.model = model
+        self.embedding_model_name = embedding_model
         self.timeout = timeout
         self.batch_size = batch_size
         self.local_device = local_device
 
-        # Initialize local model (lazy by default)
+        # Initialize local models (lazy by default)
         self._local_model = None
         self._local_available = None
+        self._embedding_model = None
+        self._embedding_available = None
 
         # Statistics
         self.stats = RerankStats()
@@ -251,6 +257,12 @@ class LocalRerankingService:
         """
         Rerank documents by relevance to query.
 
+        Uses multiple fallback strategies:
+        1. Remote reranking endpoint
+        2. Local CrossEncoder model
+        3. Embedding-based similarity
+        4. BM25-style lexical matching
+
         Args:
             query: Search query
             documents: List of document texts to rerank
@@ -266,17 +278,41 @@ class LocalRerankingService:
             return []
 
         start_time = time.time()
+        results = None
+        method_used = "none"
 
+        # Try each method in order of preference
         try:
-            # Try remote first
+            # 1. Try remote endpoint first
             if self.endpoint and REQUESTS_AVAILABLE:
-                results = await self._rerank_remote(query, documents, top_k)
-            # Fallback to local
-            elif self._check_local_available():
-                results = self._rerank_local(query, documents, top_k)
-            else:
-                self.stats.errors += 1
-                raise RuntimeError("No reranking service available")
+                try:
+                    results = await self._rerank_remote(query, documents, top_k)
+                    method_used = "remote"
+                except Exception as e:
+                    logger.warning(f"Remote reranking failed, trying local: {e}")
+
+            # 2. Try local CrossEncoder
+            if results is None and self._check_local_available():
+                try:
+                    results = self._rerank_local(query, documents, top_k)
+                    method_used = "cross_encoder"
+                except Exception as e:
+                    logger.warning(
+                        f"CrossEncoder reranking failed, trying embedding: {e}"
+                    )
+
+            # 3. Try embedding-based reranking
+            if results is None:
+                try:
+                    results = await self._rerank_embedding(query, documents, top_k)
+                    method_used = "embedding"
+                except Exception as e:
+                    logger.warning(f"Embedding reranking failed, trying BM25: {e}")
+
+            # 4. Fallback to BM25-style lexical matching
+            if results is None:
+                results = self._rerank_bm25(query, documents, top_k)
+                method_used = "bm25"
 
             # Update stats
             elapsed = time.time() - start_time
@@ -284,15 +320,19 @@ class LocalRerankingService:
 
             logger.info(
                 f"Reranked {len(documents)} documents in {elapsed:.3f}s "
-                f"({len(documents)/elapsed:.1f} docs/sec)"
+                f"using {method_used} ({len(documents)/elapsed:.1f} docs/sec)"
             )
 
             return results
 
         except Exception as e:
             self.stats.errors += 1
-            logger.error(f"Reranking failed: {e}")
-            raise
+            logger.error(f"All reranking methods failed: {e}")
+            # Return documents in original order as last resort
+            return [
+                RerankResult(text=doc, score=1.0 - (i * 0.01), original_index=i)
+                for i, doc in enumerate(documents[:top_k] if top_k else documents)
+            ]
 
     async def _rerank_remote(
         self, query: str, documents: List[str], top_k: Optional[int] = None
@@ -369,6 +409,156 @@ class LocalRerankingService:
         results = []
         for i, (doc, score) in enumerate(zip(documents, scores)):
             results.append(RerankResult(text=doc, score=float(score), original_index=i))
+
+        # Sort by score (descending)
+        results.sort(key=lambda x: x.score, reverse=True)
+
+        # Return top K if specified
+        if top_k is not None:
+            results = results[:top_k]
+
+        return results
+
+    def _check_embedding_available(self) -> bool:
+        """Check if embedding model is available."""
+        if self._embedding_available is not None:
+            return self._embedding_available
+
+        try:
+            from sentence_transformers import SentenceTransformer
+
+            logger.info(f"Loading embedding model ({self.embedding_model_name})...")
+            self._embedding_model = SentenceTransformer(
+                self.embedding_model_name,
+                device=self.local_device,
+            )
+            logger.info("Embedding model loaded successfully")
+            self._embedding_available = True
+            return True
+        except ImportError:
+            logger.warning("sentence-transformers not installed for embedding fallback")
+            self._embedding_available = False
+            return False
+        except Exception as e:
+            logger.error(f"Failed to load embedding model: {e}")
+            self._embedding_available = False
+            return False
+
+    async def _rerank_embedding(
+        self, query: str, documents: List[str], top_k: Optional[int] = None
+    ) -> List[RerankResult]:
+        """
+        Rerank using embedding similarity (cosine similarity).
+
+        This is a fallback when CrossEncoder is not available.
+        Uses sentence-transformers for embedding generation.
+        """
+        if not self._check_embedding_available():
+            raise RuntimeError("Embedding model not available")
+
+        import numpy as np
+
+        # Generate embeddings
+        loop = asyncio.get_event_loop()
+
+        def encode_sync():
+            query_embedding = self._embedding_model.encode(
+                query, convert_to_numpy=True, normalize_embeddings=True
+            )
+            doc_embeddings = self._embedding_model.encode(
+                documents,
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+                batch_size=self.batch_size,
+                show_progress_bar=False,
+            )
+            return query_embedding, doc_embeddings
+
+        query_embedding, doc_embeddings = await loop.run_in_executor(None, encode_sync)
+
+        # Calculate cosine similarity (embeddings are already normalized)
+        similarities = np.dot(doc_embeddings, query_embedding)
+
+        # Create results
+        results = []
+        for i, (doc, score) in enumerate(zip(documents, similarities)):
+            results.append(RerankResult(text=doc, score=float(score), original_index=i))
+
+        # Sort by score (descending)
+        results.sort(key=lambda x: x.score, reverse=True)
+
+        # Return top K if specified
+        if top_k is not None:
+            results = results[:top_k]
+
+        return results
+
+    def _rerank_bm25(
+        self, query: str, documents: List[str], top_k: Optional[int] = None
+    ) -> List[RerankResult]:
+        """
+        Rerank using BM25-style lexical matching.
+
+        This is the last resort fallback when no ML models are available.
+        Uses simple term frequency-based scoring.
+        """
+        import re
+        from collections import Counter
+        import math
+
+        # Tokenize query and documents
+        def tokenize(text: str) -> List[str]:
+            # Simple tokenization: lowercase and split on non-alphanumeric
+            return [t.lower() for t in re.findall(r"\w+", text) if len(t) > 1]
+
+        query_terms = set(tokenize(query))
+
+        # BM25 parameters
+        k1 = 1.5
+        b = 0.75
+
+        # Calculate average document length
+        doc_tokens = [tokenize(doc) for doc in documents]
+        avg_dl = (
+            sum(len(tokens) for tokens in doc_tokens) / len(documents)
+            if documents
+            else 1
+        )
+
+        # Calculate document frequencies
+        df = Counter()
+        for tokens in doc_tokens:
+            for term in set(tokens):
+                df[term] += 1
+
+        # Calculate BM25 scores
+        n_docs = len(documents)
+        results = []
+
+        for i, (doc, tokens) in enumerate(zip(documents, doc_tokens)):
+            score = 0.0
+            tf = Counter(tokens)
+            dl = len(tokens)
+
+            for term in query_terms:
+                if term in tf:
+                    # IDF component
+                    idf = math.log((n_docs - df[term] + 0.5) / (df[term] + 0.5) + 1)
+                    # TF component with length normalization
+                    tf_score = (
+                        tf[term]
+                        * (k1 + 1)
+                        / (tf[term] + k1 * (1 - b + b * dl / avg_dl))
+                    )
+                    score += idf * tf_score
+
+            # Normalize score to 0-1 range (approximate)
+            normalized_score = (
+                min(1.0, score / (len(query_terms) * 3)) if query_terms else 0.0
+            )
+            results.append(
+                RerankResult(text=doc, score=normalized_score, original_index=i)
+            )
 
         # Sort by score (descending)
         results.sort(key=lambda x: x.score, reverse=True)

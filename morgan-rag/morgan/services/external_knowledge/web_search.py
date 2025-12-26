@@ -216,8 +216,10 @@ class WebSearchService:
         """
         Perform the actual web search.
 
-        This method integrates with MCP browser/search functionality.
-        In a real implementation, this would call the MCP server.
+        Uses multiple backends in order of preference:
+        1. DuckDuckGo (self-hosted, no API keys)
+        2. Brave Search API (if configured)
+        3. SearXNG (if configured)
 
         Args:
             query: Search query
@@ -226,27 +228,304 @@ class WebSearchService:
         Returns:
             List of search results
         """
-        # This is where the MCP integration happens
-        # The actual search would be performed by the MCP server
-        # For now, we provide a structure that can be filled in
+        logger.info(f"Performing web search for: {query[:50]}...")
 
+        results: List[WebSearchResult] = []
+
+        # Try DuckDuckGo first (no API key needed)
         try:
-            # Placeholder for MCP integration
-            # In production, this would call the MCP server endpoint
-            logger.info(f"Performing web search for: {query[:50]}...")
+            ddg_results = await self._search_duckduckgo(query, max_results)
+            if ddg_results:
+                results.extend(ddg_results)
+                logger.info(f"DuckDuckGo returned {len(ddg_results)} results")
+        except Exception as e:
+            logger.warning(f"DuckDuckGo search failed: {e}")
 
-            # Simulate async operation
-            await asyncio.sleep(0.1)
+        # Try Brave Search API if configured and need more results
+        if (
+            len(results) < max_results
+            and hasattr(self.settings, "brave_api_key")
+            and self.settings.brave_api_key
+        ):
+            try:
+                brave_results = await self._search_brave(
+                    query, max_results - len(results)
+                )
+                if brave_results:
+                    results.extend(brave_results)
+                    logger.info(f"Brave Search returned {len(brave_results)} results")
+            except Exception as e:
+                logger.warning(f"Brave Search failed: {e}")
 
-            # Return empty results - actual implementation would use MCP
-            # The MCP server would handle the actual web search
-            results: List[WebSearchResult] = []
+        # Try SearXNG if configured and need more results
+        if (
+            len(results) < max_results
+            and hasattr(self.settings, "searxng_url")
+            and self.settings.searxng_url
+        ):
+            try:
+                searx_results = await self._search_searxng(
+                    query, max_results - len(results)
+                )
+                if searx_results:
+                    results.extend(searx_results)
+                    logger.info(f"SearXNG returned {len(searx_results)} results")
+            except Exception as e:
+                logger.warning(f"SearXNG search failed: {e}")
 
-            return results[:max_results]
+        # Deduplicate by URL
+        seen_urls = set()
+        unique_results = []
+        for result in results:
+            if result.url not in seen_urls:
+                seen_urls.add(result.url)
+                unique_results.append(result)
+
+        return unique_results[:max_results]
+
+    async def _search_duckduckgo(
+        self,
+        query: str,
+        max_results: int,
+    ) -> List[WebSearchResult]:
+        """
+        Search using DuckDuckGo HTML scraping (no API key required).
+
+        This is a self-hosted approach that doesn't require any API keys.
+        """
+        try:
+            # Try using duckduckgo-search library
+            try:
+                from duckduckgo_search import DDGS
+            except ImportError:
+                logger.warning("duckduckgo-search not installed, trying httpx fallback")
+                return await self._search_duckduckgo_httpx(query, max_results)
+
+            results = []
+
+            # Run in executor to avoid blocking
+            loop = asyncio.get_event_loop()
+
+            def search_sync():
+                with DDGS() as ddgs:
+                    return list(ddgs.text(query, max_results=max_results))
+
+            ddg_results = await loop.run_in_executor(None, search_sync)
+
+            for item in ddg_results:
+                results.append(
+                    WebSearchResult(
+                        title=item.get("title", ""),
+                        url=item.get("href", item.get("link", "")),
+                        snippet=item.get("body", item.get("snippet", "")),
+                        content=item.get("body", ""),
+                        score=1.0 - (len(results) * 0.05),  # Decay score by position
+                        source="duckduckgo",
+                        metadata={
+                            "search_engine": "duckduckgo",
+                            "position": len(results) + 1,
+                        },
+                    )
+                )
+
+            return results
 
         except Exception as e:
-            logger.error(f"Search execution failed: {e}")
-            raise
+            logger.error(f"DuckDuckGo search error: {e}")
+            return await self._search_duckduckgo_httpx(query, max_results)
+
+    async def _search_duckduckgo_httpx(
+        self,
+        query: str,
+        max_results: int,
+    ) -> List[WebSearchResult]:
+        """
+        Fallback DuckDuckGo search using httpx and HTML parsing.
+        """
+        try:
+            import httpx
+            from urllib.parse import quote_plus
+        except ImportError:
+            logger.error("httpx not installed for DuckDuckGo fallback")
+            return []
+
+        results = []
+
+        try:
+            # DuckDuckGo HTML search
+            url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(url, headers=headers, follow_redirects=True)
+                response.raise_for_status()
+                html = response.text
+
+            # Parse results using regex (avoid BeautifulSoup dependency)
+            import re
+
+            # Find result blocks
+            result_pattern = (
+                r'<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>([^<]*)</a>'
+            )
+            snippet_pattern = r'<a[^>]*class="result__snippet"[^>]*>([^<]*)</a>'
+
+            links = re.findall(result_pattern, html)
+            snippets = re.findall(snippet_pattern, html)
+
+            for i, (href, title) in enumerate(links[:max_results]):
+                snippet = snippets[i] if i < len(snippets) else ""
+
+                # Clean up URL (DuckDuckGo uses redirect URLs)
+                actual_url = href
+                if "uddg=" in href:
+                    url_match = re.search(r"uddg=([^&]+)", href)
+                    if url_match:
+                        from urllib.parse import unquote
+
+                        actual_url = unquote(url_match.group(1))
+
+                results.append(
+                    WebSearchResult(
+                        title=title.strip(),
+                        url=actual_url,
+                        snippet=snippet.strip(),
+                        content=snippet.strip(),
+                        score=1.0 - (i * 0.05),
+                        source="duckduckgo_html",
+                        metadata={
+                            "search_engine": "duckduckgo",
+                            "position": i + 1,
+                        },
+                    )
+                )
+
+            return results
+
+        except Exception as e:
+            logger.error(f"DuckDuckGo httpx search error: {e}")
+            return []
+
+    async def _search_brave(
+        self,
+        query: str,
+        max_results: int,
+    ) -> List[WebSearchResult]:
+        """
+        Search using Brave Search API.
+
+        Requires BRAVE_API_KEY in settings.
+        """
+        try:
+            import httpx
+        except ImportError:
+            logger.error("httpx not installed for Brave Search")
+            return []
+
+        results = []
+        api_key = getattr(self.settings, "brave_api_key", None)
+
+        if not api_key:
+            return []
+
+        try:
+            url = "https://api.search.brave.com/res/v1/web/search"
+            headers = {
+                "Accept": "application/json",
+                "X-Subscription-Token": api_key,
+            }
+            params = {
+                "q": query,
+                "count": max_results,
+            }
+
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(url, headers=headers, params=params)
+                response.raise_for_status()
+                data = response.json()
+
+            for i, item in enumerate(data.get("web", {}).get("results", [])):
+                results.append(
+                    WebSearchResult(
+                        title=item.get("title", ""),
+                        url=item.get("url", ""),
+                        snippet=item.get("description", ""),
+                        content=item.get("description", ""),
+                        score=1.0 - (i * 0.05),
+                        source="brave",
+                        metadata={
+                            "search_engine": "brave",
+                            "position": i + 1,
+                            "age": item.get("age", ""),
+                        },
+                    )
+                )
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Brave Search error: {e}")
+            return []
+
+    async def _search_searxng(
+        self,
+        query: str,
+        max_results: int,
+    ) -> List[WebSearchResult]:
+        """
+        Search using SearXNG instance (self-hosted meta search).
+
+        Requires SEARXNG_URL in settings.
+        """
+        try:
+            import httpx
+        except ImportError:
+            logger.error("httpx not installed for SearXNG")
+            return []
+
+        results = []
+        searxng_url = getattr(self.settings, "searxng_url", None)
+
+        if not searxng_url:
+            return []
+
+        try:
+            url = f"{searxng_url.rstrip('/')}/search"
+            params = {
+                "q": query,
+                "format": "json",
+                "categories": "general",
+            }
+
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+
+            for i, item in enumerate(data.get("results", [])[:max_results]):
+                results.append(
+                    WebSearchResult(
+                        title=item.get("title", ""),
+                        url=item.get("url", ""),
+                        snippet=item.get("content", ""),
+                        content=item.get("content", ""),
+                        score=item.get("score", 1.0 - (i * 0.05)),
+                        source="searxng",
+                        metadata={
+                            "search_engine": "searxng",
+                            "position": i + 1,
+                            "engine": item.get("engine", ""),
+                        },
+                    )
+                )
+
+            return results
+
+        except Exception as e:
+            logger.error(f"SearXNG search error: {e}")
+            return []
 
     def _get_cache_key(self, query: str) -> str:
         """Generate cache key for a query."""
