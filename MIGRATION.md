@@ -1,17 +1,57 @@
 # Migration Guide
 
-**Last Updated:** December 26, 2025
+**Last Updated**: December 26, 2025
 
-This guide helps you migrate from older Morgan implementations to the current architecture.
+This guide helps you migrate from older Morgan implementations to the current unified architecture.
+
+---
 
 ## Overview
 
-Morgan now uses a clean, modular architecture:
+### Architecture Evolution
 
-- **morgan-rag**: Core intelligence (services, emotional intelligence, memory, search)
-- **morgan-server**: FastAPI server with REST/WebSocket API
-- **morgan-cli**: Terminal client
-- **docker**: Containerized deployment
+```mermaid
+graph LR
+    subgraph Old["Old Architecture"]
+        direction TB
+        O1[llm_service.py]
+        O2[distributed_llm_service.py]
+        O3[embeddings/service.py]
+        O4[local_embeddings.py]
+        O5[local_reranking.py]
+    end
+    
+    subgraph New["New Architecture"]
+        direction TB
+        N1[services/llm/]
+        N2[services/embeddings/]
+        N3[services/reranking/]
+    end
+    
+    O1 & O2 -->|Consolidated| N1
+    O3 & O4 -->|Consolidated| N2
+    O5 -->|Consolidated| N3
+```
+
+### Migration Flow
+
+```mermaid
+flowchart TD
+    Start[Start Migration] --> Check{Using Old Imports?}
+    
+    Check -->|Yes| Update[Update Imports]
+    Check -->|No| Skip[Skip to Usage]
+    
+    Update --> Config{Update Config?}
+    Config -->|Yes| Env[Update Environment]
+    Config -->|No| Usage[Update Usage Patterns]
+    
+    Env --> Usage
+    Usage --> Test[Run Tests]
+    Test --> Done[Migration Complete]
+```
+
+---
 
 ## Quick Start (New Installation)
 
@@ -34,115 +74,327 @@ export MORGAN_SERVER_URL=http://localhost:8080
 morgan chat
 ```
 
-## Migration from Old System
+---
 
-### 1. Update Imports
+## Import Migration
 
-If you have code that imports from old service locations, update to the new unified services:
+### Import Path Changes
 
-**Old imports:**
+```mermaid
+flowchart LR
+    subgraph Old["Old Import Paths"]
+        O1["morgan.services.llm_service"]
+        O2["morgan.services.distributed_llm_service"]
+        O3["morgan.embeddings.service"]
+        O4["morgan.infrastructure.local_embeddings"]
+        O5["morgan.infrastructure.local_reranking"]
+    end
+    
+    subgraph New["New Import Paths"]
+        N1["morgan.services.llm"]
+        N2["morgan.services.embeddings"]
+        N3["morgan.services.reranking"]
+    end
+    
+    O1 & O2 -->|Replace with| N1
+    O3 & O4 -->|Replace with| N2
+    O5 -->|Replace with| N3
+```
+
+### LLM Service Migration
+
+**Old imports (no longer work):**
+
 ```python
-# These no longer work
+# ❌ These imports are removed
 from morgan.services.llm_service import LLMService
 from morgan.services.distributed_llm_service import DistributedLLMService
-from morgan.embeddings.service import EmbeddingService
-from morgan.infrastructure.local_embeddings import LocalEmbeddingService
-from morgan.infrastructure.local_reranking import LocalRerankingService
 ```
 
 **New imports:**
-```python
-# Use these instead
-from morgan.services import (
-    get_llm_service,
-    get_embedding_service,
-    get_reranking_service,
-)
 
-# Or import classes directly
+```python
+# ✅ Use these instead
+from morgan.services import get_llm_service
 from morgan.services.llm import LLMService, LLMResponse, LLMMode
+```
+
+### Embedding Service Migration
+
+**Old imports (no longer work):**
+
+```python
+# ❌ These imports are removed
+from morgan.embeddings.service import EmbeddingService
+from morgan.infrastructure.local_embeddings import LocalEmbeddingService
+from morgan.services.distributed_embedding_service import DistributedEmbeddingService
+```
+
+**New imports:**
+
+```python
+# ✅ Use these instead
+from morgan.services import get_embedding_service
 from morgan.services.embeddings import EmbeddingService
-from morgan.services.reranking import RerankingService
 ```
 
-### 2. Update Service Usage
+### Reranking Service Migration
 
-**Old usage:**
+**Old imports (no longer work):**
+
 ```python
-# Old LLM service
+# ❌ These imports are removed
+from morgan.infrastructure.local_reranking import LocalRerankingService
+from morgan.jina.reranking.service import JinaRerankingService
+```
+
+**New imports:**
+
+```python
+# ✅ Use these instead
+from morgan.services import get_reranking_service
+from morgan.services.reranking import RerankingService, RerankResult
+```
+
+---
+
+## Usage Pattern Migration
+
+### Service Initialization
+
+```mermaid
+sequenceDiagram
+    participant Old as Old Pattern
+    participant New as New Pattern
+    
+    Note over Old: Manual instantiation
+    Old->>Old: service = LLMService(endpoint=...)
+    
+    Note over New: Factory pattern (singleton)
+    New->>New: service = get_llm_service()
+```
+
+**Old pattern:**
+
+```python
+# ❌ Old: Manual instantiation
 llm = LLMService(endpoint="http://localhost:11434/v1")
-response = llm.generate("Hello")
-
-# Old embedding service
-embeddings = EmbeddingService()
-vector = embeddings.embed("Text")
+embeddings = EmbeddingService(model="all-MiniLM-L6-v2")
 ```
 
-**New usage:**
+**New pattern:**
+
 ```python
-# New unified services
+# ✅ New: Factory functions (singletons)
 from morgan.services import get_llm_service, get_embedding_service
 
-llm = get_llm_service()
-response = llm.generate("Hello")
-print(response.content)
-
+llm = get_llm_service()  # Uses defaults or environment
 embeddings = get_embedding_service()
-vector = embeddings.encode("Text")
 ```
 
-### 3. Update Configuration
+### LLM Generation
 
-**Old configuration (scattered):**
+**Old pattern:**
+
 ```python
-# Hardcoded in various files
-LLM_ENDPOINT = "http://localhost:11434/v1"
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+# ❌ Old
+response = llm.generate("Hello")
+text = response["content"]
 ```
 
-**New configuration (centralized):**
+**New pattern:**
+
+```python
+# ✅ New: Typed response object
+response = llm.generate("Hello")
+text = response.content  # LLMResponse object
+model = response.model
+usage = response.usage
+```
+
+### Embedding Generation
+
+**Old pattern:**
+
+```python
+# ❌ Old
+vector = embeddings.embed("Text")
+vectors = embeddings.embed_batch(["Text 1", "Text 2"])
+```
+
+**New pattern:**
+
+```python
+# ✅ New: Consistent naming
+vector = embeddings.encode("Text")
+vectors = embeddings.encode_batch(["Text 1", "Text 2"])
+
+# Async versions
+vector = await embeddings.aencode("Text")
+vectors = await embeddings.aencode_batch(["Text 1", "Text 2"])
+```
+
+### Reranking
+
+**Old pattern:**
+
+```python
+# ❌ Old
+results = reranker.rerank(query, documents)
+for doc, score in results:
+    print(f"{score}: {doc}")
+```
+
+**New pattern:**
+
+```python
+# ✅ New: Typed result objects
+results = await reranking.rerank(query, documents, top_k=10)
+for result in results:
+    print(f"{result.score}: {result.text}")
+    print(f"  Original index: {result.index}")
+```
+
+---
+
+## Configuration Migration
+
+### Configuration Flow
+
+```mermaid
+flowchart TD
+    subgraph Old["Old Configuration"]
+        O1[Hardcoded in code]
+        O2[Scattered .env files]
+        O3[Multiple config locations]
+    end
+    
+    subgraph New["New Configuration"]
+        N1[config/defaults.py]
+        N2[Environment variables]
+        N3[Centralized settings]
+    end
+    
+    O1 -->|Move to| N1
+    O2 -->|Standardize to| N2
+    O3 -->|Consolidate to| N3
+```
+
+### Environment Variables
+
+**Old (scattered):**
+
 ```bash
-# Environment variables
-export MORGAN_LLM_ENDPOINT=http://localhost:11434/v1
-export MORGAN_LLM_MODEL=qwen2.5:7b
-export MORGAN_EMBEDDING_ENDPOINT=http://localhost:11434/v1
-export MORGAN_EMBEDDING_MODEL=qwen3-embedding:4b
+# Various names in different places
+LLM_ENDPOINT=http://localhost:11434/v1
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+QDRANT_HOST=localhost
 ```
 
-Or use the defaults module:
+**New (standardized):**
+
+```bash
+# Consistent MORGAN_ prefix
+MORGAN_LLM_ENDPOINT=http://localhost:11434/v1
+MORGAN_LLM_MODEL=qwen2.5:7b
+MORGAN_EMBEDDING_ENDPOINT=http://localhost:11434/v1
+MORGAN_EMBEDDING_MODEL=qwen3-embedding:4b
+MORGAN_QDRANT_URL=http://localhost:6333
+MORGAN_REDIS_URL=redis://localhost:6379
+```
+
+### Using Defaults
+
 ```python
 from morgan.config.defaults import Defaults
 
+# Access default values
 endpoint = Defaults.LLM_ENDPOINT
 model = Defaults.LLM_MODEL
+dimensions = Defaults.EMBEDDING_DIMENSIONS
 ```
 
-### 4. Update Exception Handling
+---
 
-**Old exception handling:**
+## Exception Handling Migration
+
+### Exception Hierarchy
+
+```mermaid
+classDiagram
+    class MorganError {
+        +message: str
+        +service: str
+        +operation: str
+    }
+    
+    class LLMServiceError
+    class EmbeddingServiceError
+    class RerankingServiceError
+    class ConfigurationError
+    class ValidationError
+    
+    MorganError <|-- LLMServiceError
+    MorganError <|-- EmbeddingServiceError
+    MorganError <|-- RerankingServiceError
+    MorganError <|-- ConfigurationError
+    MorganError <|-- ValidationError
+```
+
+**Old pattern:**
+
 ```python
+# ❌ Old: Generic exceptions
 try:
     response = llm.generate("Hello")
 except Exception as e:
     print(f"Error: {e}")
 ```
 
-**New exception handling:**
+**New pattern:**
+
 ```python
+# ✅ New: Typed exceptions
 from morgan.exceptions import LLMServiceError, MorganError
 
 try:
     response = llm.generate("Hello")
 except LLMServiceError as e:
     print(f"LLM error: {e.message}")
+    print(f"Service: {e.service}")
     print(f"Operation: {e.operation}")
 except MorganError as e:
     print(f"Morgan error: {e}")
 ```
 
+---
+
 ## Feature Mapping
 
 ### Services
+
+```mermaid
+graph LR
+    subgraph Old["Old Services"]
+        O1[llm_service.py]
+        O2[distributed_llm_service.py]
+        O3[embeddings/service.py]
+        O4[distributed_embedding_service.py]
+        O5[local_embeddings.py]
+        O6[local_reranking.py]
+        O7[jina/reranking/service.py]
+    end
+    
+    subgraph New["New Services"]
+        N1[services/llm/<br/>Unified LLM]
+        N2[services/embeddings/<br/>Unified Embeddings]
+        N3[services/reranking/<br/>Unified Reranking]
+    end
+    
+    O1 & O2 --> N1
+    O3 & O4 & O5 --> N2
+    O6 & O7 --> N3
+```
 
 | Old Location | New Location | Notes |
 |-------------|--------------|-------|
@@ -161,54 +413,92 @@ except MorganError as e:
 | Repeated cache setup | `utils/model_cache.py` | Unified cache |
 | Repeated deduplication | `utils/deduplication.py` | ResultDeduplicator |
 
-### Configuration
-
-| Old Pattern | New Location | Notes |
-|-------------|--------------|-------|
-| Hardcoded values | `config/defaults.py` | Centralized defaults |
-| Scattered env vars | `config/settings.py` | Unified settings |
-
-## Data Migration
-
-### Vector Database
-
-If you have existing Qdrant data, it should continue to work. The new services use the same vector database.
-
-### Conversation History
-
-Conversation history stored in the memory system should continue to work with the new architecture.
+---
 
 ## Troubleshooting
 
+### Common Issues
+
+```mermaid
+flowchart TD
+    E1[Import Error] --> S1[Update import paths]
+    E2[Service Not Found] --> S2[Use factory functions]
+    E3[Config Not Loading] --> S3[Check env var names]
+    E4[Type Error] --> S4[Use new response objects]
+```
+
 ### Import Errors
 
-If you get import errors like:
+**Error:**
 ```
 ModuleNotFoundError: No module named 'morgan.services.llm_service'
 ```
 
-Update your imports to use the new paths (see section 1 above).
+**Solution:**
+```python
+# Update to new import path
+from morgan.services import get_llm_service
+llm = get_llm_service()
+```
 
 ### Service Not Found
 
-If services aren't being found:
-```python
-# Make sure you're using the factory functions
-from morgan.services import get_llm_service
+**Error:**
+```
+AttributeError: 'NoneType' object has no attribute 'generate'
+```
 
-llm = get_llm_service()  # Creates singleton instance
+**Solution:**
+```python
+# Use factory function, not direct import
+from morgan.services import get_llm_service
+llm = get_llm_service()  # Creates singleton
 ```
 
 ### Configuration Issues
 
-If configuration isn't being loaded:
-```bash
-# Check environment variables
-echo $MORGAN_LLM_ENDPOINT
-
-# Or use defaults
-python -c "from morgan.config.defaults import Defaults; print(Defaults.LLM_ENDPOINT)"
+**Error:**
 ```
+ConfigurationError: LLM_ENDPOINT not found
+```
+
+**Solution:**
+```bash
+# Use MORGAN_ prefix
+export MORGAN_LLM_ENDPOINT=http://localhost:11434/v1
+```
+
+---
+
+## Verification
+
+### Test Migration
+
+```bash
+# Run verification script
+cd morgan-rag
+python -c "
+from morgan.services import get_llm_service, get_embedding_service, get_reranking_service
+
+llm = get_llm_service()
+emb = get_embedding_service()
+rrk = get_reranking_service()
+
+print('✅ All services loaded successfully')
+print(f'  LLM: {type(llm).__name__}')
+print(f'  Embeddings: {type(emb).__name__}')
+print(f'  Reranking: {type(rrk).__name__}')
+"
+```
+
+### Run Tests
+
+```bash
+cd morgan-rag
+pytest tests/ -v
+```
+
+---
 
 ## Getting Help
 
