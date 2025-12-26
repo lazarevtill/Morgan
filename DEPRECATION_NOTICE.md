@@ -109,4 +109,15 @@ For current documentation, see:
 
 ---
 
+## License
+
+```
+Copyright 2025 Morgan AI Assistant Contributors
+Licensed under the Apache License, Version 2.0
+```
+
+See [LICENSE](./LICENSE) for the full license text.
+
+---
+
 **Morgan** - Your private, emotionally intelligent AI companion.

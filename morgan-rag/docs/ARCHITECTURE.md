@@ -882,4 +882,15 @@ pytest tests/integration/ -v
 
 ---
 
+## License
+
+```
+Copyright 2025 Morgan AI Assistant Contributors
+Licensed under the Apache License, Version 2.0
+```
+
+See [LICENSE](../../LICENSE) for the full license text.
+
+---
+
 **Morgan RAG** - The intelligent core of Morgan AI Assistant.
