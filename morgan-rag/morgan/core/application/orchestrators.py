@@ -77,6 +77,7 @@ class ConversationOrchestrator:
 
         # Proactive services (lazy loaded)
         self._full_reasoning_engine = None
+        self._task_planner = None
         self._context_monitor = None
         self._task_anticipator = None
         self._suggestion_engine = None
@@ -126,6 +127,21 @@ class ConversationOrchestrator:
                 logger.warning("Full reasoning engine not available")
                 return None
         return self._full_reasoning_engine
+
+    def _get_task_planner(self):
+        """Get task planner for complex multi-step workflows (lazy loaded)."""
+        if self._task_planner is None:
+            try:
+                from morgan.reasoning.planner import TaskPlanner
+
+                self._task_planner = TaskPlanner(
+                    llm_service=self.llm,
+                    max_concurrent_tasks=3,
+                )
+            except ImportError:
+                logger.warning("Task planner not available")
+                return None
+        return self._task_planner
 
     async def answer_question(
         self,
@@ -564,6 +580,103 @@ class ConversationOrchestrator:
             query=question,
             context=context,
         )
+
+    async def create_task_plan(
+        self,
+        goal: str,
+        context: Optional[str] = None,
+    ) -> Any:
+        """
+        Create a task plan to achieve a complex goal.
+
+        Decomposes the goal into discrete tasks with dependencies,
+        priorities, and execution order.
+
+        Args:
+            goal: The goal to achieve
+            context: Optional additional context
+
+        Returns:
+            TaskPlan with decomposed tasks
+
+        Example:
+            >>> plan = await orchestrator.create_task_plan(
+            ...     "Research and summarize recent AI safety developments"
+            ... )
+            >>> print(f"Plan has {len(plan.tasks)} tasks")
+            >>> for task in plan.tasks:
+            ...     print(f"  - {task.name}: {task.description}")
+        """
+        planner = self._get_task_planner()
+
+        if planner is None:
+            raise RuntimeError("Task planner not available")
+
+        return await planner.create_plan(goal=goal, context=context)
+
+    async def execute_task_plan(
+        self,
+        plan: Any,
+        on_progress: Optional[Any] = None,
+    ) -> Any:
+        """
+        Execute a task plan created by create_task_plan().
+
+        Executes tasks in dependency order with progress tracking.
+
+        Args:
+            plan: TaskPlan to execute
+            on_progress: Optional callback for progress updates
+
+        Returns:
+            Updated TaskPlan with results
+
+        Example:
+            >>> plan = await orchestrator.create_task_plan("Research AI safety")
+            >>> result = await orchestrator.execute_task_plan(
+            ...     plan,
+            ...     on_progress=lambda p: print(f"Progress: {p.progress:.0%}")
+            ... )
+            >>> if result.is_complete:
+            ...     for task in result.tasks:
+            ...         print(f"{task.name}: {task.result}")
+        """
+        planner = self._get_task_planner()
+
+        if planner is None:
+            raise RuntimeError("Task planner not available")
+
+        return await planner.execute_plan(plan=plan, on_progress=on_progress)
+
+    async def accomplish_goal(
+        self,
+        goal: str,
+        context: Optional[str] = None,
+        on_progress: Optional[Any] = None,
+    ) -> Any:
+        """
+        Create and execute a complete task plan for a goal.
+
+        This is a convenience method that combines create_task_plan()
+        and execute_task_plan() for simple use cases.
+
+        Args:
+            goal: The goal to achieve
+            context: Optional additional context
+            on_progress: Optional callback for progress updates
+
+        Returns:
+            Completed TaskPlan with all results
+
+        Example:
+            >>> result = await orchestrator.accomplish_goal(
+            ...     "Create a comprehensive comparison of Python web frameworks",
+            ...     on_progress=lambda p: print(f"Progress: {p.progress:.0%}")
+            ... )
+            >>> print(f"Goal achieved: {result.is_complete}")
+        """
+        plan = await self.create_task_plan(goal=goal, context=context)
+        return await self.execute_task_plan(plan=plan, on_progress=on_progress)
 
     async def start_proactive_monitoring(self):
         """Start proactive monitoring services."""
