@@ -192,7 +192,10 @@ class InfrastructureFactory:
     def _create_embedding_service(self):
         """Create embedding service (synchronous)."""
         try:
-            from morgan.services.embeddings import EmbeddingService, get_embedding_service
+            from morgan.services.embeddings import (
+                EmbeddingService,
+                get_embedding_service,
+            )
 
             if self.distributed and self.distributed_config:
                 # Get embedding host
@@ -223,7 +226,10 @@ class InfrastructureFactory:
     def _create_reranking_service(self):
         """Create reranking service (synchronous)."""
         try:
-            from morgan.services.reranking import RerankingService, get_reranking_service
+            from morgan.services.reranking import (
+                RerankingService,
+                get_reranking_service,
+            )
 
             if self.distributed and self.distributed_config:
                 # Get reranking host

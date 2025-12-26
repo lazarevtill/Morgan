@@ -1,14 +1,14 @@
 # Morgan - Personal AI Assistant Project
 
-**Status**: Phase 1 - Infrastructure Setup (70% Complete)
+**Status**: Phase 1 - Infrastructure Complete (83%)
 **Version**: 2.0.0-alpha (Active Development)
-**Last Updated**: November 2, 2025
+**Last Updated**: December 26, 2025
 
 ---
 
 ## Project Overview
 
-Morgan is a fully self-hosted, distributed personal AI assistant being transformed into an intelligent companion with:
+Morgan is a fully self-hosted, distributed personal AI assistant designed as an intelligent companion with:
 
 - **Deep emotional intelligence** - Understands and responds empathetically (95% complete)
 - **Multi-step reasoning** - Chain-of-thought planning and problem decomposition (planned)
@@ -61,80 +61,96 @@ Morgan is a fully self-hosted, distributed personal AI assistant being transform
 
 ## Current Progress
 
-### ✅ Completed (Phase 1A-B: 70%)
+### ✅ Phase 1: Infrastructure Complete (83%)
 
-**Documentation:**
-- `MORGAN_6HOST_ARCHITECTURE.md` - Complete 6-host deployment architecture
-- `DISTRIBUTED_SETUP_GUIDE.md` - Multi-host setup instructions
-- `MORGAN_TRANSFORMATION_SUMMARY.md` - High-level overview
-- `JARVIS_TRANSFORMATION_STATUS.md` - Detailed progress tracking
+**Unified Services Layer (NEW - December 2025):**
 
-**Infrastructure Code:**
-- `morgan/infrastructure/distributed_llm.py` - **COMPLETE** (450+ lines)
-  - Load balancing across multiple LLM hosts
-  - Automatic failover on errors
-  - Health monitoring and stats
-  - OpenAI-compatible async client
+All services have been consolidated into a clean, unified architecture:
 
-- `morgan/infrastructure/local_embeddings.py` - **COMPLETE** (400+ lines)
-  - OpenAI-compatible embedding endpoints
-  - Local sentence-transformers fallback
-  - Batch processing with caching
-  - Performance tracking
+```
+morgan-rag/morgan/services/
+├── __init__.py           # Unified access: get_llm_service(), get_embedding_service(), etc.
+├── llm/                  # LLM service (single + distributed modes)
+│   ├── __init__.py
+│   ├── models.py         # LLMResponse, LLMMode
+│   └── service.py        # Unified LLMService class
+├── embeddings/           # Embedding service (remote + local fallback)
+│   ├── __init__.py
+│   ├── models.py         # EmbeddingStats
+│   └── service.py        # Unified EmbeddingService class
+├── reranking/            # Reranking service (4-level fallback)
+│   ├── __init__.py
+│   ├── models.py         # RerankResult, RerankStats
+│   └── service.py        # Unified RerankingService class
+└── external_knowledge/   # MCP, Context7, Web Search
+```
 
-- `morgan/infrastructure/local_reranking.py` - **COMPLETE** (300+ lines)
-  - Remote FastAPI reranking endpoint
-  - Local CrossEncoder fallback
-  - Batch processing
-  - Performance tracking
+**Infrastructure Layer:**
+```
+morgan-rag/morgan/infrastructure/
+├── distributed_llm.py        # ✅ Load balancing across LLM hosts
+├── distributed_gpu_manager.py # ✅ Distributed GPU host management
+├── multi_gpu_manager.py      # ✅ Single-host GPU management
+└── factory.py                # ✅ Infrastructure factory
+```
 
-- `morgan/infrastructure/multi_gpu_manager.py` - **NEEDS UPDATE** for distributed hosts
-  - Currently designed for single-host tensor parallelism
-  - Needs adaptation for distributed architecture
+**Utilities:**
+```
+morgan-rag/morgan/utils/
+├── singleton.py          # ✅ Thread-safe singleton factory
+├── model_cache.py        # ✅ Unified model cache setup
+├── deduplication.py      # ✅ Result deduplication utility
+└── ...
+```
 
-**Existing Strong Code (Keep As-Is):**
-- `morgan/emotional/` - Emotion detection & empathy (excellent, 95% complete)
+**Configuration:**
+```
+morgan-rag/morgan/config/
+├── defaults.py           # ✅ Centralized default values
+├── settings.py           # ✅ Application settings
+└── distributed_config.py # ✅ Distributed deployment config
+```
+
+**Exception Hierarchy:**
+```
+morgan-rag/morgan/exceptions.py  # ✅ MorganError base + service-specific exceptions
+```
+
+**Existing Strong Code (Preserved):**
+- `morgan/intelligence/` - Emotional intelligence & empathy (excellent, 95% complete)
 - `morgan/learning/` - Pattern learning & adaptation (strong)
 - `morgan/memory/` - Conversation memory with emotional context (strong)
 - `morgan/companion/` - Relationship management (good)
 - `morgan/search/` - Multi-stage search pipeline (excellent)
+- `morgan/reasoning/` - Multi-step reasoning (good)
+- `morgan/proactive/` - Proactive assistance (good)
 
-### 🔄 In Progress (Phase 1C: 30%)
+### ⏳ Remaining (Phase 1: 17%)
 
-- [ ] Update `multi_gpu_manager.py` for distributed hosts
-- [ ] Integrate new infrastructure services with Morgan core
-- [ ] Update `morgan/services/llm_service.py` to use `DistributedLLMClient`
-- [ ] Update `morgan/services/embedding_service.py` to use `LocalEmbeddingService`
-- [ ] Add reranking to search pipeline
-- [ ] Integration testing of distributed setup
-- [ ] Performance benchmarking (validate 5-10s target)
+- [ ] Documentation updates (this task)
+- [ ] Integration testing
+- [ ] Performance validation
 
-**Estimated Time to Complete Phase 1**: 1-2 days
+### ⏳ Planned (Phases 2-5)
 
-### ⏳ Planned (Phases 2-5: ~9 weeks)
-
-**Phase 2 - Multi-Step Reasoning (2 weeks):**
-- Chain-of-thought reasoning engine
+**Phase 2 - Multi-Step Reasoning Enhancement:**
+- Chain-of-thought reasoning engine improvements
 - Task planning and decomposition
 - Progress tracking system
-- Reasoning explanation generator
 
-**Phase 3 - Proactive Features (2 weeks):**
+**Phase 3 - Proactive Features:**
 - Background monitoring service
 - Task anticipation engine
 - Contextual suggestion system
-- Scheduled check-ins
 
-**Phase 4 - Enhanced Context (2 weeks):**
+**Phase 4 - Enhanced Context:**
 - Context aggregation across sources
 - Temporal awareness (time/day patterns)
 - Activity tracking and analysis
-- Context synthesis
 
-**Phase 5 - Polish & Production (2 weeks):**
+**Phase 5 - Polish & Production:**
 - Personality consistency refinement
 - End-to-end testing
-- Performance optimization
 - Production deployment
 
 ---
@@ -151,68 +167,180 @@ Morgan is a fully self-hosted, distributed personal AI assistant being transform
 
 ## Project Structure
 
-```python
+```
 Morgan/
-├── morgan-rag/                    # Main project directory
+├── morgan-rag/                    # Main RAG project
 │   ├── morgan/
-│   │   ├── infrastructure/        # NEW: Distributed infrastructure layer
-│   │   │   ├── distributed_llm.py       # ✅ Complete
-│   │   │   ├── local_embeddings.py      # ✅ Complete
-│   │   │   ├── local_reranking.py       # ✅ Complete
-│   │   │   └── multi_gpu_manager.py     # 🔄 Needs update
+│   │   ├── services/              # ✅ Unified services layer (NEW)
+│   │   │   ├── llm/               # LLM service
+│   │   │   ├── embeddings/        # Embedding service
+│   │   │   ├── reranking/         # Reranking service
+│   │   │   └── external_knowledge/# External knowledge sources
 │   │   │
-│   │   ├── emotional/             # ✅ Emotion detection (excellent)
+│   │   ├── infrastructure/        # ✅ Distributed infrastructure
+│   │   │   ├── distributed_llm.py
+│   │   │   ├── distributed_gpu_manager.py
+│   │   │   ├── multi_gpu_manager.py
+│   │   │   └── factory.py
+│   │   │
+│   │   ├── intelligence/          # ✅ Emotional intelligence (excellent)
+│   │   │   ├── emotions/          # Emotion detection
+│   │   │   ├── empathy/           # Empathic responses
+│   │   │   └── core/              # Intelligence engine
+│   │   │
 │   │   ├── learning/              # ✅ Pattern learning (strong)
 │   │   ├── memory/                # ✅ Conversation memory (strong)
 │   │   ├── companion/             # ✅ Relationship management (good)
 │   │   ├── search/                # ✅ Multi-stage search (excellent)
-│   │   ├── services/              # 🔄 Needs update for distributed
-│   │   ├── core/                  # 🔄 Main assistant logic
+│   │   ├── reasoning/             # ✅ Multi-step reasoning
+│   │   ├── proactive/             # ✅ Proactive assistance
+│   │   ├── communication/         # ✅ Communication preferences
+│   │   │
+│   │   ├── config/                # ✅ Configuration
+│   │   │   ├── defaults.py
+│   │   │   ├── settings.py
+│   │   │   └── distributed_config.py
+│   │   │
+│   │   ├── utils/                 # ✅ Utilities
+│   │   │   ├── singleton.py
+│   │   │   ├── model_cache.py
+│   │   │   ├── deduplication.py
+│   │   │   └── logger.py
+│   │   │
+│   │   ├── core/                  # Core assistant logic
+│   │   ├── exceptions.py          # ✅ Exception hierarchy
 │   │   └── ...
 │   │
-│   └── requirements.txt
+│   ├── tests/                     # Test suite
+│   ├── examples/                  # Usage examples
+│   └── scripts/                   # Utility scripts
 │
-├── MORGAN_6HOST_ARCHITECTURE.md  # ✅ Complete deployment guide
-├── DISTRIBUTED_SETUP_GUIDE.md    # ✅ Multi-host setup
-├── MORGAN_TRANSFORMATION_SUMMARY.md  # ✅ High-level overview
-├── JARVIS_TRANSFORMATION_STATUS.md   # ✅ Detailed progress
-└── claude.md                      # ✅ This file
+├── morgan-server/                 # Server component
+├── morgan-cli/                    # CLI client
+├── docker/                        # Docker configurations
+│
+├── archive/                       # Archived deprecated code
+│   ├── deprecated-root-modules/   # Old CLI, services
+│   ├── deprecated-modules/        # Old embeddings, infrastructure
+│   └── abandoned-refactors/       # Incomplete refactors
+│
+├── shared/                        # Shared models and utilities
+├── .kiro/                         # Kiro specs and planning docs
+│
+├── claude.md                      # ✅ This file (project context)
+├── README.md                      # Project README
+├── DOCUMENTATION.md               # Documentation index
+└── MIGRATION.md                   # Migration guide
 ```
 
 ---
 
-## What Makes Morgan Special
+## Service Usage Examples
 
-### vs. Standard RAG Systems
-- ✅ Emotional intelligence and empathy
-- ✅ Learning and personalization over time
-- ✅ Long-term memory across sessions
-- 🔄 Multi-step reasoning (planned)
-- 🔄 Proactive assistance (planned)
+### Unified Services (Recommended)
 
-### vs. Cloud AI (ChatGPT, Claude, etc.)
-- ✅ Complete privacy - data stays local
-- ✅ No API costs - one-time hardware investment
-- ✅ Customizable - full control over models
-- ✅ Offline capable - works without internet
-- 🔄 Personal knowledge base (planned)
+```python
+# Import from unified services layer
+from morgan.services import (
+    get_llm_service,
+    get_embedding_service,
+    get_reranking_service,
+)
 
-### vs. Other Self-Hosted Assistants
-- ✅ Emotional intelligence (most lack this)
-- ✅ Relationship building with milestones
-- ✅ Sophisticated memory with emotional weighting
-- 🔄 Proactive features (most are reactive only)
-- 🔄 Multi-step reasoning beyond Q&A
+# Get service instances (singletons)
+llm = get_llm_service()
+embeddings = get_embedding_service()
+reranking = get_reranking_service()
+
+# LLM Generation
+response = llm.generate("What is Python?")
+print(response.content)
+
+# Async LLM Generation
+response = await llm.agenerate("Explain Docker")
+
+# Embeddings
+embedding = embeddings.encode("Document text")
+embeddings_batch = embeddings.encode_batch(["Doc 1", "Doc 2"])
+
+# Reranking
+results = await reranking.rerank(
+    query="Python programming",
+    documents=["Doc 1", "Doc 2", "Doc 3"],
+    top_k=10
+)
+```
+
+### Distributed LLM (Advanced)
+
+```python
+from morgan.services.llm import get_llm_service
+
+# Distributed mode with multiple endpoints
+llm = get_llm_service(
+    mode="distributed",
+    endpoints=[
+        "http://192.168.1.20:11434/v1",  # Host 3 (3090 #1)
+        "http://192.168.1.21:11434/v1"   # Host 4 (3090 #2)
+    ]
+)
+
+response = await llm.agenerate(
+    prompt="Explain quantum computing",
+    temperature=0.7
+)
+```
+
+### Infrastructure Factory (Full Stack)
+
+```python
+from morgan.infrastructure import get_infrastructure_services
+
+# Initialize all services at once
+services = get_infrastructure_services()
+
+# Access individual services
+llm = services.llm_service
+embeddings = services.embedding_service
+reranking = services.reranking_service
+
+# Get combined stats
+stats = services.get_stats()
+```
+
+---
+
+## Exception Handling
+
+Morgan provides a consistent exception hierarchy:
+
+```python
+from morgan.exceptions import (
+    MorganError,           # Base exception
+    LLMServiceError,       # LLM failures
+    EmbeddingServiceError, # Embedding failures
+    RerankingServiceError, # Reranking failures
+    ConfigurationError,    # Configuration issues
+    ValidationError,       # Input validation errors
+)
+
+try:
+    response = llm.generate("Hello")
+except LLMServiceError as e:
+    print(f"LLM failed: {e.message}")
+    print(f"Service: {e.service}")
+    print(f"Operation: {e.operation}")
+```
 
 ---
 
 ## Performance Targets
 
 ### Latency
-- ✅ Embeddings: <200ms batch (already achieved)
-- ✅ Search + rerank: <500ms (already achieved)
-- ⏳ Simple queries: 1-2s (target, needs validation)
-- ⏳ Complex reasoning: 5-10s (target, acceptable)
+- ✅ Embeddings: <200ms batch (achieved)
+- ✅ Search + rerank: <500ms (achieved)
+- ⏳ Simple queries: 1-2s (target)
+- ⏳ Complex reasoning: 5-10s (acceptable)
 
 ### Resource Usage
 - ⏳ GPU memory: <90% per host
@@ -228,127 +356,53 @@ Morgan/
 
 ---
 
-## Important Files for Development
+## Development Guidelines
 
-### Documentation (Read First)
-1. **MORGAN_6HOST_ARCHITECTURE.md** - Complete deployment architecture
-2. **DISTRIBUTED_SETUP_GUIDE.md** - Per-host setup instructions
-3. **MORGAN_TRANSFORMATION_SUMMARY.md** - Vision and capabilities
-4. **JARVIS_TRANSFORMATION_STATUS.md** - Detailed progress tracking
+### Import Conventions
 
-### Key Code Files (Current Work)
-1. **morgan/infrastructure/distributed_llm.py** - Distributed LLM client (COMPLETE)
-2. **morgan/infrastructure/local_embeddings.py** - Embeddings service (COMPLETE)
-3. **morgan/infrastructure/local_reranking.py** - Reranking service (COMPLETE)
-4. **morgan/infrastructure/multi_gpu_manager.py** - GPU manager (NEEDS UPDATE)
-5. **morgan/services/llm_service.py** - Main LLM service (NEEDS UPDATE)
-6. **morgan/services/embedding_service.py** - Embedding service (NEEDS UPDATE)
-
-### Excellent Existing Code (DO NOT MODIFY)
-- **morgan/emotional/** - Emotion detection, working great
-- **morgan/learning/** - Pattern learning, working great
-- **morgan/memory/** - Conversation memory, working great
-
----
-
-## Next Session Priorities
-
-When continuing development:
-
-1. **Update multi_gpu_manager.py** - Adapt for distributed hosts (1-2 hours)
-2. **Update llm_service.py** - Use DistributedLLMClient (1-2 hours)
-3. **Update embedding_service.py** - Use LocalEmbeddingService (1 hour)
-4. **Integrate reranking** - Add to search pipeline (1 hour)
-5. **Integration testing** - Test end-to-end distributed setup (2-3 hours)
-6. **Benchmarking** - Validate performance targets (1 hour)
-
-**Total**: 7-10 hours to complete Phase 1
-
----
-
-## Configuration Examples
-
-### Distributed LLM Client
 ```python
-from morgan.infrastructure import get_distributed_llm_client
+# Services (preferred)
+from morgan.services import get_llm_service, get_embedding_service
+from morgan.services.llm import LLMService, LLMResponse
 
-client = get_distributed_llm_client(
-    endpoints=[
-        "http://192.168.1.20:11434/v1",  # Host 3 (3090 #1)
-        "http://192.168.1.21:11434/v1"   # Host 4 (3090 #2)
-    ],
-    model="qwen2.5:32b-instruct-q4_K_M",
-    strategy="round_robin"
-)
+# Infrastructure (advanced)
+from morgan.infrastructure import DistributedLLMClient, get_distributed_llm_client
 
-response = await client.generate(
-    prompt="Explain quantum computing",
-    temperature=0.7
-)
+# Exceptions
+from morgan.exceptions import MorganError, LLMServiceError
+
+# Configuration
+from morgan.config import get_settings
+from morgan.config.defaults import Defaults
+
+# Utilities
+from morgan.utils.logger import get_logger
+from morgan.utils.singleton import SingletonFactory
 ```
-
-### Local Embedding Service
-```python
-from morgan.infrastructure import get_local_embedding_service
-
-service = get_local_embedding_service(
-    endpoint="http://192.168.1.22:11434/v1",  # Host 5 (4070)
-    model="qwen3-embedding:4b",  # Qwen3 embedding via Ollama
-    dimensions=2048
-)
-
-embedding = await service.embed_text("What is Python?")
-embeddings = await service.embed_batch(["Doc 1", "Doc 2", ...])
-```
-
-### Local Reranking Service
-```python
-from morgan.infrastructure import get_local_reranking_service
-
-service = get_local_reranking_service(
-    endpoint="http://192.168.1.23:8080/rerank"  # Host 6 (2060)
-)
-
-results = await service.rerank(
-    query="Python programming",
-    documents=["Doc 1", "Doc 2", ...],
-    top_k=10
-)
-```
-
----
-
-## Development Approach
-
-### Enhancement Over Refactoring
-- **Keep**: Excellent emotional intelligence, learning, memory systems
-- **Add**: Distributed infrastructure, reasoning, proactivity
-- **Avoid**: Breaking changes, full refactors, over-engineering
 
 ### Testing Strategy
-1. Unit tests for new infrastructure components
-2. Integration tests for distributed operation
+
+1. Unit tests for individual components
+2. Integration tests for service interactions
 3. End-to-end tests with real queries
 4. Performance benchmarks against targets
 
 ### Git Workflow
-- Branch: `v2-0.0.1` (current development)
-- Main branch: `main`
-- Clean git status (no uncommitted changes)
+
+- Branch: `main` (primary development)
+- Feature branches for new work
+- Clean commits with descriptive messages
 
 ---
 
-## Known Issues & Decisions
+## Archived Code
 
-### Resolved ✅
-- **Architecture**: Distributed multi-host (not single-host tensor parallelism)
-- **Project Name**: Morgan (not JARVIS - that was just inspiration)
-- **Hardware**: 6 hosts total (2 CPU-only + 4 GPU)
-- **Model Strategy**: Load balancing (not tensor parallelism due to separate hosts)
-- **Refactoring Approach**: Enhance existing (not full Clean Architecture rewrite)
+The following code has been archived (not deleted) in `/archive/`:
 
-### Open Questions ❓
-- None currently
+- `archive/deprecated-root-modules/` - Old CLI, standalone services
+- `archive/deprecated-modules/embeddings/` - Old embeddings module
+- `archive/deprecated-modules/infrastructure/` - Old local_embeddings.py, local_reranking.py
+- `archive/abandoned-refactors/morgan_v2/` - Incomplete Clean Architecture attempt
 
 ---
 
@@ -356,8 +410,9 @@ results = await service.rerank(
 
 **Phase 1 Complete When:**
 - ✅ All infrastructure services implemented
+- ✅ Service consolidation complete
+- ✅ Exception hierarchy created
 - ⏳ Integration tests passing
-- ⏳ Performance targets validated
 - ⏳ Documentation updated
 
 **Overall Project Complete When:**
@@ -369,12 +424,20 @@ results = await service.rerank(
 
 ---
 
-## Contact & Resources
+## Quick Reference
 
-**Documentation**: See top-level `.md` files
-**Code**: `morgan-rag/morgan/`
-**Progress**: `JARVIS_TRANSFORMATION_STATUS.md`
-**Architecture**: `MORGAN_6HOST_ARCHITECTURE.md`
+| Component | Location | Status |
+|-----------|----------|--------|
+| LLM Service | `morgan/services/llm/` | ✅ Complete |
+| Embedding Service | `morgan/services/embeddings/` | ✅ Complete |
+| Reranking Service | `morgan/services/reranking/` | ✅ Complete |
+| Infrastructure | `morgan/infrastructure/` | ✅ Complete |
+| Emotional Intelligence | `morgan/intelligence/` | ✅ Excellent |
+| Memory System | `morgan/memory/` | ✅ Strong |
+| Search Pipeline | `morgan/search/` | ✅ Excellent |
+| Configuration | `morgan/config/` | ✅ Complete |
+| Exceptions | `morgan/exceptions.py` | ✅ Complete |
+| Documentation | Various `.md` files | 🔄 In Progress |
 
 ---
 

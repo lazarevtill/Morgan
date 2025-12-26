@@ -1,19 +1,48 @@
 # Morgan AI Assistant
 
-Morgan is a personal AI assistant with empathic intelligence, knowledge management, and natural conversation capabilities. Built with a clean client-server architecture for self-hosted deployment.
+Morgan is a self-hosted, distributed personal AI assistant with emotional intelligence, knowledge management, and natural conversation capabilities. Built with a clean modular architecture for privacy-focused deployment.
 
-> **⚠️ Important:** The old monolithic system in `morgan-rag/` and `cli.py.old` is **DEPRECATED**. Please use the new client-server architecture (`morgan-server/` and `morgan-cli/`). See [MIGRATION.md](./MIGRATION.md) for migration instructions.
+## ✨ Features
 
-## Features
+- **🧠 Emotional Intelligence** - Understands emotions, responds empathetically, builds relationships
+- **📚 Knowledge Engine** - RAG system with vector database and semantic search
+- **🎯 Personalization** - User profiles, preferences, and conversation memory
+- **🏠 Self-Hosted** - Run entirely on your own hardware, no external APIs required
+- **⚡ Distributed** - Scale across multiple hosts with load balancing and failover
+- **🔒 Privacy First** - All data stays on your hardware
 
-- **Empathic Engine** - Emotional intelligence, personality system, and relationship management
-- **Knowledge Engine** - RAG system with vector database and semantic search
-- **Personalization Layer** - User profiles, preferences, and conversation memory
-- **Self-Hosted** - Run on your own hardware with Ollama or OpenAI-compatible LLMs
-- **Clean Architecture** - Separate server and client for flexibility
-- **Production Ready** - Docker support, health checks, metrics, and structured logging
+## 🏗️ Architecture
 
-## Quick Start
+Morgan consists of three main components:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Morgan Stack                          │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │ morgan-cli  │  │morgan-server│  │     morgan-rag      │  │
+│  │   (TUI)     │◄─┤   (API)     │◄─┤  (Core Intelligence)│  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+│                                              │               │
+│                          ┌───────────────────┼───────────────┤
+│                          │                   │               │
+│  ┌─────────────┐  ┌──────▼──────┐  ┌────────▼────────┐     │
+│  │   Ollama    │  │   Qdrant    │  │     Redis       │     │
+│  │   (LLM)     │  │ (Vector DB) │  │   (Cache)       │     │
+│  └─────────────┘  └─────────────┘  └─────────────────┘     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Components
+
+| Component | Description | Status |
+|-----------|-------------|--------|
+| **morgan-rag** | Core intelligence: services, emotional intelligence, memory, search | ✅ Active |
+| **morgan-server** | FastAPI server with REST/WebSocket API | ✅ Active |
+| **morgan-cli** | Terminal UI client | ✅ Active |
+| **docker** | Docker deployment configurations | ✅ Active |
+
+## 🚀 Quick Start
 
 ### Using Docker Compose (Recommended)
 
@@ -24,13 +53,15 @@ cd morgan
 
 # Start services
 cd docker
+cp env.example .env
+# Edit .env with your settings
 docker-compose up -d
 
 # Pull LLM model
-docker-compose exec ollama ollama pull gemma3
+docker-compose exec ollama ollama pull qwen2.5:7b
 
 # Install client
-pip install morgan-cli
+pip install -e morgan-cli
 
 # Start chatting
 export MORGAN_SERVER_URL=http://localhost:8080
@@ -39,15 +70,15 @@ morgan chat
 
 ### Manual Installation
 
-**1. Install Dependencies:**
+**1. Start Dependencies:**
 
 ```bash
 # Start Qdrant
 docker run -d -p 6333:6333 qdrant/qdrant
 
-# Start Ollama
+# Start Ollama and pull model
 ollama serve &
-ollama pull gemma3
+ollama pull qwen2.5:7b
 ```
 
 **2. Install Server:**
@@ -66,138 +97,38 @@ pip install -e .
 morgan chat
 ```
 
-## Documentation
-
-### 📚 Complete Documentation
-
-- **[Documentation Index](./DOCUMENTATION.md)** - Complete documentation index
-- **[Migration Guide](./MIGRATION.md)** - Migrate from old Morgan system
-
-### 🚀 Getting Started
-
-- **[Server Quick Start](./morgan-server/README.md#quick-start)** - Get the server running
-- **[Client Quick Start](./morgan-cli/README.md#quick-start)** - Start chatting
-- **[Docker Quick Start](./docker/README.md#quick-start)** - Deploy with Docker
-
-### ⚙️ Configuration
-
-- **[Configuration Guide](./morgan-server/docs/CONFIGURATION.md)** - Complete configuration reference
-- **[Embedding Configuration](./morgan-server/docs/EMBEDDING_CONFIGURATION.md)** - Embedding provider setup
-
-### 🚢 Deployment
-
-- **[Deployment Guide](./morgan-server/docs/DEPLOYMENT.md)** - Docker and bare metal deployment
-- **[Docker README](./docker/README.md)** - Docker deployment guide
-
-### 🔌 API
-
-- **[API Documentation](./morgan-server/docs/API.md)** - REST and WebSocket API reference
-- **[Client Library](./morgan-cli/README.md)** - Python client library
-
-## Architecture
+## 📁 Project Structure
 
 ```
-┌─────────────┐
-│   Clients   │
-│  (TUI, Web) │
-└──────┬──────┘
-       │ HTTP/WebSocket
-       │
-┌──────▼──────────────────────┐
-│     Morgan Server           │
-│  ┌────────────────────────┐ │
-│  │   API Gateway          │ │
-│  │   (FastAPI)            │ │
-│  └───────┬────────────────┘ │
-│          │                   │
-│  ┌───────▼────────────────┐ │
-│  │  Empathic Engine       │ │
-│  │  - Emotional Intel     │ │
-│  │  - Personality         │ │
-│  │  - Relationships       │ │
-│  └────────────────────────┘ │
-│  ┌────────────────────────┐ │
-│  │  Knowledge Engine      │ │
-│  │  - RAG System          │ │
-│  │  - Vector Search       │ │
-│  │  - Doc Processing      │ │
-│  └────────────────────────┘ │
-│  ┌────────────────────────┐ │
-│  │  Personalization       │ │
-│  │  - User Profiles       │ │
-│  │  - Preferences         │ │
-│  │  - Memory              │ │
-│  └────────────────────────┘ │
-└─────────────────────────────┘
-       │
-       │
-┌──────▼──────────────────────┐
-│   External Services         │
-│  - Ollama (LLM)             │
-│  - Qdrant (Vector DB)       │
-└─────────────────────────────┘
+Morgan/
+├── morgan-rag/              # Core RAG intelligence
+│   └── morgan/
+│       ├── services/        # Unified service layer
+│       │   ├── llm/         # LLM service (single + distributed)
+│       │   ├── embeddings/  # Embedding service
+│       │   └── reranking/   # Reranking service
+│       ├── intelligence/    # Emotional intelligence
+│       ├── memory/          # Conversation memory
+│       ├── search/          # Multi-stage search
+│       ├── learning/        # Pattern learning
+│       └── ...
+│
+├── morgan-server/           # FastAPI server
+├── morgan-cli/              # Terminal client
+├── docker/                  # Docker configs
+├── shared/                  # Shared utilities
+└── archive/                 # Archived deprecated code
 ```
 
-## Components
+## 🔧 Configuration
 
-### Morgan Server
-
-Standalone FastAPI server with all core functionality:
-
-- **Empathic Engine** - Emotional intelligence and personality
-- **Knowledge Engine** - RAG and semantic search
-- **Personalization** - User profiles and preferences
-- **API Gateway** - REST and WebSocket endpoints
-- **Health Checks** - Monitoring and metrics
-
-[Server Documentation →](./morgan-server/README.md)
-
-### Morgan CLI
-
-Lightweight terminal client:
-
-- **Rich TUI** - Beautiful terminal interface
-- **HTTP/WebSocket** - Server communication
-- **Commands** - Chat, learn, memory, knowledge, health
-- **Configuration** - Flexible server connection
-
-[Client Documentation →](./morgan-cli/README.md)
-
-### Docker
-
-Containerized deployment:
-
-- **Docker Compose** - Full stack with all dependencies
-- **Standalone** - Server-only container
-- **Monitoring** - Optional Prometheus integration
-
-[Docker Documentation →](./docker/README.md)
-
-## Requirements
-
-### System Requirements
-
-- **CPU:** 2+ cores (4+ recommended)
-- **RAM:** 4+ GB (8+ GB recommended)
-- **Disk:** 10+ GB free space (50+ GB recommended)
-- **OS:** Linux, macOS, or Windows
-
-### Software Requirements
-
-- **Python:** 3.11+
-- **Docker:** 20.10+ (for Docker deployment)
-- **Ollama:** Latest (or other OpenAI-compatible LLM)
-- **Qdrant:** Latest (vector database)
-
-## Configuration
-
-Morgan Server supports multiple configuration sources:
+Morgan supports multiple configuration methods:
 
 1. **Environment variables** (highest precedence)
 2. **Configuration files** (YAML, JSON, .env)
 3. **Default values** (lowest precedence)
 
-**Example Configuration:**
+### Example Configuration
 
 ```yaml
 # Server settings
@@ -207,165 +138,144 @@ port: 8080
 # LLM settings
 llm_provider: "ollama"
 llm_endpoint: "http://localhost:11434"
-llm_model: "gemma3"
+llm_model: "qwen2.5:7b"
 
 # Vector database
 vector_db_url: "http://localhost:6333"
 
 # Embedding settings
-embedding_provider: "local"
-embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+embedding_model: "qwen3-embedding:4b"
+embedding_dimensions: 2048
 ```
 
-[Configuration Guide →](./morgan-server/docs/CONFIGURATION.md)
+## 💻 Usage
 
-## API
+### Python API
 
-Morgan exposes a comprehensive REST and WebSocket API:
+```python
+from morgan.services import (
+    get_llm_service,
+    get_embedding_service,
+    get_reranking_service,
+)
 
-### Chat
+# Get service instances
+llm = get_llm_service()
+embeddings = get_embedding_service()
+
+# Generate response
+response = llm.generate("What is Python?")
+print(response.content)
+
+# Async generation
+response = await llm.agenerate("Explain Docker")
+
+# Embeddings
+embedding = embeddings.encode("Document text")
+```
+
+### CLI
 
 ```bash
+# Start chat
+morgan chat
+
+# Check health
+morgan health
+
+# Learn from document
+morgan learn /path/to/document.pdf
+```
+
+### REST API
+
+```bash
+# Chat
 curl -X POST http://localhost:8080/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Hello, Morgan!"}'
+
+# Health check
+curl http://localhost:8080/health
 ```
 
-### Knowledge
+## 📚 Documentation
 
-```bash
-curl -X POST http://localhost:8080/api/knowledge/learn \
-  -H "Content-Type: application/json" \
-  -d '{"source": "/path/to/document.pdf"}'
-```
+| Document | Description |
+|----------|-------------|
+| [claude.md](./claude.md) | Complete project context for AI assistants |
+| [DOCUMENTATION.md](./DOCUMENTATION.md) | Documentation index |
+| [MIGRATION.md](./MIGRATION.md) | Migration guide |
+| [docker/README.md](./docker/README.md) | Docker deployment guide |
+| [morgan-server/README.md](./morgan-server/README.md) | Server documentation |
+| [morgan-cli/README.md](./morgan-cli/README.md) | CLI documentation |
 
-### WebSocket
+## 🖥️ Hardware Requirements
 
-```javascript
-const ws = new WebSocket('ws://localhost:8080/ws/user123');
-ws.send(JSON.stringify({
-  type: 'message',
-  message: 'Hello, Morgan!'
-}));
-```
+### Minimum (Single Host)
+- **CPU:** 4+ cores
+- **RAM:** 16GB
+- **GPU:** 8GB VRAM (for local LLM)
+- **Disk:** 50GB free space
 
-[API Documentation →](./morgan-server/docs/API.md)
+### Recommended (Distributed)
+- **Host 1-2:** CPU hosts (i9, 64GB RAM) for orchestration
+- **Host 3-4:** GPU hosts (RTX 3090) for main LLM
+- **Host 5:** GPU host (RTX 4070) for embeddings
+- **Host 6:** GPU host (RTX 2060) for reranking
 
-## Development
+## 🛠️ Development
 
 ### Running Tests
 
 ```bash
 # Server tests
-cd morgan-server
-pytest
+cd morgan-server && pytest
+
+# RAG tests
+cd morgan-rag && pytest
 
 # Client tests
-cd morgan-cli
-pytest
-
-# Integration tests
-cd morgan-server
-pytest tests/test_integration_e2e.py
+cd morgan-cli && pytest
 ```
 
 ### Code Quality
 
 ```bash
-# Format code
-black morgan_server tests
+# Format
+black morgan_server morgan_cli
 
-# Lint code
-ruff check morgan_server tests
+# Lint
+ruff check .
 
 # Type check
 mypy morgan_server
 ```
 
-## Deployment
+## 📋 Status
 
-### Docker Compose (Recommended)
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 1 | Infrastructure & Services | ✅ 83% Complete |
+| Phase 2 | Multi-Step Reasoning | ⏳ Planned |
+| Phase 3 | Proactive Features | ⏳ Planned |
+| Phase 4 | Enhanced Context | ⏳ Planned |
+| Phase 5 | Production Polish | ⏳ Planned |
 
-```bash
-cd docker
-docker-compose up -d
-```
-
-### Bare Metal
-
-```bash
-# Install server
-cd morgan-server
-pip install -e .
-python -m morgan_server
-
-# Install client
-cd morgan-cli
-pip install -e .
-morgan chat
-```
-
-### Production
-
-For production deployments:
-
-- Use Docker or systemd service
-- Configure reverse proxy (nginx, traefik)
-- Enable HTTPS
-- Set up monitoring (Prometheus)
-- Configure backups
-- Review security settings
-
-[Deployment Guide →](./morgan-server/docs/DEPLOYMENT.md)
-
-## Troubleshooting
-
-### Server Won't Start
-
-```bash
-# Check logs
-docker-compose logs morgan-server
-
-# Verify configuration
-python -m morgan_server --check-config
-
-# Test dependencies
-curl http://localhost:11434/api/tags  # Ollama
-curl http://localhost:6333/healthz    # Qdrant
-```
-
-### Connection Issues
-
-```bash
-# Test server health
-curl http://localhost:8080/health
-
-# Check server status
-curl http://localhost:8080/api/status
-```
-
-[Troubleshooting Guide →](./morgan-server/docs/DEPLOYMENT.md#troubleshooting)
-
-## Migration
-
-Migrating from the old Morgan system? See the [Migration Guide](./MIGRATION.md).
-
-## Contributing
+## 🤝 Contributing
 
 Contributions are welcome! Please read the contributing guidelines (coming soon).
 
-## License
+## 📄 License
 
 MIT License - see LICENSE file for details.
 
-## Support
+## 🔗 Links
 
-- **Documentation:** [Complete Documentation Index](./DOCUMENTATION.md)
-- **GitHub Issues:** Report bugs or request features
-- **Discussions:** Ask questions and share ideas
+- **Documentation:** [DOCUMENTATION.md](./DOCUMENTATION.md)
+- **Project Context:** [claude.md](./claude.md)
+- **Migration Guide:** [MIGRATION.md](./MIGRATION.md)
 
-## Version
+---
 
-Current version: 0.1.0
-
-Last updated: December 8, 2025
+**Morgan** - Your private, emotionally intelligent AI companion.

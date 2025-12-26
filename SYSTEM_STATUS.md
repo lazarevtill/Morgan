@@ -1,201 +1,162 @@
 # Morgan System Status
 
-**Last Updated:** December 8, 2025
+**Last Updated:** December 26, 2025
 
 ## Current System Architecture
 
-Morgan now uses a **client-server architecture** with the following components:
+Morgan uses a **modular architecture** with the following components:
 
-### ✅ Active Components (Use These)
+### ✅ Active Components
 
 | Component | Location | Status | Purpose |
 |-----------|----------|--------|---------|
-| **Morgan Server** | `morgan-server/` | ✅ Active | Standalone server with all core functionality |
-| **Morgan CLI** | `morgan-cli/` | ✅ Active | Lightweight terminal client |
+| **Morgan RAG** | `morgan-rag/` | ✅ Active | Core intelligence (services, emotional intelligence, memory, search) |
+| **Morgan Server** | `morgan-server/` | ✅ Active | FastAPI server with REST/WebSocket API |
+| **Morgan CLI** | `morgan-cli/` | ✅ Active | Terminal client |
 | **Docker Setup** | `docker/` | ✅ Active | Containerized deployment |
-| **Documentation** | `DOCUMENTATION.md` | ✅ Active | Complete documentation index |
-| **Migration Guide** | `MIGRATION.md` | ✅ Active | Migration instructions |
+| **Shared Utilities** | `shared/` | ✅ Active | Shared models and utilities |
 
-### ⚠️ Deprecated Components (Do Not Use)
+### 📦 Archived Components
 
-| Component | Location | Status | Replacement |
-|-----------|----------|--------|-------------|
-| **Old Morgan System** | `morgan-rag/` | ⚠️ Deprecated | `morgan-server/` |
-| **Old CLI** | `cli.py.old` | ⚠️ Deprecated | `morgan-cli/` |
-| **Old Docs** | `docs/CI_CD.md` | ⚠️ Deprecated | New server docs |
-| **Old Docs** | `docs/ERROR_HANDLING_*.md` | ⚠️ Deprecated | New server docs |
+| Component | Location | Status | Notes |
+|-----------|----------|--------|-------|
+| **Old CLI** | `archive/deprecated-root-modules/cli.py.old` | 📦 Archived | Replaced by morgan-cli |
+| **Old Embeddings** | `archive/deprecated-modules/embeddings/` | 📦 Archived | Consolidated into services |
+| **Old Infrastructure** | `archive/deprecated-modules/infrastructure/` | 📦 Archived | Consolidated into services |
+| **Abandoned Refactor** | `archive/abandoned-refactors/morgan_v2/` | 📦 Archived | Incomplete Clean Architecture attempt |
 
 ## Quick Start
 
-### For New Users
+### Using Docker (Recommended)
 
 ```bash
-# 1. Start services with Docker
+# Start services
 cd docker
+cp env.example .env
 docker-compose up -d
 
-# 2. Install CLI
+# Pull LLM model
+docker-compose exec ollama ollama pull qwen2.5:7b
+
+# Install CLI
 pip install -e ../morgan-cli
 
-# 3. Start chatting
+# Start chatting
 export MORGAN_SERVER_URL=http://localhost:8080
 morgan chat
 ```
 
-### For Existing Users
+### Manual Setup
 
-If you're using the old system, please migrate:
+```bash
+# Start dependencies
+docker run -d -p 6333:6333 qdrant/qdrant
+ollama serve &
+ollama pull qwen2.5:7b
 
-1. Read [DEPRECATION_NOTICE.md](./DEPRECATION_NOTICE.md)
-2. Follow [MIGRATION.md](./MIGRATION.md)
-3. Test new system
-4. Migrate production
+# Start server
+cd morgan-server
+pip install -e .
+python -m morgan_server
+
+# Start client
+cd ../morgan-cli
+pip install -e .
+morgan chat
+```
 
 ## Documentation
 
 ### Primary Documentation
 
-- **[README.md](./README.md)** - Project overview and quick start
-- **[DOCUMENTATION.md](./DOCUMENTATION.md)** - Complete documentation index
-- **[Server README](./morgan-server/README.md)** - Server documentation
-- **[Client README](./morgan-cli/README.md)** - Client documentation
-- **[Docker README](./docker/README.md)** - Deployment guide
+| Document | Description |
+|----------|-------------|
+| [claude.md](./claude.md) | Complete project context |
+| [README.md](./README.md) | Project overview |
+| [DOCUMENTATION.md](./DOCUMENTATION.md) | Documentation index |
+| [morgan-rag/docs/ARCHITECTURE.md](./morgan-rag/docs/ARCHITECTURE.md) | Architecture details |
 
-### Migration Documentation
+### Component Documentation
 
-- **[DEPRECATION_NOTICE.md](./DEPRECATION_NOTICE.md)** - Deprecation details
-- **[MIGRATION.md](./MIGRATION.md)** - Migration instructions
+| Document | Description |
+|----------|-------------|
+| [morgan-server/README.md](./morgan-server/README.md) | Server documentation |
+| [morgan-cli/README.md](./morgan-cli/README.md) | CLI documentation |
+| [docker/README.md](./docker/README.md) | Docker deployment |
 
-### Deprecated Documentation
-
-- **[morgan-rag/DEPRECATED.md](./morgan-rag/DEPRECATED.md)** - Old system deprecation
-- **[docs/](./docs/)** - Old system documentation (deprecated)
-
-## System Comparison
-
-### Old System (Deprecated)
+## Project Structure
 
 ```
-┌─────────────────────────┐
-│   Monolithic CLI        │
-│  ┌──────────────────┐   │
-│  │  Core Logic      │   │
-│  │  - RAG           │   │
-│  │  - Memory        │   │
-│  │  - Emotional     │   │
-│  └──────────────────┘   │
-└─────────────────────────┘
+Morgan/
+├── morgan-rag/              # Core RAG intelligence
+│   └── morgan/
+│       ├── services/        # Unified service layer
+│       │   ├── llm/         # LLM service
+│       │   ├── embeddings/  # Embedding service
+│       │   └── reranking/   # Reranking service
+│       ├── intelligence/    # Emotional intelligence
+│       ├── memory/          # Conversation memory
+│       ├── search/          # Multi-stage search
+│       ├── infrastructure/  # Distributed infrastructure
+│       ├── config/          # Configuration
+│       ├── utils/           # Utilities
+│       └── exceptions.py    # Exception hierarchy
+│
+├── morgan-server/           # FastAPI server
+├── morgan-cli/              # Terminal client
+├── docker/                  # Docker configs
+├── shared/                  # Shared utilities
+└── archive/                 # Archived deprecated code
 ```
-
-**Issues:**
-- Tight coupling
-- Difficult to deploy
-- Limited API access
-- Complex configuration
-
-### New System (Active)
-
-```
-┌─────────────┐
-│   Clients   │
-│  (TUI, Web) │
-└──────┬──────┘
-       │ HTTP/WebSocket
-       │
-┌──────▼──────────────────────┐
-│     Morgan Server           │
-│  ┌────────────────────────┐ │
-│  │   API Gateway          │ │
-│  └───────┬────────────────┘ │
-│          │                   │
-│  ┌───────▼────────────────┐ │
-│  │  Empathic Engine       │ │
-│  │  Knowledge Engine      │ │
-│  │  Personalization       │ │
-│  └────────────────────────┘ │
-└─────────────────────────────┘
-```
-
-**Benefits:**
-- Clean separation
-- Easy deployment
-- Multiple clients
-- Comprehensive APIs
-- Production ready
 
 ## Feature Status
 
-### Server Features
+### Services Layer
+
+| Service | Status | Features |
+|---------|--------|----------|
+| LLM Service | ✅ Complete | Single + distributed modes, streaming, fast model support |
+| Embedding Service | ✅ Complete | Remote + local fallback, batch processing, caching |
+| Reranking Service | ✅ Complete | 4-level fallback (remote, CrossEncoder, embedding, BM25) |
+
+### Intelligence Layer
 
 | Feature | Status | Location |
 |---------|--------|----------|
-| Empathic Engine | ✅ Active | `morgan-server/morgan_server/empathic/` |
-| Knowledge Engine | ✅ Active | `morgan-server/morgan_server/knowledge/` |
-| Personalization | ✅ Active | `morgan-server/morgan_server/personalization/` |
-| REST API | ✅ Active | `morgan-server/morgan_server/api/` |
-| WebSocket API | ✅ Active | `morgan-server/morgan_server/api/` |
-| Health Checks | ✅ Active | `morgan-server/morgan_server/health.py` |
-| Metrics | ✅ Active | `morgan-server/morgan_server/app.py` |
-| Docker Support | ✅ Active | `docker/` |
+| Emotional Intelligence | ✅ Excellent | `morgan/intelligence/` |
+| Memory System | ✅ Strong | `morgan/memory/` |
+| Search Pipeline | ✅ Excellent | `morgan/search/` |
+| Pattern Learning | ✅ Strong | `morgan/learning/` |
+| Reasoning | ✅ Good | `morgan/reasoning/` |
+| Proactive | ✅ Good | `morgan/proactive/` |
 
-### Client Features
+### Infrastructure
 
 | Feature | Status | Location |
 |---------|--------|----------|
-| Interactive Chat | ✅ Active | `morgan-cli/morgan_cli/cli.py` |
-| Single Questions | ✅ Active | `morgan-cli/morgan_cli/cli.py` |
-| Document Learning | ✅ Active | `morgan-cli/morgan_cli/cli.py` |
-| Memory Management | ✅ Active | `morgan-cli/morgan_cli/cli.py` |
-| Knowledge Search | ✅ Active | `morgan-cli/morgan_cli/cli.py` |
-| Health Checks | ✅ Active | `morgan-cli/morgan_cli/cli.py` |
-| Rich UI | ✅ Active | `morgan-cli/morgan_cli/ui.py` |
+| Distributed LLM | ✅ Complete | `morgan/infrastructure/distributed_llm.py` |
+| GPU Management | ✅ Complete | `morgan/infrastructure/distributed_gpu_manager.py` |
+| Factory | ✅ Complete | `morgan/infrastructure/factory.py` |
+
+## Development Progress
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 1 | Infrastructure & Services | ✅ 95% Complete |
+| Phase 2 | Multi-Step Reasoning | ⏳ Planned |
+| Phase 3 | Proactive Features | ⏳ Planned |
+| Phase 4 | Enhanced Context | ⏳ Planned |
+| Phase 5 | Production Polish | ⏳ Planned |
 
 ## Support
 
 ### Getting Help
 
-1. **Check Documentation**
-   - [Documentation Index](./DOCUMENTATION.md)
-   - [Server Docs](./morgan-server/README.md)
-   - [Client Docs](./morgan-cli/README.md)
-
-2. **Migration Issues**
-   - [Migration Guide](./MIGRATION.md)
-   - [Deprecation Notice](./DEPRECATION_NOTICE.md)
-
-3. **Technical Issues**
-   - Check server logs
-   - Review [Troubleshooting](./morgan-server/docs/DEPLOYMENT.md#troubleshooting)
-   - Open GitHub issue
-
-### Contact
-
-- **GitHub Issues** - Report bugs or request features
-- **Discussions** - Ask questions and share ideas
-- **Documentation** - Search documentation first
-
-## Timeline
-
-### Completed
-
-- ✅ **December 8, 2025** - New client-server architecture released
-- ✅ **December 8, 2025** - Old system marked as deprecated
-- ✅ **December 8, 2025** - Migration guide created
-- ✅ **December 8, 2025** - Deprecation notices added
-
-### Upcoming
-
-- 🔄 **Future Release** - Old system moved to archive
-- 🔄 **Future Release** - Old system removed from repository
-
-## Version Information
-
-- **Current Version:** 0.1.0 (new architecture)
-- **Old Version:** Deprecated
-- **Release Date:** December 8, 2025
+1. **Check Documentation** - [DOCUMENTATION.md](./DOCUMENTATION.md)
+2. **Check Project Context** - [claude.md](./claude.md)
+3. **Check Logs** - Server and service logs
+4. **GitHub Issues** - Report bugs or request features
 
 ---
 
-**Use the new system:** `morgan-server/` and `morgan-cli/`
-
-**Need help?** See [MIGRATION.md](./MIGRATION.md) or [DOCUMENTATION.md](./DOCUMENTATION.md)
+**Morgan** - Your private, emotionally intelligent AI companion.
