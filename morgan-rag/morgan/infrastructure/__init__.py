@@ -6,6 +6,7 @@ This layer provides infrastructure for fully self-hosted distributed operation:
 - Multi-GPU management and model routing (single-host and distributed)
 - Local embedding service (OpenAI-compatible + local fallback)
 - Local reranking service (remote + local fallback)
+- Infrastructure factory for unified service creation
 - No external API dependencies
 
 Designed for 6-host distributed architecture:
@@ -20,6 +21,7 @@ Components:
     multi_gpu_manager.py       - Manage models across local GPUs
     local_embeddings.py        - Local embedding generation
     local_reranking.py         - Local reranking implementation
+    factory.py                 - Unified infrastructure factory
 """
 
 from morgan.infrastructure.distributed_llm import (
@@ -45,6 +47,12 @@ from morgan.infrastructure.local_reranking import (
     get_local_reranking_service,
 )
 from morgan.infrastructure.multi_gpu_manager import MultiGPUManager
+from morgan.infrastructure.factory import (
+    InfrastructureFactory,
+    InfrastructureServices,
+    get_infrastructure_services,
+    get_infrastructure_services_async,
+)
 
 __all__ = [
     # Distributed LLM
@@ -67,4 +75,9 @@ __all__ = [
     # Reranking
     "LocalRerankingService",
     "get_local_reranking_service",
+    # Infrastructure Factory
+    "InfrastructureFactory",
+    "InfrastructureServices",
+    "get_infrastructure_services",
+    "get_infrastructure_services_async",
 ]
