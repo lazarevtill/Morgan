@@ -41,13 +41,13 @@ logger = get_logger(__name__)
 def setup_reranker_cache(cache_dir: Optional[str] = None):
     """
     Setup model cache directories and environment variables for rerankers.
-    
+
     This ensures models are downloaded once and reused on subsequent starts.
     Also configures HF_TOKEN for downloading gated models if available.
-    
+
     Args:
         cache_dir: Base directory for model cache. Defaults to ~/.morgan/models
-    
+
     Environment variables loaded from .env:
         - HF_TOKEN: Hugging Face API token (for gated models)
         - HUGGING_FACE_HUB_TOKEN: Alternative HF token variable
@@ -56,43 +56,42 @@ def setup_reranker_cache(cache_dir: Optional[str] = None):
     # Try to load .env file if python-dotenv is available
     try:
         from dotenv import load_dotenv
+
         load_dotenv()
         logger.debug("Loaded environment from .env file")
     except ImportError:
         pass  # dotenv not installed, use existing env vars
-    
+
     if cache_dir is None:
         cache_dir = os.environ.get("MORGAN_MODEL_CACHE", "~/.morgan/models")
-    
+
     cache_path = Path(cache_dir).expanduser()
-    
+
     # Create subdirectories
     sentence_transformers_path = cache_path / "sentence-transformers"
     hf_path = cache_path / "huggingface"
-    
+
     for path in [cache_path, sentence_transformers_path, hf_path]:
         path.mkdir(parents=True, exist_ok=True)
-    
+
     # Set environment variables for model caching
     os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(sentence_transformers_path)
     os.environ["HF_HOME"] = str(hf_path)
     os.environ["TRANSFORMERS_CACHE"] = str(hf_path)
-    
+
     # Configure HF_TOKEN for gated model downloads
     hf_token = (
-        os.environ.get("HF_TOKEN") or
-        os.environ.get("HUGGING_FACE_HUB_TOKEN") or
-        os.environ.get("HUGGINGFACE_TOKEN")
+        os.environ.get("HF_TOKEN")
+        or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+        or os.environ.get("HUGGINGFACE_TOKEN")
     )
     if hf_token:
         os.environ["HF_TOKEN"] = hf_token
         os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
         logger.info("HF_TOKEN configured for authenticated model downloads")
     else:
-        logger.debug(
-            "No HF_TOKEN found - some gated models may not be accessible"
-        )
-    
+        logger.debug("No HF_TOKEN found - some gated models may not be accessible")
+
     logger.info("Reranker model cache configured at %s", cache_path)
     return cache_path
 
@@ -133,7 +132,7 @@ class RerankStats:
 class LocalRerankingService:
     """
     Local reranking service for distributed Morgan setup.
-    
+
     100% Self-Hosted - No API Keys Required.
 
     Supports:
@@ -141,7 +140,7 @@ class LocalRerankingService:
     - Local CrossEncoder via sentence-transformers (fallback)
     - Batch processing with configurable size
     - Performance tracking
-    
+
     Self-hosted models (via sentence-transformers CrossEncoder):
     - cross-encoder/ms-marco-MiniLM-L-6-v2: Fast, English (recommended)
     - cross-encoder/ms-marco-MiniLM-L-12-v2: Better quality, English
@@ -189,13 +188,11 @@ class LocalRerankingService:
             preload_model: If True, load model immediately
         """
         if not REQUESTS_AVAILABLE:
-            logger.warning(
-                "requests package not available, remote reranking disabled"
-            )
+            logger.warning("requests package not available, remote reranking disabled")
 
         # Setup model cache directory before any model loading
         self.model_cache_path = setup_reranker_cache(model_cache_dir)
-        
+
         self.endpoint = endpoint
         self.model = model
         self.timeout = timeout
@@ -210,8 +207,10 @@ class LocalRerankingService:
         self.stats = RerankStats()
 
         logger.info(
-            "LocalRerankingService initialized: endpoint=%s, model=%s, "
-            "cache_dir=%s", endpoint, model, self.model_cache_path
+            "LocalRerankingService initialized: endpoint=%s, model=%s, " "cache_dir=%s",
+            endpoint,
+            model,
+            self.model_cache_path,
         )
 
         # Preload model if requested (downloads weights on first run)
@@ -305,9 +304,7 @@ class LocalRerankingService:
             payload["top_k"] = top_k
 
         try:
-            response = requests.post(
-                self.endpoint, json=payload, timeout=self.timeout
-            )
+            response = requests.post(self.endpoint, json=payload, timeout=self.timeout)
             response.raise_for_status()
 
             data = response.json()
@@ -371,9 +368,7 @@ class LocalRerankingService:
         # Create results with original indices
         results = []
         for i, (doc, score) in enumerate(zip(documents, scores)):
-            results.append(RerankResult(
-                text=doc, score=float(score), original_index=i
-            ))
+            results.append(RerankResult(text=doc, score=float(score), original_index=i))
 
         # Sort by score (descending)
         results.sort(key=lambda x: x.score, reverse=True)

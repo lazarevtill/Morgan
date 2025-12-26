@@ -41,12 +41,12 @@ class RerankedSearchResult:
 class SearchReranker:
     """
     Reranker for search results.
-    
+
     100% Self-Hosted - No API Keys Required.
 
     Integrates with the distributed reranking service to improve
     search result relevance through cross-encoder scoring.
-    
+
     Self-hosted models (via sentence-transformers CrossEncoder):
     - cross-encoder/ms-marco-MiniLM-L-6-v2: Fast, English (recommended)
     - cross-encoder/ms-marco-MiniLM-L-12-v2: Better quality, English
@@ -54,7 +54,7 @@ class SearchReranker:
 
     Example:
         >>> reranker = SearchReranker()
-        >>> 
+        >>>
         >>> # Rerank search results
         >>> results = [
         ...     {"content": "Python is a language", "score": 0.85},
@@ -130,9 +130,7 @@ class SearchReranker:
 
         # Fallback to settings
         if not endpoint:
-            endpoint = getattr(
-                self.settings, "reranking_endpoint", None
-            )
+            endpoint = getattr(self.settings, "reranking_endpoint", None)
 
         # Initialize reranking service
         self._reranking_service = LocalRerankingService(
@@ -203,18 +201,24 @@ class SearchReranker:
 
                 # Calculate combined score
                 combined_score = (
-                    self._rerank_weight * rerank_score +
-                    self._original_weight * original_score
+                    self._rerank_weight * rerank_score
+                    + self._original_weight * original_score
                 )
 
-                reranked.append(RerankedSearchResult(
-                    content=result.get(content_key, ""),
-                    original_score=original_score,
-                    rerank_score=rerank_score,
-                    combined_score=combined_score,
-                    original_index=i,
-                    metadata={k: v for k, v in result.items() if k not in [content_key, score_key]},
-                ))
+                reranked.append(
+                    RerankedSearchResult(
+                        content=result.get(content_key, ""),
+                        original_score=original_score,
+                        rerank_score=rerank_score,
+                        combined_score=combined_score,
+                        original_index=i,
+                        metadata={
+                            k: v
+                            for k, v in result.items()
+                            if k not in [content_key, score_key]
+                        },
+                    )
+                )
 
             # Sort by combined score
             reranked.sort(key=lambda r: r.combined_score, reverse=True)
@@ -229,9 +233,7 @@ class SearchReranker:
             self._stats["total_documents"] += len(results)
             self._stats["total_time"] += elapsed
 
-            logger.debug(
-                f"Reranked {len(results)} results in {elapsed:.3f}s"
-            )
+            logger.debug(f"Reranked {len(results)} results in {elapsed:.3f}s")
 
             return reranked
 
@@ -246,7 +248,9 @@ class SearchReranker:
                     rerank_score=0.0,
                     combined_score=r.get(score_key, 0.0),
                     original_index=i,
-                    metadata={k: v for k, v in r.items() if k not in [content_key, score_key]},
+                    metadata={
+                        k: v for k, v in r.items() if k not in [content_key, score_key]
+                    },
                 )
                 for i, r in enumerate(results)
             ]
@@ -274,7 +278,9 @@ class SearchReranker:
             **self._stats,
             "average_time": f"{avg_time:.3f}s",
             "average_documents": avg_docs,
-            "service_stats": self._reranking_service.get_stats() if self._reranking_service else {},
+            "service_stats": (
+                self._reranking_service.get_stats() if self._reranking_service else {}
+            ),
         }
 
 
@@ -288,4 +294,3 @@ def get_search_reranker() -> SearchReranker:
     if _reranker is None:
         _reranker = SearchReranker()
     return _reranker
-

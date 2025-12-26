@@ -21,11 +21,13 @@ from morgan.background.infrastructure.precomputed_cache import PrecomputedSearch
 
 logger = get_logger(__name__)
 
+
 class BackgroundOrchestrator:
     """
     Application service that orchestrates background operations.
     A clean facade that coordinates infrastructure components.
     """
+
     def __init__(
         self,
         vector_db_client=None,
@@ -39,30 +41,29 @@ class BackgroundOrchestrator:
     ):
         self.check_interval = check_interval_seconds
         self.enable_auto_scheduling = enable_auto_scheduling
-        
+
         # Initialize components (use provided or defaults)
         self.scheduler = scheduler or SimpleTaskScheduler()
         self.monitor = monitor or ResourceMonitor()
-        
+
         self.executor = executor or BackgroundTaskExecutor(
             scheduler=self.scheduler,
             monitor=self.monitor,
             vector_db_client=vector_db_client,
             reranking_service=reranking_service,
         )
-        
+
         self.cache = cache or PrecomputedSearchCache(
-            vector_db_client=vector_db_client, 
-            reranking_service=reranking_service
+            vector_db_client=vector_db_client, reranking_service=reranking_service
         )
-        
+
         self.default_collections = [
             "morgan_knowledge",
             "morgan_memories",
             "morgan_web_content",
             "morgan_code",
         ]
-        
+
         # Service state
         self.running = False
         self.worker_thread = None
@@ -104,10 +105,12 @@ class BackgroundOrchestrator:
                 executions = self.executor.run_pending_tasks()
                 if executions:
                     logger.info(f"Executed {len(executions)} background tasks")
-                
+
                 time.sleep(self.check_interval)
             except Exception as e:
-                logger.error(f"Error in background orchestrator loop: {e}", exc_info=True)
+                logger.error(
+                    f"Error in background orchestrator loop: {e}", exc_info=True
+                )
                 time.sleep(60)
 
     def _schedule_default_tasks(self):

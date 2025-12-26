@@ -95,7 +95,7 @@ class ServiceContainer:
         self.conversation_memory = MemoryService()
         self.assistant = MorganAssistant()
         self.smart_search = SmartSearch()
-        
+
         # Search and background services
         self.search_engine = MultiStageSearchEngine()
         self.background_service = BackgroundProcessingService()

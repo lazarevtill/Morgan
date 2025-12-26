@@ -3,12 +3,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional
 
+
 class TaskStatus(Enum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
     SKIPPED = "skipped"
+
 
 class TaskType(Enum):
     REINDEX = "reindex"
@@ -17,15 +19,18 @@ class TaskType(Enum):
     OPTIMIZE = "optimize"
     PRECOMPUTE = "precompute"
 
+
 class TaskFrequency(Enum):
     HOURLY = "hourly"
     DAILY = "daily"
     WEEKLY = "weekly"
     MONTHLY = "monthly"
 
+
 @dataclass
 class BackgroundTask:
     """Domain entity representing a background task."""
+
     task_id: str
     task_type: TaskType
     status: TaskStatus

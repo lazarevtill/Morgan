@@ -50,7 +50,9 @@ class KnowledgeService:
 
         # Repositories
         self.repository = KnowledgeRepository(self.vector_db, self.main_collection)
-        self.hierarchical_repository = KnowledgeRepository(self.vector_db, self.hierarchical_collection)
+        self.hierarchical_repository = KnowledgeRepository(
+            self.vector_db, self.hierarchical_collection
+        )
 
         # Ensure collections exist
         self._ensure_collections()
@@ -360,7 +362,11 @@ class KnowledgeService:
             )
 
             # Use repository for search
-            repo = self.hierarchical_repository if collection == self.hierarchical_collection else self.repository
+            repo = (
+                self.hierarchical_repository
+                if collection == self.hierarchical_collection
+                else self.repository
+            )
             chunks = repo.search(
                 query_vector=query_embedding,
                 limit=max_results,
@@ -374,7 +380,9 @@ class KnowledgeService:
                     {
                         "content": chunk.content,
                         "source": chunk.source,
-                        "score": getattr(chunk, 'score', 0.0), # Assuming repo adds score to entity or similar
+                        "score": getattr(
+                            chunk, "score", 0.0
+                        ),  # Assuming repo adds score to entity or similar
                         "metadata": chunk.metadata,
                         "document_type": chunk.metadata.get("document_type", "unknown"),
                     }

@@ -121,8 +121,10 @@ class TaskPlan:
 
     def get_next_tasks(self) -> List[Task]:
         """Get tasks ready to execute (pending with satisfied dependencies)."""
-        completed_ids = {t.task_id for t in self.tasks if t.status == TaskStatus.COMPLETED}
-        
+        completed_ids = {
+            t.task_id for t in self.tasks if t.status == TaskStatus.COMPLETED
+        }
+
         ready = []
         for task in self.tasks:
             if task.status != TaskStatus.PENDING:
@@ -130,7 +132,7 @@ class TaskPlan:
             # Check if all dependencies are satisfied
             if all(dep_id in completed_ids for dep_id in task.dependencies):
                 ready.append(task)
-        
+
         # Sort by priority
         priority_order = {
             TaskPriority.CRITICAL: 0,
@@ -139,7 +141,7 @@ class TaskPlan:
             TaskPriority.LOW: 3,
         }
         ready.sort(key=lambda t: priority_order.get(t.priority, 2))
-        
+
         return ready
 
     def to_dict(self) -> Dict[str, Any]:
@@ -168,15 +170,15 @@ class TaskPlanner:
 
     Example:
         >>> planner = TaskPlanner()
-        >>> 
+        >>>
         >>> # Create a plan from a goal
         >>> plan = await planner.create_plan(
         ...     "Research and summarize the latest developments in AI safety"
         ... )
-        >>> 
+        >>>
         >>> # Execute the plan
         >>> result = await planner.execute_plan(plan)
-        >>> 
+        >>>
         >>> # Get progress
         >>> print(f"Progress: {plan.progress * 100:.0f}%")
     """
@@ -324,9 +326,7 @@ Respond in JSON format:
 
             self._plans[plan_id] = plan
 
-            logger.info(
-                f"Created plan {plan_id} with {len(tasks)} tasks"
-            )
+            logger.info(f"Created plan {plan_id} with {len(tasks)} tasks")
 
             return plan
 
@@ -384,8 +384,8 @@ Respond in JSON format:
                 break
 
             # Execute tasks (respecting concurrency limit)
-            batch = ready_tasks[:self.max_concurrent]
-            
+            batch = ready_tasks[: self.max_concurrent]
+
             await asyncio.gather(
                 *[self._execute_task(task, results_context) for task in batch]
             )
@@ -493,4 +493,3 @@ def get_task_planner() -> TaskPlanner:
     if _planner is None:
         _planner = TaskPlanner()
     return _planner
-

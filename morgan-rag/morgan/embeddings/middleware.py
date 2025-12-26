@@ -33,10 +33,14 @@ class EmbeddingMiddleware(EmbeddingProvider):
     def is_available(self) -> bool:
         return self.provider.is_available()
 
-    def encode(self, text: str, request_id: Optional[str] = None, **kwargs) -> List[float]:
+    def encode(
+        self, text: str, request_id: Optional[str] = None, **kwargs
+    ) -> List[float]:
         return self.provider.encode(text, request_id=request_id, **kwargs)
 
-    def encode_batch(self, texts: List[str], request_id: Optional[str] = None, **kwargs) -> List[List[float]]:
+    def encode_batch(
+        self, texts: List[str], request_id: Optional[str] = None, **kwargs
+    ) -> List[List[float]]:
         return self.provider.encode_batch(texts, request_id=request_id, **kwargs)
 
 
@@ -54,7 +58,9 @@ class CachingMiddleware(EmbeddingMiddleware):
         content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
         return f"emb_{self.provider.model_name}_{content_hash}"
 
-    def encode(self, text: str, request_id: Optional[str] = None, **kwargs) -> List[float]:
+    def encode(
+        self, text: str, request_id: Optional[str] = None, **kwargs
+    ) -> List[float]:
         use_cache = kwargs.get("use_cache", True)
         if not use_cache:
             return super().encode(text, request_id=request_id, **kwargs)
@@ -69,7 +75,9 @@ class CachingMiddleware(EmbeddingMiddleware):
         self.cache.set(cache_key, embedding)
         return embedding
 
-    def encode_batch(self, texts: List[str], request_id: Optional[str] = None, **kwargs) -> List[List[float]]:
+    def encode_batch(
+        self, texts: List[str], request_id: Optional[str] = None, **kwargs
+    ) -> List[List[float]]:
         use_cache = kwargs.get("use_cache", True)
         if not use_cache:
             return super().encode_batch(texts, request_id=request_id, **kwargs)
@@ -89,7 +97,9 @@ class CachingMiddleware(EmbeddingMiddleware):
 
         if uncached_texts:
             logger.debug(f"Cache miss: {len(uncached_texts)}/{len(texts)}")
-            new_embeddings = super().encode_batch(uncached_texts, request_id=request_id, **kwargs)
+            new_embeddings = super().encode_batch(
+                uncached_texts, request_id=request_id, **kwargs
+            )
             for i, idx in enumerate(uncached_indices):
                 embedding = new_embeddings[i]
                 results[idx] = embedding
@@ -106,13 +116,17 @@ class InstructionMiddleware(EmbeddingMiddleware):
     Middleware that handles instruction prefixes.
     """
 
-    def encode(self, text: str, request_id: Optional[str] = None, **kwargs) -> List[float]:
+    def encode(
+        self, text: str, request_id: Optional[str] = None, **kwargs
+    ) -> List[float]:
         instruction = kwargs.get("instruction")
         if instruction:
             text = self._apply_instruction_prefix(text, instruction)
         return super().encode(text, request_id=request_id, **kwargs)
 
-    def encode_batch(self, texts: List[str], request_id: Optional[str] = None, **kwargs) -> List[List[float]]:
+    def encode_batch(
+        self, texts: List[str], request_id: Optional[str] = None, **kwargs
+    ) -> List[List[float]]:
         instruction = kwargs.get("instruction")
         if instruction:
             texts = [self._apply_instruction_prefix(t, instruction) for t in texts]
@@ -136,11 +150,15 @@ class RateLimitingMiddleware(EmbeddingMiddleware):
         super().__init__(provider)
         self.rate_limiter = rate_limiter
 
-    def encode(self, text: str, request_id: Optional[str] = None, **kwargs) -> List[float]:
+    def encode(
+        self, text: str, request_id: Optional[str] = None, **kwargs
+    ) -> List[float]:
         self.rate_limiter.acquire()
         return super().encode(text, request_id=request_id, **kwargs)
 
-    def encode_batch(self, texts: List[str], request_id: Optional[str] = None, **kwargs) -> List[List[float]]:
+    def encode_batch(
+        self, texts: List[str], request_id: Optional[str] = None, **kwargs
+    ) -> List[List[float]]:
         # For simplicity, we limit by the number of calls, not number of items.
         # This is a bit naive but matches how original code did it for remote.
         self.rate_limiter.acquire()
@@ -156,7 +174,9 @@ class RetryMiddleware(EmbeddingMiddleware):
         super().__init__(provider)
         self.max_retries = max_retries
 
-    def encode(self, text: str, request_id: Optional[str] = None, **kwargs) -> List[float]:
+    def encode(
+        self, text: str, request_id: Optional[str] = None, **kwargs
+    ) -> List[float]:
         last_exception = None
         for attempt in range(self.max_retries):
             try:
@@ -172,15 +192,20 @@ class RetryMiddleware(EmbeddingMiddleware):
                         f"retrying in {delay:.2f}s: {e}"
                     )
                     import time
+
                     time.sleep(delay)
                 else:
-                    logger.error(f"Encoding failed after {self.max_retries} attempts: {e}")
-        
+                    logger.error(
+                        f"Encoding failed after {self.max_retries} attempts: {e}"
+                    )
+
         if last_exception:
             raise last_exception
         return []
 
-    def encode_batch(self, texts: List[str], request_id: Optional[str] = None, **kwargs) -> List[List[float]]:
+    def encode_batch(
+        self, texts: List[str], request_id: Optional[str] = None, **kwargs
+    ) -> List[List[float]]:
         last_exception = None
         for attempt in range(self.max_retries):
             try:
@@ -196,9 +221,12 @@ class RetryMiddleware(EmbeddingMiddleware):
                         f"retrying in {delay:.2f}s: {e}"
                     )
                     import time
+
                     time.sleep(delay)
                 else:
-                    logger.error(f"Batch encoding failed after {self.max_retries} attempts: {e}")
+                    logger.error(
+                        f"Batch encoding failed after {self.max_retries} attempts: {e}"
+                    )
 
         if last_exception:
             raise last_exception

@@ -89,9 +89,7 @@ class EnergyPreference:
     user_id: str
     default_energy: EnergyLevel = EnergyLevel.MODERATE
     time_preferences: Dict[TimeOfDay, EnergyLevel] = field(default_factory=dict)
-    emotional_energy_patterns: Dict[str, EnergyLevel] = field(
-        default_factory=dict
-    )
+    emotional_energy_patterns: Dict[str, EnergyLevel] = field(default_factory=dict)
     energy_variability: float = 0.5  # How much energy varies (0.0-1.0)
     adaptation_sensitivity: float = 0.7  # How quickly to match user energy
     confidence: float = 0.0

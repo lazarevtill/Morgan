@@ -61,15 +61,16 @@ class IntegrationOrchestrator:
 
             # performance_validation and background_integration are currently placeholders
             # and should be fully implemented as the system evolves.
-            
+
             total_time = time.time() - start_time
             results["integration_summary"] = {
                 "total_time": total_time,
                 "status": "completed",
                 "overall_success": all(
-                    r.success_rate >= 1.0 for r in results.values() 
+                    r.success_rate >= 1.0
+                    for r in results.values()
                     if isinstance(r, IntegrationWorkflowResult)
-                )
+                ),
             }
 
             return results

@@ -48,7 +48,7 @@ class RemoteEmbeddingProvider(EmbeddingProvider):
         )
         self._remote_available = None
         self._remote_base_url = None
-        
+
         # Rate limiting (100 requests/minute)
         self.rate_limiter = TokenBucketRateLimiter(rate_limit=100, time_window=60.0)
 
@@ -135,14 +135,23 @@ class RemoteEmbeddingProvider(EmbeddingProvider):
 
                 models = []
                 if isinstance(data, dict) and "data" in data:
-                    models = [m.get("id") or m.get("name") or m.get("model", "") for m in data.get("data", [])]
+                    models = [
+                        m.get("id") or m.get("name") or m.get("model", "")
+                        for m in data.get("data", [])
+                    ]
                 elif isinstance(data, dict) and "models" in data:
                     models = [m.get("name", "") for m in data.get("models", [])]
                 elif isinstance(data, list):
-                    models = [m.get("id") or m.get("name") for m in data if isinstance(m, dict)]
+                    models = [
+                        m.get("id") or m.get("name")
+                        for m in data
+                        if isinstance(m, dict)
+                    ]
 
                 if self._model_name not in models:
-                    logger.warning(f"Model {self._model_name} not found in remote service.")
+                    logger.warning(
+                        f"Model {self._model_name} not found in remote service."
+                    )
                     self._remote_available = False
                     return False
 
@@ -160,12 +169,16 @@ class RemoteEmbeddingProvider(EmbeddingProvider):
         self._remote_available = False
         return False
 
-    def encode(self, text: str, request_id: Optional[str] = None, **kwargs) -> List[float]:
+    def encode(
+        self, text: str, request_id: Optional[str] = None, **kwargs
+    ) -> List[float]:
         """Encode text using remote embedding service."""
         try:
             self.rate_limiter.acquire(timeout=30.0)
         except TimeoutError:
-            logger.warning(f"Rate limiter timeout, proceeding (request_id={request_id})")
+            logger.warning(
+                f"Rate limiter timeout, proceeding (request_id={request_id})"
+            )
 
         base_url = self._get_remote_base_url()
         if not base_url:
@@ -202,12 +215,14 @@ class RemoteEmbeddingProvider(EmbeddingProvider):
                 metadata={"model": self._model_name, "text_length": len(text)},
             ) from e
 
-    def encode_batch(self, texts: List[str], request_id: Optional[str] = None, **kwargs) -> List[List[float]]:
+    def encode_batch(
+        self, texts: List[str], request_id: Optional[str] = None, **kwargs
+    ) -> List[List[float]]:
         """Encode batch using remote service with optimized API calls."""
         # For remote, we often process texts individually if the API doesn't support batching well
         # or we want to handle retries per item. Here we'll do a simple loop or use batch API if available.
         # This implementation follows the legacy _encode_batch_remote logic.
-        
+
         results = []
         for text in texts:
             results.append(self.encode(text, request_id=request_id, **kwargs))

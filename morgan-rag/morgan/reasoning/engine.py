@@ -290,7 +290,9 @@ Respond in JSON format:
                     step = await self._reason_step(
                         query=query,
                         step_description=sub_problem["description"],
-                        previous_conclusions=[s.conclusion for s in steps if s.conclusion],
+                        previous_conclusions=[
+                            s.conclusion for s in steps if s.conclusion
+                        ],
                         context=context,
                         step_number=i + 1,
                     )
@@ -596,4 +598,3 @@ def get_reasoning_engine() -> ReasoningEngine:
     if _engine is None:
         _engine = ReasoningEngine()
     return _engine
-

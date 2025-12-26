@@ -11,7 +11,10 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from morgan.background.infrastructure.monitor import ResourceMonitor
-from morgan.background.infrastructure.scheduler import ScheduledTask, SimpleTaskScheduler
+from morgan.background.infrastructure.scheduler import (
+    ScheduledTask,
+    SimpleTaskScheduler,
+)
 from morgan.background.domain.interfaces import (
     TaskExecutor,
     TaskScheduler,
