@@ -728,7 +728,7 @@ class HealthMonitor:
 
             # No data available - check if pipeline components exist
             try:
-                from morgan.processing.batch_processor import get_batch_processor
+                from morgan.optimization.batch_processor import get_batch_processor
 
                 processor = get_batch_processor()
                 return processor is not None
@@ -802,12 +802,12 @@ class HealthMonitor:
 
             # Test emotional analysis is functional
             try:
-                from morgan.emotional.analyzer import get_emotion_analyzer
+                from morgan.intelligence.emotions import get_emotion_detector
 
-                analyzer = get_emotion_analyzer()
-                if analyzer:
-                    # Quick test
-                    test_result = analyzer.analyze("Hello, how are you?")
+                detector = get_emotion_detector()
+                if detector:
+                    # Quick test - detect emotion in sample text
+                    test_result = detector.detect_emotion("Hello, how are you?")
                     return test_result is not None
                 return True
 

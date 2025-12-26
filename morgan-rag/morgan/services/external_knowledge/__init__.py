@@ -53,13 +53,19 @@ from morgan.services.external_knowledge.service import (
 )
 from morgan.services.external_knowledge.mcp_client import (
     MCPClient,
-    MCPRequest,
+    MCPClientError,
+    MCPNotConnectedError,
+    MCPSDKNotAvailableError,
     MCPResponse,
+    MCPServerConfig,
     MCPServerType,
+    MCPTransport,
     get_mcp_client,
     mcp_web_search,
     mcp_resolve_library,
     mcp_get_library_docs,
+    setup_context7_server,
+    setup_playwright_server,
 )
 
 __all__ = [
@@ -80,11 +86,17 @@ __all__ = [
     "get_external_knowledge_service",
     # MCP Client
     "MCPClient",
-    "MCPRequest",
+    "MCPClientError",
+    "MCPNotConnectedError",
+    "MCPSDKNotAvailableError",
     "MCPResponse",
+    "MCPServerConfig",
     "MCPServerType",
+    "MCPTransport",
     "get_mcp_client",
     "mcp_web_search",
     "mcp_resolve_library",
     "mcp_get_library_docs",
+    "setup_context7_server",
+    "setup_playwright_server",
 ]
