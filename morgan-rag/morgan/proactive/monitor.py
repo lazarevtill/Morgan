@@ -74,17 +74,17 @@ class ContextMonitor:
 
     Example:
         >>> monitor = ContextMonitor()
-        >>> 
+        >>>
         >>> # Register event handlers
         >>> monitor.on_event(ContextEventType.INACTIVITY, handle_inactivity)
-        >>> 
+        >>>
         >>> # Update context
         >>> await monitor.update_context(
         ...     user_id="user123",
         ...     topic="machine learning",
         ...     emotional_state="curious"
         ... )
-        >>> 
+        >>>
         >>> # Start monitoring
         >>> await monitor.start()
     """
@@ -385,6 +385,7 @@ class ContextMonitor:
 
             # Count word frequency
             from collections import Counter
+
             word_counts = Counter(words)
             common = word_counts.most_common(3)
 
@@ -407,4 +408,3 @@ def get_context_monitor() -> ContextMonitor:
     if _monitor is None:
         _monitor = ContextMonitor()
     return _monitor
-

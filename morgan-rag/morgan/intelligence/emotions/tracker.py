@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
-from morgan.intelligence.core.models import ConversationContext, EmotionalState, EmotionType
+from morgan.intelligence.core.models import (
+    ConversationContext,
+    EmotionalState,
+    EmotionType,
+)
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)

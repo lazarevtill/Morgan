@@ -37,4 +37,3 @@ __all__ = [
     "AnticipatedTask",
     "get_task_anticipator",
 ]
-

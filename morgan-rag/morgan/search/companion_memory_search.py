@@ -15,7 +15,9 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from morgan.companion.relationship_manager import CompanionRelationshipManager
-from morgan.intelligence.core.intelligence_engine import get_emotional_intelligence_engine
+from morgan.intelligence.core.intelligence_engine import (
+    get_emotional_intelligence_engine,
+)
 from morgan.intelligence.core.models import EmotionalState
 from morgan.memory.memory_processor import get_memory_processor
 from morgan.search.multi_stage_search import SearchResult, get_multi_stage_search_engine

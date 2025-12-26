@@ -6,6 +6,7 @@ Delegates to BackgroundOrchestrator for DDD compliance.
 from typing import Any, Dict, List, Optional
 from morgan.background.application.orchestrators import BackgroundOrchestrator
 
+
 class BackgroundProcessingService:
     """
     Facade for background processing.
@@ -32,7 +33,9 @@ class BackgroundProcessingService:
     def stop(self) -> bool:
         return self.orchestrator.stop()
 
-    def schedule_reindexing(self, collection_name: str, frequency: str = "weekly") -> str:
+    def schedule_reindexing(
+        self, collection_name: str, frequency: str = "weekly"
+    ) -> str:
         return self.orchestrator.scheduler.schedule_task(
             task_type="reindex", collection_name=collection_name, frequency=frequency
         )
@@ -45,8 +48,12 @@ class BackgroundProcessingService:
     def warm_cache_for_collection(self, collection_name: str) -> int:
         return self.orchestrator.cache.warm_cache(collection_name)
 
-    def track_search_query(self, query: str, collection_name: str, response_time: float = 0.0) -> str:
-        return self.orchestrator.cache.track_query(query, collection_name, response_time)
+    def track_search_query(
+        self, query: str, collection_name: str, response_time: float = 0.0
+    ) -> str:
+        return self.orchestrator.cache.track_query(
+            query, collection_name, response_time
+        )
 
     def get_cached_results(self, query: str, collection_name: str) -> Optional[Any]:
         return self.orchestrator.cache.get_cached_results(query, collection_name)
@@ -70,10 +77,12 @@ class BackgroundProcessingService:
                 {
                     "query": q.query_text,
                     "count": q.access_count,
-                    "last_accessed": q.last_accessed.isoformat() if q.last_accessed else None
+                    "last_accessed": (
+                        q.last_accessed.isoformat() if q.last_accessed else None
+                    ),
                 }
                 for q in self.orchestrator.cache.get_popular_queries(limit=limit)
-            ]
+            ],
         }
 
     def __enter__(self):

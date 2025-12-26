@@ -212,7 +212,9 @@ class HumorDetector:
 
         return preference
 
-    def _analyze_humor_styles(self, conversation_history: List[str]) -> Dict[HumorStyle, float]:
+    def _analyze_humor_styles(
+        self, conversation_history: List[str]
+    ) -> Dict[HumorStyle, float]:
         """Analyze humor style preferences from conversation history."""
         import re
 
@@ -281,7 +283,9 @@ class HumorDetector:
         adjustments = {}
 
         # Extraversion affects humor frequency and style
-        extraversion = personality_profile.get_trait_level(PersonalityTrait.EXTRAVERSION)
+        extraversion = personality_profile.get_trait_level(
+            PersonalityTrait.EXTRAVERSION
+        )
         if extraversion in [TraitLevel.HIGH, TraitLevel.VERY_HIGH]:
             adjustments["frequency_boost"] = 0.2
             adjustments["preferred_styles"] = [HumorStyle.PLAYFUL, HumorStyle.WITTY]
@@ -298,10 +302,15 @@ class HumorDetector:
             adjustments["simple_styles"] = [HumorStyle.GENTLE, HumorStyle.OBSERVATIONAL]
 
         # Agreeableness affects humor appropriateness
-        agreeableness = personality_profile.get_trait_level(PersonalityTrait.AGREEABLENESS)
+        agreeableness = personality_profile.get_trait_level(
+            PersonalityTrait.AGREEABLENESS
+        )
         if agreeableness in [TraitLevel.HIGH, TraitLevel.VERY_HIGH]:
             adjustments["appropriateness_boost"] = 0.1
-            adjustments["gentle_styles"] = [HumorStyle.GENTLE, HumorStyle.SELF_DEPRECATING]
+            adjustments["gentle_styles"] = [
+                HumorStyle.GENTLE,
+                HumorStyle.SELF_DEPRECATING,
+            ]
 
         # Neuroticism affects humor sensitivity
         neuroticism = personality_profile.get_trait_level(PersonalityTrait.NEUROTICISM)
@@ -328,17 +337,24 @@ class HumorDetector:
         # Adjust appropriateness threshold
         if "appropriateness_boost" in adjustments:
             preference.appropriateness_threshold = min(
-                preference.appropriateness_threshold + adjustments["appropriateness_boost"],
+                preference.appropriateness_threshold
+                + adjustments["appropriateness_boost"],
                 1.0,
             )
         if "sensitivity_increase" in adjustments:
             preference.appropriateness_threshold = min(
-                preference.appropriateness_threshold + adjustments["sensitivity_increase"],
+                preference.appropriateness_threshold
+                + adjustments["sensitivity_increase"],
                 1.0,
             )
 
         # Add preferred styles
-        for key in ["preferred_styles", "creative_styles", "gentle_styles", "simple_styles"]:
+        for key in [
+            "preferred_styles",
+            "creative_styles",
+            "gentle_styles",
+            "simple_styles",
+        ]:
             if key in adjustments:
                 for style in adjustments[key]:
                     if style not in preference.preferred_styles:
@@ -618,9 +634,7 @@ class HumorGenerator:
 
         return filled_template
 
-    def _fill_template(
-        self, template: str, context: str, topic: Optional[str]
-    ) -> str:
+    def _fill_template(self, template: str, context: str, topic: Optional[str]) -> str:
         """Fill in template variables with context-appropriate content."""
         # Simple template filling - could be enhanced with NLP
         variables = {

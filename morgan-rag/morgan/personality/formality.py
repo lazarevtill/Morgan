@@ -99,9 +99,7 @@ class FormalityPreference:
         """Get preferred formality level for a context type."""
         return self.context_preferences.get(context_type, self.default_level)
 
-    def set_context_preference(
-        self, context_type: ContextType, level: FormalityLevel
-    ):
+    def set_context_preference(self, context_type: ContextType, level: FormalityLevel):
         """Set formality preference for a specific context."""
         self.context_preferences[context_type] = level
         self.last_updated = datetime.utcnow()
@@ -354,7 +352,10 @@ class FormalityLevelAdjuster:
         return target_level
 
     def adjust_text_formality(
-        self, text: str, target_level: FormalityLevel, current_level: Optional[FormalityLevel] = None
+        self,
+        text: str,
+        target_level: FormalityLevel,
+        current_level: Optional[FormalityLevel] = None,
     ) -> FormalityAdjustment:
         """
         Adjust text to match target formality level.
@@ -367,9 +368,7 @@ class FormalityLevelAdjuster:
         Returns:
             FormalityAdjustment with original and adjusted text
         """
-        logger.debug(
-            "Adjusting text formality to %s: %s", target_level.name, text[:50]
-        )
+        logger.debug("Adjusting text formality to %s: %s", target_level.name, text[:50])
 
         # Detect current level if not provided
         if current_level is None:
@@ -527,7 +526,9 @@ class FormalityLevelAdjuster:
                         }
 
                         score = score_mapping.get(formality_category, 0.0)
-                        confidence = min(len(matches) / 3.0, 1.0)  # More matches = higher confidence
+                        confidence = min(
+                            len(matches) / 3.0, 1.0
+                        )  # More matches = higher confidence
 
                         indicator = FormalityIndicator(
                             indicator_type=indicator_type,
@@ -647,9 +648,7 @@ class FormalityLevelAdjuster:
     ) -> FormalityLevel:
         """Blend two formality levels based on blend factor."""
         # Simple weighted average
-        blended_value = (
-            level1.value * (1 - blend_factor) + level2.value * blend_factor
-        )
+        blended_value = level1.value * (1 - blend_factor) + level2.value * blend_factor
         rounded_value = round(blended_value)
         return FormalityLevel(max(1, min(5, rounded_value)))
 
@@ -728,7 +727,9 @@ class FormalityLevelAdjuster:
 
         adjusted_text = text
         for pattern, replacement in replacements.items():
-            adjusted_text = re.sub(pattern, replacement, adjusted_text, flags=re.IGNORECASE)
+            adjusted_text = re.sub(
+                pattern, replacement, adjusted_text, flags=re.IGNORECASE
+            )
 
         return adjusted_text
 
@@ -758,7 +759,9 @@ class FormalityLevelAdjuster:
 
         adjusted_text = text
         for pattern, replacement in replacements.items():
-            adjusted_text = re.sub(pattern, replacement, adjusted_text, flags=re.IGNORECASE)
+            adjusted_text = re.sub(
+                pattern, replacement, adjusted_text, flags=re.IGNORECASE
+            )
 
         return adjusted_text
 
@@ -834,7 +837,9 @@ class FormalityLevelAdjuster:
 
         return descriptions.get(level, f"Formality level: {level.name}")
 
-    def get_context_formality_guidelines(self, context_type: ContextType) -> Dict[str, str]:
+    def get_context_formality_guidelines(
+        self, context_type: ContextType
+    ) -> Dict[str, str]:
         """Get formality guidelines for different context types."""
         guidelines = {
             ContextType.PERSONAL: {
@@ -869,8 +874,11 @@ class FormalityLevelAdjuster:
             },
         }
 
-        return guidelines.get(context_type, {
-            "recommended_level": "Neutral",
-            "description": "Balanced approach appropriate for general contexts",
-            "avoid": "Extreme formality or casualness without context",
-        })
+        return guidelines.get(
+            context_type,
+            {
+                "recommended_level": "Neutral",
+                "description": "Balanced approach appropriate for general contexts",
+                "avoid": "Extreme formality or casualness without context",
+            },
+        )

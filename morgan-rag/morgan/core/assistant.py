@@ -13,8 +13,11 @@ from typing import Any, Dict, Iterator, List, Optional
 
 from ..companion.relationship_manager import CompanionRelationshipManager
 from ..config import get_settings
+
 # Legacy imports removed
-from morgan.intelligence.core.intelligence_engine import get_emotional_intelligence_engine
+from morgan.intelligence.core.intelligence_engine import (
+    get_emotional_intelligence_engine,
+)
 from morgan.intelligence.core.models import ConversationContext, EmotionalState
 from ..services.llm_service import LLMService
 from ..utils.logger import get_logger
@@ -68,10 +71,7 @@ class MorganAssistant:
 
         # Orchestrator
         self.orchestrator = ConversationOrchestrator(
-            self.knowledge,
-            self.memory,
-            self.llm,
-            self.emotional_processor
+            self.knowledge, self.memory, self.llm, self.emotional_processor
         )
 
         # Human-friendly state
@@ -80,9 +80,7 @@ class MorganAssistant:
             "helpful, knowledgeable, conversational, and emotionally aware"
         )
 
-        logger.info(
-            f"{self.name} assistant initialized with clean DDD architecture!"
-        )
+        logger.info(f"{self.name} assistant initialized with clean DDD architecture!")
 
     async def ask(
         self,
@@ -117,9 +115,9 @@ class MorganAssistant:
         memory_context = ""
         if conversation_id:
             memory_context = self.memory.get_conversation_context(conversation_id)
-        
+
         context = f"Knowledge: {search_results}\nMemory: {memory_context}"
-        
+
         full_response = ""
         for chunk in self.llm.stream_generate(
             prompt=f"Question: {question}", system_prompt=context
@@ -134,7 +132,7 @@ class MorganAssistant:
                 conversation_id=conversation_id,
                 question=question,
                 answer=full_response,
-                sources=[res.get("source") for res in search_results]
+                sources=[res.get("source") for res in search_results],
             )
 
     def learn_from_documents(

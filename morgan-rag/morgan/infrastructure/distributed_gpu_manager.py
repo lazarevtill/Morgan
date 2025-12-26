@@ -124,8 +124,7 @@ class DistributedGPUManager:
         self._http_client: Optional[httpx.AsyncClient] = None
 
         logger.info(
-            "DistributedGPUManager initialized with %d hosts",
-            len(self.config.hosts)
+            "DistributedGPUManager initialized with %d hosts", len(self.config.hosts)
         )
 
     @classmethod
@@ -253,10 +252,7 @@ class DistributedGPUManager:
 
     def get_hosts_by_role(self, role: HostRole) -> List[HostConfig]:
         """Get all hosts with a specific role."""
-        return [
-            host for host in self.config.hosts.values()
-            if host.role == role
-        ]
+        return [host for host in self.config.hosts.values() if host.role == role]
 
     def get_endpoint_url(self, host: HostConfig) -> str:
         """Get the full endpoint URL for a host."""
@@ -330,9 +326,7 @@ class DistributedGPUManager:
                 # Parse Ollama response for loaded models
                 data = response.json()
                 if "models" in data:
-                    health.models_loaded = [
-                        m.get("name", "") for m in data["models"]
-                    ]
+                    health.models_loaded = [m.get("name", "") for m in data["models"]]
 
                 logger.debug(
                     "Host %s healthy: %.1fms, %d models",
@@ -382,21 +376,16 @@ class DistributedGPUManager:
         logger.debug("Checking health of %d hosts...", len(self.config.hosts))
 
         # Check all hosts in parallel
-        tasks = [
-            self.check_host_health(host)
-            for host in self.config.hosts.values()
-        ]
+        tasks = [self.check_host_health(host) for host in self.config.hosts.values()]
 
         await asyncio.gather(*tasks, return_exceptions=True)
 
         # Count status
         online = sum(
-            1 for h in self.config.health.values()
-            if h.status == HostStatus.ONLINE
+            1 for h in self.config.health.values() if h.status == HostStatus.ONLINE
         )
         offline = sum(
-            1 for h in self.config.health.values()
-            if h.status == HostStatus.OFFLINE
+            1 for h in self.config.health.values() if h.status == HostStatus.OFFLINE
         )
 
         logger.info(
@@ -411,9 +400,7 @@ class DistributedGPUManager:
     def start_health_monitoring(self):
         """Start background health monitoring."""
         if self._health_check_task is None:
-            self._health_check_task = asyncio.create_task(
-                self._health_monitor_loop()
-            )
+            self._health_check_task = asyncio.create_task(self._health_monitor_loop())
             logger.info("Started background health monitoring")
 
     def stop_health_monitoring(self):
@@ -445,11 +432,12 @@ class DistributedGPUManager:
         for role in HostRole:
             hosts = self.get_hosts_by_role(role)
             online = sum(
-                1 for h in hosts
+                1
+                for h in hosts
                 if self.config.health.get(
-                    h.host_id,
-                    HostHealth(host_id=h.host_id, status=HostStatus.UNKNOWN)
-                ).status == HostStatus.ONLINE
+                    h.host_id, HostHealth(host_id=h.host_id, status=HostStatus.UNKNOWN)
+                ).status
+                == HostStatus.ONLINE
             )
             hosts_by_role[role.value] = {
                 "total": len(hosts),

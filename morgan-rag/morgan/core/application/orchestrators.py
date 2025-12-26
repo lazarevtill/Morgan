@@ -31,7 +31,7 @@ class ConversationOrchestrator:
         knowledge_service: KnowledgeService,
         memory_service: MemoryService,
         llm_service: LLMService,
-        emotional_processor: Any, # Avoid circular imports
+        emotional_processor: Any,  # Avoid circular imports
     ):
         self.knowledge = knowledge_service
         self.memory = memory_service
@@ -52,7 +52,7 @@ class ConversationOrchestrator:
         Ask Morgan a question with emotional intelligence and companion awareness.
         """
         start_time = time.time()
-        
+
         # Ensure IDs
         conv_id = conversation_id or str(uuid.uuid4())
         uid = user_id or "anonymous"
@@ -72,7 +72,9 @@ class ConversationOrchestrator:
                 )
 
             # Step 2: Contextualize query for multi-turn reasoning
-            search_query = await self.reasoning.contextualize_query(question, memory_history)
+            search_query = await self.reasoning.contextualize_query(
+                question, memory_history
+            )
 
             # Create conversation context
             conv_context = ConversationContext(
@@ -80,7 +82,7 @@ class ConversationOrchestrator:
                 conversation_id=conv_id,
                 message_text=question,
                 timestamp=datetime.utcnow(),
-                previous_messages=[m.get("question", "") for m in memory_history]
+                previous_messages=[m.get("question", "") for m in memory_history],
             )
 
             # Step 3: Analyze emotional state
@@ -91,7 +93,9 @@ class ConversationOrchestrator:
             # Step 4: Handle user profile and personalization
             user_profile = None
             if user_id:
-                user_profile = self.emotional_processor.get_or_create_user_profile(user_id)
+                user_profile = self.emotional_processor.get_or_create_user_profile(
+                    user_id
+                )
 
             # Step 5: Adapt conversation style
             conversation_style = None
@@ -110,10 +114,12 @@ class ConversationOrchestrator:
             context = f"Emotional State: {emotional_state}\nStyle: {conversation_style}\nKnowledge: {search_results}\nMemory: {memory_context}"
 
             # Step 8 & 9: Generate responses
-            empathetic_response = self.emotional_processor.emotional_engine.generate_empathetic_response(
-                emotional_state, context
+            empathetic_response = (
+                self.emotional_processor.emotional_engine.generate_empathetic_response(
+                    emotional_state, context
+                )
             )
-            
+
             llm_response = self.llm.generate(
                 prompt=f"Question: {question}", system_prompt=context
             )
@@ -127,11 +133,15 @@ class ConversationOrchestrator:
 
             # Step 13: Create final response
             # (This logic should probably be in a ResponseHandler service)
-            from .response_handler import Response # Local import for now
-            
+            from .response_handler import Response  # Local import for now
+
             response = Response(
                 answer=llm_response.content,
-                sources=[res.get("source") for res in search_results] if include_sources else [],
+                sources=(
+                    [res.get("source") for res in search_results]
+                    if include_sources
+                    else []
+                ),
                 confidence=0.8,
                 conversation_id=conv_id,
                 emotional_tone=emotional_state.primary_emotion.value,

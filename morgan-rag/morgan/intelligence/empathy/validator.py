@@ -9,7 +9,11 @@ import threading
 from typing import Any, Dict, Optional
 
 from morgan.config import get_settings
-from morgan.intelligence.core.models import ConversationContext, EmotionalState, EmotionType
+from morgan.intelligence.core.models import (
+    ConversationContext,
+    EmotionalState,
+    EmotionType,
+)
 from morgan.services.llm_service import get_llm_service
 from morgan.utils.logger import get_logger
 

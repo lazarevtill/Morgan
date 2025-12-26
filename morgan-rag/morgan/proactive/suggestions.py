@@ -86,14 +86,14 @@ class SuggestionEngine:
 
     Example:
         >>> engine = SuggestionEngine()
-        >>> 
+        >>>
         >>> # Generate suggestions for a user
         >>> suggestions = await engine.generate_suggestions("user123")
-        >>> 
+        >>>
         >>> # Get top suggestion
         >>> top = suggestions[0] if suggestions else None
         >>> print(f"Suggestion: {top.title}")
-        >>> 
+        >>>
         >>> # Mark as shown
         >>> await engine.mark_shown(top.suggestion_id)
     """
@@ -297,9 +297,19 @@ Respond in JSON format:
             prompt = self.SUGGESTION_PROMPT.format(
                 topic=context.current_topic or "Not set",
                 emotional_state=context.emotional_state or "Unknown",
-                recent_queries=", ".join(context.recent_queries[-5:]) if context.recent_queries else "None",
-                goals=", ".join(context.active_goals) if context.active_goals else "None",
-                last_activity=context.last_activity.isoformat() if context.last_activity else "Unknown",
+                recent_queries=(
+                    ", ".join(context.recent_queries[-5:])
+                    if context.recent_queries
+                    else "None"
+                ),
+                goals=(
+                    ", ".join(context.active_goals) if context.active_goals else "None"
+                ),
+                last_activity=(
+                    context.last_activity.isoformat()
+                    if context.last_activity
+                    else "Unknown"
+                ),
                 session_duration=session_duration,
             )
 
@@ -404,4 +414,3 @@ def get_suggestion_engine() -> SuggestionEngine:
     if _engine is None:
         _engine = SuggestionEngine()
     return _engine
-

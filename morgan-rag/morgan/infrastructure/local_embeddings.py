@@ -43,13 +43,13 @@ logger = get_logger(__name__)
 def setup_model_cache(cache_dir: Optional[str] = None):
     """
     Setup model cache directories and environment variables.
-    
+
     This ensures models are downloaded once and reused on subsequent starts.
     Also configures HF_TOKEN for downloading gated models if available.
-    
+
     Args:
         cache_dir: Base directory for model cache. Defaults to ~/.morgan/models
-    
+
     Environment variables loaded from .env:
         - HF_TOKEN: Hugging Face API token (for gated models)
         - HUGGING_FACE_HUB_TOKEN: Alternative HF token variable
@@ -58,35 +58,36 @@ def setup_model_cache(cache_dir: Optional[str] = None):
     # Try to load .env file if python-dotenv is available
     try:
         from dotenv import load_dotenv
+
         load_dotenv()
         logger.debug("Loaded environment from .env file")
     except ImportError:
         pass  # dotenv not installed, use existing env vars
-    
+
     if cache_dir is None:
         cache_dir = os.environ.get("MORGAN_MODEL_CACHE", "~/.morgan/models")
-    
+
     cache_path = Path(cache_dir).expanduser()
-    
+
     # Create subdirectories
     sentence_transformers_path = cache_path / "sentence-transformers"
     hf_path = cache_path / "huggingface"
-    
+
     for path in [cache_path, sentence_transformers_path, hf_path]:
         path.mkdir(parents=True, exist_ok=True)
-    
+
     # Set environment variables for model caching
     os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(sentence_transformers_path)
     os.environ["HF_HOME"] = str(hf_path)
     os.environ["TRANSFORMERS_CACHE"] = str(hf_path)
     os.environ["HF_DATASETS_CACHE"] = str(hf_path / "datasets")
-    
+
     # Configure HF_TOKEN for gated model downloads
     # Check multiple possible env var names
     hf_token = (
-        os.environ.get("HF_TOKEN") or
-        os.environ.get("HUGGING_FACE_HUB_TOKEN") or
-        os.environ.get("HUGGINGFACE_TOKEN")
+        os.environ.get("HF_TOKEN")
+        or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+        or os.environ.get("HUGGINGFACE_TOKEN")
     )
     if hf_token:
         # Set all possible HF token env vars for compatibility
@@ -94,10 +95,8 @@ def setup_model_cache(cache_dir: Optional[str] = None):
         os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
         logger.info("HF_TOKEN configured for authenticated model downloads")
     else:
-        logger.debug(
-            "No HF_TOKEN found - some gated models may not be accessible"
-        )
-    
+        logger.debug("No HF_TOKEN found - some gated models may not be accessible")
+
     logger.info("Model cache configured at %s", cache_path)
     return cache_path
 
@@ -133,7 +132,7 @@ class EmbeddingStats:
 class LocalEmbeddingService:
     """
     Local embedding service for distributed Morgan setup.
-    
+
     100% Self-Hosted - No API Keys Required.
 
     Supports:
@@ -142,7 +141,7 @@ class LocalEmbeddingService:
     - Batch processing with configurable size
     - Content-based caching
     - Performance tracking
-    
+
     Self-hosted models (Qwen3-Embedding via Ollama):
     - qwen3-embedding:0.6b: 896 dims (lightweight)
     - qwen3-embedding:4b: 2048 dims (recommended for RTX 4070)
@@ -207,7 +206,7 @@ class LocalEmbeddingService:
 
         # Setup model cache directory before any model loading
         self.model_cache_path = setup_model_cache(model_cache_dir)
-        
+
         self.endpoint = endpoint
         self.model = model
         self.dimensions = dimensions
@@ -234,7 +233,7 @@ class LocalEmbeddingService:
             f"endpoint={endpoint}, model={model}, dims={dimensions}, "
             f"cache_dir={self.model_cache_path}"
         )
-        
+
         # Preload model if requested (downloads weights on first run)
         if preload_model and SENTENCE_TRANSFORMERS_AVAILABLE:
             logger.info(f"Preloading embedding model {local_model}...")

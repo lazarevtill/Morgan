@@ -31,9 +31,7 @@ class LocalEmbeddingProvider(EmbeddingProvider):
     def __init__(self, model_name: str, settings=None):
         self.settings = settings or get_settings()
         self._model_name = model_name
-        self.model_config = self.MODELS.get(
-            model_name, self.MODELS["all-MiniLM-L6-v2"]
-        )
+        self.model_config = self.MODELS.get(model_name, self.MODELS["all-MiniLM-L6-v2"])
         self._local_model = None
         self._local_available = None
 
@@ -62,7 +60,9 @@ class LocalEmbeddingProvider(EmbeddingProvider):
             self._local_available = True
             return True
         except ImportError:
-            logger.warning("sentence-transformers not installed, local embeddings unavailable")
+            logger.warning(
+                "sentence-transformers not installed, local embeddings unavailable"
+            )
             self._local_available = False
             return False
         except Exception as e:
@@ -70,7 +70,9 @@ class LocalEmbeddingProvider(EmbeddingProvider):
             self._local_available = False
             return False
 
-    def encode(self, text: str, request_id: Optional[str] = None, **kwargs) -> List[float]:
+    def encode(
+        self, text: str, request_id: Optional[str] = None, **kwargs
+    ) -> List[float]:
         """Encode text using local sentence-transformers."""
         if not self.is_available():
             raise RuntimeError("Local embedding service is not available")
@@ -87,7 +89,9 @@ class LocalEmbeddingProvider(EmbeddingProvider):
                 metadata={"model": self._model_name, "text_length": len(text)},
             ) from e
 
-    def encode_batch(self, texts: List[str], request_id: Optional[str] = None, **kwargs) -> List[List[float]]:
+    def encode_batch(
+        self, texts: List[str], request_id: Optional[str] = None, **kwargs
+    ) -> List[List[float]]:
         """Encode batch using local sentence-transformers."""
         if not self.is_available():
             raise RuntimeError("Local embedding service is not available")

@@ -47,15 +47,15 @@ class DistributedLLMService:
 
     Example:
         >>> service = DistributedLLMService()
-        >>> 
+        >>>
         >>> # Synchronous
         >>> response = service.generate("What is Python?")
         >>> print(response.content)
-        >>> 
+        >>>
         >>> # Asynchronous
         >>> response = await service.agenerate("Explain Docker")
         >>> print(response.content)
-        >>> 
+        >>>
         >>> # Streaming
         >>> async for chunk in service.astream("Write a poem"):
         ...     print(chunk, end="", flush=True)
@@ -102,8 +102,7 @@ class DistributedLLMService:
         self._gpu_manager: Optional[DistributedGPUManager] = None
 
         logger.info(
-            "DistributedLLMService created: "
-            "main_model=%s, fast_model=%s",
+            "DistributedLLMService created: " "main_model=%s, fast_model=%s",
             self.main_model,
             self.fast_model,
         )
@@ -123,16 +122,10 @@ class DistributedLLMService:
             if endpoints is None and self._auto_discover:
                 try:
                     self._gpu_manager = get_distributed_gpu_manager()
-                    endpoints = await self._gpu_manager.get_endpoints(
-                        HostRole.MAIN_LLM
-                    )
-                    logger.info(
-                        "Auto-discovered %d LLM endpoints", len(endpoints)
-                    )
+                    endpoints = await self._gpu_manager.get_endpoints(HostRole.MAIN_LLM)
+                    logger.info("Auto-discovered %d LLM endpoints", len(endpoints))
                 except Exception as e:
-                    logger.warning(
-                        "Failed to auto-discover endpoints: %s", e
-                    )
+                    logger.warning("Failed to auto-discover endpoints: %s", e)
 
             # Fallback to settings
             if not endpoints:
@@ -198,6 +191,7 @@ class DistributedLLMService:
 
         try:
             import time
+
             start = time.time()
 
             content = await client.generate(
@@ -364,6 +358,7 @@ class DistributedLLMService:
         use_fast_model: bool = False,
     ) -> Iterator[str]:
         """Synchronous streaming generator."""
+
         async def _async_gen():
             async for chunk in self.astream(
                 prompt=prompt,
@@ -447,4 +442,3 @@ def get_distributed_llm_service(
                 )
 
     return _service_instance
-

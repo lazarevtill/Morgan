@@ -70,17 +70,17 @@ class TaskAnticipator:
 
     Example:
         >>> anticipator = TaskAnticipator()
-        >>> 
+        >>>
         >>> # After a user query, anticipate next tasks
         >>> anticipated = await anticipator.anticipate(
         ...     user_id="user123",
         ...     current_query="How do I create a Docker container?",
         ...     response="To create a Docker container..."
         ... )
-        >>> 
+        >>>
         >>> for task in anticipated:
         ...     print(f"Likely question: {task.question} ({task.probability:.0%})")
-        >>> 
+        >>>
         >>> # Check if a query matches anticipated task
         >>> match = await anticipator.check_match(
         ...     user_id="user123",
@@ -177,7 +177,9 @@ Respond in JSON format:
                 query=current_query,
                 response=response[:500],  # Truncate long responses
                 emotional_state=context.emotional_state if context else "Unknown",
-                previous_topics=", ".join(context.recent_queries[-3:]) if context else "None",
+                previous_topics=(
+                    ", ".join(context.recent_queries[-3:]) if context else "None"
+                ),
             )
 
             llm_response = self.llm.generate(
@@ -220,7 +222,7 @@ Respond in JSON format:
 
             # Sort by probability
             anticipated.sort(key=lambda t: t.probability, reverse=True)
-            anticipated = anticipated[:self.max_anticipated]
+            anticipated = anticipated[: self.max_anticipated]
 
             # Store
             self._anticipated[user_id] = anticipated
@@ -231,9 +233,7 @@ Respond in JSON format:
                     if task.probability >= 0.6:
                         await self._preparation_queue.put(task)
 
-            logger.info(
-                f"Anticipated {len(anticipated)} tasks for {user_id}"
-            )
+            logger.info(f"Anticipated {len(anticipated)} tasks for {user_id}")
 
             return anticipated
 
@@ -340,9 +340,7 @@ Provide a helpful, concise response."""
     async def start_preparation_worker(self):
         """Start background worker for response preparation."""
         if self._preparation_task is None:
-            self._preparation_task = asyncio.create_task(
-                self._preparation_loop()
-            )
+            self._preparation_task = asyncio.create_task(self._preparation_loop())
             logger.info("Started preparation worker")
 
     async def stop_preparation_worker(self):
@@ -381,7 +379,8 @@ Provide a helpful, concise response."""
         """Get anticipator statistics."""
         total_tasks = sum(len(tasks) for tasks in self._anticipated.values())
         prepared_count = sum(
-            1 for tasks in self._anticipated.values()
+            1
+            for tasks in self._anticipated.values()
             for task in tasks
             if task.prepared_response
         )
@@ -404,4 +403,3 @@ def get_task_anticipator() -> TaskAnticipator:
     if _anticipator is None:
         _anticipator = TaskAnticipator()
     return _anticipator
-

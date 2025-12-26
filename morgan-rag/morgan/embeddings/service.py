@@ -23,18 +23,22 @@ class EmbeddingService:
 
     def __init__(self, settings=None):
         self.settings = settings or get_settings()
-        
+
         # Primary provider (from settings)
         self.model_name = self.settings.embedding_model
         self.primary_provider = get_configured_provider(self.model_name, self.settings)
-        
+
         # Secondary/fallback provider (local)
-        self.local_model_name = getattr(self.settings, "embedding_local_model", "all-MiniLM-L6-v2")
-        self.secondary_provider = get_configured_provider(self.local_model_name, self.settings)
-        
+        self.local_model_name = getattr(
+            self.settings, "embedding_local_model", "all-MiniLM-L6-v2"
+        )
+        self.secondary_provider = get_configured_provider(
+            self.local_model_name, self.settings
+        )
+
         # Performance tracking
         self.performance_stats = defaultdict(lambda: deque(maxlen=1000))
-        
+
         logger.info(
             f"EmbeddingService initialized with primary: {self.model_name}, "
             f"fallback: {self.local_model_name}"
@@ -43,14 +47,14 @@ class EmbeddingService:
     def is_available(self) -> bool:
         """Check if any provider is available."""
         force_remote = getattr(self.settings, "embedding_force_remote", False)
-        
+
         if self.primary_provider.is_available():
             return True
-            
+
         if force_remote:
             logger.error("Remote embedding forced but not available")
             return False
-            
+
         return self.secondary_provider.is_available()
 
     def get_embedding_dimension(self) -> int:
@@ -69,33 +73,39 @@ class EmbeddingService:
         """Encode text with fallback logic."""
         if request_id is None:
             request_id = get_request_id() or set_request_id()
-            
+
         start_time = time.time()
         force_remote = getattr(self.settings, "embedding_force_remote", False)
-        
+
         try:
             # Try primary provider first
             if self.primary_provider.is_available():
                 embedding = self.primary_provider.encode(
-                    text, instruction=instruction, use_cache=use_cache, request_id=request_id
+                    text,
+                    instruction=instruction,
+                    use_cache=use_cache,
+                    request_id=request_id,
                 )
             elif force_remote:
                 raise RuntimeError("Remote embedding forced but not available")
             # Fallback to secondary
             elif self.secondary_provider.is_available():
                 embedding = self.secondary_provider.encode(
-                    text, instruction=instruction, use_cache=use_cache, request_id=request_id
+                    text,
+                    instruction=instruction,
+                    use_cache=use_cache,
+                    request_id=request_id,
                 )
             else:
                 raise RuntimeError("No embedding service available")
-                
+
             elapsed = time.time() - start_time
             self.performance_stats["encode_times"].append(elapsed)
             return embedding
 
         except Exception as e:
             if "Remote embedding forced but not available" in str(e):
-                 raise EmbeddingError(
+                raise EmbeddingError(
                     "Remote embedding service unavailable and force_remote enabled",
                     operation="encode",
                     severity=ErrorSeverity.HIGH,
@@ -120,21 +130,25 @@ class EmbeddingService:
         """Encode batch with fallback logic and optimizations."""
         if request_id is None:
             request_id = get_request_id() or set_request_id()
-            
+
         if not texts:
             return []
-            
+
         # Handle optimized batching if enabled (using legacy batch processor for now)
         if use_optimized_batching:
             try:
                 from morgan.optimization.batch_processor import get_batch_processor
+
                 batch_processor = get_batch_processor()
-                
+
                 def embedding_function(batch_texts: List[str]) -> List[List[float]]:
                     return self._encode_batch_with_fallback(
-                        batch_texts, instruction=instruction, use_cache=use_cache, request_id=request_id
+                        batch_texts,
+                        instruction=instruction,
+                        use_cache=use_cache,
+                        request_id=request_id,
                     )
-                    
+
                 # The legacy batch processor expects a result object, but we want the embeddings
                 # For now let's use the standard batching or modify the caller.
                 # Actually, the old EmbeddingService just called the batch processor and then
@@ -159,27 +173,33 @@ class EmbeddingService:
         """Internal batch encoding with fallback."""
         start_time = time.time()
         force_remote = getattr(self.settings, "embedding_force_remote", False)
-        
+
         try:
             if self.primary_provider.is_available():
                 embeddings = self.primary_provider.encode_batch(
-                    texts, instruction=instruction, use_cache=use_cache, request_id=request_id
+                    texts,
+                    instruction=instruction,
+                    use_cache=use_cache,
+                    request_id=request_id,
                 )
             elif force_remote:
-                 raise RuntimeError("Remote embedding forced but not available")
+                raise RuntimeError("Remote embedding forced but not available")
             elif self.secondary_provider.is_available():
                 embeddings = self.secondary_provider.encode_batch(
-                    texts, instruction=instruction, use_cache=use_cache, request_id=request_id
+                    texts,
+                    instruction=instruction,
+                    use_cache=use_cache,
+                    request_id=request_id,
                 )
             else:
-                 raise RuntimeError("No embedding service available")
-                 
+                raise RuntimeError("No embedding service available")
+
             elapsed = time.time() - start_time
             self.performance_stats["batch_encode_times"].append(elapsed)
             return embeddings
 
         except Exception as e:
-             raise EmbeddingError(
+            raise EmbeddingError(
                 f"Batch embedding encoding failed: {e}",
                 operation="encode_batch",
                 request_id=request_id,

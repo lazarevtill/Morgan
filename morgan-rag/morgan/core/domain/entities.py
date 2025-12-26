@@ -13,6 +13,7 @@ class KnowledgeChunk:
     """
     A piece of knowledge with metadata.
     """
+
     content: str
     source: str
     chunk_id: str
@@ -27,6 +28,7 @@ class ConversationTurn:
     """
     A single turn in a conversation.
     """
+
     turn_id: str
     conversation_id: str
     timestamp: datetime
@@ -45,6 +47,7 @@ class Conversation:
     """
     A complete conversation between human and Morgan.
     """
+
     conversation_id: str
     started_at: datetime
     topic: Optional[str] = None

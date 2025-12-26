@@ -49,17 +49,17 @@ class DistributedEmbeddingService:
 
     Example:
         >>> service = DistributedEmbeddingService()
-        >>> 
+        >>>
         >>> # Single embedding
         >>> embedding = await service.aembed("What is Python?")
-        >>> 
+        >>>
         >>> # Batch embedding
         >>> embeddings = await service.aembed_batch([
         ...     "Document 1",
         ...     "Document 2",
         ...     "Document 3"
         ... ])
-        >>> 
+        >>>
         >>> # Get stats
         >>> stats = service.get_stats()
     """
@@ -130,9 +130,7 @@ class DistributedEmbeddingService:
 
             # Fallback to settings
             if not endpoint:
-                endpoint = getattr(
-                    self.settings, "embedding_endpoint", None
-                )
+                endpoint = getattr(self.settings, "embedding_endpoint", None)
 
             # Initialize local embedding service
             try:
@@ -215,7 +213,9 @@ class DistributedEmbeddingService:
         loop = asyncio.new_event_loop()
         try:
             return loop.run_until_complete(
-                self.aembed_batch(texts, use_cache=use_cache, show_progress=show_progress)
+                self.aembed_batch(
+                    texts, use_cache=use_cache, show_progress=show_progress
+                )
             )
         finally:
             loop.close()
@@ -271,4 +271,3 @@ def get_distributed_embedding_service(
                 )
 
     return _service_instance
-

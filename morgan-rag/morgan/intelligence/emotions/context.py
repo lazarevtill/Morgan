@@ -17,7 +17,10 @@ from morgan.intelligence.core.models import (
     EmotionalState,
     EmotionType,
 )
-from morgan.intelligence.emotions.memory import EmotionalMemory, get_emotional_memory_storage
+from morgan.intelligence.emotions.memory import (
+    EmotionalMemory,
+    get_emotional_memory_storage,
+)
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)

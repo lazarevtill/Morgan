@@ -14,7 +14,9 @@ from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
 from morgan.core.memory import ConversationTurn
-from morgan.intelligence.core.intelligence_engine import get_emotional_intelligence_engine
+from morgan.intelligence.core.intelligence_engine import (
+    get_emotional_intelligence_engine,
+)
 from morgan.intelligence.core.models import (
     ConversationContext,
     EmotionalState,
