@@ -972,30 +972,415 @@ class RelationshipAdaptation:
             ],
         )
 
-    # Placeholder implementations for remaining methods
-    def _assess_expected_impact(self, adaptations, context) -> str:
-        return "moderate_improvement"
+    def _assess_expected_impact(
+        self, adaptations: List[Dict[str, Any]], context: AdaptationContext
+    ) -> str:
+        """
+        Assess expected impact of planned adaptations.
 
-    def _estimate_adaptation_timeline(self, adaptations, strategy) -> str:
-        return "1-2 weeks"
+        Returns: "significant_improvement", "moderate_improvement",
+                "minor_improvement", "neutral", "potential_risk"
+        """
+        if not adaptations:
+            return "neutral"
 
-    def _define_success_metrics(self, adaptations, context) -> List[str]:
-        return ["improved_user_satisfaction", "increased_engagement"]
+        # Calculate impact score based on adaptation characteristics
+        total_impact_score = 0.0
 
-    def _define_rollback_conditions(self, adaptations) -> List[str]:
-        return ["user_satisfaction_drops_below_0.3", "negative_feedback_received"]
+        for adaptation in adaptations:
+            dimension = adaptation.get("dimension", "")
+            strength = adaptation.get("adaptation_strength", 0.3)
+            confidence = adaptation.get("confidence", 0.5)
+
+            # High-impact dimensions
+            high_impact_dimensions = [
+                "empathy_level",
+                "emotional_tone",
+                "communication_style",
+            ]
+            medium_impact_dimensions = ["formality_level", "technical_depth"]
+
+            # Base impact from dimension type
+            if dimension in high_impact_dimensions:
+                base_impact = 0.8
+            elif dimension in medium_impact_dimensions:
+                base_impact = 0.5
+            else:
+                base_impact = 0.3
+
+            # Weighted by strength and confidence
+            adaptation_impact = base_impact * strength * confidence
+            total_impact_score += adaptation_impact
+
+        # Consider context factors
+        if context.user_profile.trust_level < 0.4:
+            total_impact_score *= 0.8  # Lower impact expected with low trust
+
+        if context.recent_feedback and context.recent_feedback < 0.4:
+            total_impact_score *= 1.2  # Higher potential for improvement from low base
+
+        # Normalize by number of adaptations
+        avg_impact = total_impact_score / len(adaptations)
+
+        if avg_impact > 0.5:
+            return "significant_improvement"
+        elif avg_impact > 0.3:
+            return "moderate_improvement"
+        elif avg_impact > 0.15:
+            return "minor_improvement"
+        elif avg_impact > 0:
+            return "neutral"
+        else:
+            return "potential_risk"
+
+    def _estimate_adaptation_timeline(
+        self, adaptations: List[Dict[str, Any]], strategy: AdaptationStrategy
+    ) -> str:
+        """
+        Estimate timeline for adaptations to show effect.
+
+        Returns human-readable timeline string.
+        """
+        if not adaptations:
+            return "immediate"
+
+        # Base timeline by strategy
+        strategy_timelines = {
+            AdaptationStrategy.RESPONSIVE: "1-3 days",
+            AdaptationStrategy.GRADUAL: "1-2 weeks",
+            AdaptationStrategy.CONSERVATIVE: "2-4 weeks",
+            AdaptationStrategy.EXPERIMENTAL: "3-7 days",
+            AdaptationStrategy.RECOVERY: "1-2 weeks",
+        }
+
+        base_timeline = strategy_timelines.get(strategy, "1-2 weeks")
+
+        # Adjust based on adaptation characteristics
+        total_strength = sum(a.get("adaptation_strength", 0.3) for a in adaptations)
+        avg_strength = total_strength / len(adaptations)
+
+        # Stronger adaptations take longer to fully manifest
+        if avg_strength > 0.5:
+            if "days" in base_timeline:
+                return base_timeline.replace("days", "days to 1 week")
+            else:
+                # Add a week
+                return base_timeline.replace("weeks", "to 3 weeks")
+
+        # Multiple adaptations might take longer
+        if len(adaptations) > 3:
+            return base_timeline + " (multiple changes)"
+
+        return base_timeline
+
+    def _define_success_metrics(
+        self, adaptations: List[Dict[str, Any]], context: AdaptationContext
+    ) -> List[str]:
+        """
+        Define specific success metrics for the adaptations.
+        """
+        metrics = []
+
+        for adaptation in adaptations:
+            dimension = adaptation.get("dimension", "")
+            target = adaptation.get("adaptation_target", "")
+
+            # Dimension-specific metrics
+            if dimension == "empathy_level":
+                metrics.append("user_reports_feeling_understood")
+                metrics.append("increased_emotional_sharing")
+
+            elif dimension == "communication_style":
+                metrics.append("improved_conversation_flow")
+                metrics.append("reduced_clarification_requests")
+
+            elif dimension == "formality_level":
+                metrics.append("more_natural_conversation")
+                metrics.append("increased_user_comfort")
+
+            elif dimension == "technical_depth":
+                metrics.append("appropriate_technical_level")
+                metrics.append("successful_technical_explanations")
+
+            elif dimension == "response_length":
+                metrics.append("better_response_fit")
+                metrics.append("reduced_skipped_content")
+
+            elif dimension == "emotional_tone":
+                metrics.append("tone_alignment_with_context")
+                metrics.append("positive_emotional_response")
+
+            elif dimension == "personality_traits":
+                metrics.append("consistent_personality_expression")
+                metrics.append("authentic_interaction_feel")
+
+        # Add universal metrics
+        metrics.append(
+            f"user_satisfaction_above_{context.user_profile.trust_level + 0.1:.1f}"
+        )
+        metrics.append("no_negative_feedback_received")
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_metrics = []
+        for m in metrics:
+            if m not in seen:
+                seen.add(m)
+                unique_metrics.append(m)
+
+        return unique_metrics[:8]  # Limit to 8 metrics
+
+    def _define_rollback_conditions(
+        self, adaptations: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Define conditions that should trigger rollback of adaptations.
+        """
+        conditions = []
+
+        # Universal rollback conditions
+        conditions.append("user_satisfaction_drops_below_0.3")
+        conditions.append("explicit_negative_feedback")
+        conditions.append("user_requests_change")
+
+        # Adaptation-specific conditions
+        for adaptation in adaptations:
+            dimension = adaptation.get("dimension", "")
+            strength = adaptation.get("adaptation_strength", 0.3)
+
+            if dimension == "empathy_level":
+                conditions.append("user_indicates_feeling_overwhelmed")
+
+            elif dimension == "communication_style":
+                conditions.append("repeated_misunderstandings")
+
+            elif dimension == "formality_level":
+                conditions.append("user_increases_formality_in_response")
+
+            elif dimension == "technical_depth":
+                conditions.append("user_requests_simpler_explanations")
+                conditions.append("user_requests_more_detail")
+
+            # Strong adaptations have stricter rollback
+            if strength > 0.5:
+                conditions.append(f"any_decline_in_engagement_for_{dimension}")
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_conditions = []
+        for c in conditions:
+            if c not in seen:
+                seen.add(c)
+                unique_conditions.append(c)
+
+        return unique_conditions[:6]  # Limit to 6 conditions
 
     def _assess_adaptation_effectiveness(
-        self, adaptation, feedback_score, context
+        self,
+        adaptation: AdaptationResult,
+        feedback_score: float,
+        context: InteractionData,
     ) -> float:
-        return min(feedback_score + 0.2, 1.0)
+        """
+        Assess how effective a specific adaptation was.
+
+        Returns: effectiveness score 0.0 to 1.0
+        """
+        # Base effectiveness from feedback
+        base_effectiveness = feedback_score
+
+        # Adjust based on adaptation type
+        dimension = adaptation.dimension
+        strength = adaptation.adaptation_strength
+
+        # Check if the adaptation target was likely achieved
+        if dimension == AdaptationDimension.EMPATHY_LEVEL:
+            # Check if emotional response indicators are present
+            message = context.conversation_context.message_text.lower()
+            emotional_words = ["thank", "helpful", "understand", "appreciate", "feel"]
+
+            if any(word in message for word in emotional_words):
+                base_effectiveness += 0.15
+
+        elif dimension == AdaptationDimension.COMMUNICATION_STYLE:
+            # Longer interactions might indicate better style fit
+            if context.conversation_context.session_duration:
+                duration_mins = (
+                    context.conversation_context.session_duration.total_seconds() / 60
+                )
+                if duration_mins > 5:
+                    base_effectiveness += 0.1
+
+        elif dimension == AdaptationDimension.TECHNICAL_DEPTH:
+            # Check for follow-up questions (indicates engagement)
+            if len(context.topics_discussed) > 1:
+                base_effectiveness += 0.1
+
+        # Stronger adaptations need stronger results to be considered effective
+        effectiveness_threshold = 0.5 + (strength * 0.2)
+
+        if base_effectiveness >= effectiveness_threshold:
+            # Exceeded expectations
+            effectiveness = min(1.0, base_effectiveness + 0.1)
+        else:
+            # Didn't meet threshold, penalize proportionally
+            effectiveness = base_effectiveness * 0.8
+
+        return max(0.0, min(1.0, effectiveness))
 
     def _update_learning_weights(
-        self, user_id, feedback_score, adaptations
+        self, user_id: str, feedback_score: float, adaptations: List[AdaptationResult]
     ) -> Dict[str, float]:
-        return {}
+        """
+        Update learning weights based on feedback.
+
+        Returns: Dict of weight changes per dimension
+        """
+        weight_updates = {}
+
+        # Learning rate based on confidence
+        base_learning_rate = 0.1
+
+        for adaptation in adaptations:
+            dimension = adaptation.dimension.value
+            strength = adaptation.adaptation_strength
+
+            # Calculate weight change
+            # Good feedback = increase weight for this dimension
+            # Bad feedback = decrease weight
+
+            if feedback_score > 0.6:
+                # Positive feedback - reinforce this type of adaptation
+                weight_change = base_learning_rate * (feedback_score - 0.5)
+            elif feedback_score < 0.4:
+                # Negative feedback - reduce weight for this adaptation
+                weight_change = -base_learning_rate * (0.5 - feedback_score)
+            else:
+                # Neutral feedback - minimal change
+                weight_change = 0.0
+
+            # Scale by adaptation strength (stronger adaptations have more signal)
+            weight_change *= 1 + strength
+
+            # Apply update
+            current_weight = self.learning_weights.get(dimension, 1.0)
+            new_weight = max(0.3, min(2.0, current_weight + weight_change))
+
+            if abs(weight_change) > 0.01:
+                weight_updates[dimension] = new_weight - current_weight
+                self.learning_weights[dimension] = new_weight
+
+        return weight_updates
 
     def _adjust_adaptation_confidence(
-        self, user_id, feedback_score, adaptations
+        self, user_id: str, feedback_score: float, adaptations: List[AdaptationResult]
     ) -> Dict[str, float]:
-        return {}
+        """
+        Adjust confidence levels for future adaptations.
+
+        Returns: Dict of confidence adjustments per dimension
+        """
+        confidence_adjustments = {}
+
+        for adaptation in adaptations:
+            dimension = adaptation.dimension.value
+
+            # Track success/failure for this dimension for this user
+            if user_id not in self.adaptation_history:
+                self.adaptation_history[user_id] = []
+
+            # Calculate success rate for this dimension
+            dimension_history = [
+                a
+                for a in self.adaptation_history[user_id]
+                if a.dimension.value == dimension
+            ]
+
+            # Determine if this adaptation was successful
+            is_success = feedback_score > 0.5
+
+            if dimension_history:
+                # Calculate running success rate
+                recent_count = min(len(dimension_history), 10)
+                # We don't have explicit success tracking, so we'll estimate
+                # based on whether similar adaptations are being repeated
+                success_estimate = 0.5 + (feedback_score - 0.5) * 0.5
+            else:
+                success_estimate = 0.5  # Default
+
+            # Adjust confidence
+            if is_success:
+                adjustment = 0.05  # Small positive adjustment
+            else:
+                adjustment = -0.08  # Slightly larger negative adjustment (be cautious)
+
+            # Store for rules
+            for rule in self.adaptation_rules:
+                if rule.dimension.value == dimension:
+                    new_threshold = max(
+                        0.3, min(0.95, rule.confidence_threshold + adjustment)
+                    )
+                    if abs(adjustment) > 0.01:
+                        confidence_adjustments[dimension] = adjustment
+                        rule.confidence_threshold = new_threshold
+
+        return confidence_adjustments
+
+    def get_learning_summary(self, user_id: str) -> Dict[str, Any]:
+        """
+        Get summary of learned preferences for a user.
+
+        Returns: Dict with learned preferences and patterns
+        """
+        history = self.adaptation_history.get(user_id, [])
+
+        if not history:
+            return {
+                "user_id": user_id,
+                "total_adaptations": 0,
+                "learned_preferences": {},
+                "adaptation_patterns": {},
+                "recommendation": "continue_learning",
+            }
+
+        # Analyze adaptation patterns
+        dimension_counts = {}
+        dimension_strengths = {}
+
+        for adaptation in history:
+            dim = adaptation.dimension.value
+            dimension_counts[dim] = dimension_counts.get(dim, 0) + 1
+
+            if dim not in dimension_strengths:
+                dimension_strengths[dim] = []
+            dimension_strengths[dim].append(adaptation.adaptation_strength)
+
+        # Calculate averages
+        adaptation_patterns = {}
+        for dim, strengths in dimension_strengths.items():
+            adaptation_patterns[dim] = {
+                "count": dimension_counts[dim],
+                "avg_strength": sum(strengths) / len(strengths),
+                "trend": "stable",  # Could calculate actual trend
+            }
+
+        # Determine learned preferences
+        learned_preferences = {}
+        for dim, data in adaptation_patterns.items():
+            if data["count"] >= 3:
+                # Enough data to form preference
+                if data["avg_strength"] > 0.4:
+                    learned_preferences[dim] = "prefers_stronger_adaptations"
+                else:
+                    learned_preferences[dim] = "prefers_subtle_adaptations"
+
+        return {
+            "user_id": user_id,
+            "total_adaptations": len(history),
+            "learned_preferences": learned_preferences,
+            "adaptation_patterns": adaptation_patterns,
+            "current_weights": dict(self.learning_weights),
+            "recommendation": (
+                "apply_learned_patterns" if learned_preferences else "continue_learning"
+            ),
+        }

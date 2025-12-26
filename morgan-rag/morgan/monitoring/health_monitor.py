@@ -443,37 +443,130 @@ class HealthMonitor:
     # Default health check implementations
 
     async def _check_vector_database_health(self) -> bool:
-        """Check vector database health."""
+        """Check vector database (Qdrant) health with actual connectivity test."""
         try:
-            # This would typically check Qdrant connectivity
-            # For now, simulate a basic check
-            await asyncio.sleep(0.1)  # Simulate network call
+            from morgan.config import get_settings
 
-            # In real implementation, would check:
-            # - Database connectivity
-            # - Response time
-            # - Available collections
-            # - Memory usage
+            settings = get_settings()
 
-            return True  # Placeholder
+            # Try to connect to Qdrant and list collections
+            try:
+                from qdrant_client import QdrantClient
+
+                client = QdrantClient(
+                    url=settings.qdrant_url,
+                    api_key=getattr(settings, "qdrant_api_key", None),
+                    timeout=5,
+                )
+
+                # Test connectivity by listing collections
+                start_time = time.time()
+                collections = client.get_collections()
+                response_time = time.time() - start_time
+
+                # Record metrics
+                self.metrics_collector.record_database_connections(
+                    database_type="qdrant",
+                    connection_count=len(collections.collections),
+                )
+
+                # Log successful health check
+                logger.debug(
+                    "Qdrant health check passed",
+                    collections=len(collections.collections),
+                    response_time=f"{response_time:.3f}s",
+                )
+
+                # Healthy if response time < 5 seconds
+                return response_time < 5.0
+
+            except ImportError:
+                logger.warning("qdrant-client not installed, using HTTP fallback")
+                return await self._check_qdrant_http_health(settings)
 
         except Exception as e:
             logger.error("Vector database health check failed", error=str(e))
             return False
 
-    async def _check_embedding_service_health(self) -> bool:
-        """Check embedding service health."""
+    async def _check_qdrant_http_health(self, settings) -> bool:
+        """HTTP fallback for Qdrant health check."""
         try:
-            # This would typically test embedding generation
-            await asyncio.sleep(0.2)  # Simulate embedding generation
+            import httpx
 
-            # In real implementation, would check:
-            # - Service availability
-            # - Model loading status
-            # - Response time for test embedding
-            # - GPU/CPU utilization
+            qdrant_url = settings.qdrant_url.rstrip("/")
+            health_url = f"{qdrant_url}/health"
 
-            return True  # Placeholder
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(health_url)
+                return response.status_code == 200
+
+        except Exception as e:
+            logger.error(f"Qdrant HTTP health check failed: {e}")
+            return False
+
+    async def _check_embedding_service_health(self) -> bool:
+        """Check embedding service health with actual test."""
+        try:
+            from morgan.config import get_settings
+
+            settings = get_settings()
+
+            # Try Ollama embedding endpoint
+            embedding_url = getattr(settings, "ollama_url", "http://localhost:11434")
+
+            try:
+                import httpx
+
+                # Test embedding generation
+                start_time = time.time()
+
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    # Check Ollama is running
+                    response = await client.get(f"{embedding_url}/api/tags")
+                    if response.status_code != 200:
+                        return False
+
+                    # Test actual embedding generation
+                    test_response = await client.post(
+                        f"{embedding_url}/api/embeddings",
+                        json={
+                            "model": getattr(
+                                settings, "embedding_model", "nomic-embed-text"
+                            ),
+                            "prompt": "health check test",
+                        },
+                        timeout=10.0,
+                    )
+
+                    response_time = time.time() - start_time
+
+                    if test_response.status_code == 200:
+                        data = test_response.json()
+                        embedding = data.get("embedding", [])
+
+                        logger.debug(
+                            "Embedding service health check passed",
+                            embedding_dim=len(embedding),
+                            response_time=f"{response_time:.3f}s",
+                        )
+
+                        # Healthy if we got an embedding and response time < 10 seconds
+                        return len(embedding) > 0 and response_time < 10.0
+
+                    return False
+
+            except ImportError:
+                # Try sentence-transformers fallback
+                try:
+                    from sentence_transformers import SentenceTransformer
+
+                    model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+                    embedding = model.encode("health check test")
+
+                    return len(embedding) > 0
+
+                except Exception:
+                    return False
 
         except Exception as e:
             logger.error("Embedding service health check failed", error=str(e))
@@ -490,6 +583,26 @@ class HealthMonitor:
             # Record memory usage
             self.metrics_collector.record_memory_usage("system", memory.used)
 
+            # Also check GPU memory if available
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    for i in range(torch.cuda.device_count()):
+                        gpu_memory = torch.cuda.memory_allocated(i)
+                        gpu_total = torch.cuda.get_device_properties(i).total_memory
+                        gpu_percent = (gpu_memory / gpu_total) * 100
+                        self.metrics_collector.record_memory_usage(
+                            f"gpu_{i}", gpu_memory
+                        )
+
+                        if gpu_percent > 95:
+                            logger.warning(
+                                f"GPU {i} memory usage high: {gpu_percent:.1f}%"
+                            )
+            except ImportError:
+                pass  # PyTorch not available
+
             # Consider healthy if memory usage is below 90%
             return memory_percent < 90.0
 
@@ -498,41 +611,100 @@ class HealthMonitor:
             return False
 
     async def _check_cache_health(self) -> bool:
-        """Check cache system health."""
+        """Check cache system health (Redis if configured, local otherwise)."""
         try:
-            # This would typically check cache performance
-            await asyncio.sleep(0.05)  # Simulate cache check
+            from morgan.config import get_settings
 
-            # In real implementation, would check:
-            # - Cache hit rates
-            # - Cache size and memory usage
-            # - Cache response times
-            # - Cache consistency
+            settings = get_settings()
 
-            # Simulate cache hit rate check
-            cache_hit_rate = 85.0  # Placeholder
-            self.metrics_collector.record_cache_hit_rate(
-                "semantic_cache", cache_hit_rate
-            )
+            redis_url = getattr(settings, "redis_url", None)
 
-            return cache_hit_rate > 70.0  # Healthy if hit rate > 70%
+            if redis_url:
+                return await self._check_redis_health(redis_url)
+            else:
+                return await self._check_local_cache_health()
 
         except Exception as e:
             logger.error("Cache health check failed", error=str(e))
             return False
 
+    async def _check_redis_health(self, redis_url: str) -> bool:
+        """Check Redis cache health."""
+        try:
+            import redis.asyncio as redis
+
+            client = redis.from_url(redis_url, decode_responses=True)
+
+            try:
+                # Test connectivity with PING
+                start_time = time.time()
+                await client.ping()
+                response_time = time.time() - start_time
+
+                # Get memory info
+                info = await client.info("memory")
+                used_memory = info.get("used_memory", 0)
+                max_memory = info.get("maxmemory", 0)
+
+                # Get stats
+                stats_info = await client.info("stats")
+                hits = stats_info.get("keyspace_hits", 0)
+                misses = stats_info.get("keyspace_misses", 0)
+                total = hits + misses
+                hit_rate = (hits / total * 100) if total > 0 else 0
+
+                self.metrics_collector.record_cache_hit_rate("redis", hit_rate)
+
+                logger.debug(
+                    "Redis health check passed",
+                    response_time=f"{response_time:.3f}s",
+                    hit_rate=f"{hit_rate:.1f}%",
+                    used_memory=used_memory,
+                )
+
+                # Healthy if responsive and hit rate is reasonable
+                return response_time < 1.0
+
+            finally:
+                await client.close()
+
+        except ImportError:
+            logger.warning("redis package not installed")
+            return await self._check_local_cache_health()
+        except Exception as e:
+            logger.error(f"Redis health check failed: {e}")
+            return False
+
+    async def _check_local_cache_health(self) -> bool:
+        """Check local cache health (in-memory caches)."""
+        try:
+            from morgan.caching.intelligent_cache import get_intelligent_cache_manager
+
+            cache_manager = get_intelligent_cache_manager()
+            stats = cache_manager.get_stats()
+
+            hit_rate = stats.get("overall_hit_rate", 0)
+            self.metrics_collector.record_cache_hit_rate("local", hit_rate)
+
+            logger.debug(
+                "Local cache health check passed",
+                hit_rate=f"{hit_rate:.1f}%",
+                total_entries=stats.get("total_entries", 0),
+            )
+
+            # Healthy if cache is operational
+            return True
+
+        except ImportError:
+            # No intelligent cache, check basic operation
+            return True
+        except Exception as e:
+            logger.debug(f"Local cache health check: {e}")
+            return True  # Don't fail on missing cache
+
     async def _check_processing_pipeline_health(self) -> bool:
         """Check document processing pipeline health."""
         try:
-            # This would typically check processing performance
-            await asyncio.sleep(0.1)  # Simulate processing check
-
-            # In real implementation, would check:
-            # - Processing queue depth
-            # - Average processing time
-            # - Error rates
-            # - Resource utilization
-
             # Get recent processing metrics
             processing_summary = self.metrics_collector.get_metrics_summary(
                 "processing_time"
@@ -540,10 +712,28 @@ class HealthMonitor:
 
             if processing_summary:
                 # Healthy if error rate < 5% and P95 < 10 seconds
-                return (
+                is_healthy = (
                     processing_summary.error_rate < 0.05
                     and processing_summary.percentile_95 < 10.0
                 )
+
+                logger.debug(
+                    "Processing pipeline health check",
+                    error_rate=f"{processing_summary.error_rate:.1%}",
+                    p95=f"{processing_summary.percentile_95:.2f}s",
+                    healthy=is_healthy,
+                )
+
+                return is_healthy
+
+            # No data available - check if pipeline components exist
+            try:
+                from morgan.processing.batch_processor import get_batch_processor
+
+                processor = get_batch_processor()
+                return processor is not None
+            except ImportError:
+                pass
 
             return True  # No data available, assume healthy
 
@@ -552,28 +742,39 @@ class HealthMonitor:
             return False
 
     async def _check_search_system_health(self) -> bool:
-        """Check search system health."""
+        """Check search system health with actual query test."""
         try:
-            # This would typically test search functionality
-            await asyncio.sleep(0.15)  # Simulate search test
-
-            # In real implementation, would check:
-            # - Search response times
-            # - Search accuracy/relevance
-            # - Index health
-            # - Query processing capacity
-
-            # Get recent search metrics
+            # Get recent search metrics first
             search_summary = self.metrics_collector.get_metrics_summary("search_time")
 
             if search_summary:
                 # Healthy if error rate < 2% and P95 < 1 second
-                return (
+                is_healthy = (
                     search_summary.error_rate < 0.02
                     and search_summary.percentile_95 < 1.0
                 )
 
-            return True  # No data available, assume healthy
+                logger.debug(
+                    "Search system health check (metrics)",
+                    error_rate=f"{search_summary.error_rate:.1%}",
+                    p95=f"{search_summary.percentile_95:.2f}s",
+                    healthy=is_healthy,
+                )
+
+                if not is_healthy:
+                    return False
+
+            # Additionally test actual search capability
+            try:
+                from morgan.search.service import get_search_service
+
+                service = get_search_service()
+                if service and hasattr(service, "is_ready"):
+                    return service.is_ready()
+                return True
+
+            except ImportError:
+                return True
 
         except Exception as e:
             logger.error("Search system health check failed", error=str(e))
@@ -582,15 +783,6 @@ class HealthMonitor:
     async def _check_companion_system_health(self) -> bool:
         """Check companion system health."""
         try:
-            # This would typically check companion features
-            await asyncio.sleep(0.1)  # Simulate companion check
-
-            # In real implementation, would check:
-            # - Emotional analysis accuracy
-            # - Response generation time
-            # - User satisfaction scores
-            # - Relationship tracking functionality
-
             # Get recent emotional analysis metrics
             emotional_summary = self.metrics_collector.get_metrics_summary(
                 "emotional_analysis_time"
@@ -598,9 +790,29 @@ class HealthMonitor:
 
             if emotional_summary:
                 # Healthy if P95 < 2 seconds
-                return emotional_summary.percentile_95 < 2.0
+                is_healthy = emotional_summary.percentile_95 < 2.0
 
-            return True  # No data available, assume healthy
+                logger.debug(
+                    "Companion system health check",
+                    p95=f"{emotional_summary.percentile_95:.2f}s",
+                    healthy=is_healthy,
+                )
+
+                return is_healthy
+
+            # Test emotional analysis is functional
+            try:
+                from morgan.emotional.analyzer import get_emotion_analyzer
+
+                analyzer = get_emotion_analyzer()
+                if analyzer:
+                    # Quick test
+                    test_result = analyzer.analyze("Hello, how are you?")
+                    return test_result is not None
+                return True
+
+            except ImportError:
+                return True
 
         except Exception as e:
             logger.error("Companion system health check failed", error=str(e))

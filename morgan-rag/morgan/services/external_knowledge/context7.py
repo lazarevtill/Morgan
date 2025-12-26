@@ -422,24 +422,105 @@ class Context7Service:
 
     async def _resolve_library_mcp(self, library_name: str) -> Optional[LibraryInfo]:
         """
-        Resolve library via MCP Context7 server.
+        Resolve library via MCP Context7 server or HTTP API fallback.
 
-        This method integrates with the Context7 MCP server.
+        Uses the Context7 API to find the correct library ID.
         """
         try:
-            # This is where MCP integration happens
-            # The actual resolution would be done by the MCP server
             logger.info(f"Resolving library via Context7: {library_name}")
 
-            # Simulate async operation
-            await asyncio.sleep(0.1)
+            # Try HTTP API first (doesn't require MCP server)
+            result = await self._resolve_library_http(library_name)
+            if result:
+                return result
 
-            # Placeholder - actual implementation uses MCP
+            # Try MCP client if available
+            from morgan.services.external_knowledge.mcp_client import get_mcp_client
+
+            client = get_mcp_client()
+            response = await client.resolve_library(library_name)
+
+            if response.success and response.data:
+                data = response.data
+
+                # Handle different response formats
+                if isinstance(data, dict):
+                    return LibraryInfo(
+                        library_id=data.get(
+                            "id", data.get("library_id", f"/{library_name}")
+                        ),
+                        name=data.get("name", library_name),
+                        description=data.get("description", ""),
+                        version=data.get("version"),
+                        code_snippets_count=data.get("code_snippets_count", 0),
+                        reputation=data.get("reputation", "unknown"),
+                        benchmark_score=data.get("benchmark_score", 0.0),
+                    )
+                elif isinstance(data, str):
+                    return LibraryInfo(
+                        library_id=data,
+                        name=library_name,
+                    )
+
             return None
 
         except Exception as e:
             logger.error(f"MCP library resolution failed: {e}")
-            raise
+            # Return None instead of raising to allow fallback to known libraries
+            return None
+
+    async def _resolve_library_http(self, library_name: str) -> Optional[LibraryInfo]:
+        """
+        Resolve library using Context7 HTTP API.
+
+        This is a fallback when MCP is not available.
+        """
+        try:
+            import httpx
+        except ImportError:
+            return None
+
+        try:
+            # Context7 public API endpoint
+            url = "https://context7.com/api/v1/resolve"
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    url,
+                    json={"libraryName": library_name},
+                    headers={"Content-Type": "application/json"},
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    if data and isinstance(data, list) and len(data) > 0:
+                        # Return first (best) match
+                        best = data[0]
+                        return LibraryInfo(
+                            library_id=best.get("id", ""),
+                            name=best.get("name", library_name),
+                            description=best.get("description", ""),
+                            version=best.get("version"),
+                            code_snippets_count=best.get("codeSnippetsCount", 0),
+                            reputation=best.get("reputation", "unknown"),
+                            benchmark_score=best.get("benchmarkScore", 0.0),
+                        )
+                    elif data and isinstance(data, dict):
+                        return LibraryInfo(
+                            library_id=data.get("id", ""),
+                            name=data.get("name", library_name),
+                            description=data.get("description", ""),
+                            version=data.get("version"),
+                            code_snippets_count=data.get("codeSnippetsCount", 0),
+                            reputation=data.get("reputation", "unknown"),
+                            benchmark_score=data.get("benchmarkScore", 0.0),
+                        )
+
+            return None
+
+        except Exception as e:
+            logger.debug(f"Context7 HTTP API fallback failed: {e}")
+            return None
 
     async def _fetch_documentation_mcp(
         self,
@@ -449,26 +530,170 @@ class Context7Service:
         page: int,
     ) -> Optional[DocumentationResult]:
         """
-        Fetch documentation via MCP Context7 server.
-
-        This method integrates with the Context7 MCP server.
+        Fetch documentation via MCP Context7 server or HTTP API fallback.
         """
         try:
-            # This is where MCP integration happens
             logger.info(
                 f"Fetching documentation: {library_id}, "
                 f"topic={topic}, mode={mode.value}, page={page}"
             )
 
-            # Simulate async operation
-            await asyncio.sleep(0.1)
+            # Try HTTP API first
+            result = await self._fetch_documentation_http(library_id, topic, mode, page)
+            if result:
+                return result
 
-            # Placeholder - actual implementation uses MCP
+            # Try MCP client if available
+            from morgan.services.external_knowledge.mcp_client import get_mcp_client
+
+            client = get_mcp_client()
+            response = await client.get_library_docs(
+                library_id=library_id,
+                topic=topic,
+                mode=mode.value,
+                page=page,
+            )
+
+            if response.success and response.data:
+                data = response.data
+
+                # Extract content based on response format
+                content = ""
+                code_examples = []
+                has_more = False
+
+                if isinstance(data, str):
+                    content = data
+                    # Extract code blocks as examples
+                    code_examples = self._extract_code_examples(content)
+                elif isinstance(data, dict):
+                    content = data.get("content", data.get("text", str(data)))
+                    code_examples = data.get("code_examples", [])
+                    has_more = data.get("has_more_pages", data.get("hasMore", False))
+                    if not code_examples:
+                        code_examples = self._extract_code_examples(content)
+
+                return DocumentationResult(
+                    library_id=library_id,
+                    topic=topic,
+                    content=content,
+                    mode=mode,
+                    page=page,
+                    has_more_pages=has_more,
+                    code_examples=code_examples,
+                    metadata={
+                        "source": "mcp_context7",
+                        "response_length": len(content),
+                    },
+                )
+
             return None
 
         except Exception as e:
             logger.error(f"MCP documentation fetch failed: {e}")
-            raise
+            return None
+
+    async def _fetch_documentation_http(
+        self,
+        library_id: str,
+        topic: Optional[str],
+        mode: DocumentationMode,
+        page: int,
+    ) -> Optional[DocumentationResult]:
+        """
+        Fetch documentation using Context7 HTTP API.
+
+        This is a fallback when MCP is not available.
+        """
+        try:
+            import httpx
+        except ImportError:
+            return None
+
+        try:
+            # Context7 public API endpoint
+            url = "https://context7.com/api/v1/docs"
+
+            params = {
+                "libraryId": library_id,
+                "mode": mode.value,
+                "page": page,
+            }
+            if topic:
+                params["topic"] = topic
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    url,
+                    params=params,
+                    headers={"Accept": "application/json"},
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    content = data.get("content", "")
+
+                    if content:
+                        code_examples = data.get("codeExamples", [])
+                        if not code_examples:
+                            code_examples = self._extract_code_examples(content)
+
+                        return DocumentationResult(
+                            library_id=library_id,
+                            topic=topic,
+                            content=content,
+                            mode=mode,
+                            page=page,
+                            has_more_pages=data.get("hasMore", False),
+                            code_examples=code_examples,
+                            metadata={
+                                "source": "context7_http",
+                                "response_length": len(content),
+                            },
+                        )
+
+            return None
+
+        except Exception as e:
+            logger.debug(f"Context7 HTTP API documentation fetch failed: {e}")
+            return None
+
+    def _extract_code_examples(self, content: str) -> List[str]:
+        """Extract code blocks from documentation content."""
+        import re
+
+        code_examples = []
+
+        # Match fenced code blocks ```...```
+        fenced_pattern = r"```[\w]*\n(.*?)```"
+        fenced_matches = re.findall(fenced_pattern, content, re.DOTALL)
+        code_examples.extend(fenced_matches)
+
+        # Match indented code blocks (4 spaces)
+        lines = content.split("\n")
+        current_block = []
+        in_block = False
+
+        for line in lines:
+            if line.startswith("    ") and line.strip():
+                current_block.append(line[4:])  # Remove indentation
+                in_block = True
+            elif in_block and not line.strip():
+                current_block.append("")  # Keep blank lines in block
+            elif in_block:
+                if current_block:
+                    code_examples.append("\n".join(current_block).strip())
+                current_block = []
+                in_block = False
+
+        # Don't forget last block
+        if current_block:
+            code_examples.append("\n".join(current_block).strip())
+
+        # Filter out very short snippets
+        code_examples = [ex for ex in code_examples if len(ex) > 20]
+
+        return code_examples[:10]  # Limit to 10 examples
 
     def _get_docs_cache_key(
         self,
