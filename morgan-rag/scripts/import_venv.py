@@ -107,7 +107,9 @@ def import_conversations(path: Path):
         # Progress indicator every 10 conversations
         if idx % 10 == 0 or idx == 1:
             print(f"[{idx}/{len(conversations)}] Processing: {title[:50]}...")
-            print(f"           Progress: {imported} imported, {turns_total} turns total")
+            print(
+                f"           Progress: {imported} imported, {turns_total} turns total"
+            )
 
         try:
             conv_id = memory.create_conversation(topic=title)

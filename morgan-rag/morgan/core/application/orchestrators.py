@@ -6,12 +6,12 @@ Centralizes the end-to-end flows for conversation and learning.
 import time
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from morgan.config import get_settings
-from morgan.core.domain.entities import ConversationTurn
 from morgan.core.knowledge import KnowledgeService
 from morgan.core.memory import MemoryService
+from morgan.core.response_handler import Response
 from morgan.services.llm_service import LLMService
 from morgan.utils.logger import get_logger
 from morgan.intelligence.core.models import ConversationContext
@@ -131,10 +131,7 @@ class ConversationOrchestrator:
                     user_profile, conv_context, emotional_state
                 )
 
-            # Step 13: Create final response
-            # (This logic should probably be in a ResponseHandler service)
-            from .response_handler import Response  # Local import for now
-
+            # Step 13: Create final response with empathetic context
             response = Response(
                 answer=llm_response.content,
                 sources=(
@@ -144,7 +141,9 @@ class ConversationOrchestrator:
                 ),
                 confidence=0.8,
                 conversation_id=conv_id,
-                emotional_tone=emotional_state.primary_emotion.value,
+                emotional_tone=empathetic_response.emotional_tone,
+                empathy_level=empathetic_response.empathy_level,
+                personalization_elements=empathetic_response.personalization_elements,
                 milestone_celebration=milestone.description if milestone else None,
             )
 

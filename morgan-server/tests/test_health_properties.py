@@ -27,9 +27,10 @@ from morgan_server.api.models import (
 # Mock Components for Testing
 # ============================================================================
 
+
 class MockHealthyComponent:
     """Mock component that is always healthy."""
-    
+
     async def health_check(self) -> Dict[str, Any]:
         """Return healthy status."""
         await asyncio.sleep(0.001)  # Simulate minimal latency
@@ -38,10 +39,10 @@ class MockHealthyComponent:
 
 class MockSlowComponent:
     """Mock component with configurable latency."""
-    
+
     def __init__(self, latency_ms: float = 100):
         self.latency_ms = latency_ms
-    
+
     async def health_check(self) -> Dict[str, Any]:
         """Return healthy status after delay."""
         await asyncio.sleep(self.latency_ms / 1000)
@@ -50,7 +51,7 @@ class MockSlowComponent:
 
 class MockUnhealthyComponent:
     """Mock component that is always unhealthy."""
-    
+
     async def health_check(self) -> Dict[str, Any]:
         """Return unhealthy status."""
         await asyncio.sleep(0.001)
@@ -59,7 +60,7 @@ class MockUnhealthyComponent:
 
 class MockFailingComponent:
     """Mock component that raises exceptions."""
-    
+
     async def health_check(self) -> Dict[str, Any]:
         """Raise an exception."""
         await asyncio.sleep(0.001)
@@ -68,10 +69,10 @@ class MockFailingComponent:
 
 class MockPingComponent:
     """Mock component with ping method."""
-    
+
     def __init__(self, should_succeed: bool = True):
         self.should_succeed = should_succeed
-    
+
     async def ping(self) -> None:
         """Ping the component."""
         await asyncio.sleep(0.001)
@@ -82,6 +83,7 @@ class MockPingComponent:
 # ============================================================================
 # Property 10: Health Check Responsiveness
 # ============================================================================
+
 
 class TestHealthCheckResponsiveness:
     """
@@ -110,22 +112,19 @@ class TestHealthCheckResponsiveness:
         """
         # Create health system
         health_system = HealthCheckSystem(version="test")
-        
+
         # Register mock components
         for i in range(num_components):
-            health_system.register_component(
-                f"component_{i}",
-                MockHealthyComponent()
-            )
-        
+            health_system.register_component(f"component_{i}", MockHealthyComponent())
+
         # Measure response time
         start_time = time.time()
         response = await health_system.get_health()
         elapsed_time = time.time() - start_time
-        
+
         # Verify response time is under 2 seconds
         assert elapsed_time < 2.0, f"Health check took {elapsed_time}s, expected < 2s"
-        
+
         # Verify response structure
         assert isinstance(response, HealthResponse)
         assert response.status in ["healthy", "degraded", "unhealthy"]
@@ -139,7 +138,9 @@ class TestHealthCheckResponsiveness:
         num_unhealthy=st.integers(min_value=0, max_value=5),
     )
     @settings(max_examples=100, deadline=10000)
-    async def test_property_status_reflects_component_health(self, num_healthy, num_unhealthy):
+    async def test_property_status_reflects_component_health(
+        self, num_healthy, num_unhealthy
+    ):
         """
         Property: Status endpoint reflects component health accurately.
 
@@ -149,32 +150,26 @@ class TestHealthCheckResponsiveness:
         """
         # Create health system
         health_system = HealthCheckSystem(version="test")
-        
+
         # Register healthy components
         for i in range(num_healthy):
-            health_system.register_component(
-                f"healthy_{i}",
-                MockHealthyComponent()
-            )
-        
+            health_system.register_component(f"healthy_{i}", MockHealthyComponent())
+
         # Register unhealthy components
         for i in range(num_unhealthy):
-            health_system.register_component(
-                f"unhealthy_{i}",
-                MockUnhealthyComponent()
-            )
-        
+            health_system.register_component(f"unhealthy_{i}", MockUnhealthyComponent())
+
         # Get status
         status = await health_system.get_status()
-        
+
         # Verify response structure
         assert isinstance(status, StatusResponse)
         assert status.status in ["healthy", "degraded", "unhealthy"]
-        
+
         # Verify component count
         total_components = num_healthy + num_unhealthy
         assert len(status.components) == total_components
-        
+
         # Verify overall status logic
         if total_components == 0:
             assert status.status == "healthy"
@@ -184,12 +179,12 @@ class TestHealthCheckResponsiveness:
         else:
             # All components are up
             assert status.status == "healthy"
-        
+
         # Verify each component status
         for name, component in status.components.items():
             assert isinstance(component, ComponentStatus)
             assert component.status in ["up", "down", "degraded"]
-            
+
             if name.startswith("healthy_"):
                 assert component.status == "up"
             elif name.startswith("unhealthy_"):
@@ -209,22 +204,20 @@ class TestHealthCheckResponsiveness:
         """
         # Create health system
         health_system = HealthCheckSystem(version="test")
-        
+
         # Register slow component
         component = MockSlowComponent(latency_ms=latency_ms)
         health_system.register_component("slow_component", component)
-        
+
         # Check component health
         result = await health_system.check_component_health(
-            "slow_component",
-            component,
-            timeout_seconds=2.0
+            "slow_component", component, timeout_seconds=2.0
         )
-        
+
         # Verify latency is tracked
         assert result.latency_ms is not None
         assert result.latency_ms > 0
-        
+
         # Latency should be approximately the configured latency
         # Allow for some variance due to system overhead
         assert result.latency_ms >= latency_ms * 0.8
@@ -245,26 +238,26 @@ class TestHealthCheckResponsiveness:
         """
         # Create health system
         health_system = HealthCheckSystem(version="test")
-        
+
         # Record requests
         num_success = int(num_requests * success_rate)
         num_error = num_requests - num_success
-        
+
         for i in range(num_success):
             health_system.record_request(success=True, response_time_ms=100.0)
-        
+
         for i in range(num_error):
             health_system.record_request(success=False, response_time_ms=200.0)
-        
+
         # Get metrics
         metrics = health_system.get_system_metrics()
-        
+
         # Verify accuracy
         assert metrics.requests_total == num_requests
-        
+
         # Calculate expected error rate
         expected_error_rate = num_error / num_requests if num_requests > 0 else 0.0
-        
+
         # Allow for floating point precision
         assert abs(metrics.error_rate - expected_error_rate) < 0.01
 
@@ -282,23 +275,21 @@ class TestHealthCheckResponsiveness:
         """
         # Create health system
         health_system = HealthCheckSystem(version="test")
-        
+
         # Create component that takes longer than timeout
         slow_latency_ms = (timeout_seconds + 0.5) * 1000
         component = MockSlowComponent(latency_ms=slow_latency_ms)
-        
+
         # Check component health with timeout
         start_time = time.time()
         result = await health_system.check_component_health(
-            "slow_component",
-            component,
-            timeout_seconds=timeout_seconds
+            "slow_component", component, timeout_seconds=timeout_seconds
         )
         elapsed_time = time.time() - start_time
-        
+
         # Verify timeout was respected
         assert elapsed_time <= timeout_seconds * 1.5  # Allow some overhead
-        
+
         # Verify status is degraded due to timeout
         assert result.status == "degraded"
         assert result.error is not None
@@ -318,20 +309,17 @@ class TestHealthCheckResponsiveness:
         """
         # Create health system
         health_system = HealthCheckSystem(version="test")
-        
+
         # Register failing components
         for i in range(num_failures):
-            health_system.register_component(
-                f"failing_{i}",
-                MockFailingComponent()
-            )
-        
+            health_system.register_component(f"failing_{i}", MockFailingComponent())
+
         # Get status (should not raise exception)
         status = await health_system.get_status()
-        
+
         # Verify all failing components are reported as down
         assert len(status.components) == num_failures
-        
+
         for name, component in status.components.items():
             assert component.status == "down"
             assert component.error is not None
@@ -352,19 +340,17 @@ class TestHealthCheckResponsiveness:
         """
         # Create health system
         health_system = HealthCheckSystem(version="test")
-        
+
         if has_ping:
             component = MockPingComponent(should_succeed=ping_succeeds)
         else:
             component = MockHealthyComponent()
-        
+
         # Check component health
         result = await health_system.check_component_health(
-            "test_component",
-            component,
-            timeout_seconds=2.0
+            "test_component", component, timeout_seconds=2.0
         )
-        
+
         # Verify result
         if has_ping:
             if ping_succeeds:
@@ -378,9 +364,7 @@ class TestHealthCheckResponsiveness:
     @pytest.mark.asyncio
     @given(
         session_changes=st.lists(
-            st.sampled_from(["increment", "decrement"]),
-            min_size=0,
-            max_size=50
+            st.sampled_from(["increment", "decrement"]), min_size=0, max_size=50
         ),
     )
     @settings(max_examples=100, deadline=5000)
@@ -393,7 +377,7 @@ class TestHealthCheckResponsiveness:
         """
         # Create health system
         health_system = HealthCheckSystem(version="test")
-        
+
         # Apply session changes
         expected_count = 0
         for change in session_changes:
@@ -403,10 +387,10 @@ class TestHealthCheckResponsiveness:
             else:  # decrement
                 health_system.decrement_active_sessions()
                 expected_count = max(0, expected_count - 1)  # Can't go below 0
-        
+
         # Get metrics
         metrics = health_system.get_system_metrics()
-        
+
         # Verify session count
         assert metrics.active_sessions == expected_count
         assert metrics.active_sessions >= 0
@@ -420,16 +404,16 @@ class TestHealthCheckResponsiveness:
         """
         # Create health system
         health_system = HealthCheckSystem(version="test")
-        
+
         # Get initial uptime
         uptime1 = health_system.get_uptime_seconds()
-        
+
         # Wait a bit
         await asyncio.sleep(0.1)
-        
+
         # Get uptime again
         uptime2 = health_system.get_uptime_seconds()
-        
+
         # Verify uptime increased
         assert uptime2 > uptime1
         assert uptime2 >= uptime1 + 0.09  # Allow for timing variance

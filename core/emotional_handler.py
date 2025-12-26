@@ -35,7 +35,9 @@ class EmotionalHandler:
 
         # Keep only recent states
         if len(self.user_emotions[user_id]) > self.max_history:
-            self.user_emotions[user_id] = self.user_emotions[user_id][-self.max_history :]
+            self.user_emotions[user_id] = self.user_emotions[user_id][
+                -self.max_history :
+            ]
 
     def get_mood_pattern(self, user_id: str) -> Dict:
         """Get mood pattern for user"""
@@ -68,7 +70,9 @@ class EmotionalHandler:
 
         return response_text
 
-    def get_emotional_context_for_llm(self, user_id: str, current_emotion: EmotionalState) -> str:
+    def get_emotional_context_for_llm(
+        self, user_id: str, current_emotion: EmotionalState
+    ) -> str:
         """
         Generate emotional context to include in LLM prompt.
 

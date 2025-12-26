@@ -49,6 +49,7 @@ from morgan_server.config import ServerConfig, load_config
 # Property 18: Container configuration
 # ============================================================================
 
+
 @pytest.mark.parametrize("execution_number", range(100))
 @given(
     host=st.sampled_from(["0.0.0.0", "127.0.0.1", "localhost"]),
@@ -72,25 +73,25 @@ def test_container_configuration(
 ):
     """
     **Feature: client-server-separation, Property 18: Container configuration**
-    
+
     **Validates: Requirements 8.2**
-    
+
     For any server running in a container, configuration values provided via
     environment variables should be read and applied correctly, producing the
     same behavior as running outside a container.
-    
+
     This test verifies that:
     1. Environment variables are correctly read
     2. Configuration is applied as expected
     3. The server configuration matches the provided environment variables
     4. The behavior is consistent with non-containerized deployment
-    
+
     Note: This test simulates container environment by setting environment
     variables and verifying the configuration is loaded correctly.
     """
     # Save original environment
     original_env = os.environ.copy()
-    
+
     try:
         # Set environment variables (simulating container environment)
         os.environ["MORGAN_HOST"] = host
@@ -98,36 +99,37 @@ def test_container_configuration(
         os.environ["MORGAN_LOG_LEVEL"] = log_level
         os.environ["MORGAN_LOG_FORMAT"] = log_format
         os.environ["MORGAN_WORKERS"] = str(workers)
-        
+
         # Set required configuration (with defaults for testing)
         os.environ["MORGAN_LLM_ENDPOINT"] = "http://localhost:11434"
         os.environ["MORGAN_VECTOR_DB_URL"] = "http://localhost:6333"
-        
+
         # Load configuration (this is what happens in the container)
         config = load_config()
-        
+
         # Verify configuration matches environment variables
-        assert config.host == host, \
-            f"Host mismatch: expected {host}, got {config.host}"
-        
-        assert config.port == port, \
-            f"Port mismatch: expected {port}, got {config.port}"
-        
-        assert config.log_level == log_level, \
-            f"Log level mismatch: expected {log_level}, got {config.log_level}"
-        
-        assert config.log_format == log_format, \
-            f"Log format mismatch: expected {log_format}, got {config.log_format}"
-        
-        assert config.workers == workers, \
-            f"Workers mismatch: expected {workers}, got {config.workers}"
-        
+        assert config.host == host, f"Host mismatch: expected {host}, got {config.host}"
+
+        assert config.port == port, f"Port mismatch: expected {port}, got {config.port}"
+
+        assert (
+            config.log_level == log_level
+        ), f"Log level mismatch: expected {log_level}, got {config.log_level}"
+
+        assert (
+            config.log_format == log_format
+        ), f"Log format mismatch: expected {log_format}, got {config.log_format}"
+
+        assert (
+            config.workers == workers
+        ), f"Workers mismatch: expected {workers}, got {config.workers}"
+
         # Verify required fields are set
         assert config.llm_endpoint == "http://localhost:11434"
         assert config.vector_db_url == "http://localhost:6333"
-        
+
         # Property verified: Container configuration is read and applied correctly
-        
+
     finally:
         # Restore original environment
         os.environ.clear()
@@ -137,10 +139,13 @@ def test_container_configuration(
 @pytest.mark.parametrize("execution_number", range(100))
 @given(
     llm_provider=st.sampled_from(["ollama", "openai-compatible"]),
-    llm_model=st.text(min_size=1, max_size=50, alphabet=st.characters(
-        whitelist_categories=("Lu", "Ll", "Nd"),
-        whitelist_characters="-_."
-    )),
+    llm_model=st.text(
+        min_size=1,
+        max_size=50,
+        alphabet=st.characters(
+            whitelist_categories=("Lu", "Ll", "Nd"), whitelist_characters="-_."
+        ),
+    ),
     embedding_provider=st.sampled_from(["local", "ollama", "openai-compatible"]),
     cache_size_mb=st.integers(min_value=100, max_value=10000),
 )
@@ -158,13 +163,13 @@ def test_container_configuration_advanced(
 ):
     """
     **Feature: client-server-separation, Property 18: Container configuration**
-    
+
     **Validates: Requirements 8.2**
-    
+
     Test advanced configuration options in container environment.
     """
     original_env = os.environ.copy()
-    
+
     try:
         # Set environment variables
         os.environ["MORGAN_LLM_PROVIDER"] = llm_provider
@@ -173,22 +178,22 @@ def test_container_configuration_advanced(
         os.environ["MORGAN_EMBEDDING_PROVIDER"] = embedding_provider
         os.environ["MORGAN_CACHE_SIZE_MB"] = str(cache_size_mb)
         os.environ["MORGAN_VECTOR_DB_URL"] = "http://localhost:6333"
-        
+
         # Set embedding endpoint for remote providers
         if embedding_provider in ["ollama", "openai-compatible"]:
             os.environ["MORGAN_EMBEDDING_ENDPOINT"] = "http://localhost:11434"
-        
+
         # Load configuration
         config = load_config()
-        
+
         # Verify configuration
         assert config.llm_provider == llm_provider
         assert config.llm_model == llm_model
         assert config.embedding_provider == embedding_provider
         assert config.cache_size_mb == cache_size_mb
-        
+
         # Property verified: Advanced configuration works in containers
-        
+
     finally:
         os.environ.clear()
         os.environ.update(original_env)
@@ -213,41 +218,40 @@ def test_container_configuration_file_formats(
 ):
     """
     **Feature: client-server-separation, Property 18: Container configuration**
-    
+
     **Validates: Requirements 8.2**
-    
+
     Test that different configuration file formats work correctly in containers.
     """
     original_env = os.environ.copy()
-    
+
     try:
         # Clear ALL Morgan environment variables to ensure file config is used
         for key in list(os.environ.keys()):
             if key.startswith("MORGAN_"):
                 del os.environ[key]
-        
+
         # Create temporary config file
         with tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix=f'.{config_format}',
-            delete=False
+            mode="w", suffix=f".{config_format}", delete=False
         ) as f:
             config_path = Path(f.name)
-            
+
             if config_format == "env":
                 f.write(f"MORGAN_HOST={host}\n")
                 f.write(f"MORGAN_PORT={port}\n")
                 f.write("MORGAN_LLM_ENDPOINT=http://localhost:11434\n")
                 f.write("MORGAN_VECTOR_DB_URL=http://localhost:6333\n")
-            
+
             elif config_format == "yaml":
                 f.write(f"host: {host}\n")
                 f.write(f"port: {port}\n")
                 f.write("llm_endpoint: http://localhost:11434\n")
                 f.write("vector_db_url: http://localhost:6333\n")
-            
+
             elif config_format == "json":
                 import json
+
                 config_dict = {
                     "host": host,
                     "port": port,
@@ -255,30 +259,33 @@ def test_container_configuration_file_formats(
                     "vector_db_url": "http://localhost:6333",
                 }
                 json.dump(config_dict, f)
-        
+
         try:
             # For .env files, we need to load them into environment variables
             if config_format == "env":
                 # Load .env file into environment
                 from dotenv import load_dotenv
+
                 load_dotenv(config_path)
                 config = load_config()
             else:
                 # Load configuration from file
                 config = load_config(config_file=config_path)
-            
+
             # Verify configuration
-            assert config.host == host, \
-                f"Host mismatch: expected {host}, got {config.host}"
-            assert config.port == port, \
-                f"Port mismatch: expected {port}, got {config.port}"
-            
+            assert (
+                config.host == host
+            ), f"Host mismatch: expected {host}, got {config.host}"
+            assert (
+                config.port == port
+            ), f"Port mismatch: expected {port}, got {config.port}"
+
             # Property verified: Config files work in containers
-            
+
         finally:
             # Clean up temp file
             config_path.unlink(missing_ok=True)
-    
+
     finally:
         os.environ.clear()
         os.environ.update(original_env)
@@ -288,14 +295,12 @@ def test_container_configuration_file_formats(
 # Property 19: Container signal handling
 # ============================================================================
 
+
 def _check_docker_available():
     """Check if Docker is available and running."""
     try:
         result = subprocess.run(
-            ["docker", "version"],
-            capture_output=True,
-            text=True,
-            timeout=5
+            ["docker", "version"], capture_output=True, text=True, timeout=5
         )
         return result.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -407,7 +412,7 @@ except KeyboardInterrupt:
             cwd=tmpdir,
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=60,
         )
 
         if build_result.returncode != 0:
@@ -419,15 +424,10 @@ except KeyboardInterrupt:
             # Start container
             container_name = f"morgan-signal-test-{execution_number}"
             run_result = subprocess.Popen(
-                [
-                    "docker", "run",
-                    "--rm",
-                    "--name", container_name,
-                    image_tag
-                ],
+                ["docker", "run", "--rm", "--name", container_name, image_tag],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
             )
 
             # Wait for startup
@@ -438,7 +438,7 @@ except KeyboardInterrupt:
                 ["docker", "ps", "-q", "-f", f"name={container_name}"],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
 
             if not check_result.stdout.strip():
@@ -449,13 +449,11 @@ except KeyboardInterrupt:
                 ["docker", "kill", "--signal", signal_type, container_name],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
 
             if signal_result.returncode != 0:
-                pytest.fail(
-                    f"Failed to send signal: {signal_result.stderr}"
-                )
+                pytest.fail(f"Failed to send signal: {signal_result.stderr}")
 
             # Wait for graceful shutdown (max 10 seconds)
             try:
@@ -463,44 +461,39 @@ except KeyboardInterrupt:
                 exit_code = run_result.returncode
 
                 # Verify graceful shutdown
-                assert exit_code == 0, \
-                    f"Container should exit with code 0, got {exit_code}\n" \
+                assert exit_code == 0, (
+                    f"Container should exit with code 0, got {exit_code}\n"
                     f"Stdout: {stdout}\nStderr: {stderr}"
+                )
 
                 # Verify shutdown message was printed
-                assert "shutting down gracefully" in stdout.lower(), \
-                    f"Graceful shutdown message not found in output: {stdout}"
+                assert (
+                    "shutting down gracefully" in stdout.lower()
+                ), f"Graceful shutdown message not found in output: {stdout}"
 
-                assert "cleanup complete" in stdout.lower(), \
-                    f"Cleanup completion message not found in output: {stdout}"
+                assert (
+                    "cleanup complete" in stdout.lower()
+                ), f"Cleanup completion message not found in output: {stdout}"
 
                 # Property verified: Container handles signals gracefully
 
             except subprocess.TimeoutExpired:
                 # Force kill if it doesn't shut down
                 subprocess.run(
-                    ["docker", "kill", container_name],
-                    capture_output=True,
-                    timeout=5
+                    ["docker", "kill", container_name], capture_output=True, timeout=5
                 )
                 run_result.communicate()
-                pytest.fail(
-                    "Container did not shut down gracefully within timeout"
-                )
+                pytest.fail("Container did not shut down gracefully within timeout")
 
         finally:
             # Clean up: ensure container is stopped
             subprocess.run(
-                ["docker", "rm", "-f", container_name],
-                capture_output=True,
-                timeout=5
+                ["docker", "rm", "-f", container_name], capture_output=True, timeout=5
             )
 
             # Clean up: remove image
             subprocess.run(
-                ["docker", "rmi", "-f", image_tag],
-                capture_output=True,
-                timeout=10
+                ["docker", "rmi", "-f", image_tag], capture_output=True, timeout=10
             )
 
 
@@ -601,7 +594,7 @@ except KeyboardInterrupt:
             cwd=tmpdir,
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=60,
         )
 
         if build_result.returncode != 0:
@@ -613,15 +606,10 @@ except KeyboardInterrupt:
             # Start container
             container_name = f"morgan-signal-conn-test-{execution_number}"
             run_result = subprocess.Popen(
-                [
-                    "docker", "run",
-                    "--rm",
-                    "--name", container_name,
-                    image_tag
-                ],
+                ["docker", "run", "--rm", "--name", container_name, image_tag],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
             )
 
             # Wait for startup
@@ -632,7 +620,7 @@ except KeyboardInterrupt:
                 ["docker", "ps", "-q", "-f", f"name={container_name}"],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
 
             if not check_result.stdout.strip():
@@ -643,13 +631,11 @@ except KeyboardInterrupt:
                 ["docker", "kill", "--signal", "SIGTERM", container_name],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
 
             if signal_result.returncode != 0:
-                pytest.fail(
-                    f"Failed to send signal: {signal_result.stderr}"
-                )
+                pytest.fail(f"Failed to send signal: {signal_result.stderr}")
 
             # Wait for graceful shutdown (max 10 seconds)
             try:
@@ -657,44 +643,39 @@ except KeyboardInterrupt:
                 exit_code = run_result.returncode
 
                 # Verify graceful shutdown
-                assert exit_code == 0, \
-                    f"Container should exit with code 0, got {exit_code}\n" \
+                assert exit_code == 0, (
+                    f"Container should exit with code 0, got {exit_code}\n"
                     f"Stdout: {stdout}\nStderr: {stderr}"
+                )
 
                 # Verify connection cleanup message
-                assert "connections closed" in stdout.lower(), \
-                    f"Connection cleanup message not found: {stdout}"
+                assert (
+                    "connections closed" in stdout.lower()
+                ), f"Connection cleanup message not found: {stdout}"
 
-                assert "exiting gracefully" in stdout.lower(), \
-                    f"Graceful exit message not found: {stdout}"
+                assert (
+                    "exiting gracefully" in stdout.lower()
+                ), f"Graceful exit message not found: {stdout}"
 
                 # Property verified: Graceful shutdown with active connections
 
             except subprocess.TimeoutExpired:
                 # Force kill if it doesn't shut down
                 subprocess.run(
-                    ["docker", "kill", container_name],
-                    capture_output=True,
-                    timeout=5
+                    ["docker", "kill", container_name], capture_output=True, timeout=5
                 )
                 run_result.communicate()
-                pytest.fail(
-                    "Container did not shut down gracefully within timeout"
-                )
+                pytest.fail("Container did not shut down gracefully within timeout")
 
         finally:
             # Clean up: ensure container is stopped
             subprocess.run(
-                ["docker", "rm", "-f", container_name],
-                capture_output=True,
-                timeout=5
+                ["docker", "rm", "-f", container_name], capture_output=True, timeout=5
             )
 
             # Clean up: remove image
             subprocess.run(
-                ["docker", "rmi", "-f", image_tag],
-                capture_output=True,
-                timeout=10
+                ["docker", "rmi", "-f", image_tag], capture_output=True, timeout=10
             )
 
 
@@ -702,30 +683,31 @@ except KeyboardInterrupt:
 # Unit Tests for Container Configuration
 # ============================================================================
 
+
 def test_container_environment_precedence():
     """
     Test that environment variables take precedence over defaults in containers.
-    
+
     This is a unit test that complements the property tests.
     """
     original_env = os.environ.copy()
-    
+
     try:
         # Set environment variables
         os.environ["MORGAN_HOST"] = "0.0.0.0"
         os.environ["MORGAN_PORT"] = "9999"
         os.environ["MORGAN_LLM_ENDPOINT"] = "http://test:11434"
         os.environ["MORGAN_VECTOR_DB_URL"] = "http://test:6333"
-        
+
         # Load config
         config = load_config()
-        
+
         # Verify environment takes precedence
         assert config.host == "0.0.0.0"
         assert config.port == 9999
         assert config.llm_endpoint == "http://test:11434"
         assert config.vector_db_url == "http://test:6333"
-    
+
     finally:
         os.environ.clear()
         os.environ.update(original_env)
@@ -734,27 +716,27 @@ def test_container_environment_precedence():
 def test_container_default_config_values():
     """
     Test that default configuration values work in containers.
-    
+
     This ensures containers can start with minimal configuration.
     """
     original_env = os.environ.copy()
-    
+
     try:
         # Clear all Morgan config
         for key in list(os.environ.keys()):
             if key.startswith("MORGAN_"):
                 del os.environ[key]
-        
+
         # Should load with defaults
         config = load_config()
-        
+
         # Verify defaults are applied
         assert config.host == "0.0.0.0"
         assert config.port == 8080
         assert config.llm_provider == "ollama"
         assert config.llm_endpoint == "http://localhost:11434"
         assert config.vector_db_url == "http://localhost:6333"
-    
+
     finally:
         os.environ.clear()
         os.environ.update(original_env)

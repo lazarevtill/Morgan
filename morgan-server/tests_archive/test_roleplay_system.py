@@ -45,7 +45,7 @@ class TestRoleplayConfiguration:
             tone=RoleplayTone.PROFESSIONAL,
             response_style=ResponseStyle.TECHNICAL,
             background_story="Expert in testing",
-            expertise_areas=["testing", "QA"]
+            expertise_areas=["testing", "QA"],
         )
         system = RoleplaySystem(config)
 
@@ -63,7 +63,7 @@ class TestRoleplayConfiguration:
             personality_traits={
                 PersonalityTrait.WARMTH: 0.9,
                 PersonalityTrait.FORMALITY: 0.2,
-                PersonalityTrait.HUMOR: 0.7
+                PersonalityTrait.HUMOR: 0.7,
             }
         )
         system = RoleplaySystem(config)
@@ -79,8 +79,7 @@ class TestRoleplayConfiguration:
 
         # Update configuration
         system.update_config(
-            tone=RoleplayTone.PLAYFUL,
-            response_style=ResponseStyle.CONCISE
+            tone=RoleplayTone.PLAYFUL, response_style=ResponseStyle.CONCISE
         )
 
         assert system.config.tone == RoleplayTone.PLAYFUL
@@ -91,9 +90,7 @@ class TestRoleplayConfiguration:
         system = RoleplaySystem()
 
         # Update personality traits
-        system.update_config(
-            personality_traits={PersonalityTrait.WARMTH: 0.5}
-        )
+        system.update_config(personality_traits={PersonalityTrait.WARMTH: 0.5})
 
         assert system.personality_system.get_trait(PersonalityTrait.WARMTH) == 0.5
 
@@ -102,7 +99,7 @@ class TestRoleplayConfiguration:
         config = RoleplayConfig(
             communication_preferences={
                 "response_length": "concise",
-                "formality": "casual"
+                "formality": "casual",
             }
         )
         system = RoleplaySystem(config)
@@ -131,10 +128,7 @@ class TestContextAwareResponses:
         system = RoleplaySystem()
         base_response = "I understand your concern."
 
-        context = RoleplayContext(
-            user_id="user123",
-            relationship_depth=0.6
-        )
+        context = RoleplayContext(user_id="user123", relationship_depth=0.6)
 
         result = system.generate_response(base_response, context)
 
@@ -147,10 +141,7 @@ class TestContextAwareResponses:
         system = RoleplaySystem()
         base_response = "Great to hear from you!"
 
-        context = RoleplayContext(
-            user_id="user123",
-            relationship_depth=0.9
-        )
+        context = RoleplayContext(user_id="user123", relationship_depth=0.9)
 
         result = system.generate_response(base_response, context)
 
@@ -162,10 +153,7 @@ class TestContextAwareResponses:
         system = RoleplaySystem()
         base_response = "Hello!"
 
-        context = RoleplayContext(
-            user_id="user123",
-            relationship_depth=0.1
-        )
+        context = RoleplayContext(user_id="user123", relationship_depth=0.1)
 
         result = system.generate_response(base_response, context)
 
@@ -178,10 +166,7 @@ class TestContextAwareResponses:
         base_response = "Here's the information you requested."
 
         context = RoleplayContext(
-            user_preferences={
-                "response_length": "concise",
-                "technical_level": "high"
-            }
+            user_preferences={"response_length": "concise", "technical_level": "high"}
         )
 
         result = system.generate_response(base_response, context)
@@ -197,7 +182,7 @@ class TestContextAwareResponses:
         context = RoleplayContext(
             conversation_history=[
                 {"role": "user", "content": "Tell me about Python"},
-                {"role": "assistant", "content": "Python is a programming language..."}
+                {"role": "assistant", "content": "Python is a programming language..."},
             ]
         )
 
@@ -233,15 +218,10 @@ class TestEmotionalIntegration:
         base_response = "I'm here to help."
 
         emotional_state = EmotionalDetection(
-            primary_tone=EmotionalTone.SAD,
-            confidence=0.8,
-            indicators=["sad", "down"]
+            primary_tone=EmotionalTone.SAD, confidence=0.8, indicators=["sad", "down"]
         )
 
-        context = RoleplayContext(
-            user_id="user123",
-            emotional_state=emotional_state
-        )
+        context = RoleplayContext(user_id="user123", emotional_state=emotional_state)
 
         result = system.generate_response(base_response, context)
 
@@ -257,13 +237,10 @@ class TestEmotionalIntegration:
         emotional_state = EmotionalDetection(
             primary_tone=EmotionalTone.JOYFUL,
             confidence=0.9,
-            indicators=["happy", "wonderful"]
+            indicators=["happy", "wonderful"],
         )
 
-        context = RoleplayContext(
-            user_id="user123",
-            emotional_state=emotional_state
-        )
+        context = RoleplayContext(user_id="user123", emotional_state=emotional_state)
 
         result = system.generate_response(base_response, context)
 
@@ -275,27 +252,16 @@ class TestEmotionalIntegration:
         base_response = "I understand."
 
         # Create some negative emotional history
+        system.emotional_intelligence.track_pattern("user123", EmotionalTone.SAD, 0.8)
         system.emotional_intelligence.track_pattern(
-            "user123",
-            EmotionalTone.SAD,
-            0.8
-        )
-        system.emotional_intelligence.track_pattern(
-            "user123",
-            EmotionalTone.ANXIOUS,
-            0.7
+            "user123", EmotionalTone.ANXIOUS, 0.7
         )
 
         emotional_state = EmotionalDetection(
-            primary_tone=EmotionalTone.SAD,
-            confidence=0.8,
-            indicators=["sad"]
+            primary_tone=EmotionalTone.SAD, confidence=0.8, indicators=["sad"]
         )
 
-        context = RoleplayContext(
-            user_id="user123",
-            emotional_state=emotional_state
-        )
+        context = RoleplayContext(user_id="user123", emotional_state=emotional_state)
 
         result = system.generate_response(base_response, context)
 
@@ -330,16 +296,8 @@ class TestEmotionalIntegration:
         user_id = "user123"
 
         # Track some patterns
-        system.emotional_intelligence.track_pattern(
-            user_id,
-            EmotionalTone.JOYFUL,
-            0.8
-        )
-        system.emotional_intelligence.track_pattern(
-            user_id,
-            EmotionalTone.CONTENT,
-            0.7
-        )
+        system.emotional_intelligence.track_pattern(user_id, EmotionalTone.JOYFUL, 0.8)
+        system.emotional_intelligence.track_pattern(user_id, EmotionalTone.CONTENT, 0.7)
 
         trend = system.get_emotional_trend(user_id)
 
@@ -373,9 +331,7 @@ class TestSystemPromptGeneration:
 
     def test_get_system_prompt_with_expertise(self):
         """Test prompt includes expertise areas."""
-        config = RoleplayConfig(
-            expertise_areas=["programming", "AI", "testing"]
-        )
+        config = RoleplayConfig(expertise_areas=["programming", "AI", "testing"])
         system = RoleplaySystem(config)
 
         prompt = system.get_system_prompt()
@@ -417,10 +373,7 @@ class TestSystemPromptGeneration:
         system = RoleplaySystem()
 
         context = RoleplayContext(
-            user_preferences={
-                "response_length": "concise",
-                "formality": "casual"
-            }
+            user_preferences={"response_length": "concise", "formality": "casual"}
         )
 
         prompt = system.get_system_prompt(context)
@@ -465,7 +418,7 @@ class TestToneAndStyleApplication:
         result_close = system.generate_response("Hello", context_close)
         assert result_close.tone_applied in [
             RoleplayTone.FRIENDLY,
-            RoleplayTone.COMPANION
+            RoleplayTone.COMPANION,
         ]
 
     def test_style_adapts_to_preferences(self):
@@ -506,8 +459,8 @@ class TestContextSummary:
             relationship_depth=0.7,
             conversation_history=[
                 {"role": "user", "content": "Hello"},
-                {"role": "assistant", "content": "Hi there!"}
-            ]
+                {"role": "assistant", "content": "Hi there!"},
+            ],
         )
 
         summary = system.get_context_summary(context)
@@ -523,15 +476,10 @@ class TestContextSummary:
         system = RoleplaySystem()
 
         emotional_state = EmotionalDetection(
-            primary_tone=EmotionalTone.JOYFUL,
-            confidence=0.8,
-            indicators=["happy"]
+            primary_tone=EmotionalTone.JOYFUL, confidence=0.8, indicators=["happy"]
         )
 
-        context = RoleplayContext(
-            user_id="user123",
-            emotional_state=emotional_state
-        )
+        context = RoleplayContext(user_id="user123", emotional_state=emotional_state)
 
         summary = system.get_context_summary(context)
 
@@ -562,8 +510,7 @@ class TestIntegrationWithOtherSystems:
     def test_integration_with_custom_personality_system(self):
         """Test using custom personality system."""
         personality_config = PersonalityConfig(
-            name="CustomBot",
-            traits={PersonalityTrait.WARMTH: 0.5}
+            name="CustomBot", traits={PersonalityTrait.WARMTH: 0.5}
         )
         personality = PersonalitySystem(personality_config)
         system = RoleplaySystem(personality_system=personality)
@@ -578,13 +525,15 @@ class TestIntegrationWithOtherSystems:
             character_description="A test assistant",
             personality_traits={PersonalityTrait.WARMTH: 0.9},
             background_story="Expert tester",
-            expertise_areas=["testing"]
+            expertise_areas=["testing"],
         )
         system = RoleplaySystem(config)
 
         # Personality system should reflect roleplay config
         assert system.personality_system.config.name == "TestBot"
-        assert system.personality_system.config.roleplay_description == "A test assistant"
+        assert (
+            system.personality_system.config.roleplay_description == "A test assistant"
+        )
         assert system.personality_system.config.background == "Expert tester"
         assert "testing" in system.personality_system.config.interests
         assert system.personality_system.get_trait(PersonalityTrait.WARMTH) == 0.9
@@ -602,13 +551,10 @@ class TestIntegrationWithOtherSystems:
             user_id="user123",
             relationship_depth=0.7,
             emotional_state=emotional_state,
-            user_preferences={"response_length": "conversational"}
+            user_preferences={"response_length": "conversational"},
         )
 
-        result = system.generate_response(
-            "That's wonderful to hear!",
-            context
-        )
+        result = system.generate_response("That's wonderful to hear!", context)
 
         # Verify all systems contributed
         assert result.emotional_adjustment is not None

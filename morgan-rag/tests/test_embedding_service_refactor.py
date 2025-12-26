@@ -1,6 +1,6 @@
-
 import pytest
 from morgan.embeddings.service import get_embedding_service
+
 
 def test_embedding_service_initialization():
     """Test that the embedding service relies on the new package."""
@@ -11,12 +11,15 @@ def test_embedding_service_initialization():
     assert hasattr(service, "encode")
     assert hasattr(service, "encode_batch")
 
+
 def test_embedding_functionality():
     """Test basic encoding functionality."""
     service = get_embedding_service()
     if not service.is_available():
-        pytest.skip("Embedding service not available (no provider configured or local model missing)")
-        
+        pytest.skip(
+            "Embedding service not available (no provider configured or local model missing)"
+        )
+
     embedding = service.encode("test")
     assert isinstance(embedding, list)
     assert len(embedding) > 0

@@ -38,11 +38,14 @@ async def test_enhanced_assistant():
         print(f"Confidence: {response.confidence:.2f}")
         print(f"Emotional Tone: {response.emotional_tone}")
         print(f"Empathy Level: {response.empathy_level:.2f}")
-        
-        if hasattr(response, 'personalization_elements'):
+
+        if hasattr(response, "personalization_elements"):
             print(f"Personalization Elements: {response.personalization_elements}")
 
-        if hasattr(response, 'milestone_celebration') and response.milestone_celebration:
+        if (
+            hasattr(response, "milestone_celebration")
+            and response.milestone_celebration
+        ):
             print(f"🎉 Milestone: {response.milestone_celebration.description}")
 
         # Test relationship insights

@@ -179,7 +179,10 @@ class TestOpenAICompatibleClient:
             "model": "gpt-3.5-turbo",
             "choices": [
                 {
-                    "message": {"role": "assistant", "content": "Hello! How can I help?"},
+                    "message": {
+                        "role": "assistant",
+                        "content": "Hello! How can I help?",
+                    },
                     "finish_reason": "stop",
                 }
             ],

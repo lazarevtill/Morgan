@@ -94,9 +94,7 @@ class TestVectorDBClient:
             mock_client.create_collection.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_create_collection_with_different_distances(
-        self, vectordb_client
-    ):
+    async def test_create_collection_with_different_distances(self, vectordb_client):
         """Test creating collections with different distance metrics."""
         mock_client = AsyncMock()
         mock_collections = MagicMock()
@@ -107,13 +105,9 @@ class TestVectorDBClient:
             vectordb_client, "_get_async_client", return_value=mock_client
         ):
             # Test Cosine
-            await vectordb_client.create_collection(
-                "test_cosine", 384, "Cosine"
-            )
+            await vectordb_client.create_collection("test_cosine", 384, "Cosine")
             # Test Euclid
-            await vectordb_client.create_collection(
-                "test_euclid", 384, "Euclid"
-            )
+            await vectordb_client.create_collection("test_euclid", 384, "Euclid")
             # Test Dot
             await vectordb_client.create_collection("test_dot", 384, "Dot")
 
@@ -139,9 +133,7 @@ class TestVectorDBClient:
             vectordb_client, "_get_async_client", return_value=mock_client
         ):
             with pytest.raises(VectorDBCollectionError):
-                await vectordb_client.create_collection(
-                    "test_collection", 384
-                )
+                await vectordb_client.create_collection("test_collection", 384)
 
     @pytest.mark.asyncio
     async def test_delete_collection_success(self, vectordb_client):

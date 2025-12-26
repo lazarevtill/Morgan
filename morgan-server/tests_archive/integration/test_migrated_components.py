@@ -28,9 +28,7 @@ class TestRerankingIntegration:
         """Test that reranking properly reorders search results."""
         # Create reranking service (local only for testing)
         reranking_service = RerankingService(
-            remote_endpoint=None,
-            enable_local_fallback=True,
-            local_device="cpu"
+            remote_endpoint=None, enable_local_fallback=True, local_device="cpu"
         )
 
         # Sample search results
@@ -46,9 +44,7 @@ class TestRerankingIntegration:
         # Rerank documents
         async with reranking_service:
             results = await reranking_service.rerank(
-                query=query,
-                documents=documents,
-                top_k=3
+                query=query, documents=documents, top_k=3
             )
 
         # Verify results
@@ -67,28 +63,24 @@ class TestRerankingIntegration:
     async def test_reranking_preserves_metadata(self):
         """Test that reranking preserves document metadata."""
         reranking_service = RerankingService(
-            remote_endpoint=None,
-            enable_local_fallback=True,
-            local_device="cpu"
+            remote_endpoint=None, enable_local_fallback=True, local_device="cpu"
         )
 
         query = "machine learning"
         documents = [
             "Machine learning is a subset of AI.",
             "Deep learning uses neural networks.",
-            "Data science involves statistics."
+            "Data science involves statistics.",
         ]
         metadata = [
             {"source": "doc1", "page": 1},
             {"source": "doc2", "page": 5},
-            {"source": "doc3", "page": 10}
+            {"source": "doc3", "page": 10},
         ]
 
         async with reranking_service:
             results = await reranking_service.rerank(
-                query=query,
-                documents=documents,
-                metadata=metadata
+                query=query, documents=documents, metadata=metadata
             )
 
         # Verify metadata is preserved
@@ -99,9 +91,7 @@ class TestRerankingIntegration:
     async def test_reranking_statistics(self):
         """Test that reranking tracks statistics correctly."""
         reranking_service = RerankingService(
-            remote_endpoint=None,
-            enable_local_fallback=True,
-            local_device="cpu"
+            remote_endpoint=None, enable_local_fallback=True, local_device="cpu"
         )
 
         query = "test query"
@@ -163,7 +153,10 @@ class TestEmotionalIntelligenceIntegration:
 
         assert adjustment.target_tone == EmotionalTone.CONCERNED
         assert adjustment.support is not None
-        assert "support" in adjustment.suggestions[0].lower() or "gentle" in adjustment.suggestions[0].lower()
+        assert (
+            "support" in adjustment.suggestions[0].lower()
+            or "gentle" in adjustment.suggestions[0].lower()
+        )
 
         # Test joyful emotion
         joy_detection = ei.detect_tone("I'm so excited and happy!", user_id=user_id)
@@ -186,7 +179,10 @@ class TestEmotionalIntelligenceIntegration:
 
         # Should have celebration message
         assert adjustment.celebration is not None
-        assert "glad" in adjustment.celebration.lower() or "happy" in adjustment.celebration.lower()
+        assert (
+            "glad" in adjustment.celebration.lower()
+            or "happy" in adjustment.celebration.lower()
+        )
 
 
 class TestRelationshipManagementIntegration:
@@ -206,7 +202,7 @@ class TestRelationshipManagementIntegration:
             "Hi, I need help with something",
             "Thank you so much for your help!",
             "I really appreciate your support",
-            "You've been so helpful to me"
+            "You've been so helpful to me",
         ]
 
         for message in messages:
@@ -215,7 +211,7 @@ class TestRelationshipManagementIntegration:
                 user_id=user_id,
                 interaction_type="chat",
                 quality_score=0.8,
-                emotional_tone=detection.primary_tone.value
+                emotional_tone=detection.primary_tone.value,
             )
 
         # Verify relationship metrics updated
@@ -233,7 +229,9 @@ class TestRelationshipManagementIntegration:
         rm.get_or_create_profile(user_id)
 
         # Simulate breakthrough moment with strong positive emotion
-        breakthrough_message = "Oh wow, I finally understand! This is amazing! Thank you so much!"
+        breakthrough_message = (
+            "Oh wow, I finally understand! This is amazing! Thank you so much!"
+        )
         detection = ei.detect_tone(breakthrough_message, user_id=user_id)
 
         # Record high-quality interaction
@@ -241,7 +239,7 @@ class TestRelationshipManagementIntegration:
             user_id=user_id,
             interaction_type="chat",
             quality_score=0.95,
-            emotional_tone=detection.primary_tone.value
+            emotional_tone=detection.primary_tone.value,
         )
 
         # Check for milestones
@@ -264,7 +262,7 @@ class TestRelationshipManagementIntegration:
                 user_id=user_id,
                 interaction_type="chat",
                 quality_score=0.8,
-                emotional_tone="grateful"
+                emotional_tone="grateful",
             )
 
         updated_profile = rm.get_profile(user_id)
@@ -287,7 +285,7 @@ class TestCommunicationPreferencesIntegration:
         long_messages = [
             "I really appreciate your detailed explanation. It helped me understand the concept much better.",
             "Could you please provide more information about this topic? I'm very interested in learning more.",
-            "Thank you for taking the time to explain this thoroughly. Your examples were particularly helpful."
+            "Thank you for taking the time to explain this thoroughly. Your examples were particularly helpful.",
         ]
 
         # Record short message interactions
@@ -296,7 +294,7 @@ class TestCommunicationPreferencesIntegration:
                 user_id=user_id,
                 message=msg,
                 response_length="brief",
-                satisfaction_score=0.8
+                satisfaction_score=0.8,
             )
 
         # Get preferences
@@ -317,7 +315,7 @@ class TestCommunicationPreferencesIntegration:
                 user_id=user_id,
                 message="quick question",
                 response_length="brief",
-                satisfaction_score=0.8
+                satisfaction_score=0.8,
             )
 
         initial_prefs = pm.get_preferences(user_id)
@@ -328,13 +326,16 @@ class TestCommunicationPreferencesIntegration:
                 user_id=user_id,
                 message="I'd like to understand this in detail, with examples and explanations.",
                 response_length="detailed",
-                satisfaction_score=0.9
+                satisfaction_score=0.9,
             )
 
         updated_prefs = pm.get_preferences(user_id)
 
         # Preferences should adapt
-        assert updated_prefs.preferred_response_length != initial_prefs.preferred_response_length
+        assert (
+            updated_prefs.preferred_response_length
+            != initial_prefs.preferred_response_length
+        )
 
     def test_topic_interest_tracking(self):
         """Test that topic interests are tracked correctly."""
@@ -345,7 +346,7 @@ class TestCommunicationPreferencesIntegration:
         tech_messages = [
             "Tell me about Python programming",
             "How does machine learning work?",
-            "Explain neural networks"
+            "Explain neural networks",
         ]
 
         for msg in tech_messages:
@@ -353,7 +354,7 @@ class TestCommunicationPreferencesIntegration:
                 user_id=user_id,
                 message=msg,
                 response_length="moderate",
-                satisfaction_score=0.9
+                satisfaction_score=0.9,
             )
 
         prefs = pm.get_preferences(user_id)
@@ -374,9 +375,7 @@ class TestIntegratedWorkflow:
         rm = RelationshipManager()
         pm = PreferenceManager()
         reranking_service = RerankingService(
-            remote_endpoint=None,
-            enable_local_fallback=True,
-            local_device="cpu"
+            remote_endpoint=None, enable_local_fallback=True, local_device="cpu"
         )
 
         user_id = "test_user_workflow_123"
@@ -404,9 +403,7 @@ class TestIntegratedWorkflow:
         # Step 5: Rerank results
         async with reranking_service:
             reranked = await reranking_service.rerank(
-                query=query,
-                documents=documents,
-                top_k=2
+                query=query, documents=documents, top_k=2
             )
 
         assert len(reranked) == 2
@@ -417,7 +414,7 @@ class TestIntegratedWorkflow:
             user_id=user_id,
             interaction_type="chat",
             quality_score=0.9,
-            emotional_tone=emotion.primary_tone.value
+            emotional_tone=emotion.primary_tone.value,
         )
 
         # Step 7: Update preferences
@@ -425,7 +422,7 @@ class TestIntegratedWorkflow:
             user_id=user_id,
             message=user_message,
             response_length="detailed",
-            satisfaction_score=0.9
+            satisfaction_score=0.9,
         )
 
         # Step 8: Verify all components updated correctly
@@ -452,7 +449,7 @@ class TestIntegratedWorkflow:
             "Thank you so much!",
             "This is really helpful!",
             "I appreciate your support!",
-            "You're amazing!"
+            "You're amazing!",
         ]
 
         for msg in positive_messages:
@@ -461,7 +458,7 @@ class TestIntegratedWorkflow:
                 user_id=user_id,
                 interaction_type="chat",
                 quality_score=0.9,
-                emotional_tone=emotion.primary_tone.value
+                emotional_tone=emotion.primary_tone.value,
             )
 
         profile = rm.get_profile(user_id)
@@ -479,7 +476,7 @@ class TestIntegratedWorkflow:
         technical_messages = [
             "Explain the technical details of how this works",
             "I want to understand the underlying algorithms",
-            "Show me the implementation details"
+            "Show me the implementation details",
         ]
 
         for msg in technical_messages:
@@ -487,7 +484,7 @@ class TestIntegratedWorkflow:
                 user_id=user_id,
                 message=msg,
                 response_length="detailed",
-                satisfaction_score=0.95
+                satisfaction_score=0.95,
             )
 
         prefs = pm.get_preferences(user_id)
