@@ -105,7 +105,7 @@ class TestConfigEnvironmentVariables:
             "MORGAN_USER_ID": "prod-user",
             "MORGAN_TIMEOUT": "90",
             "MORGAN_RETRY_ATTEMPTS": "4",
-            "MORGAN_RETRY_DELAY": "5"
+            "MORGAN_RETRY_DELAY": "5",
         }
         with patch.dict(os.environ, env_vars):
             config = Config()
@@ -141,9 +141,7 @@ class TestConfigWithOverrides:
         """Test overriding server URL."""
         with patch.dict(os.environ, {}, clear=True):
             config = Config()
-            new_config = config.with_overrides(
-                server_url="http://override:8888"
-            )
+            new_config = config.with_overrides(server_url="http://override:8888")
             assert new_config.server_url == "http://override:8888"
             # Original should be unchanged
             assert config.server_url == "http://localhost:8080"
@@ -196,7 +194,7 @@ class TestConfigWithOverrides:
                 server_url="http://multi:9999",
                 api_key="multi-key",
                 user_id="multi-user",
-                timeout_seconds=200
+                timeout_seconds=200,
             )
             assert new_config.server_url == "http://multi:9999"
             assert new_config.api_key == "multi-key"
@@ -207,16 +205,10 @@ class TestConfigWithOverrides:
         """Test that None overrides don't change values."""
         with patch.dict(
             os.environ,
-            {
-                "MORGAN_SERVER_URL": "http://env:8080",
-                "MORGAN_API_KEY": "env-key"
-            }
+            {"MORGAN_SERVER_URL": "http://env:8080", "MORGAN_API_KEY": "env-key"},
         ):
             config = Config()
-            new_config = config.with_overrides(
-                server_url=None,
-                api_key=None
-            )
+            new_config = config.with_overrides(server_url=None, api_key=None)
             # Should keep original values when None is passed
             assert new_config.server_url == "http://env:8080"
             assert new_config.api_key == "env-key"
@@ -255,7 +247,7 @@ class TestGetConfig:
             config = get_config(
                 server_url="http://multi:6666",
                 api_key="multi-key",
-                user_id="multi-user"
+                user_id="multi-user",
             )
             assert config.server_url == "http://multi:6666"
             assert config.api_key == "multi-key"
@@ -263,10 +255,7 @@ class TestGetConfig:
 
     def test_get_config_env_and_override(self):
         """Test get_config with both env vars and overrides."""
-        env_vars = {
-            "MORGAN_SERVER_URL": "http://env:5555",
-            "MORGAN_API_KEY": "env-key"
-        }
+        env_vars = {"MORGAN_SERVER_URL": "http://env:5555", "MORGAN_API_KEY": "env-key"}
         with patch.dict(os.environ, env_vars):
             # Override should take precedence
             config = get_config(server_url="http://override:4444")

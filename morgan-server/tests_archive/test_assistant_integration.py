@@ -22,23 +22,23 @@ class TestAssistantIntegration:
     def mock_llm_client(self):
         """Create a mock LLM client."""
         from morgan_server.llm import LLMResponse
-        
+
         client = AsyncMock()
-        client.generate = AsyncMock(return_value=LLMResponse(
-            content="This is a test response from the assistant.",
-            model="test-model"
-        ))
+        client.generate = AsyncMock(
+            return_value=LLMResponse(
+                content="This is a test response from the assistant.",
+                model="test-model",
+            )
+        )
         return client
 
     @pytest.fixture
     def mock_rag_system(self):
         """Create a mock RAG system."""
         rag = AsyncMock()
-        rag.retrieve = AsyncMock(return_value={
-            "context": "Test context",
-            "sources": [],
-            "confidence": 0.8
-        })
+        rag.retrieve = AsyncMock(
+            return_value={"context": "Test context", "sources": [], "confidence": 0.8}
+        )
         return rag
 
     @pytest.fixture
@@ -57,7 +57,7 @@ class TestAssistantIntegration:
             personality_system=personality_system,
             memory_system=memory_system,
             preference_manager=preference_manager,
-            profile_manager=profile_manager
+            profile_manager=profile_manager,
         )
 
         return assistant
@@ -105,9 +105,7 @@ class TestAssistantIntegration:
 
         # Send second message in same conversation
         response2 = await assistant.chat(
-            user_id=user_id,
-            message="How are you?",
-            conversation_id=conversation_id
+            user_id=user_id, message="How are you?", conversation_id=conversation_id
         )
 
         # Verify same conversation

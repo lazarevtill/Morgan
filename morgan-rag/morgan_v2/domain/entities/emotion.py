@@ -15,6 +15,7 @@ from uuid import uuid4
 
 class EmotionType(str, Enum):
     """Core emotion types based on psychological research"""
+
     JOY = "joy"
     SADNESS = "sadness"
     ANGER = "anger"
@@ -26,11 +27,12 @@ class EmotionType(str, Enum):
 
 class IntensityLevel(str, Enum):
     """Emotional intensity levels"""
-    VERY_LOW = "very_low"      # 0.0-0.2
-    LOW = "low"                # 0.2-0.4
-    MODERATE = "moderate"      # 0.4-0.6
-    HIGH = "high"              # 0.6-0.8
-    VERY_HIGH = "very_high"    # 0.8-1.0
+
+    VERY_LOW = "very_low"  # 0.0-0.2
+    LOW = "low"  # 0.2-0.4
+    MODERATE = "moderate"  # 0.4-0.6
+    HIGH = "high"  # 0.6-0.8
+    VERY_HIGH = "very_high"  # 0.8-1.0
 
 
 @dataclass
@@ -53,6 +55,7 @@ class EmotionalState:
         >>> state.is_strong_emotion()
         True
     """
+
     primary_emotion: EmotionType
     intensity: float  # 0.0 to 1.0
     confidence: float  # 0.0 to 1.0
@@ -67,7 +70,9 @@ class EmotionalState:
             raise ValueError(f"Intensity must be between 0 and 1, got {self.intensity}")
 
         if not 0.0 <= self.confidence <= 1.0:
-            raise ValueError(f"Confidence must be between 0 and 1, got {self.confidence}")
+            raise ValueError(
+                f"Confidence must be between 0 and 1, got {self.confidence}"
+            )
 
     @property
     def intensity_level(self) -> IntensityLevel:
@@ -112,6 +117,7 @@ class EmotionalContext:
 
     Includes triggers, patterns, and historical context.
     """
+
     current_state: EmotionalState
     triggers: List[str] = field(default_factory=list)
     historical_pattern: Optional[str] = None
@@ -123,9 +129,7 @@ class EmotionalContext:
         if previous_state.primary_emotion != self.current_state.primary_emotion:
             return True
 
-        intensity_change = abs(
-            self.current_state.intensity - previous_state.intensity
-        )
+        intensity_change = abs(self.current_state.intensity - previous_state.intensity)
         return intensity_change > 0.3
 
     def get_empathy_level(self) -> float:
@@ -158,6 +162,7 @@ class MoodHistory:
         - Identify triggers
         - Track emotional recovery
     """
+
     user_id: str
     states: List[EmotionalState] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.utcnow)
@@ -174,10 +179,7 @@ class MoodHistory:
     def get_dominant_emotion(self, hours: int = 24) -> Optional[EmotionType]:
         """Get the most common emotion in recent history"""
         cutoff = datetime.utcnow().timestamp() - (hours * 3600)
-        recent_states = [
-            s for s in self.states
-            if s.detected_at.timestamp() > cutoff
-        ]
+        recent_states = [s for s in self.states if s.detected_at.timestamp() > cutoff]
 
         if not recent_states:
             return None
@@ -199,10 +201,7 @@ class MoodHistory:
             "improving", "declining", or "stable"
         """
         cutoff = datetime.utcnow().timestamp() - (hours * 3600)
-        recent_states = [
-            s for s in self.states
-            if s.detected_at.timestamp() > cutoff
-        ]
+        recent_states = [s for s in self.states if s.detected_at.timestamp() > cutoff]
 
         if len(recent_states) < 3:
             return "stable"
@@ -210,21 +209,29 @@ class MoodHistory:
         # Calculate average intensity for first and second half
         mid = len(recent_states) // 2
         first_half_avg = sum(s.intensity for s in recent_states[:mid]) / mid
-        second_half_avg = sum(s.intensity for s in recent_states[mid:]) / (len(recent_states) - mid)
+        second_half_avg = sum(s.intensity for s in recent_states[mid:]) / (
+            len(recent_states) - mid
+        )
 
         # Check for positive vs negative emotions
         first_half_positive = sum(
-            1 for s in recent_states[:mid]
+            1
+            for s in recent_states[:mid]
             if s.primary_emotion in [EmotionType.JOY, EmotionType.SURPRISE]
         )
         second_half_positive = sum(
-            1 for s in recent_states[mid:]
+            1
+            for s in recent_states[mid:]
             if s.primary_emotion in [EmotionType.JOY, EmotionType.SURPRISE]
         )
 
         # Trend based on positive emotion ratio
         first_ratio = first_half_positive / mid if mid > 0 else 0
-        second_ratio = second_half_positive / (len(recent_states) - mid) if len(recent_states) > mid else 0
+        second_ratio = (
+            second_half_positive / (len(recent_states) - mid)
+            if len(recent_states) > mid
+            else 0
+        )
 
         if second_ratio > first_ratio + 0.2:
             return "improving"
@@ -236,10 +243,7 @@ class MoodHistory:
     def get_average_intensity(self, hours: int = 24) -> float:
         """Calculate average emotional intensity over time"""
         cutoff = datetime.utcnow().timestamp() - (hours * 3600)
-        recent_states = [
-            s for s in self.states
-            if s.detected_at.timestamp() > cutoff
-        ]
+        recent_states = [s for s in self.states if s.detected_at.timestamp() > cutoff]
 
         if not recent_states:
             return 0.0

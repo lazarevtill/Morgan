@@ -34,25 +34,25 @@ async def get_memory_stats(
     """
     try:
         assistant = get_assistant()
-        
+
         # Get stats from memory manager
         # Note: Core MemoryService might not filter by user_id yet
         stats = await run_in_threadpool(assistant.core.memory.get_learning_insights)
-        
+
         # Map fields
         # stats has: total_conversations, total_turns, recent_activity, etc.
         return MemoryStats(
             total_conversations=stats.get("total_conversations", 0),
-            active_conversations=stats.get("total_conversations", 0), 
+            active_conversations=stats.get("total_conversations", 0),
             total_messages=stats.get("total_turns", 0),
-            oldest_conversation=None, # Not provided by get_learning_insights
+            oldest_conversation=None,  # Not provided by get_learning_insights
             newest_conversation=(
                 datetime.fromisoformat(stats["recent_activity"])
                 if stats.get("recent_activity")
                 else None
             ),
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -67,29 +67,27 @@ async def get_memory_stats(
 async def search_memory(
     query: str = Query(..., min_length=1, description="Search query"),
     user_id: Optional[str] = Query(None, description="User ID to search within"),
-    limit: int = Query(10, ge=1, le=100, description="Maximum results to return")
+    limit: int = Query(10, ge=1, le=100, description="Maximum results to return"),
 ) -> List[MemorySearchResult]:
     """
     Search conversation history.
     """
     try:
         assistant = get_assistant()
-        
+
         query = query.strip()
         if not query:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Query cannot be empty or whitespace only",
             )
-        
+
         # Search conversations
         # Note: Core MemoryService search might not filter by user_id
         results = await run_in_threadpool(
-            assistant.core.memory.search_conversations,
-            query=query,
-            max_results=limit
+            assistant.core.memory.search_conversations, query=query, max_results=limit
         )
-        
+
         # Convert to API models
         search_results = []
         for res in results:
@@ -97,15 +95,19 @@ async def search_memory(
             search_results.append(
                 MemorySearchResult(
                     conversation_id=res.get("conversation_id", ""),
-                    timestamp=datetime.fromisoformat(res["timestamp"]) if res.get("timestamp") else datetime.utcnow(),
+                    timestamp=(
+                        datetime.fromisoformat(res["timestamp"])
+                        if res.get("timestamp")
+                        else datetime.utcnow()
+                    ),
                     message=res.get("question", ""),
                     response=res.get("answer", ""),
                     relevance_score=min(float(res.get("score", 0.0)), 1.0),
                 )
             )
-        
+
         return search_results
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -119,16 +121,18 @@ async def search_memory(
 @router.delete("/cleanup")
 async def cleanup_memory(
     user_id: str = Query(..., description="User ID to clean up conversations for"),
-    keep_recent: int = Query(10, ge=1, le=100, description="Number of recent conversations to keep")
+    keep_recent: int = Query(
+        10, ge=1, le=100, description="Number of recent conversations to keep"
+    ),
 ) -> JSONResponse:
     """
     Clean up old conversations.
     """
     try:
         assistant = get_assistant()
-        
+
         if not user_id or not user_id.strip():
-             raise HTTPException(
+            raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="user_id is required and cannot be empty",
             )
@@ -137,28 +141,27 @@ async def cleanup_memory(
         # Legacy API: keep_recent (count)
         # Core: cleanup_old_conversations(days_to_keep)
         # We will attempt to map or just use a default days value and warn/comment
-        
+
         # Mapping assumption: keeping recent 10 conversations ~ keeping last 30 days?
         # Ideally we update Core to support cleanup by count, or accept the change in behavior.
         # For now, we call core with a reasonable default relative to 'recent'.
-        days = 30 # Default
-        
+        days = 30  # Default
+
         deleted_count = await run_in_threadpool(
-            assistant.core.memory.cleanup_old_conversations,
-            days_to_keep=days
+            assistant.core.memory.cleanup_old_conversations, days_to_keep=days
         )
-        
+
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={
                 "status": "success",
                 "deleted_count": deleted_count,
-                 # We can't guarantee kept_count strictly matches keep_recent
-                "kept_count": -1, 
+                # We can't guarantee kept_count strictly matches keep_recent
+                "kept_count": -1,
                 "message": f"Cleaned up {deleted_count} old conversations (older than {days} days)",
-            }
+            },
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:

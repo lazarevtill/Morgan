@@ -113,7 +113,6 @@ class MorganRefactoring:
             "domain/repositories",
             "domain/services",
             "domain/events",
-
             # Application layer
             "application",
             "application/use_cases",
@@ -124,7 +123,6 @@ class MorganRefactoring:
             "application/use_cases/learning",
             "application/dto",
             "application/ports",
-
             # Infrastructure layer
             "infrastructure",
             "infrastructure/persistence",
@@ -141,7 +139,6 @@ class MorganRefactoring:
             "infrastructure/background/tasks",
             "infrastructure/monitoring",
             "infrastructure/config",
-
             # Interfaces layer
             "interfaces",
             "interfaces/cli",
@@ -153,13 +150,11 @@ class MorganRefactoring:
             "interfaces/web",
             "interfaces/web/static",
             "interfaces/web/templates",
-
             # Shared layer
             "shared",
             "shared/errors",
             "shared/utils",
             "shared/types",
-
             # DI layer
             "di",
         ]
@@ -185,8 +180,7 @@ class MorganRefactoring:
 
         for name, code in entities_to_generate:
             self._write_file(
-                self.morgan_new / "domain" / "entities" / f"{name}.py",
-                code
+                self.morgan_new / "domain" / "entities" / f"{name}.py", code
             )
 
         # Generate value objects
@@ -199,8 +193,7 @@ class MorganRefactoring:
 
         for name, code in value_objects:
             self._write_file(
-                self.morgan_new / "domain" / "value_objects" / f"{name}.py",
-                code
+                self.morgan_new / "domain" / "value_objects" / f"{name}.py", code
             )
 
         # Generate repository interfaces
@@ -215,8 +208,7 @@ class MorganRefactoring:
         for name, interface_name in repositories:
             code = self._get_repository_interface_code(interface_name)
             self._write_file(
-                self.morgan_new / "domain" / "repositories" / f"{name}.py",
-                code
+                self.morgan_new / "domain" / "repositories" / f"{name}.py", code
             )
 
     def _generate_application_layer(self):
@@ -236,8 +228,7 @@ class MorganRefactoring:
         for path, class_name in use_cases:
             code = self._get_use_case_code(class_name)
             self._write_file(
-                self.morgan_new / "application" / "use_cases" / f"{path}.py",
-                code
+                self.morgan_new / "application" / "use_cases" / f"{path}.py", code
             )
 
         # Generate DTOs
@@ -251,8 +242,7 @@ class MorganRefactoring:
         for name, class_name in dtos:
             code = self._get_dto_code(class_name)
             self._write_file(
-                self.morgan_new / "application" / "dto" / f"{name}.py",
-                code
+                self.morgan_new / "application" / "dto" / f"{name}.py", code
             )
 
         # Generate ports (interfaces)
@@ -266,8 +256,7 @@ class MorganRefactoring:
         for name, interface_name in ports:
             code = self._get_port_interface_code(interface_name)
             self._write_file(
-                self.morgan_new / "application" / "ports" / f"{name}.py",
-                code
+                self.morgan_new / "application" / "ports" / f"{name}.py", code
             )
 
     def _generate_infrastructure_layer(self):
@@ -289,18 +278,23 @@ class MorganRefactoring:
     def _setup_dependency_injection(self):
         """Setup DI container"""
         container_code = self._get_di_container_code()
-        self._write_file(
-            self.morgan_new / "di" / "container.py",
-            container_code
-        )
+        self._write_file(self.morgan_new / "di" / "container.py", container_code)
 
     def _migrate_existing_code(self):
         """Migrate code from old structure to new"""
         migrations = [
             (self.morgan_old / "emotional", "domain/services", "emotion_analyzer.py"),
             (self.morgan_old / "learning", "domain/services", "learning_engine.py"),
-            (self.morgan_old / "services/llm_service.py", "infrastructure/ai_services/openai_compatible", "llm_adapter.py"),
-            (self.morgan_old / "services/embedding_service.py", "infrastructure/ai_services/openai_compatible", "embedding_adapter.py"),
+            (
+                self.morgan_old / "services/llm_service.py",
+                "infrastructure/ai_services/openai_compatible",
+                "llm_adapter.py",
+            ),
+            (
+                self.morgan_old / "services/embedding_service.py",
+                "infrastructure/ai_services/openai_compatible",
+                "embedding_adapter.py",
+            ),
         ]
 
         for source, dest_dir, dest_file in migrations:
@@ -322,7 +316,11 @@ class MorganRefactoring:
                 if self.morgan_old.exists():
                     shutil.rmtree(self.morgan_old)
             print("  🗑️  Removed old structure")
-            self.stats["files_removed"] = len(list(self.morgan_old.rglob("*.py"))) if self.morgan_old.exists() else 0
+            self.stats["files_removed"] = (
+                len(list(self.morgan_old.rglob("*.py")))
+                if self.morgan_old.exists()
+                else 0
+            )
 
     def _update_imports(self):
         """Update all imports to use new structure"""
@@ -332,10 +330,7 @@ class MorganRefactoring:
     def _generate_documentation(self):
         """Generate documentation for new structure"""
         readme_code = self._get_readme_code()
-        self._write_file(
-            self.morgan_new / "README.md",
-            readme_code
-        )
+        self._write_file(self.morgan_new / "README.md", readme_code)
 
     def _write_file(self, path: Path, content: str):
         """Write file with stats tracking"""
@@ -348,9 +343,9 @@ class MorganRefactoring:
 
     def _print_summary(self):
         """Print refactoring summary"""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("✅ Refactoring Complete!")
-        print("="*60)
+        print("=" * 60)
         print(f"📝 Files created:   {self.stats['files_created']}")
         print(f"📤 Files migrated:  {self.stats['files_migrated']}")
         print(f"🗑️  Files removed:   {self.stats['files_removed']}")
@@ -687,7 +682,7 @@ class Container(containers.DeclarativeContainer):
 '''
 
     def _get_readme_code(self) -> str:
-        return '''# Morgan RAG v2 - Clean Architecture
+        return """# Morgan RAG v2 - Clean Architecture
 
 Production-grade AI assistant with Clean Architecture.
 
@@ -710,22 +705,28 @@ async def main():
 ```
 
 See documentation for details.
-'''
+"""
 
 
 def main():
     """Main entry point"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Refactor Morgan to Clean Architecture v2")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be done")
+    parser = argparse.ArgumentParser(
+        description="Refactor Morgan to Clean Architecture v2"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show what would be done"
+    )
     parser.add_argument("--keep-old", action="store_true", help="Keep old structure")
     parser.add_argument("--skip-tests", action="store_true", help="Skip test updates")
 
     args = parser.parse_args()
 
     root_dir = Path(__file__).parent.parent
-    refactoring = MorganRefactoring(root_dir, dry_run=args.dry_run, keep_old=args.keep_old)
+    refactoring = MorganRefactoring(
+        root_dir, dry_run=args.dry_run, keep_old=args.keep_old
+    )
 
     try:
         refactoring.run()

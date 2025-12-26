@@ -13,20 +13,23 @@ from datetime import datetime
 
 from morgan.core.assistant import MorganAssistant as CoreMorganAssistant
 from morgan.intelligence.core.models import EmotionalState
+
 # from morgan.services.llm_service import LLMClient, LLMMessage # Removed as classes don't exist in Core
 
-# Re-exporting Response models for compatibility if needed, 
+# Re-exporting Response models for compatibility if needed,
 # though we should rely on API models in api/models.py
 # But the internal wrapper needs its own response type or reuse Core's.
 # To minimize disruption to api/routes/chat.py, we keep AssistantResponse strictly compatible.
+
 
 @dataclass
 class AssistantContext:
     """
     Context for an assistant interaction.
-    Kept for backward compatibility if other modules import it, 
+    Kept for backward compatibility if other modules import it,
     though largely internal now.
     """
+
     user_id: str
     conversation_id: Optional[str] = None
     message: str = ""
@@ -37,6 +40,7 @@ class AssistantContext:
 @dataclass
 class AssistantResponse:
     """Response from the assistant - internal server model."""
+
     answer: str
     conversation_id: str
     emotional_tone: Optional[str] = None
@@ -51,13 +55,13 @@ class AssistantResponse:
 class MorganAssistant:
     """
     Morgan Assistant - Wrapper around morgan-rag CoreMorganAssistant.
-    
+
     Delegates orchestration to the shared domain logic in `morgan` package.
     """
 
     def __init__(
         self,
-        llm_client: Any = None, # Legacy arg, ignored as Core handles its own LLM
+        llm_client: Any = None,  # Legacy arg, ignored as Core handles its own LLM
         # Legacy args ignored/deprecated
         emotional_intelligence: Any = None,
         personality_system: Any = None,
@@ -67,11 +71,11 @@ class MorganAssistant:
         profile_manager: Any = None,
         preference_manager: Any = None,
         memory_system: Any = None,
-        config_path: Optional[str] = None
+        config_path: Optional[str] = None,
     ):
         """
         Initialize the Morgan Assistant Wrapper.
-        
+
         Args:
             llm_client: Deprecated. Core uses internal LLM service.
             ...: Other args are deprecated.
@@ -86,7 +90,7 @@ class MorganAssistant:
         conversation_id: Optional[str] = None,
         use_knowledge: bool = True,
         use_memory: bool = True,
-        # API allows these flags, Core defaults to True usually. 
+        # API allows these flags, Core defaults to True usually.
         # We can pass them if Core supports, otherwise we consume them.
     ) -> AssistantResponse:
         """
@@ -94,33 +98,35 @@ class MorganAssistant:
         """
         # Delegate to Core
         # Core 'ask' is async? 'ask' in assistant.py is async def ask(...)
-        
+
         core_response = await self.core.ask(
             question=message,
             conversation_id=conversation_id,
             user_id=user_id,
-            include_sources=use_knowledge
+            include_sources=use_knowledge,
         )
-        
+
         # Map core_response to AssistantResponse
         sources_list = []
         if core_response.sources:
             for src in core_response.sources:
-                sources_list.append({
-                    "content": src,
-                    "score": 1.0, # Default as core doesn't return score in simple list
-                    "document_id": "unknown", 
-                    "chunk_id": "unknown"
-                })
-        
+                sources_list.append(
+                    {
+                        "content": src,
+                        "score": 1.0,  # Default as core doesn't return score in simple list
+                        "document_id": "unknown",
+                        "chunk_id": "unknown",
+                    }
+                )
+
         # Handle milestone celebration (Core returns object or None)
         milestone_msg = None
         if core_response.milestone_celebration:
-             # If it's an object, get description, else string
-            if hasattr(core_response.milestone_celebration, 'description'):
+            # If it's an object, get description, else string
+            if hasattr(core_response.milestone_celebration, "description"):
                 milestone_msg = core_response.milestone_celebration.description
             else:
-                 milestone_msg = str(core_response.milestone_celebration)
+                milestone_msg = str(core_response.milestone_celebration)
 
         return AssistantResponse(
             answer=core_response.answer,
@@ -133,12 +139,12 @@ class MorganAssistant:
             sources=sources_list,
             metadata={
                 "suggestions": core_response.suggestions,
-                "thinking": core_response.thinking
-            }
+                "thinking": core_response.thinking,
+            },
         )
 
     # Legacy method support - mapped to Core functionality where possible
-    
+
     async def get_conversation_history(
         self,
         user_id: str,
@@ -170,8 +176,8 @@ class MorganAssistant:
 
     def get_user_profile(self, user_id: str) -> Optional[Any]:
         """Get user profile."""
-        if hasattr(self.core, 'emotional_processor'):
-             return self.core.emotional_processor.get_or_create_user_profile(user_id)
+        if hasattr(self.core, "emotional_processor"):
+            return self.core.emotional_processor.get_or_create_user_profile(user_id)
         return None
 
     def update_user_profile(self, user_id: str, **updates) -> Any:
@@ -179,94 +185,109 @@ class MorganAssistant:
         profile = self.get_user_profile(user_id)
         if not profile:
             return None
-        
+
         # Apply updates
-        if 'preferred_name' in updates:
-            profile.preferred_name = updates['preferred_name']
-            
-        if 'communication_style' in updates:
+        if "preferred_name" in updates:
+            profile.preferred_name = updates["preferred_name"]
+
+        if "communication_style" in updates:
             # Check if it's already an enum or string
-            val = updates['communication_style']
+            val = updates["communication_style"]
             # If it's an enum, use it. If string, leave it (model might expect enum)
             # Core CompanionProfile uses communication_preferences which is UserPreferences object
             # We might need to update communication_preferences
             if not profile.communication_preferences:
-                from morgan.intelligence.core.models import UserPreferences, CommunicationStyle, ResponseLength
+                from morgan.intelligence.core.models import (
+                    UserPreferences,
+                    CommunicationStyle,
+                    ResponseLength,
+                )
+
                 profile.communication_preferences = UserPreferences(
                     topics_of_interest=[],
                     communication_style=CommunicationStyle.FRIENDLY,
-                    preferred_response_length=ResponseLength.MODERATE
+                    preferred_response_length=ResponseLength.MODERATE,
                 )
-            
+
             profile.communication_preferences.communication_style = val
-            
-        if 'response_length' in updates:
+
+        if "response_length" in updates:
             if not profile.communication_preferences:
-                from morgan.intelligence.core.models import UserPreferences, CommunicationStyle, ResponseLength
+                from morgan.intelligence.core.models import (
+                    UserPreferences,
+                    CommunicationStyle,
+                    ResponseLength,
+                )
+
                 profile.communication_preferences = UserPreferences(
                     topics_of_interest=[],
                     communication_style=CommunicationStyle.FRIENDLY,
-                    preferred_response_length=ResponseLength.MODERATE
+                    preferred_response_length=ResponseLength.MODERATE,
                 )
-            profile.communication_preferences.preferred_response_length = updates['response_length']
-            
-        if 'topics_of_interest' in updates:
+            profile.communication_preferences.preferred_response_length = updates[
+                "response_length"
+            ]
+
+        if "topics_of_interest" in updates:
             # This is on profile directly or preferences?
             # CompanionProfile has topics_of_interest? No, UserPreferences has it.
             if not profile.communication_preferences:
-                 from morgan.intelligence.core.models import UserPreferences, CommunicationStyle, ResponseLength
-                 profile.communication_preferences = UserPreferences(
+                from morgan.intelligence.core.models import (
+                    UserPreferences,
+                    CommunicationStyle,
+                    ResponseLength,
+                )
+
+                profile.communication_preferences = UserPreferences(
                     topics_of_interest=[],
                     communication_style=CommunicationStyle.FRIENDLY,
-                    preferred_response_length=ResponseLength.MODERATE
+                    preferred_response_length=ResponseLength.MODERATE,
                 )
-            profile.communication_preferences.topics_of_interest = updates['topics_of_interest']
+            profile.communication_preferences.topics_of_interest = updates[
+                "topics_of_interest"
+            ]
 
         return profile
 
     async def analyze_emotional_state(self, user_id: str) -> Dict[str, Any]:
         """Analyze user's emotional state over time."""
-        if hasattr(self.core, 'emotional_engine'):
-             return self.core.emotional_engine.track_mood_patterns(user_id)
+        if hasattr(self.core, "emotional_engine"):
+            return self.core.emotional_engine.track_mood_patterns(user_id)
         return {}
 
     async def health_check(self) -> Dict[str, Any]:
         """
         Perform a health check of the assistant's components.
-        
+
         Returns:
             Dict with 'status' and 'details' keys.
         """
         status_val = "up"
         details = {}
-        
+
         try:
             # Check knowledge engine
-            if hasattr(self.core, 'knowledge'):
+            if hasattr(self.core, "knowledge"):
                 # Simple liveness check via statistics
                 self.core.knowledge.get_statistics()
                 details["knowledge"] = "up"
             else:
                 details["knowledge"] = "unknown"
-                
+
             # Check memory engine
-            if hasattr(self.core, 'memory'):
+            if hasattr(self.core, "memory"):
                 # Simple check
                 details["memory"] = "up"
             else:
-                 details["memory"] = "unknown"
-                 
+                details["memory"] = "unknown"
+
         except Exception as e:
             status_val = "degraded"
             details["error"] = str(e)
-            
-        return {
-            "status": status_val,
-            "details": details
-        }
+
+        return {"status": status_val, "details": details}
 
     async def shutdown(self):
         """Shutdown the assistant."""
         # Perform any cleanup needed for Core
         pass
-

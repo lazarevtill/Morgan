@@ -47,6 +47,9 @@ class KnowledgeService:
         # Knowledge collections
         self.main_collection = "morgan_knowledge"
         self.hierarchical_collection = "morgan_knowledge_hierarchical"
+        self.memory_collection = (
+            "morgan_memory"  # Memory collection for conversation context
+        )
 
         # Repositories
         self.repository = KnowledgeRepository(self.vector_db, self.main_collection)

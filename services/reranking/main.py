@@ -24,10 +24,10 @@ _model_name = None
 def setup_model_cache():
     """
     Setup model cache directories to avoid re-downloading on each startup.
-    
+
     Models are downloaded once to the cache directory and reused later.
     Also configures HF_TOKEN for gated model downloads.
-    
+
     Environment variables:
         - MODEL_CACHE_DIR: Cache directory (default: /app/models)
         - HF_TOKEN: Hugging Face API token (for gated models)
@@ -36,31 +36,32 @@ def setup_model_cache():
     # Try to load .env file if available
     try:
         from dotenv import load_dotenv
+
         load_dotenv()
         print("Loaded environment from .env file")
     except ImportError:
         pass  # dotenv not installed
-    
+
     cache_dir = os.getenv("MODEL_CACHE_DIR", "/app/models")
     cache_path = Path(cache_dir)
-    
+
     # Create subdirectories
     st_cache = cache_path / "sentence-transformers"
     hf_cache = cache_path / "huggingface"
-    
+
     for path in [cache_path, st_cache, hf_cache]:
         path.mkdir(parents=True, exist_ok=True)
-    
+
     # Set environment variables for model caching
     os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(st_cache)
     os.environ["HF_HOME"] = str(hf_cache)
     os.environ["TRANSFORMERS_CACHE"] = str(hf_cache)
-    
+
     # Configure HF_TOKEN for gated model downloads
     hf_token = (
-        os.getenv("HF_TOKEN") or
-        os.getenv("HUGGING_FACE_HUB_TOKEN") or
-        os.getenv("HUGGINGFACE_TOKEN")
+        os.getenv("HF_TOKEN")
+        or os.getenv("HUGGING_FACE_HUB_TOKEN")
+        or os.getenv("HUGGINGFACE_TOKEN")
     )
     if hf_token:
         os.environ["HF_TOKEN"] = hf_token
@@ -68,7 +69,7 @@ def setup_model_cache():
         print("HF_TOKEN configured for authenticated model downloads")
     else:
         print("Warning: No HF_TOKEN - some gated models may not download")
-    
+
     print(f"Model cache configured at {cache_path}")
     return cache_path
 
@@ -76,27 +77,26 @@ def setup_model_cache():
 def get_model():
     """Lazy load the CrossEncoder model."""
     global _model, _model_name
-    
+
     if _model is None:
         from sentence_transformers import CrossEncoder
-        
+
         # Self-hosted models (no API key required):
         #   - cross-encoder/ms-marco-MiniLM-L-6-v2 (fast, English)
         #   - cross-encoder/ms-marco-MiniLM-L-12-v2 (better quality)
         #   - BAAI/bge-reranker-base (multilingual)
         #   - jinaai/jina-reranker-v1-base-en (Jina, multilingual)
         model_name = os.getenv(
-            "RERANKING_MODEL",
-            "cross-encoder/ms-marco-MiniLM-L-6-v2"
+            "RERANKING_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"
         )
         device = os.getenv("RERANKING_DEVICE", "cuda")
-        
+
         print(f"Loading reranking model: {model_name} on {device}")
         print("(Model downloaded on first run and cached for future use)")
         _model = CrossEncoder(model_name, device=device)
         _model_name = model_name
         print("Model loaded successfully")
-    
+
     return _model
 
 
@@ -124,6 +124,7 @@ app.add_middleware(
 # Request/Response models
 class RerankRequest(BaseModel):
     """Reranking request."""
+
     query: str = Field(..., description="Search query")
     documents: List[str] = Field(..., description="Documents to rerank")
     top_k: Optional[int] = Field(None, description="Return top K results")
@@ -131,6 +132,7 @@ class RerankRequest(BaseModel):
 
 class RerankResultItem(BaseModel):
     """Single reranked result."""
+
     index: int
     text: str
     score: float
@@ -138,6 +140,7 @@ class RerankResultItem(BaseModel):
 
 class RerankResponse(BaseModel):
     """Reranking response."""
+
     results: List[RerankResultItem]
     model: str
     elapsed_ms: float
@@ -145,6 +148,7 @@ class RerankResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     """Health check response."""
+
     status: str
     model: str
     device: str
@@ -166,10 +170,10 @@ async def health_check():
 async def rerank(request: RerankRequest):
     """
     Rerank documents by relevance to a query.
-    
+
     Args:
         request: Reranking request with query and documents
-        
+
     Returns:
         Reranked results sorted by score (descending)
     """
@@ -179,43 +183,45 @@ async def rerank(request: RerankRequest):
             model=_model_name or "not_loaded",
             elapsed_ms=0.0,
         )
-    
+
     try:
         start_time = time.time()
-        
+
         # Get model
         model = get_model()
-        
+
         # Create query-document pairs
         pairs = [[request.query, doc] for doc in request.documents]
-        
+
         # Score all pairs
         scores = model.predict(pairs, batch_size=32, show_progress_bar=False)
-        
+
         # Create results with original indices
         results = []
         for i, (doc, score) in enumerate(zip(request.documents, scores)):
-            results.append(RerankResultItem(
-                index=i,
-                text=doc,
-                score=float(score),
-            ))
-        
+            results.append(
+                RerankResultItem(
+                    index=i,
+                    text=doc,
+                    score=float(score),
+                )
+            )
+
         # Sort by score (descending)
         results.sort(key=lambda x: x.score, reverse=True)
-        
+
         # Apply top_k if specified
         if request.top_k is not None:
-            results = results[:request.top_k]
-        
+            results = results[: request.top_k]
+
         elapsed_ms = (time.time() - start_time) * 1000
-        
+
         return RerankResponse(
             results=results,
             model=_model_name,
             elapsed_ms=elapsed_ms,
         )
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -243,9 +249,8 @@ async def startup_event():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     host = os.getenv("RERANKING_HOST", "0.0.0.0")
     port = int(os.getenv("RERANKING_PORT", "8080"))
-    
-    uvicorn.run(app, host=host, port=port)
 
+    uvicorn.run(app, host=host, port=port)

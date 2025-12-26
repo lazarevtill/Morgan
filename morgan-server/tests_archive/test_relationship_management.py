@@ -30,9 +30,7 @@ class TestRelationshipManager:
         user_id = "user123"
 
         interaction = manager.track_interaction(
-            user_id=user_id,
-            interaction_type=InteractionType.CHAT,
-            sentiment="positive"
+            user_id=user_id, interaction_type=InteractionType.CHAT, sentiment="positive"
         )
 
         assert user_id in manager.profiles
@@ -50,7 +48,7 @@ class TestRelationshipManager:
             manager.track_interaction(
                 user_id=user_id,
                 interaction_type=InteractionType.CHAT,
-                sentiment="positive"
+                sentiment="positive",
             )
 
         profile = manager.get_profile(user_id)
@@ -64,8 +62,7 @@ class TestRelationshipManager:
         user_id = "user123"
 
         manager.track_interaction(
-            user_id=user_id,
-            interaction_type=InteractionType.CHAT
+            user_id=user_id, interaction_type=InteractionType.CHAT
         )
 
         milestones = manager.get_milestones(user_id)
@@ -80,8 +77,7 @@ class TestRelationshipManager:
         # Track 10 interactions to trigger milestone
         for _ in range(10):
             manager.track_interaction(
-                user_id=user_id,
-                interaction_type=InteractionType.CHAT
+                user_id=user_id, interaction_type=InteractionType.CHAT
             )
 
         milestones = manager.get_milestones(user_id)
@@ -103,9 +99,7 @@ class TestRelationshipManager:
 
         # Track 1 interaction
         manager.track_interaction(
-            user_id=user_id,
-            interaction_type=InteractionType.CHAT,
-            sentiment="positive"
+            user_id=user_id, interaction_type=InteractionType.CHAT, sentiment="positive"
         )
         trust_1 = manager.calculate_trust_level(user_id)
 
@@ -114,7 +108,7 @@ class TestRelationshipManager:
             manager.track_interaction(
                 user_id=user_id,
                 interaction_type=InteractionType.CHAT,
-                sentiment="positive"
+                sentiment="positive",
             )
         trust_10 = manager.calculate_trust_level(user_id)
 
@@ -133,7 +127,7 @@ class TestRelationshipManager:
             manager.track_interaction(
                 user_id=user_positive,
                 interaction_type=InteractionType.CHAT,
-                sentiment="positive"
+                sentiment="positive",
             )
 
         # Track negative interactions
@@ -141,7 +135,7 @@ class TestRelationshipManager:
             manager.track_interaction(
                 user_id=user_negative,
                 interaction_type=InteractionType.CHAT,
-                sentiment="negative"
+                sentiment="negative",
             )
 
         trust_positive = manager.calculate_trust_level(user_positive)
@@ -160,7 +154,7 @@ class TestRelationshipManager:
             manager.track_interaction(
                 user_id=user_with_support,
                 interaction_type=InteractionType.EMOTIONAL_SUPPORT,
-                sentiment="positive"
+                sentiment="positive",
             )
 
         # Track regular interactions
@@ -168,15 +162,11 @@ class TestRelationshipManager:
             manager.track_interaction(
                 user_id=user_without_support,
                 interaction_type=InteractionType.CHAT,
-                sentiment="positive"
+                sentiment="positive",
             )
 
-        trust_with_support = manager.calculate_trust_level(
-            user_with_support
-        )
-        trust_without_support = manager.calculate_trust_level(
-            user_without_support
-        )
+        trust_with_support = manager.calculate_trust_level(user_with_support)
+        trust_without_support = manager.calculate_trust_level(user_without_support)
 
         assert trust_with_support > trust_without_support
 
@@ -201,15 +191,13 @@ class TestRelationshipManager:
         ]
         for interaction_type in interaction_types:
             manager.track_interaction(
-                user_id=user_varied,
-                interaction_type=interaction_type
+                user_id=user_varied, interaction_type=interaction_type
             )
 
         # Track monotone interactions
         for _ in range(4):
             manager.track_interaction(
-                user_id=user_monotone,
-                interaction_type=InteractionType.CHAT
+                user_id=user_monotone, interaction_type=InteractionType.CHAT
             )
 
         engagement_varied = manager.calculate_engagement_score(user_varied)
@@ -227,7 +215,7 @@ class TestRelationshipManager:
             manager.track_interaction(
                 user_id=user_id,
                 interaction_type=InteractionType.CHAT,
-                sentiment="positive"
+                sentiment="positive",
             )
 
         depth = manager.calculate_relationship_depth(user_id)
@@ -251,7 +239,7 @@ class TestRelationshipManager:
                 manager.track_interaction(
                     user_id=user_id,
                     interaction_type=interaction_type,
-                    sentiment="positive"
+                    sentiment="positive",
                 )
 
         depth = manager.calculate_relationship_depth(user_id)
@@ -270,8 +258,7 @@ class TestRelationshipManager:
         # Track interactions to trigger milestones
         for _ in range(15):
             manager.track_interaction(
-                user_id=user_id,
-                interaction_type=InteractionType.CHAT
+                user_id=user_id, interaction_type=InteractionType.CHAT
             )
 
         milestones = manager.get_milestones(user_id)
@@ -284,8 +271,7 @@ class TestRelationshipManager:
 
         # Create profile and add interaction
         manager.track_interaction(
-            user_id=user_id,
-            interaction_type=InteractionType.CHAT
+            user_id=user_id, interaction_type=InteractionType.CHAT
         )
 
         # Get recent milestones (should include first conversation)
@@ -303,7 +289,7 @@ class TestRelationshipManager:
             manager.track_interaction(
                 user_id=user_id,
                 interaction_type=InteractionType.CHAT,
-                sentiment="positive"
+                sentiment="positive",
             )
 
         metrics = manager.get_metrics(user_id)
@@ -323,8 +309,7 @@ class TestRelationshipManager:
 
         # Track interaction
         manager.track_interaction(
-            user_id=user_id,
-            interaction_type=InteractionType.CHAT
+            user_id=user_id, interaction_type=InteractionType.CHAT
         )
 
         profile = manager.get_profile(user_id)
@@ -347,7 +332,7 @@ class TestRelationshipManager:
         milestone = Milestone(
             milestone_type=MilestoneType.CONVERSATIONS_10,
             achieved_at=datetime.now(),
-            description="10 conversations"
+            description="10 conversations",
         )
 
         message = manager.celebrate_milestone(milestone)
@@ -362,13 +347,13 @@ class TestRelationshipManager:
         milestone_10 = Milestone(
             milestone_type=MilestoneType.CONVERSATIONS_10,
             achieved_at=datetime.now(),
-            description="10 conversations"
+            description="10 conversations",
         )
 
         milestone_50 = Milestone(
             milestone_type=MilestoneType.CONVERSATIONS_50,
             achieved_at=datetime.now(),
-            description="50 conversations"
+            description="50 conversations",
         )
 
         message_10 = manager.celebrate_milestone(milestone_10)
@@ -381,16 +366,10 @@ class TestRelationshipManager:
         manager = RelationshipManager()
         user_id = "user123"
 
-        metadata = {
-            "topic": "programming",
-            "duration_seconds": 120,
-            "quality": "high"
-        }
+        metadata = {"topic": "programming", "duration_seconds": 120, "quality": "high"}
 
         interaction = manager.track_interaction(
-            user_id=user_id,
-            interaction_type=InteractionType.CHAT,
-            metadata=metadata
+            user_id=user_id, interaction_type=InteractionType.CHAT, metadata=metadata
         )
 
         assert interaction.metadata == metadata
@@ -403,9 +382,7 @@ class TestRelationshipManager:
         context = "User asked about Python programming"
 
         interaction = manager.track_interaction(
-            user_id=user_id,
-            interaction_type=InteractionType.QUESTION,
-            context=context
+            user_id=user_id, interaction_type=InteractionType.QUESTION, context=context
         )
 
         assert interaction.context == context
@@ -417,8 +394,7 @@ class TestRelationshipManager:
 
         # Track first interaction
         manager.track_interaction(
-            user_id=user_id,
-            interaction_type=InteractionType.CHAT
+            user_id=user_id, interaction_type=InteractionType.CHAT
         )
 
         metrics_1 = manager.get_metrics(user_id)
@@ -426,8 +402,7 @@ class TestRelationshipManager:
 
         # Track second interaction
         manager.track_interaction(
-            user_id=user_id,
-            interaction_type=InteractionType.CHAT
+            user_id=user_id, interaction_type=InteractionType.CHAT
         )
 
         metrics_2 = manager.get_metrics(user_id)
@@ -445,7 +420,7 @@ class TestRelationshipManager:
             manager.track_interaction(
                 user_id=user_id,
                 interaction_type=InteractionType.EMOTIONAL_SUPPORT,
-                sentiment="positive"
+                sentiment="positive",
             )
 
         milestones = manager.get_milestones(user_id)
@@ -458,9 +433,7 @@ class TestRelationshipManager:
             MilestoneType.TRUST_MILESTONE_90,
         ]
 
-        has_trust_milestone = any(
-            mt in milestone_types for mt in trust_milestones
-        )
+        has_trust_milestone = any(mt in milestone_types for mt in trust_milestones)
         assert has_trust_milestone
 
     def test_engagement_milestone_triggered(self):
@@ -475,7 +448,7 @@ class TestRelationshipManager:
                 manager.track_interaction(
                     user_id=user_id,
                     interaction_type=interaction_type,
-                    sentiment="positive"
+                    sentiment="positive",
                 )
 
         milestones = manager.get_milestones(user_id)
@@ -493,15 +466,13 @@ class TestRelationshipManager:
         # Track interactions for user1
         for _ in range(5):
             manager.track_interaction(
-                user_id=user1,
-                interaction_type=InteractionType.CHAT
+                user_id=user1, interaction_type=InteractionType.CHAT
             )
 
         # Track interactions for user2
         for _ in range(10):
             manager.track_interaction(
-                user_id=user2,
-                interaction_type=InteractionType.CHAT
+                user_id=user2, interaction_type=InteractionType.CHAT
             )
 
         profile1 = manager.get_profile(user1)
@@ -518,8 +489,7 @@ class TestRelationshipManager:
         user_id = "user123"
 
         manager.track_interaction(
-            user_id=user_id,
-            interaction_type=InteractionType.CHAT
+            user_id=user_id, interaction_type=InteractionType.CHAT
         )
 
         metrics = manager.get_metrics(user_id)
@@ -533,8 +503,7 @@ class TestRelationshipManager:
         # Track 10 interactions
         for _ in range(10):
             manager.track_interaction(
-                user_id=user_id,
-                interaction_type=InteractionType.CHAT
+                user_id=user_id, interaction_type=InteractionType.CHAT
             )
 
         metrics = manager.get_metrics(user_id)
@@ -552,14 +521,14 @@ class TestRelationshipManager:
             manager.track_interaction(
                 user_id=user_id,
                 interaction_type=InteractionType.CHAT,
-                sentiment="positive"
+                sentiment="positive",
             )
 
         for _ in range(3):
             manager.track_interaction(
                 user_id=user_id,
                 interaction_type=InteractionType.CHAT,
-                sentiment="negative"
+                sentiment="negative",
             )
 
         metrics = manager.get_metrics(user_id)
@@ -573,14 +542,11 @@ class TestRelationshipManager:
         # Track enough interactions to calculate trend
         for _ in range(15):
             manager.track_interaction(
-                user_id=user_id,
-                interaction_type=InteractionType.CHAT
+                user_id=user_id, interaction_type=InteractionType.CHAT
             )
 
         metrics = manager.get_metrics(user_id)
-        assert metrics.recent_activity_trend in [
-            "increasing", "stable", "decreasing"
-        ]
+        assert metrics.recent_activity_trend in ["increasing", "stable", "decreasing"]
 
 
 if __name__ == "__main__":

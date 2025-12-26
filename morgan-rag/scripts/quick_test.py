@@ -14,6 +14,7 @@ print("=" * 60)
 # 1. Config
 print("\n1. Testing Configuration...")
 from morgan.config import get_settings
+
 settings = get_settings()
 print(f"   ✅ LLM: {settings.llm_model} @ {settings.llm_base_url}")
 print(f"   ✅ Embedding: {settings.embedding_model}")
@@ -22,6 +23,7 @@ print(f"   ✅ Qdrant: {settings.qdrant_url}")
 # 2. Embedding Service
 print("\n2. Testing Embedding Service...")
 from morgan.embeddings.service import EmbeddingService
+
 emb_service = EmbeddingService()
 test_emb = emb_service.encode("Hello world")
 print(f"   ✅ Generated embedding: {len(test_emb)} dimensions")
@@ -29,6 +31,7 @@ print(f"   ✅ Generated embedding: {len(test_emb)} dimensions")
 # 3. LLM Service
 print("\n3. Testing LLM Service...")
 from morgan.services.llm_service import get_llm_service
+
 llm = get_llm_service()
 response = llm.generate("Say 'test' only", max_tokens=10)
 print(f"   ✅ LLM response: {response.content[:50]}")
@@ -36,6 +39,7 @@ print(f"   ✅ LLM response: {response.content[:50]}")
 # 4. Qdrant
 print("\n4. Testing Qdrant Connection...")
 import requests
+
 r = requests.get("http://localhost:6333/collections")
 collections = r.json()["result"]["collections"]
 print(f"   ✅ Connected. Collections: {len(collections)}")
@@ -46,6 +50,7 @@ for c in collections[:5]:
 print("\n5. Testing Emotion Detection...")
 try:
     from morgan.emotional.intelligence_engine import EmotionalIntelligenceEngine
+
     emotion_engine = EmotionalIntelligenceEngine()
     print(f"   ✅ Emotion engine initialized")
 except Exception as e:

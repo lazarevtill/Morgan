@@ -65,9 +65,7 @@ class TestEmbeddingService:
             "_embed_batch_local",
             return_value=[[0.1, 0.2], [0.3, 0.4]],
         ):
-            embeddings = await local_embedding_service.embed_batch(
-                ["text1", "text2"]
-            )
+            embeddings = await local_embedding_service.embed_batch(["text1", "text2"])
             assert isinstance(embeddings, list)
             assert len(embeddings) == 2
             assert all(isinstance(emb, list) for emb in embeddings)
@@ -140,9 +138,7 @@ class TestRAGSystem:
         """Create a mock embedding service."""
         service = AsyncMock()
         service.embed_text = AsyncMock(return_value=[0.1, 0.2, 0.3])
-        service.embed_batch = AsyncMock(
-            return_value=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
-        )
+        service.embed_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
         return service
 
     @pytest.fixture
@@ -219,9 +215,7 @@ class TestRAGSystem:
         assert all(s.rerank_score is not None for s in result.sources)
 
     @pytest.mark.asyncio
-    async def test_retrieve_without_reranking(
-        self, rag_system, mock_vectordb_client
-    ):
+    async def test_retrieve_without_reranking(self, rag_system, mock_vectordb_client):
         """Test retrieval without reranking."""
         mock_result = SearchResult(
             id="chunk1",
@@ -241,9 +235,7 @@ class TestRAGSystem:
         assert result.sources[0].rerank_score is None
 
     @pytest.mark.asyncio
-    async def test_retrieve_with_custom_top_k(
-        self, rag_system, mock_vectordb_client
-    ):
+    async def test_retrieve_with_custom_top_k(self, rag_system, mock_vectordb_client):
         """Test retrieval with custom top_k parameter."""
         mock_results = [
             SearchResult(
@@ -313,9 +305,7 @@ class TestRAGSystem:
             mock_vectordb_client.insert_vectors.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_index_document_unchanged(
-        self, rag_system, mock_vectordb_client
-    ):
+    async def test_index_document_unchanged(self, rag_system, mock_vectordb_client):
         """Test indexing unchanged document returns 0."""
         with patch(
             "morgan_server.knowledge.rag.DocumentProcessor"
@@ -388,9 +378,7 @@ class TestRAGSystem:
         assert sources[0].content == "Test content"
 
     @pytest.mark.asyncio
-    async def test_search_similar_with_filter(
-        self, rag_system, mock_vectordb_client
-    ):
+    async def test_search_similar_with_filter(self, rag_system, mock_vectordb_client):
         """Test semantic search with filter."""
         mock_vectordb_client.search.return_value = []
         filter_conditions = {"category": "tech"}
@@ -448,9 +436,7 @@ class TestRAGSystem:
         assert stats["status"] == "not_found"
 
     @pytest.mark.asyncio
-    async def test_get_stats_error_handling(
-        self, rag_system, mock_vectordb_client
-    ):
+    async def test_get_stats_error_handling(self, rag_system, mock_vectordb_client):
         """Test error handling in get_stats."""
         mock_vectordb_client.get_collection_stats.side_effect = Exception(
             "Stats failed"
@@ -534,9 +520,7 @@ class TestRAGSystem:
         assert scores == sorted(scores, reverse=True)
 
     @pytest.mark.asyncio
-    async def test_retrieve_confidence_scoring(
-        self, rag_system, mock_vectordb_client
-    ):
+    async def test_retrieve_confidence_scoring(self, rag_system, mock_vectordb_client):
         """Test confidence scoring in retrieval."""
         # High score results should give high confidence
         high_score_results = [

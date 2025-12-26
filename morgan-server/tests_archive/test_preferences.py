@@ -43,9 +43,7 @@ class TestPreferenceCreation:
 
             manager.create_preferences("user123")
 
-            with pytest.raises(
-                ValueError, match="Preferences already exist"
-            ):
+            with pytest.raises(ValueError, match="Preferences already exist"):
                 manager.create_preferences("user123")
 
     def test_preferences_have_timestamps(self):
@@ -145,9 +143,7 @@ class TestInteractionRecording:
             manager = PreferenceManager(storage_dir=tmpdir)
 
             prefs = manager.record_interaction(
-                user_id="user123",
-                message_length=100,
-                response_length=300
+                user_id="user123", message_length=100, response_length=300
             )
 
             assert prefs.user_id == "user123"
@@ -164,7 +160,7 @@ class TestInteractionRecording:
                 user_id="user123",
                 message_length=100,
                 response_length=300,
-                topics=["AI", "programming"]
+                topics=["AI", "programming"],
             )
 
             assert len(prefs.interaction_history) == 1
@@ -180,7 +176,7 @@ class TestInteractionRecording:
                 user_id="user123",
                 message_length=100,
                 response_length=300,
-                user_satisfaction=0.8
+                user_satisfaction=0.8,
             )
 
             assert prefs.interaction_history[0].user_satisfaction == 0.8
@@ -194,37 +190,30 @@ class TestInteractionRecording:
                 user_id="user123",
                 message_length=100,
                 response_length=300,
-                communication_style_used="casual"
+                communication_style_used="casual",
             )
 
-            assert (
-                prefs.interaction_history[0].communication_style_used
-                == "casual"
-            )
+            assert prefs.interaction_history[0].communication_style_used == "casual"
 
     def test_record_interaction_invalid_satisfaction(self):
         """Test that invalid satisfaction score raises error."""
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = PreferenceManager(storage_dir=tmpdir)
 
-            with pytest.raises(
-                ValueError, match="user_satisfaction must be between"
-            ):
+            with pytest.raises(ValueError, match="user_satisfaction must be between"):
                 manager.record_interaction(
                     user_id="user123",
                     message_length=100,
                     response_length=300,
-                    user_satisfaction=1.5
+                    user_satisfaction=1.5,
                 )
 
-            with pytest.raises(
-                ValueError, match="user_satisfaction must be between"
-            ):
+            with pytest.raises(ValueError, match="user_satisfaction must be between"):
                 manager.record_interaction(
                     user_id="user123",
                     message_length=100,
                     response_length=300,
-                    user_satisfaction=-0.1
+                    user_satisfaction=-0.1,
                 )
 
     def test_record_multiple_interactions(self):
@@ -233,19 +222,13 @@ class TestInteractionRecording:
             manager = PreferenceManager(storage_dir=tmpdir)
 
             manager.record_interaction(
-                user_id="user123",
-                message_length=100,
-                response_length=300
+                user_id="user123", message_length=100, response_length=300
             )
             manager.record_interaction(
-                user_id="user123",
-                message_length=150,
-                response_length=400
+                user_id="user123", message_length=150, response_length=400
             )
             manager.record_interaction(
-                user_id="user123",
-                message_length=200,
-                response_length=500
+                user_id="user123", message_length=200, response_length=500
             )
 
             prefs = manager.get_preferences("user123")
@@ -254,17 +237,12 @@ class TestInteractionRecording:
     def test_interaction_history_max_size(self):
         """Test that interaction history respects max size."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            manager = PreferenceManager(
-                storage_dir=tmpdir,
-                max_history_size=5
-            )
+            manager = PreferenceManager(storage_dir=tmpdir, max_history_size=5)
 
             # Record 10 interactions
             for i in range(10):
                 manager.record_interaction(
-                    user_id="user123",
-                    message_length=100 + i,
-                    response_length=300 + i
+                    user_id="user123", message_length=100 + i, response_length=300 + i
                 )
 
             prefs = manager.get_preferences("user123")
@@ -290,7 +268,7 @@ class TestPreferenceLearning:
                     message_length=100,
                     response_length=300,
                     communication_style_used="casual",
-                    user_satisfaction=0.9
+                    user_satisfaction=0.9,
                 )
 
             prefs = manager.get_preferences("user123")
@@ -309,7 +287,7 @@ class TestPreferenceLearning:
                     user_id="user123",
                     message_length=100,
                     response_length=150,  # Brief
-                    user_satisfaction=0.9
+                    user_satisfaction=0.9,
                 )
 
             prefs = manager.get_preferences("user123")
@@ -328,7 +306,7 @@ class TestPreferenceLearning:
                     message_length=100,
                     response_length=300,
                     topics=["AI"],
-                    user_satisfaction=0.8
+                    user_satisfaction=0.8,
                 )
 
             prefs = manager.get_preferences("user123")
@@ -346,24 +324,20 @@ class TestPreferenceLearning:
                 message_length=100,
                 response_length=300,
                 topics=["AI"],
-                user_satisfaction=0.5
+                user_satisfaction=0.5,
             )
 
-            initial_score = manager.get_preferences(
-                "user123"
-            ).topic_interests["AI"]
+            initial_score = manager.get_preferences("user123").topic_interests["AI"]
 
             manager.record_interaction(
                 user_id="user123",
                 message_length=100,
                 response_length=300,
                 topics=["AI"],
-                user_satisfaction=0.9
+                user_satisfaction=0.9,
             )
 
-            final_score = manager.get_preferences(
-                "user123"
-            ).topic_interests["AI"]
+            final_score = manager.get_preferences("user123").topic_interests["AI"]
 
             assert final_score > initial_score
 
@@ -377,7 +351,7 @@ class TestPreferenceLearning:
                 message_length=100,
                 response_length=300,
                 topics=["AI", "programming", "music"],
-                user_satisfaction=0.8
+                user_satisfaction=0.8,
             )
 
             prefs = manager.get_preferences("user123")
@@ -401,7 +375,7 @@ class TestPreferenceRetrieval:
                     message_length=100,
                     response_length=300,
                     communication_style_used="casual",
-                    user_satisfaction=0.9
+                    user_satisfaction=0.9,
                 )
 
             for _ in range(2):
@@ -410,7 +384,7 @@ class TestPreferenceRetrieval:
                     message_length=100,
                     response_length=300,
                     communication_style_used="professional",
-                    user_satisfaction=0.5
+                    user_satisfaction=0.5,
                 )
 
             preferred = manager.get_preferred_communication_style("user123")
@@ -435,7 +409,7 @@ class TestPreferenceRetrieval:
                     user_id="user123",
                     message_length=100,
                     response_length=1000,  # Detailed
-                    user_satisfaction=0.9
+                    user_satisfaction=0.9,
                 )
 
             preferred = manager.get_preferred_response_length("user123")
@@ -517,14 +491,10 @@ class TestTopicInterestManagement:
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = PreferenceManager(storage_dir=tmpdir)
 
-            with pytest.raises(
-                ValueError, match="score must be between"
-            ):
+            with pytest.raises(ValueError, match="score must be between"):
                 manager.add_topic_interest("user123", "AI", 1.5)
 
-            with pytest.raises(
-                ValueError, match="score must be between"
-            ):
+            with pytest.raises(ValueError, match="score must be between"):
                 manager.add_topic_interest("user123", "AI", -0.1)
 
     def test_remove_topic_interest(self):
@@ -596,7 +566,7 @@ class TestPreferencePersistence:
                 user_id="user123",
                 message_length=100,
                 response_length=300,
-                topics=["AI"]
+                topics=["AI"],
             )
 
             # Load from disk
@@ -617,7 +587,7 @@ class TestPreferencePersistence:
                     message_length=100,
                     response_length=300,
                     communication_style_used="casual",
-                    user_satisfaction=0.9
+                    user_satisfaction=0.9,
                 )
 
             # Load from disk
@@ -708,10 +678,7 @@ class TestPreferenceEdgeCases:
             manager = PreferenceManager(storage_dir=tmpdir)
 
             prefs = manager.record_interaction(
-                user_id="user123",
-                message_length=100,
-                response_length=300,
-                topics=[]
+                user_id="user123", message_length=100, response_length=300, topics=[]
             )
 
             assert prefs.interaction_history[0].topics == []
@@ -726,7 +693,7 @@ class TestPreferenceEdgeCases:
                 user_id="user123",
                 message_length=100,
                 response_length=150,
-                user_satisfaction=0.8
+                user_satisfaction=0.8,
             )
 
             # Moderate response
@@ -734,7 +701,7 @@ class TestPreferenceEdgeCases:
                 user_id="user123",
                 message_length=100,
                 response_length=500,
-                user_satisfaction=0.8
+                user_satisfaction=0.8,
             )
 
             # Detailed response
@@ -742,7 +709,7 @@ class TestPreferenceEdgeCases:
                 user_id="user123",
                 message_length=100,
                 response_length=1000,
-                user_satisfaction=0.8
+                user_satisfaction=0.8,
             )
 
             prefs = manager.get_preferences("user123")
@@ -761,7 +728,7 @@ class TestPreferenceEdgeCases:
                 message_length=100,
                 response_length=300,
                 communication_style_used="casual",
-                user_satisfaction=0.3
+                user_satisfaction=0.3,
             )
 
             prefs = manager.get_preferences("user123")
@@ -773,7 +740,7 @@ class TestPreferenceEdgeCases:
                 message_length=100,
                 response_length=300,
                 communication_style_used="casual",
-                user_satisfaction=0.9
+                user_satisfaction=0.9,
             )
 
             prefs = manager.get_preferences("user123")
@@ -794,7 +761,7 @@ class TestPreferenceEdgeCases:
                     message_length=100,
                     response_length=300,
                     topics=["AI"],
-                    user_satisfaction=1.0
+                    user_satisfaction=1.0,
                 )
 
             prefs = manager.get_preferences("user123")

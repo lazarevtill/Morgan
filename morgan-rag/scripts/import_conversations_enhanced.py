@@ -66,7 +66,9 @@ def extract_turns(mapping: dict) -> List[Tuple[str, str]]:
     return turns
 
 
-def generate_llm_tags(title: str, turns: List[Tuple[str, str]], llm_service) -> List[str]:
+def generate_llm_tags(
+    title: str, turns: List[Tuple[str, str]], llm_service
+) -> List[str]:
     """Generate semantic tags for a conversation using LLM."""
     try:
         # Create a summary of the conversation
@@ -112,11 +114,16 @@ def import_conversations_enhanced(path: Path):
 
     # Get actual service configurations
     from morgan.config import get_settings
+
     settings = get_settings()
 
     console.print("[green]✓[/green] Memory system ready")
-    console.print(f"[green]✓[/green] LLM service ready ({settings.llm_model} via ai.ishosting.com)")
-    console.print(f"[green]✓[/green] Embeddings ready ({settings.embedding_model} via local Ollama at {settings.embedding_base_url})\n")
+    console.print(
+        f"[green]✓[/green] LLM service ready ({settings.llm_model} via ai.ishosting.com)"
+    )
+    console.print(
+        f"[green]✓[/green] Embeddings ready ({settings.embedding_model} via local Ollama at {settings.embedding_base_url})\n"
+    )
 
     conversations = load_conversations(path)
     imported = 0
@@ -131,12 +138,11 @@ def import_conversations_enhanced(path: Path):
         BarColumn(),
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         TimeElapsedColumn(),
-        console=console
+        console=console,
     ) as progress:
 
         task = progress.add_task(
-            "[cyan]Importing conversations...",
-            total=len(conversations)
+            "[cyan]Importing conversations...", total=len(conversations)
         )
 
         for idx, conv in enumerate(conversations, 1):
@@ -166,8 +172,7 @@ def import_conversations_enhanced(path: Path):
 
                 # Upsert conversation topic with embedding
                 topic_vector = memory.embedding_service.encode(
-                    text=title or "conversation",
-                    instruction="document"
+                    text=title or "conversation", instruction="document"
                 )
 
                 memory.vector_db.upsert_points(
@@ -192,10 +197,7 @@ def import_conversations_enhanced(path: Path):
                 for turn_idx, (q, a) in enumerate(turns):
                     turn_tags = tags + [f"turn:{turn_idx}"]
                     memory.add_turn(
-                        conversation_id=conv_id,
-                        question=q,
-                        answer=a,
-                        tags=turn_tags
+                        conversation_id=conv_id, question=q, answer=a, tags=turn_tags
                     )
                     turns_total += 1
 
@@ -208,8 +210,7 @@ def import_conversations_enhanced(path: Path):
 
                     text = "\n\n".join([f"Q: {q}\nA: {a}" for q, a in chunk])
                     vec = memory.embedding_service.encode(
-                        text=text,
-                        instruction="document"
+                        text=text, instruction="document"
                     )
 
                     chunk_points.append(
@@ -230,7 +231,7 @@ def import_conversations_enhanced(path: Path):
                     memory.vector_db.upsert_points(
                         memory.turn_collection,
                         chunk_points,
-                        use_batch_optimization=False
+                        use_batch_optimization=False,
                     )
 
                 imported += 1
@@ -247,18 +248,28 @@ def import_conversations_enhanced(path: Path):
 
     # Final summary
     console.print("\n[bold green]✓ Import Complete![/bold green]\n")
-    console.print(f"  [cyan]Conversations imported:[/cyan] {imported}/{len(conversations)}")
+    console.print(
+        f"  [cyan]Conversations imported:[/cyan] {imported}/{len(conversations)}"
+    )
     console.print(f"  [cyan]Total turns processed:[/cyan] {turns_total}")
     console.print(f"  [cyan]LLM tags generated:[/cyan] {llm_tags_added} conversations")
     console.print(f"\n[bold]Data stored in:[/bold]")
-    console.print(f"  • [dim]morgan_conversations:[/dim] {imported} conversation topics")
-    console.print(f"  • [dim]morgan_turns:[/dim] ~{imported * chunk_size} chunked summaries")
-    console.print(f"\n[green]🚀 Your conversations are now searchable with semantic tags![/green]\n")
+    console.print(
+        f"  • [dim]morgan_conversations:[/dim] {imported} conversation topics"
+    )
+    console.print(
+        f"  • [dim]morgan_turns:[/dim] ~{imported * chunk_size} chunked summaries"
+    )
+    console.print(
+        f"\n[green]🚀 Your conversations are now searchable with semantic tags![/green]\n"
+    )
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        console.print("\n[red]Usage:[/red] python scripts/import_conversations_enhanced.py <conversations.json>\n")
+        console.print(
+            "\n[red]Usage:[/red] python scripts/import_conversations_enhanced.py <conversations.json>\n"
+        )
         sys.exit(1)
 
     conv_file = Path(sys.argv[1])

@@ -1,2 +1,1 @@
 """Reranking Service Package."""
-

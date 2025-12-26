@@ -26,10 +26,12 @@ from rich.table import Table
 
 console = Console()
 
+
 def check_config():
     """Check configuration loads"""
     try:
         from morgan.config import get_settings
+
         settings = get_settings()
         console.print("✅ Configuration loaded")
         console.print(f"   LLM: {settings.llm_model} @ {settings.llm_base_url}")
@@ -45,6 +47,7 @@ def check_llm():
     """Check LLM service"""
     try:
         from morgan.services.llm_service import get_llm_service
+
         llm = get_llm_service()
         response = llm.generate("Say 'OK'", max_tokens=5)
         console.print(f"✅ LLM service working")
@@ -59,6 +62,7 @@ def check_embeddings():
     """Check embedding service"""
     try:
         from morgan.embeddings.service import EmbeddingService
+
         service = EmbeddingService()
         emb = service.encode("test")
         console.print(f"✅ Embedding service working")
@@ -96,6 +100,7 @@ def check_memory():
     """Check memory system"""
     try:
         from morgan.core.memory import ConversationMemory
+
         memory = ConversationMemory()
         console.print("✅ Memory system initialized")
         return True
@@ -108,6 +113,7 @@ def check_assistant():
     """Check Morgan assistant"""
     try:
         from morgan.core.assistant import MorganAssistant
+
         assistant = MorganAssistant()
         console.print("✅ Morgan assistant ready")
 
@@ -118,6 +124,7 @@ def check_assistant():
     except Exception as e:
         console.print(f"❌ Assistant failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

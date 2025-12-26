@@ -55,7 +55,10 @@ class TestEmotionalIntelligenceIntegration:
 
         test_cases = [
             ("I'm feeling really sad today", EmotionalTone.CONCERNED),
-            ("I'm so excited and happy!", [EmotionalTone.JOYFUL, EmotionalTone.EXCITED]),
+            (
+                "I'm so excited and happy!",
+                [EmotionalTone.JOYFUL, EmotionalTone.EXCITED],
+            ),
             ("I'm confused about this", EmotionalTone.CONTENT),
             ("Thank you so much!", EmotionalTone.CONTENT),
         ]
@@ -117,9 +120,7 @@ class TestRerankingIntegration:
     async def test_reranking_basic_functionality(self):
         """Test basic reranking functionality."""
         reranking_service = RerankingService(
-            remote_endpoint=None,
-            enable_local_fallback=True,
-            local_device="cpu"
+            remote_endpoint=None, enable_local_fallback=True, local_device="cpu"
         )
 
         query = "Python programming"
@@ -131,17 +132,15 @@ class TestRerankingIntegration:
 
         async with reranking_service:
             results = await reranking_service.rerank(
-                query=query,
-                documents=documents,
-                top_k=2
+                query=query, documents=documents, top_k=2
             )
 
         # Verify results
         assert len(results) == 2
         assert all(isinstance(r, RerankResult) for r in results)
-        assert all(hasattr(r, 'text') for r in results)
-        assert all(hasattr(r, 'score') for r in results)
-        assert all(hasattr(r, 'original_index') for r in results)
+        assert all(hasattr(r, "text") for r in results)
+        assert all(hasattr(r, "score") for r in results)
+        assert all(hasattr(r, "original_index") for r in results)
 
         # Verify scores are in descending order
         scores = [r.score for r in results]
@@ -151,24 +150,16 @@ class TestRerankingIntegration:
     async def test_reranking_with_metadata(self):
         """Test that reranking preserves metadata."""
         reranking_service = RerankingService(
-            remote_endpoint=None,
-            enable_local_fallback=True,
-            local_device="cpu"
+            remote_endpoint=None, enable_local_fallback=True, local_device="cpu"
         )
 
         query = "machine learning"
         documents = ["ML is AI", "DL uses networks", "Stats is important"]
-        metadata = [
-            {"source": "doc1"},
-            {"source": "doc2"},
-            {"source": "doc3"}
-        ]
+        metadata = [{"source": "doc1"}, {"source": "doc2"}, {"source": "doc3"}]
 
         async with reranking_service:
             results = await reranking_service.rerank(
-                query=query,
-                documents=documents,
-                metadata=metadata
+                query=query, documents=documents, metadata=metadata
             )
 
         # Verify metadata is preserved
@@ -179,9 +170,7 @@ class TestRerankingIntegration:
     async def test_reranking_statistics_tracking(self):
         """Test that reranking tracks statistics."""
         reranking_service = RerankingService(
-            remote_endpoint=None,
-            enable_local_fallback=True,
-            local_device="cpu"
+            remote_endpoint=None, enable_local_fallback=True, local_device="cpu"
         )
 
         query = "test"
@@ -202,9 +191,7 @@ class TestRerankingIntegration:
     async def test_reranking_empty_documents(self):
         """Test reranking with empty document list."""
         reranking_service = RerankingService(
-            remote_endpoint=None,
-            enable_local_fallback=True,
-            local_device="cpu"
+            remote_endpoint=None, enable_local_fallback=True, local_device="cpu"
         )
 
         async with reranking_service:
@@ -221,9 +208,7 @@ class TestIntegratedWorkflow:
         """Test using emotional intelligence and reranking together."""
         ei = EmotionalIntelligence()
         reranking_service = RerankingService(
-            remote_endpoint=None,
-            enable_local_fallback=True,
-            local_device="cpu"
+            remote_endpoint=None, enable_local_fallback=True, local_device="cpu"
         )
 
         user_id = "test_user_workflow"
@@ -250,9 +235,7 @@ class TestIntegratedWorkflow:
 
         async with reranking_service:
             reranked = await reranking_service.rerank(
-                query=query,
-                documents=documents,
-                top_k=2
+                query=query, documents=documents, top_k=2
             )
 
         assert len(reranked) == 2

@@ -38,7 +38,9 @@ class TestHierarchicalEmbeddingService:
 
         # Mock clustering engine to returned unmodified embeddings
         self.mock_clustering_engine = Mock()
-        self.mock_clustering_engine.apply_contrastive_bias.side_effect = lambda emb, *args: emb
+        self.mock_clustering_engine.apply_contrastive_bias.side_effect = (
+            lambda emb, *args: emb
+        )
         self.service.clustering_engine = self.mock_clustering_engine
 
     def test_create_hierarchical_embeddings(self):

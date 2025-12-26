@@ -12,11 +12,22 @@ Characteristics:
     - Validate their own invariants
 """
 
-from morgan_v2.domain.entities.conversation import Conversation, ConversationTurn, Message
+from morgan_v2.domain.entities.conversation import (
+    Conversation,
+    ConversationTurn,
+    Message,
+)
 from morgan_v2.domain.entities.user import User, UserProfile, UserPreferences
 from morgan_v2.domain.entities.knowledge import Document, DocumentChunk, Source
-from morgan_v2.domain.entities.emotion import EmotionalState, EmotionalContext, MoodHistory
-from morgan_v2.domain.entities.relationship import CompanionProfile, RelationshipMilestone
+from morgan_v2.domain.entities.emotion import (
+    EmotionalState,
+    EmotionalContext,
+    MoodHistory,
+)
+from morgan_v2.domain.entities.relationship import (
+    CompanionProfile,
+    RelationshipMilestone,
+)
 from morgan_v2.domain.entities.memory import Memory, MemoryContext, MemoryCluster
 
 __all__ = [
