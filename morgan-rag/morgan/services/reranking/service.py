@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from morgan.config import get_settings
 from morgan.services.reranking.models import RerankResult, RerankStats
 from morgan.utils.logger import get_logger
+from morgan.utils.model_cache import setup_model_cache  # Use canonical implementation
 
 logger = get_logger(__name__)
 
@@ -42,46 +43,6 @@ try:
     SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
     SENTENCE_TRANSFORMERS_AVAILABLE = False
-
-
-def setup_model_cache(cache_dir: Optional[str] = None) -> Path:
-    """
-    Setup model cache directories for rerankers.
-
-    Args:
-        cache_dir: Base directory for model cache
-
-    Returns:
-        Path to cache directory
-    """
-    try:
-        from dotenv import load_dotenv
-
-        load_dotenv()
-    except ImportError:
-        pass
-
-    if cache_dir is None:
-        cache_dir = os.environ.get("MORGAN_MODEL_CACHE", "~/.morgan/models")
-
-    cache_path = Path(cache_dir).expanduser()
-    cache_path.mkdir(parents=True, exist_ok=True)
-
-    # Set environment variables
-    os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(cache_path / "sentence-transformers")
-    os.environ["HF_HOME"] = str(cache_path / "huggingface")
-
-    # Configure HF_TOKEN
-    hf_token = (
-        os.environ.get("HF_TOKEN")
-        or os.environ.get("HUGGING_FACE_HUB_TOKEN")
-        or os.environ.get("HUGGINGFACE_TOKEN")
-    )
-    if hf_token:
-        os.environ["HF_TOKEN"] = hf_token
-        os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
-
-    return cache_path
 
 
 class RerankingService:

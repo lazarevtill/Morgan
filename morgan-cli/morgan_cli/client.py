@@ -19,10 +19,11 @@ import aiohttp
 import websockets
 from pydantic import BaseModel, Field, ValidationError as PydanticValidationError
 
-# Add shared package to path if not already there
-_shared_path = Path(__file__).parent.parent.parent / "shared"
-if _shared_path.exists() and str(_shared_path) not in sys.path:
-    sys.path.insert(0, str(_shared_path))
+# Add project root to path so 'from shared.utils...' imports work
+# We need the parent of 'shared/', not 'shared/' itself
+_project_root = Path(__file__).parent.parent.parent
+if (_project_root / "shared").exists() and str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 from shared.utils.exceptions import (
     MorganException,
@@ -352,17 +353,20 @@ class HTTPClient:
         """
         return await self._request("PUT", endpoint, json_data=data)
 
-    async def delete(self, endpoint: str) -> Dict[str, Any]:
+    async def delete(
+        self, endpoint: str, params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Make a DELETE request.
 
         Args:
             endpoint: API endpoint
+            params: Query parameters
 
         Returns:
             Response data
         """
-        return await self._request("DELETE", endpoint)
+        return await self._request("DELETE", endpoint, params=params)
 
     # ========================================================================
     # API Methods
@@ -449,7 +453,7 @@ class HTTPClient:
             if user_id or self.config.user_id
             else None
         )
-        return await self.delete("/api/memory/cleanup")
+        return await self.delete("/api/memory/cleanup", params=params)
 
     async def learn(
         self,

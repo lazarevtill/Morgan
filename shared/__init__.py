@@ -1,7 +1,8 @@
 """
 Shared modules for Morgan AI Assistant.
 
-Contains utilities, models, and infrastructure components shared across services.
+Contains utilities, models, infrastructure, and configuration components
+shared across all Morgan services.
 """
 
-__all__ = ["models", "utils", "infrastructure"]
+__all__ = ["models", "utils", "infrastructure", "config"]

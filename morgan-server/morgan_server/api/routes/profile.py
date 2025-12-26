@@ -7,6 +7,7 @@ This module implements the profile endpoints for Morgan server:
 - GET /api/timeline/{user_id}: Get relationship timeline
 """
 
+import logging
 from typing import Optional, List
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, status, Path
@@ -24,6 +25,7 @@ from morgan_server.api.routes.chat import get_assistant
 # Import Enums from Core models for mapping
 from morgan.intelligence.core.models import CommunicationStyle, ResponseLength
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["profile"])
 
@@ -87,7 +89,7 @@ async def get_user_profile(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error retrieving profile: {e}")
+        logger.exception("Error retrieving profile for user %s", user_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve profile: {str(e)}",
@@ -120,23 +122,29 @@ async def update_user_profile(
         if preferences.communication_style is not None:
             # Map string to Core Enum
             try:
-                # Use value matching, assuming Core Enums use lowercase strings as values?
-                # or verify map manually.
-                # Assuming simple mapping:
                 update_kwargs["communication_style"] = CommunicationStyle(
                     preferences.communication_style.lower()
                 )
-            except ValueError:
-                # Fallback or error?
-                pass
+            except ValueError as e:
+                logger.warning(
+                    "Invalid communication_style '%s': %s",
+                    preferences.communication_style,
+                    e
+                )
+                # Continue with other updates rather than failing completely
 
         if preferences.response_length is not None:
             try:
                 update_kwargs["response_length"] = ResponseLength(
                     preferences.response_length.lower()
                 )
-            except ValueError:
-                pass
+            except ValueError as e:
+                logger.warning(
+                    "Invalid response_length '%s': %s",
+                    preferences.response_length,
+                    e
+                )
+                # Continue with other updates rather than failing completely
 
         if preferences.topics_of_interest is not None:
             update_kwargs["topics_of_interest"] = preferences.topics_of_interest
@@ -182,7 +190,7 @@ async def update_user_profile(
             detail=str(e),
         )
     except Exception as e:
-        print(f"Error updating profile: {e}")
+        logger.exception("Error updating profile for user %s", user_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update profile: {str(e)}",
@@ -249,7 +257,7 @@ async def get_user_timeline(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error retrieving timeline: {e}")
+        logger.exception("Error retrieving timeline for user %s", user_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve timeline: {str(e)}",

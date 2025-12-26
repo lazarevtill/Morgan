@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 from morgan.config import get_settings
 from morgan.services.embeddings.models import EmbeddingStats
 from morgan.utils.logger import get_logger
+from morgan.utils.model_cache import setup_model_cache  # Use canonical implementation
 
 logger = get_logger(__name__)
 
@@ -34,57 +35,6 @@ try:
     SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
     SENTENCE_TRANSFORMERS_AVAILABLE = False
-
-
-def setup_model_cache(cache_dir: Optional[str] = None) -> Path:
-    """
-    Setup model cache directories and environment variables.
-
-    Ensures models are downloaded once and reused on subsequent starts.
-
-    Args:
-        cache_dir: Base directory for model cache. Defaults to ~/.morgan/models
-
-    Returns:
-        Path to cache directory
-    """
-    # Try to load .env file if python-dotenv is available
-    try:
-        from dotenv import load_dotenv
-
-        load_dotenv()
-    except ImportError:
-        pass
-
-    if cache_dir is None:
-        cache_dir = os.environ.get("MORGAN_MODEL_CACHE", "~/.morgan/models")
-
-    cache_path = Path(cache_dir).expanduser()
-
-    # Create subdirectories
-    sentence_transformers_path = cache_path / "sentence-transformers"
-    hf_path = cache_path / "huggingface"
-
-    for path in [cache_path, sentence_transformers_path, hf_path]:
-        path.mkdir(parents=True, exist_ok=True)
-
-    # Set environment variables for model caching
-    os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(sentence_transformers_path)
-    os.environ["HF_HOME"] = str(hf_path)
-    os.environ["TRANSFORMERS_CACHE"] = str(hf_path)
-
-    # Configure HF_TOKEN for gated model downloads
-    hf_token = (
-        os.environ.get("HF_TOKEN")
-        or os.environ.get("HUGGING_FACE_HUB_TOKEN")
-        or os.environ.get("HUGGINGFACE_TOKEN")
-    )
-    if hf_token:
-        os.environ["HF_TOKEN"] = hf_token
-        os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
-
-    logger.debug("Model cache configured at %s", cache_path)
-    return cache_path
 
 
 class EmbeddingService:

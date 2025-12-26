@@ -17,6 +17,7 @@ from morgan_cli.client import (
     ConnectionStatus,
     HTTPClient,
     MorganClient,
+    WebSocketClient,
     # These are now aliases to shared exceptions but maintain backward compatibility
     ConnectionError,
     RequestError,
@@ -369,7 +370,7 @@ async def test_client_error_handling(config, error_type):
 
         try:
             await http_client.health_check()
-        except ClientConnectionError as e:
+        except ConnectionError as e:
             error_raised = True
             error_type_correct = error_type in ["connection"]
             # Verify error message is informative
