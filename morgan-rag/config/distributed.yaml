@@ -1,0 +1,180 @@
+# Morgan Distributed Architecture Configuration
+# 100% Self-Hosted - No API Keys Required
+#
+# All models run locally via Ollama or sentence-transformers.
+#
+# Copy this file and customize for your environment:
+#   cp distributed.yaml distributed.local.yaml
+#
+# Override with environment variable:
+#   MORGAN_DISTRIBUTED_CONFIG=/path/to/config.yaml
+
+# Global settings
+settings:
+  # Health check interval in seconds
+  health_check_interval: 60
+
+  # Default request timeout in seconds
+  default_timeout: 30.0
+
+  # Load balancing strategy: round_robin, random, least_loaded
+  load_balancing_strategy: round_robin
+
+  # Enable automatic failover
+  enable_failover: true
+
+  # Number of retries before marking host unhealthy
+  max_retries: 3
+
+# Model cache configuration
+# All models are downloaded once and cached here
+model_cache:
+  # Base directory for all model weights
+  # Models are downloaded here on first use and reused on subsequent starts
+  base_dir: "~/.morgan/models"
+
+  # sentence-transformers cache (embeddings, rerankers)
+  sentence_transformers_home: "~/.morgan/models/sentence-transformers"
+
+  # Hugging Face cache
+  hf_home: "~/.morgan/models/huggingface"
+
+  # Ollama models directory (if using custom location)
+  ollama_models: "~/.ollama/models"
+
+  # Enable pre-download of models on startup
+  preload_on_startup: true
+
+# LLM Configuration (Ollama)
+llm:
+  # Main LLM model (for complex reasoning)
+  # Runs on RTX 3090 hosts via Ollama
+  main_model: "qwen2.5:32b-instruct-q4_K_M"
+
+  # Fast LLM model (for simple queries)
+  # Runs on RTX 4070 host via Ollama
+  fast_model: "qwen2.5:7b-instruct-q5_K_M"
+
+  # Default temperature
+  temperature: 0.7
+
+  # Default max tokens
+  max_tokens: 2048
+
+# Embedding Configuration (Self-Hosted)
+embeddings:
+  # Primary: nomic-embed-text via Ollama
+  # Fallback: all-MiniLM-L6-v2 via sentence-transformers
+  model: "nomic-embed-text"
+  dimensions: 768
+
+  # Local fallback model (sentence-transformers, CPU)
+  local_fallback_model: "all-MiniLM-L6-v2"
+
+  # Batch size for embedding
+  batch_size: 100
+
+# Reranking Configuration (Self-Hosted)
+reranking:
+  # CrossEncoder model via sentence-transformers
+  # Runs locally, no API required
+  model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+  # Score weighting
+  rerank_weight: 0.6
+  original_weight: 0.4
+
+  # Top-k documents to rerank
+  top_k: 20
+
+# Host definitions
+# Each host requires: host_id, address, port, role
+# Optional: gpu_model, gpu_vram_gb, models, api_path
+hosts:
+# CPU Host 1 - Morgan Core Orchestrator
+- host_id: "cpu-orchestrator-1"
+  address: "192.168.1.10"
+  port: 8080
+  role: "orchestrator"
+  description: "Primary Morgan core with Qdrant and Redis"
+  models: []
+
+# CPU Host 2 - Background Services
+- host_id: "cpu-orchestrator-2"
+  address: "192.168.1.11"
+  port: 8080
+  role: "orchestrator"
+  description: "Background services and monitoring"
+  models: []
+
+# GPU Host 3 - Main LLM Primary (RTX 3090)
+- host_id: "llm-primary"
+  address: "192.168.1.20"
+  port: 11434
+  role: "main_llm"
+  gpu_model: "RTX 3090"
+  gpu_vram_gb: 24.0
+  api_path: "/v1"
+  description: "Primary LLM inference via Ollama"
+  models:
+  - "qwen2.5:32b-instruct-q4_K_M"
+
+# GPU Host 4 - Main LLM Secondary (RTX 3090)
+- host_id: "llm-secondary"
+  address: "192.168.1.21"
+  port: 11434
+  role: "main_llm"
+  gpu_model: "RTX 3090"
+  gpu_vram_gb: 24.0
+  api_path: "/v1"
+  description: "Secondary LLM inference via Ollama"
+  models:
+  - "qwen2.5:32b-instruct-q4_K_M"
+
+# GPU Host 5 - Embeddings + Fast LLM (RTX 4070)
+- host_id: "embeddings-host"
+  address: "192.168.1.22"
+  port: 11434
+  role: "embeddings"
+  gpu_model: "RTX 4070"
+  gpu_vram_gb: 12.0
+  api_path: "/v1"
+  description: "Embedding generation via Ollama"
+  models:
+  - "nomic-embed-text"
+  - "qwen2.5:7b-instruct-q5_K_M"
+
+# GPU Host 6 - Reranking (RTX 2060)
+- host_id: "reranking-host"
+  address: "192.168.1.23"
+  port: 8080
+  role: "reranking"
+  gpu_model: "RTX 2060"
+  gpu_vram_gb: 6.0
+  api_path: "/rerank"
+  description: "Document reranking via sentence-transformers"
+  models:
+  - "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+# Redis Configuration
+redis:
+  host: "192.168.1.10"
+  port: 6379
+  db: 0
+  password: ""
+  prefix: "morgan:"
+
+# Vector Database (Qdrant) Configuration
+qdrant:
+  host: "192.168.1.10"
+  port: 6333
+  grpc_port: 6334
+
+# Monitoring Configuration
+monitoring:
+  prometheus:
+    host: "192.168.1.11"
+    port: 9090
+  grafana:
+    host: "192.168.1.11"
+    port: 3000

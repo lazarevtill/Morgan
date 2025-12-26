@@ -1,0 +1,436 @@
+# Docker Compose for Distributed Morgan Setup (6-Host Architecture)
+#
+# This compose file is designed to be deployed across multiple hosts
+# using Docker Swarm or individual docker-compose deployments.
+#
+# Architecture:
+# - Host 1 (192.168.1.10): Morgan Core Orchestrator + Qdrant + Redis
+# - Host 2 (192.168.1.11): Background Services + Monitoring
+# - Host 3 (192.168.1.20): Main LLM #1 (RTX 3090)
+# - Host 4 (192.168.1.21): Main LLM #2 (RTX 3090)
+# - Host 5 (192.168.1.22): Embeddings + Fast LLM (RTX 4070)
+# - Host 6 (192.168.1.23): Reranking + Utilities (RTX 2060)
+#
+# Usage:
+# - Deploy host-specific compose files or use Docker Swarm
+# - Configure external networks for cross-host communication
+#
+version: "3.9"
+
+services:
+  #############################################
+  # HOST 1 - Morgan Core (192.168.1.10)
+  #############################################
+  
+  morgan-core:
+    image: morgan-server:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.server
+    container_name: morgan-core
+    hostname: morgan-core
+    ports:
+      - "8080:8080"
+    environment:
+      # Server
+      - MORGAN_HOST=0.0.0.0
+      - MORGAN_PORT=8080
+      - MORGAN_WORKERS=8
+      - MORGAN_NODE_ID=core-1
+      
+      # Distributed LLM (connect to GPU hosts)
+      - MORGAN_LLM_ENDPOINTS=http://192.168.1.20:11434/v1,http://192.168.1.21:11434/v1
+      - MORGAN_LLM_MODEL=qwen2.5:32b-instruct-q4_K_M
+      - MORGAN_LLM_FAST_MODEL=qwen2.5:7b-instruct-q5_K_M
+      - MORGAN_LLM_STRATEGY=round_robin
+      
+      # Embeddings (connect to embedding host)
+      - MORGAN_EMBEDDING_ENDPOINT=http://192.168.1.22:11434/v1
+      - MORGAN_EMBEDDING_MODEL=nomic-embed-text
+      - MORGAN_EMBEDDING_DIMENSIONS=768
+      
+      # Reranking (connect to reranking host)
+      - MORGAN_RERANKING_ENDPOINT=http://192.168.1.23:8080/rerank
+      
+      # Vector DB
+      - MORGAN_VECTOR_DB_URL=http://qdrant:6333
+      
+      # Redis
+      - MORGAN_REDIS_URL=redis://redis:6379/0
+      - MORGAN_CACHE_BACKEND=redis
+      - MORGAN_SESSION_BACKEND=redis
+      
+      # Features
+      - MORGAN_REASONING_ENABLED=true
+      - MORGAN_PROACTIVE_ENABLED=true
+      
+      # Distributed configuration
+      - MORGAN_DISTRIBUTED_CONFIG=/app/config/distributed.yaml
+      
+      # Model cache - weights are downloaded once and reused
+      - MORGAN_MODEL_CACHE=/app/models
+      
+      # Logging
+      - MORGAN_LOG_LEVEL=INFO
+      - MORGAN_LOG_FORMAT=json
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - morgan-data:/app/data
+      - morgan-models:/app/models  # Persistent model cache
+      - ./config:/app/config:ro
+    networks:
+      morgan-internal:
+        ipv4_address: 172.28.1.10
+      morgan-external:
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 16G
+        reservations:
+          cpus: '2'
+          memory: 8G
+      placement:
+        constraints:
+          - node.labels.morgan.role == core
+
+  # Qdrant on Host 1
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: morgan-qdrant
+    hostname: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__STORAGE__STORAGE_PATH=/qdrant/storage
+      - QDRANT__STORAGE__OPTIMIZERS__DEFAULT_SEGMENT_NUMBER=4
+      - QDRANT__SERVICE__MAX_REQUEST_SIZE_MB=64
+    volumes:
+      - qdrant-storage:/qdrant/storage
+      - qdrant-snapshots:/qdrant/snapshots
+    networks:
+      morgan-internal:
+        ipv4_address: 172.28.1.11
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 8G
+      placement:
+        constraints:
+          - node.labels.morgan.role == core
+
+  # Redis on Host 1
+  redis:
+    image: redis:7-alpine
+    container_name: morgan-redis
+    hostname: redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --save 300 100
+      --tcp-backlog 511
+      --timeout 0
+      --tcp-keepalive 300
+    volumes:
+      - redis-data:/data
+    networks:
+      morgan-internal:
+        ipv4_address: 172.28.1.12
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 4G
+      placement:
+        constraints:
+          - node.labels.morgan.role == core
+
+  #############################################
+  # HOST 2 - Background Services (192.168.1.11)
+  #############################################
+  
+  morgan-background:
+    image: morgan-server:latest
+    container_name: morgan-background
+    hostname: morgan-background
+    environment:
+      - MORGAN_MODE=background
+      - MORGAN_NODE_ID=background-1
+      - MORGAN_REDIS_URL=redis://192.168.1.10:6379/0
+      - MORGAN_VECTOR_DB_URL=http://192.168.1.10:6333
+      - MORGAN_LOG_LEVEL=INFO
+    networks:
+      morgan-external:
+    restart: unless-stopped
+    profiles:
+      - background
+    deploy:
+      placement:
+        constraints:
+          - node.labels.morgan.role == background
+
+  # Prometheus on Host 2
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: morgan-prometheus
+    hostname: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus-distributed.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      morgan-external:
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    deploy:
+      placement:
+        constraints:
+          - node.labels.morgan.role == background
+
+  # Grafana on Host 2
+  grafana:
+    image: grafana/grafana:latest
+    container_name: morgan-grafana
+    hostname: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-morgan}
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      morgan-external:
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    deploy:
+      placement:
+        constraints:
+          - node.labels.morgan.role == background
+
+  #############################################
+  # HOST 3 - Main LLM #1 (192.168.1.20)
+  #############################################
+  
+  ollama-llm-1:
+    image: ollama/ollama:latest
+    container_name: ollama-llm-1
+    hostname: ollama-llm-1
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+      - OLLAMA_MODELS=/root/.ollama/models
+      - OLLAMA_NUM_PARALLEL=4
+      - OLLAMA_MAX_LOADED_MODELS=1
+    volumes:
+      - ollama-models-1:/root/.ollama
+    networks:
+      morgan-external:
+    restart: unless-stopped
+    profiles:
+      - gpu-llm-1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+      placement:
+        constraints:
+          - node.labels.morgan.role == llm-primary
+
+  #############################################
+  # HOST 4 - Main LLM #2 (192.168.1.21)
+  #############################################
+  
+  ollama-llm-2:
+    image: ollama/ollama:latest
+    container_name: ollama-llm-2
+    hostname: ollama-llm-2
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+      - OLLAMA_MODELS=/root/.ollama/models
+      - OLLAMA_NUM_PARALLEL=4
+      - OLLAMA_MAX_LOADED_MODELS=1
+    volumes:
+      - ollama-models-2:/root/.ollama
+    networks:
+      morgan-external:
+    restart: unless-stopped
+    profiles:
+      - gpu-llm-2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+      placement:
+        constraints:
+          - node.labels.morgan.role == llm-secondary
+
+  #############################################
+  # HOST 5 - Embeddings (192.168.1.22)
+  #############################################
+  
+  ollama-embeddings:
+    image: ollama/ollama:latest
+    container_name: ollama-embeddings
+    hostname: ollama-embeddings
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+      - OLLAMA_MODELS=/root/.ollama/models
+      - OLLAMA_NUM_PARALLEL=8
+      - OLLAMA_MAX_LOADED_MODELS=2
+    volumes:
+      - ollama-models-embed:/root/.ollama
+    networks:
+      morgan-external:
+    restart: unless-stopped
+    profiles:
+      - gpu-embeddings
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+      placement:
+        constraints:
+          - node.labels.morgan.role == embeddings
+
+  #############################################
+  # HOST 6 - Reranking (192.168.1.23)
+  #############################################
+  
+  reranking-service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.reranking
+    container_name: reranking-service
+    hostname: reranking-service
+    ports:
+      - "8080:8080"
+    environment:
+      - RERANKING_HOST=0.0.0.0
+      - RERANKING_PORT=8080
+      - RERANKING_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+      - RERANKING_DEVICE=cuda
+      - RERANKING_PRELOAD=true
+      # Model cache - weights are downloaded once and reused
+      - MODEL_CACHE_DIR=/app/models
+    volumes:
+      - reranking-models:/app/models  # Persistent model cache
+    networks:
+      morgan-external:
+    restart: unless-stopped
+    profiles:
+      - gpu-reranking
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+      placement:
+        constraints:
+          - node.labels.morgan.role == reranking
+
+# Volumes
+volumes:
+  morgan-data:
+    driver: local
+  morgan-models:
+    driver: local
+    # Model weights cache for Morgan core
+    # Downloaded once, reused on subsequent starts
+  qdrant-storage:
+    driver: local
+  qdrant-snapshots:
+    driver: local
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  ollama-models-1:
+    driver: local
+    # Ollama models for LLM host 1
+  ollama-models-2:
+    driver: local
+    # Ollama models for LLM host 2
+  ollama-models-embed:
+    driver: local
+    # Ollama models for embedding host
+  reranking-models:
+    driver: local
+    # CrossEncoder models for reranking service
+
+# Networks
+networks:
+  # Internal network for core services (Host 1)
+  morgan-internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.1.0/24
+  
+  # External network for cross-host communication
+  morgan-external:
+    driver: overlay
+    attachable: true
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+

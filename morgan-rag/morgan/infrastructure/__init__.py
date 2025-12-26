@@ -3,7 +3,7 @@ Infrastructure Layer - Distributed Morgan Implementation
 
 This layer provides infrastructure for fully self-hosted distributed operation:
 - Distributed LLM client with load balancing and failover
-- Multi-GPU management and model routing
+- Multi-GPU management and model routing (single-host and distributed)
 - Local embedding service (OpenAI-compatible + local fallback)
 - Local reranking service (remote + local fallback)
 - No external API dependencies
@@ -15,16 +15,26 @@ Designed for 6-host distributed architecture:
 - Host 6 (2060): Reranking + Utilities
 
 Components:
-    distributed_llm.py   - Distributed LLM with load balancing
-    multi_gpu_manager.py - Manage models across GPUs
-    local_embeddings.py  - Local embedding generation
-    local_reranking.py   - Local reranking implementation
+    distributed_llm.py         - Distributed LLM with load balancing
+    distributed_gpu_manager.py - Manage distributed GPU hosts
+    multi_gpu_manager.py       - Manage models across local GPUs
+    local_embeddings.py        - Local embedding generation
+    local_reranking.py         - Local reranking implementation
 """
 
 from morgan.infrastructure.distributed_llm import (
     DistributedLLMClient,
     LoadBalancingStrategy,
     get_distributed_llm_client,
+)
+from morgan.infrastructure.distributed_gpu_manager import (
+    DistributedGPUManager,
+    DistributedConfig,
+    HostRole,
+    HostStatus,
+    HostConfig,
+    HostHealth,
+    get_distributed_gpu_manager,
 )
 from morgan.infrastructure.local_embeddings import (
     LocalEmbeddingService,
@@ -41,7 +51,15 @@ __all__ = [
     "DistributedLLMClient",
     "get_distributed_llm_client",
     "LoadBalancingStrategy",
-    # GPU Management
+    # Distributed GPU Management
+    "DistributedGPUManager",
+    "DistributedConfig",
+    "get_distributed_gpu_manager",
+    "HostRole",
+    "HostStatus",
+    "HostConfig",
+    "HostHealth",
+    # Single-host GPU Management
     "MultiGPUManager",
     # Embeddings
     "LocalEmbeddingService",

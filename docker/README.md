@@ -1,289 +1,267 @@
 # Morgan Docker Deployment
 
-This directory contains Docker configuration for deploying Morgan in a containerized environment.
+Docker configurations for deploying Morgan in various setups.
 
-## Quick Start
-
-### Prerequisites
-
-- Docker Engine 20.10+
-- Docker Compose 2.0+
-- Remote Ollama instance running (or other OpenAI-compatible LLM endpoint)
-
-### Basic Deployment
-
-1. **Start the services:**
+## Quick Start (Single Machine)
 
 ```bash
-cd docker
-docker-compose up -d
+# Start Morgan with Redis and Qdrant
+docker compose up -d
+
+# With monitoring (Prometheus + Grafana)
+docker compose --profile monitoring up -d
 ```
-
-This will start:
-- Morgan Server (port 8080)
-- Qdrant vector database (ports 6333, 6334)
-
-2. **Check service health:**
-
-```bash
-docker-compose ps
-```
-
-All services should show "healthy" status.
-
-3. **View logs:**
-
-```bash
-# All services
-docker-compose logs -f
-
-# Specific service
-docker-compose logs -f morgan-server
-```
-
-4. **Stop services:**
-
-```bash
-docker-compose down
-```
-
-### With Monitoring (Optional)
-
-To include Prometheus monitoring:
-
-```bash
-docker-compose --profile monitoring up -d
-```
-
-Access Prometheus at: http://localhost:9090
 
 ## Configuration
 
 ### Environment Variables
 
-Create a `.env` file in the `docker/` directory to customize configuration:
+Copy and customize the environment file:
 
 ```bash
-# LLM Configuration (required - remote Ollama)
-MORGAN_LLM_ENDPOINT=http://your-ollama-host:11434
-MORGAN_LLM_MODEL=gemma3
-MORGAN_LLM_API_KEY=  # Optional for self-hosted
-
-# Embedding Configuration
-MORGAN_EMBEDDING_PROVIDER=local  # Options: local, ollama, openai-compatible
-MORGAN_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-MORGAN_EMBEDDING_DEVICE=cpu  # For local embeddings
-MORGAN_EMBEDDING_ENDPOINT=  # Required for remote providers
-MORGAN_EMBEDDING_API_KEY=  # Optional for remote providers
-
-# Cache Configuration
-MORGAN_CACHE_SIZE_MB=1000
-
-# Logging Configuration
-MORGAN_LOG_LEVEL=INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
-MORGAN_LOG_FORMAT=json  # json or text
-
-# Performance Configuration
-MORGAN_MAX_CONCURRENT=100
-MORGAN_REQUEST_TIMEOUT=60
-MORGAN_SESSION_TIMEOUT=60
-
-# Vector Database Configuration
-MORGAN_VECTOR_DB_API_KEY=  # Optional
+cp .env.example .env
 ```
 
-### Using Remote Ollama
+Key variables:
+- `MORGAN_LLM_ENDPOINT` - Ollama endpoint URL
+- `MORGAN_LLM_MODEL` - Main LLM model name
+- `MORGAN_DISTRIBUTED_CONFIG` - Path to distributed config YAML
 
-The default configuration assumes Ollama is running on the host machine. To connect to it from Docker:
+### Distributed Architecture Configuration
 
-**On Linux:**
+Morgan uses YAML files for distributed architecture configuration.
+Config files are mounted at `/app/config/` in the container.
+
+**Config files:**
+- `config/distributed.yaml` - Default single-machine config
+- `config/distributed.6host.yaml` - Template for 6-host setup
+
+**Customization:**
+
 ```bash
-MORGAN_LLM_ENDPOINT=http://172.17.0.1:11434
+# Create local override
+cp config/distributed.yaml config/distributed.local.yaml
+
+# Edit with your IP addresses
+vi config/distributed.local.yaml
+
+# Set environment variable
+export MORGAN_DISTRIBUTED_CONFIG=/app/config/distributed.local.yaml
 ```
 
-**On macOS/Windows:**
+## Deployment Options
+
+### 1. Single Machine (Development)
+
+Uses `docker-compose.yml`:
+- Morgan Server
+- Redis (session/cache)
+- Qdrant (vector DB)
+- Prometheus/Grafana (optional)
+
 ```bash
-MORGAN_LLM_ENDPOINT=http://host.docker.internal:11434
+docker compose up -d
 ```
 
-**On a remote server:**
+### 2. Distributed (6-Host Production)
+
+Uses `docker-compose.distributed.yml` with Docker Swarm:
+
+**Architecture:**
+| Host | IP | Role | Components |
+|------|-----|------|------------|
+| 1 | 192.168.1.10 | Core | Morgan, Qdrant, Redis |
+| 2 | 192.168.1.11 | Background | Prometheus, Grafana |
+| 3 | 192.168.1.20 | LLM Primary | Ollama (RTX 3090) |
+| 4 | 192.168.1.21 | LLM Secondary | Ollama (RTX 3090) |
+| 5 | 192.168.1.22 | Embeddings | Ollama (RTX 4070) |
+| 6 | 192.168.1.23 | Reranking | Reranking Service (RTX 2060) |
+
+**Setup:**
+
 ```bash
-MORGAN_LLM_ENDPOINT=http://your-server-ip:11434
+# Initialize Swarm on Host 1
+docker swarm init --advertise-addr 192.168.1.10
+
+# Join other hosts to swarm
+docker swarm join --token <token> 192.168.1.10:2377
+
+# Label nodes
+docker node update --label-add morgan.role=core host1
+docker node update --label-add morgan.role=background host2
+docker node update --label-add morgan.role=llm-primary host3
+docker node update --label-add morgan.role=llm-secondary host4
+docker node update --label-add morgan.role=embeddings host5
+docker node update --label-add morgan.role=reranking host6
+
+# Copy and customize config
+cp config/distributed.6host.yaml config/distributed.local.yaml
+vi config/distributed.local.yaml
+
+# Deploy stack
+docker stack deploy -c docker-compose.distributed.yml morgan
 ```
 
 ## Services
 
-### Morgan Server
+### Morgan Server (Port 8080)
 
-- **Port:** 8080
-- **Health Check:** http://localhost:8080/health
-- **API Docs:** http://localhost:8080/docs
-- **Metrics:** http://localhost:8080/metrics
+Main API server with endpoints:
+- `GET /health` - Health check
+- `POST /chat` - Chat endpoint
+- `POST /ask` - Question answering
+- `GET /docs` - API documentation
 
-### Qdrant Vector Database
+### Qdrant (Ports 6333, 6334)
 
-- **HTTP Port:** 6333
-- **gRPC Port:** 6334
-- **Dashboard:** http://localhost:6333/dashboard
-- **Health Check:** http://localhost:6333/healthz
+Vector database:
+- REST API: `http://localhost:6333`
+- gRPC: `localhost:6334`
+- Dashboard: `http://localhost:6333/dashboard`
 
-### Prometheus (Optional)
+### Redis (Port 6379)
 
-- **Port:** 9090
-- **Dashboard:** http://localhost:9090
+Session and cache storage:
+- Connect: `redis://localhost:6379`
 
-## Data Persistence
+### Prometheus (Port 9090) [Optional]
 
-Data is persisted in named Docker volumes:
+Metrics collection:
+- Dashboard: `http://localhost:9090`
 
-- `morgan-cache`: Application cache
-- `morgan-data`: Application data
-- `morgan-qdrant-storage`: Vector database storage
-- `morgan-qdrant-snapshots`: Vector database snapshots
-- `morgan-prometheus-data`: Prometheus metrics (if enabled)
+### Grafana (Port 3000) [Optional]
 
-### Backup Data
+Metrics visualization:
+- Dashboard: `http://localhost:3000`
+- Default credentials: admin/morgan
+
+## Health Checks
 
 ```bash
-# Backup Qdrant data
-docker run --rm -v morgan-qdrant-storage:/data -v $(pwd):/backup alpine tar czf /backup/qdrant-backup.tar.gz -C /data .
+# Morgan Server
+curl http://localhost:8080/health
 
-# Backup Morgan data
-docker run --rm -v morgan-data:/data -v $(pwd):/backup alpine tar czf /backup/morgan-backup.tar.gz -C /data .
+# Qdrant
+curl http://localhost:6333/healthz
+
+# Redis
+redis-cli ping
 ```
 
-### Restore Data
+## Logs
 
 ```bash
-# Restore Qdrant data
-docker run --rm -v morgan-qdrant-storage:/data -v $(pwd):/backup alpine sh -c "cd /data && tar xzf /backup/qdrant-backup.tar.gz"
+# All services
+docker compose logs -f
 
-# Restore Morgan data
-docker run --rm -v morgan-data:/data -v $(pwd):/backup alpine sh -c "cd /data && tar xzf /backup/morgan-backup.tar.gz"
+# Specific service
+docker compose logs -f morgan-server
+
+# Distributed deployment
+docker service logs morgan_morgan-core -f
+```
+
+## Volumes
+
+Data is persisted in Docker volumes:
+- `morgan-cache` - Embedding and response cache
+- `morgan-data` - Application data
+- `morgan-models` - **Model weights cache** (see below)
+- `redis-data` - Redis persistence
+- `qdrant-storage` - Vector database storage
+- `reranking-models` - Reranking model cache (distributed setup)
+
+## Model Caching
+
+**Model weights are downloaded once and cached persistently** to avoid 
+re-downloading on each container restart.
+
+### How It Works
+
+1. On first startup, models are downloaded from Hugging Face
+2. Models are saved to the `morgan-models` volume (`/app/models` in container)
+3. On subsequent starts, cached models are loaded instantly
+
+### Configuration
+
+In `config/distributed.yaml`:
+
+```yaml
+model_cache:
+  # Base directory for model weights
+  base_dir: "/app/models"
+  # sentence-transformers models (embeddings, rerankers)
+  sentence_transformers_home: "/app/models/sentence-transformers"
+  # Hugging Face models
+  hf_home: "/app/models/huggingface"
+  # Preload models on startup
+  preload_on_startup: true
+```
+
+### Environment Variables
+
+These are set automatically by the configuration:
+- `SENTENCE_TRANSFORMERS_HOME` - sentence-transformers cache
+- `HF_HOME` - Hugging Face cache
+- `TRANSFORMERS_CACHE` - Transformers cache
+- `MODEL_CACHE_DIR` - General model cache (for reranking service)
+
+### First Run
+
+The first startup may take several minutes as models are downloaded:
+- Embedding models: ~400MB
+- Reranking models: ~100MB
+- Ollama models: Managed by Ollama (separate volume)
+
+### Clearing Cache
+
+To re-download models, remove the volume:
+
+```bash
+# Stop containers
+docker compose down
+
+# Remove model cache volume
+docker volume rm morgan-models
+
+# Restart (will re-download)
+docker compose up -d
 ```
 
 ## Troubleshooting
 
-### Service Won't Start
+### Connection Refused to LLM
 
-1. Check logs:
+Ensure Ollama is running and accessible:
 ```bash
-docker-compose logs morgan-server
-```
-
-2. Verify configuration:
-```bash
-docker-compose config
-```
-
-3. Check if ports are available:
-```bash
-netstat -an | grep -E '8080|6333|9090'
-```
-
-### Can't Connect to Ollama
-
-1. Verify Ollama is running:
-```bash
+# Check Ollama
 curl http://localhost:11434/api/tags
+
+# For Docker, use host.docker.internal
+MORGAN_LLM_ENDPOINT=http://host.docker.internal:11434
 ```
 
-2. Check Docker network connectivity:
+### GPU Not Detected
+
+For GPU hosts, ensure NVIDIA Container Toolkit is installed:
 ```bash
-docker-compose exec morgan-server curl http://host.docker.internal:11434/api/tags
+# Install
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+sudo systemctl restart docker
+
+# Test
+docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
 ```
 
-3. Update `MORGAN_LLM_ENDPOINT` in `.env` file with correct host
+### Memory Issues
 
-### Qdrant Connection Issues
-
-1. Check Qdrant health:
-```bash
-curl http://localhost:6333/healthz
-```
-
-2. View Qdrant logs:
-```bash
-docker-compose logs qdrant
-```
-
-### High Memory Usage
-
-1. Reduce cache size in `.env`:
-```bash
-MORGAN_CACHE_SIZE_MB=500
-```
-
-2. Limit concurrent requests:
-```bash
-MORGAN_MAX_CONCURRENT=50
-```
-
-3. Use CPU for embeddings instead of GPU:
-```bash
-MORGAN_EMBEDDING_DEVICE=cpu
-```
-
-## Production Deployment
-
-For production deployments:
-
-1. **Use specific image tags** instead of `latest`
-2. **Set resource limits** in docker-compose.yml:
+Adjust container memory limits in `docker-compose.yml`:
 ```yaml
 deploy:
   resources:
     limits:
-      cpus: '2'
-      memory: 4G
-    reservations:
-      cpus: '1'
-      memory: 2G
-```
-
-3. **Enable monitoring** with Prometheus
-4. **Set up log aggregation** (e.g., ELK stack)
-5. **Configure backups** for volumes
-6. **Use secrets management** for API keys
-7. **Enable HTTPS** with reverse proxy (nginx, traefik)
-8. **Set up health check monitoring** and alerting
-
-## Scaling
-
-To scale the Morgan server:
-
-```bash
-docker-compose up -d --scale morgan-server=3
-```
-
-Note: You'll need to add a load balancer (nginx, traefik) in front of multiple server instances.
-
-## Updating
-
-To update to a new version:
-
-```bash
-# Pull latest images
-docker-compose pull
-
-# Restart services
-docker-compose up -d
-
-# Remove old images
-docker image prune -f
-```
-
-## Cleanup
-
-To completely remove all services and data:
-
-```bash
-# Stop and remove containers
-docker-compose down
-
-# Remove volumes (WARNING: This deletes all data!)
-docker-compose down -v
-
-# Remove images
-docker-compose down --rmi all
+      memory: 8G
 ```
