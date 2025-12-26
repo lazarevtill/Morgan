@@ -1,23 +1,70 @@
-/.pytest_cache
-/morgan-venv
-/data/cache
-*.pyc
-/morgan-rag/data/cache/
-*.meta
-*.cache
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+*.manifest
+*.spec
+
+# Virtual environments
+/morgan-venv/
+venv/
+.venv/
+ENV/
+
+# IDE
+/.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment files (NEVER commit secrets)
 .env
+.env.*
+!.env.example
+!env.example
+
+# Cache and data
+/data/
 data/
+*.cache
+*.meta
+/morgan-rag/data/cache/
+/morgan-rag/local_libs/
+/morgan-rag/backups/
+/.pytest_cache/
+.pytest_cache/
+.hypothesis/
+morgan-server/.hypothesis/
+
+# Logs
 logs/
+*.log
 *.logs
-/.idea
-/morgan-rag/local_libs
+
+# Build artifacts
 *.gz
 *.whl
-/morgan-rag/morgan_rag.egg-info
-/morgan-rag/backups
-conversations.json
-morgan-server/.hypothesis/
-.hypothesis/
+/morgan-rag/morgan_rag.egg-info/
+/morgan-server/morgan_server.egg-info/
+/morgan-cli/morgan_cli.egg-info/
+
+# Test outputs
 *.xml
-*.txt
-*.log
+test_*.txt
+test_output*.log
+
+# Runtime files
+conversations.json
+*.pid
+
+# Archive (deprecated code)
+/archive/
