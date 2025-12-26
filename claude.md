@@ -1,6 +1,6 @@
 # Morgan - Personal AI Assistant Project
 
-**Status**: Phase 1 - Infrastructure Complete (83%)
+**Status**: Phase 1 - Infrastructure Complete (95%)
 **Version**: 2.0.0-alpha (Active Development)
 **Last Updated**: December 26, 2025
 
@@ -20,19 +20,159 @@ Morgan is a fully self-hosted, distributed personal AI assistant designed as an 
 
 ---
 
+## System Architecture
+
+### High-Level Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph Clients["Client Layer"]
+        CLI[Morgan CLI<br/>Terminal UI]
+        API[REST/WebSocket<br/>API Clients]
+        WEB[Web Interface<br/>Future]
+    end
+
+    subgraph Server["Server Layer"]
+        GW[API Gateway<br/>FastAPI]
+        AUTH[Auth &<br/>Session]
+    end
+
+    subgraph Core["Core Intelligence Layer"]
+        LLM[LLM Service]
+        EMB[Embedding Service]
+        RERANK[Reranking Service]
+        INTEL[Emotional<br/>Intelligence]
+        MEM[Memory<br/>System]
+        SEARCH[Search<br/>Pipeline]
+    end
+
+    subgraph Infra["Infrastructure Layer"]
+        DIST[Distributed<br/>LLM Client]
+        GPU[GPU<br/>Manager]
+        FACTORY[Service<br/>Factory]
+    end
+
+    subgraph External["External Services"]
+        OLLAMA[Ollama<br/>LLM Server]
+        QDRANT[Qdrant<br/>Vector DB]
+        REDIS[Redis<br/>Cache]
+    end
+
+    CLI --> GW
+    API --> GW
+    WEB --> GW
+    GW --> AUTH
+    AUTH --> LLM
+    AUTH --> EMB
+    AUTH --> RERANK
+    AUTH --> INTEL
+    AUTH --> MEM
+    AUTH --> SEARCH
+    
+    LLM --> DIST
+    EMB --> FACTORY
+    RERANK --> FACTORY
+    
+    DIST --> GPU
+    GPU --> OLLAMA
+    FACTORY --> OLLAMA
+    
+    MEM --> QDRANT
+    SEARCH --> QDRANT
+    EMB --> QDRANT
+    
+    MEM --> REDIS
+    SEARCH --> REDIS
+```
+
+### Request Flow Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant CLI as Morgan CLI
+    participant API as API Gateway
+    participant LLM as LLM Service
+    participant EMB as Embedding Service
+    participant SEARCH as Search Pipeline
+    participant MEM as Memory System
+    participant INTEL as Intelligence Engine
+    participant QDRANT as Qdrant
+    participant OLLAMA as Ollama
+
+    U->>CLI: Send message
+    CLI->>API: POST /api/chat
+    
+    API->>EMB: Embed query
+    EMB->>OLLAMA: Generate embedding
+    OLLAMA-->>EMB: Vector [2048]
+    EMB-->>API: Query embedding
+    
+    API->>SEARCH: Search relevant context
+    SEARCH->>QDRANT: Vector search
+    QDRANT-->>SEARCH: Similar documents
+    SEARCH->>SEARCH: Rerank results
+    SEARCH-->>API: Ranked context
+    
+    API->>MEM: Get conversation history
+    MEM->>QDRANT: Fetch memories
+    QDRANT-->>MEM: Past interactions
+    MEM-->>API: Conversation context
+    
+    API->>INTEL: Analyze emotion
+    INTEL-->>API: Emotional context
+    
+    API->>LLM: Generate response
+    LLM->>OLLAMA: Chat completion
+    OLLAMA-->>LLM: Generated text
+    LLM-->>API: Response
+    
+    API->>MEM: Store interaction
+    MEM->>QDRANT: Save memory
+    
+    API-->>CLI: Chat response
+    CLI-->>U: Display response
+```
+
+---
+
 ## Hardware Architecture (6 Hosts)
 
-### CPU Hosts
-- **Host 1** (i9, 64GB RAM): Morgan Core Orchestrator + Qdrant + Redis
-- **Host 2** (i9, 64GB RAM): Background Services + Monitoring
+### Network Topology Diagram
 
-### GPU Hosts
-- **Host 3** (RTX 3090, 12GB): Main LLM #1 (Qwen2.5-32B)
-- **Host 4** (RTX 3090, 12GB): Main LLM #2 (Load balanced)
-- **Host 5** (RTX 4070, 8GB): Embeddings + Fast LLM
-- **Host 6** (RTX 2060, 6GB): Reranking + Utilities
+```mermaid
+graph TB
+    subgraph Network["192.168.1.x Network"]
+        subgraph CPU["CPU Hosts"]
+            H1[Host 1<br/>192.168.1.10<br/>i9, 64GB RAM<br/>Core + Qdrant + Redis]
+            H2[Host 2<br/>192.168.1.11<br/>i9, 64GB RAM<br/>Background + Monitoring]
+        end
+        
+        subgraph GPU["GPU Hosts"]
+            H3[Host 3<br/>192.168.1.20<br/>RTX 3090, 12GB<br/>Main LLM #1]
+            H4[Host 4<br/>192.168.1.21<br/>RTX 3090, 12GB<br/>Main LLM #2]
+            H5[Host 5<br/>192.168.1.22<br/>RTX 4070, 8GB<br/>Embeddings + Fast LLM]
+            H6[Host 6<br/>192.168.1.23<br/>RTX 2060, 6GB<br/>Reranking]
+        end
+    end
+    
+    H1 <--> H3
+    H1 <--> H4
+    H1 <--> H5
+    H1 <--> H6
+    H1 <--> H2
+```
 
-**Network**: All hosts on 192.168.1.x subnet, 1Gbps minimum bandwidth
+### Host Specifications
+
+| Host | IP | Hardware | Role | Services |
+|------|-----|----------|------|----------|
+| **Host 1** | 192.168.1.10 | i9, 64GB RAM | Core | Morgan Orchestrator, Qdrant, Redis |
+| **Host 2** | 192.168.1.11 | i9, 64GB RAM | Background | Prometheus, Grafana, Background Jobs |
+| **Host 3** | 192.168.1.20 | RTX 3090, 12GB | LLM Primary | Ollama (Qwen2.5-32B) |
+| **Host 4** | 192.168.1.21 | RTX 3090, 12GB | LLM Secondary | Ollama (Qwen2.5-32B) |
+| **Host 5** | 192.168.1.22 | RTX 4070, 8GB | Embeddings | Ollama (Qwen3-Embedding, Qwen2.5-7B) |
+| **Host 6** | 192.168.1.23 | RTX 2060, 6GB | Reranking | CrossEncoder Service |
 
 ---
 
@@ -51,117 +191,99 @@ Morgan is a fully self-hosted, distributed personal AI assistant designed as an 
 - **Services**: FastAPI
 - **Language**: Python 3.11+
 
-### Distributed Architecture
-- Load balancing: Round-robin, random, least-loaded strategies
-- Automatic failover: 3 consecutive errors triggers unhealthy state
-- Health monitoring: Background checks every 60s
-- Performance tracking: Response times, success rates per endpoint
-
 ---
 
-## Current Progress
+## Services Layer Architecture
 
-### ✅ Phase 1: Infrastructure Complete (83%)
+### Service Class Diagram
 
-**Unified Services Layer (NEW - December 2025):**
-
-All services have been consolidated into a clean, unified architecture:
-
+```mermaid
+classDiagram
+    class LLMService {
+        +mode: LLMMode
+        +endpoint: str
+        +model: str
+        +generate(prompt) LLMResponse
+        +agenerate(prompt) LLMResponse
+        +stream(prompt) AsyncIterator
+        +astream(prompt) AsyncIterator
+    }
+    
+    class EmbeddingService {
+        +endpoint: str
+        +model: str
+        +dimensions: int
+        +encode(text) List~float~
+        +encode_batch(texts) List~List~float~~
+        +aencode(text) List~float~
+    }
+    
+    class RerankingService {
+        +endpoint: str
+        +model: str
+        +rerank(query, docs) List~RerankResult~
+        +arerank(query, docs) List~RerankResult~
+    }
+    
+    class SingletonFactory {
+        -_instances: Dict
+        +get_or_create(cls, factory) T
+        +reset(cls) void
+    }
+    
+    class LLMResponse {
+        +content: str
+        +model: str
+        +usage: Dict
+        +finish_reason: str
+    }
+    
+    class RerankResult {
+        +index: int
+        +score: float
+        +text: str
+    }
+    
+    LLMService --> LLMResponse
+    RerankingService --> RerankResult
+    SingletonFactory --> LLMService
+    SingletonFactory --> EmbeddingService
+    SingletonFactory --> RerankingService
 ```
-morgan-rag/morgan/services/
-├── __init__.py           # Unified access: get_llm_service(), get_embedding_service(), etc.
-├── llm/                  # LLM service (single + distributed modes)
-│   ├── __init__.py
-│   ├── models.py         # LLMResponse, LLMMode
-│   └── service.py        # Unified LLMService class
-├── embeddings/           # Embedding service (remote + local fallback)
-│   ├── __init__.py
-│   ├── models.py         # EmbeddingStats
-│   └── service.py        # Unified EmbeddingService class
-├── reranking/            # Reranking service (4-level fallback)
-│   ├── __init__.py
-│   ├── models.py         # RerankResult, RerankStats
-│   └── service.py        # Unified RerankingService class
-└── external_knowledge/   # MCP, Context7, Web Search
+
+### Service Fallback Strategy
+
+```mermaid
+flowchart TD
+    subgraph LLM["LLM Service"]
+        L1[Primary Endpoint] --> L2{Healthy?}
+        L2 -->|Yes| L3[Generate]
+        L2 -->|No| L4[Secondary Endpoint]
+        L4 --> L5{Healthy?}
+        L5 -->|Yes| L3
+        L5 -->|No| L6[Fast Model Fallback]
+    end
+    
+    subgraph EMB["Embedding Service"]
+        E1[Remote Ollama] --> E2{Available?}
+        E2 -->|Yes| E3[Generate Embedding]
+        E2 -->|No| E4[Local sentence-transformers]
+        E4 --> E3
+    end
+    
+    subgraph RERANK["Reranking Service"]
+        R1[Remote Endpoint] --> R2{Available?}
+        R2 -->|Yes| R3[Rerank]
+        R2 -->|No| R4[Local CrossEncoder]
+        R4 --> R5{Available?}
+        R5 -->|Yes| R3
+        R5 -->|No| R6[Embedding Similarity]
+        R6 --> R7{Available?}
+        R7 -->|Yes| R3
+        R7 -->|No| R8[BM25 Lexical]
+        R8 --> R3
+    end
 ```
-
-**Infrastructure Layer:**
-```
-morgan-rag/morgan/infrastructure/
-├── distributed_llm.py        # ✅ Load balancing across LLM hosts
-├── distributed_gpu_manager.py # ✅ Distributed GPU host management
-├── multi_gpu_manager.py      # ✅ Single-host GPU management
-└── factory.py                # ✅ Infrastructure factory
-```
-
-**Utilities:**
-```
-morgan-rag/morgan/utils/
-├── singleton.py          # ✅ Thread-safe singleton factory
-├── model_cache.py        # ✅ Unified model cache setup
-├── deduplication.py      # ✅ Result deduplication utility
-└── ...
-```
-
-**Configuration:**
-```
-morgan-rag/morgan/config/
-├── defaults.py           # ✅ Centralized default values
-├── settings.py           # ✅ Application settings
-└── distributed_config.py # ✅ Distributed deployment config
-```
-
-**Exception Hierarchy:**
-```
-morgan-rag/morgan/exceptions.py  # ✅ MorganError base + service-specific exceptions
-```
-
-**Existing Strong Code (Preserved):**
-- `morgan/intelligence/` - Emotional intelligence & empathy (excellent, 95% complete)
-- `morgan/learning/` - Pattern learning & adaptation (strong)
-- `morgan/memory/` - Conversation memory with emotional context (strong)
-- `morgan/companion/` - Relationship management (good)
-- `morgan/search/` - Multi-stage search pipeline (excellent)
-- `morgan/reasoning/` - Multi-step reasoning (good)
-- `morgan/proactive/` - Proactive assistance (good)
-
-### ⏳ Remaining (Phase 1: 17%)
-
-- [ ] Documentation updates (this task)
-- [ ] Integration testing
-- [ ] Performance validation
-
-### ⏳ Planned (Phases 2-5)
-
-**Phase 2 - Multi-Step Reasoning Enhancement:**
-- Chain-of-thought reasoning engine improvements
-- Task planning and decomposition
-- Progress tracking system
-
-**Phase 3 - Proactive Features:**
-- Background monitoring service
-- Task anticipation engine
-- Contextual suggestion system
-
-**Phase 4 - Enhanced Context:**
-- Context aggregation across sources
-- Temporal awareness (time/day patterns)
-- Activity tracking and analysis
-
-**Phase 5 - Polish & Production:**
-- Personality consistency refinement
-- End-to-end testing
-- Production deployment
-
----
-
-## Key Design Principles
-
-1. **Privacy First** - All data stays on your hardware, no external APIs
-2. **Quality Over Speed** - 5-10s for thoughtful responses is acceptable
-3. **KISS (Keep It Simple)** - Simple, focused modules with clear responsibilities
-4. **Modular Enhancement** - Keep excellent existing code, add missing capabilities
-5. **Fault Tolerance** - Distributed architecture with failover and health monitoring
 
 ---
 
@@ -171,45 +293,54 @@ morgan-rag/morgan/exceptions.py  # ✅ MorganError base + service-specific excep
 Morgan/
 ├── morgan-rag/                    # Main RAG project
 │   ├── morgan/
-│   │   ├── services/              # ✅ Unified services layer (NEW)
+│   │   ├── services/              # ✅ Unified services layer
+│   │   │   ├── __init__.py        # Service exports
 │   │   │   ├── llm/               # LLM service
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── models.py      # LLMResponse, LLMMode
+│   │   │   │   └── service.py     # LLMService class
 │   │   │   ├── embeddings/        # Embedding service
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── models.py      # EmbeddingStats
+│   │   │   │   └── service.py     # EmbeddingService class
 │   │   │   ├── reranking/         # Reranking service
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── models.py      # RerankResult, RerankStats
+│   │   │   │   └── service.py     # RerankingService class
 │   │   │   └── external_knowledge/# External knowledge sources
 │   │   │
 │   │   ├── infrastructure/        # ✅ Distributed infrastructure
-│   │   │   ├── distributed_llm.py
+│   │   │   ├── distributed_llm.py # Load balancing
 │   │   │   ├── distributed_gpu_manager.py
 │   │   │   ├── multi_gpu_manager.py
-│   │   │   └── factory.py
+│   │   │   └── factory.py         # Infrastructure factory
 │   │   │
-│   │   ├── intelligence/          # ✅ Emotional intelligence (excellent)
+│   │   ├── intelligence/          # ✅ Emotional intelligence
 │   │   │   ├── emotions/          # Emotion detection
 │   │   │   ├── empathy/           # Empathic responses
 │   │   │   └── core/              # Intelligence engine
 │   │   │
-│   │   ├── learning/              # ✅ Pattern learning (strong)
-│   │   ├── memory/                # ✅ Conversation memory (strong)
-│   │   ├── companion/             # ✅ Relationship management (good)
-│   │   ├── search/                # ✅ Multi-stage search (excellent)
+│   │   ├── learning/              # ✅ Pattern learning
+│   │   ├── memory/                # ✅ Conversation memory
+│   │   ├── companion/             # ✅ Relationship management
+│   │   ├── search/                # ✅ Multi-stage search
 │   │   ├── reasoning/             # ✅ Multi-step reasoning
 │   │   ├── proactive/             # ✅ Proactive assistance
 │   │   ├── communication/         # ✅ Communication preferences
 │   │   │
 │   │   ├── config/                # ✅ Configuration
-│   │   │   ├── defaults.py
-│   │   │   ├── settings.py
+│   │   │   ├── defaults.py        # Default values
+│   │   │   ├── settings.py        # Application settings
 │   │   │   └── distributed_config.py
 │   │   │
 │   │   ├── utils/                 # ✅ Utilities
-│   │   │   ├── singleton.py
-│   │   │   ├── model_cache.py
-│   │   │   ├── deduplication.py
-│   │   │   └── logger.py
+│   │   │   ├── singleton.py       # Singleton factory
+│   │   │   ├── model_cache.py     # Model caching
+│   │   │   ├── deduplication.py   # Result deduplication
+│   │   │   └── logger.py          # Logging
 │   │   │
 │   │   ├── core/                  # Core assistant logic
-│   │   ├── exceptions.py          # ✅ Exception hierarchy
-│   │   └── ...
+│   │   └── exceptions.py          # ✅ Exception hierarchy
 │   │
 │   ├── tests/                     # Test suite
 │   ├── examples/                  # Usage examples
@@ -218,26 +349,51 @@ Morgan/
 ├── morgan-server/                 # Server component
 ├── morgan-cli/                    # CLI client
 ├── docker/                        # Docker configurations
-│
 ├── archive/                       # Archived deprecated code
-│   ├── deprecated-root-modules/   # Old CLI, services
-│   ├── deprecated-modules/        # Old embeddings, infrastructure
-│   └── abandoned-refactors/       # Incomplete refactors
-│
 ├── shared/                        # Shared models and utilities
-├── .kiro/                         # Kiro specs and planning docs
-│
-├── claude.md                      # ✅ This file (project context)
-├── README.md                      # Project README
-├── DOCUMENTATION.md               # Documentation index
-└── MIGRATION.md                   # Migration guide
+└── .kiro/                         # Kiro specs and planning docs
 ```
 
 ---
 
 ## Service Usage Examples
 
-### Unified Services (Recommended)
+### LLM Service Flow
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant LLM as LLMService
+    participant Dist as DistributedLLMClient
+    participant EP1 as Endpoint 1
+    participant EP2 as Endpoint 2
+
+    App->>LLM: get_llm_service()
+    LLM->>LLM: Check mode (single/distributed)
+    
+    alt Single Mode
+        App->>LLM: generate("Hello")
+        LLM->>EP1: POST /v1/chat/completions
+        EP1-->>LLM: Response
+        LLM-->>App: LLMResponse
+    else Distributed Mode
+        App->>LLM: generate("Hello")
+        LLM->>Dist: generate()
+        Dist->>Dist: Select endpoint (round-robin)
+        Dist->>EP1: POST /v1/chat/completions
+        alt EP1 Fails
+            EP1-->>Dist: Error
+            Dist->>EP2: POST /v1/chat/completions
+            EP2-->>Dist: Response
+        else EP1 Succeeds
+            EP1-->>Dist: Response
+        end
+        Dist-->>LLM: Response
+        LLM-->>App: LLMResponse
+    end
+```
+
+### Code Examples
 
 ```python
 # Import from unified services layer
@@ -291,28 +447,66 @@ response = await llm.agenerate(
 )
 ```
 
-### Infrastructure Factory (Full Stack)
-
-```python
-from morgan.infrastructure import get_infrastructure_services
-
-# Initialize all services at once
-services = get_infrastructure_services()
-
-# Access individual services
-llm = services.llm_service
-embeddings = services.embedding_service
-reranking = services.reranking_service
-
-# Get combined stats
-stats = services.get_stats()
-```
-
 ---
 
-## Exception Handling
+## Exception Hierarchy
 
-Morgan provides a consistent exception hierarchy:
+```mermaid
+classDiagram
+    class MorganError {
+        +message: str
+        +service: str
+        +operation: str
+    }
+    
+    class LLMServiceError {
+        +endpoint: str
+        +model: str
+    }
+    
+    class EmbeddingServiceError {
+        +model: str
+        +batch_size: int
+    }
+    
+    class RerankingServiceError {
+        +fallback_used: str
+    }
+    
+    class ConfigurationError {
+        +config_key: str
+    }
+    
+    class ValidationError {
+        +field: str
+        +value: any
+    }
+    
+    class InfrastructureError {
+        +host: str
+    }
+    
+    class ConnectionError {
+        +url: str
+        +timeout: float
+    }
+    
+    class TimeoutError {
+        +operation: str
+        +timeout: float
+    }
+    
+    MorganError <|-- LLMServiceError
+    MorganError <|-- EmbeddingServiceError
+    MorganError <|-- RerankingServiceError
+    MorganError <|-- ConfigurationError
+    MorganError <|-- ValidationError
+    MorganError <|-- InfrastructureError
+    InfrastructureError <|-- ConnectionError
+    InfrastructureError <|-- TimeoutError
+```
+
+### Usage
 
 ```python
 from morgan.exceptions import (
@@ -334,93 +528,135 @@ except LLMServiceError as e:
 
 ---
 
-## Performance Targets
+## Search Pipeline
 
-### Latency
-- ✅ Embeddings: <200ms batch (achieved)
-- ✅ Search + rerank: <500ms (achieved)
-- ⏳ Simple queries: 1-2s (target)
-- ⏳ Complex reasoning: 5-10s (acceptable)
+### Multi-Stage Search Flow
 
-### Resource Usage
-- ⏳ GPU memory: <90% per host
-- ⏳ CPU: <70% average
-- ⏳ Uptime: >99.5%
-- ✅ Network latency: +10-50ms (acceptable for distributed)
-
-### User Experience
-- ✅ Emotionally appropriate responses: >90%
-- ⏳ Answer accuracy: >90% (target)
-- ⏳ Reasoning coherence: >85% (target)
-- ⏳ Proactive helpfulness: >70% (target)
-
----
-
-## Development Guidelines
-
-### Import Conventions
-
-```python
-# Services (preferred)
-from morgan.services import get_llm_service, get_embedding_service
-from morgan.services.llm import LLMService, LLMResponse
-
-# Infrastructure (advanced)
-from morgan.infrastructure import DistributedLLMClient, get_distributed_llm_client
-
-# Exceptions
-from morgan.exceptions import MorganError, LLMServiceError
-
-# Configuration
-from morgan.config import get_settings
-from morgan.config.defaults import Defaults
-
-# Utilities
-from morgan.utils.logger import get_logger
-from morgan.utils.singleton import SingletonFactory
+```mermaid
+flowchart TD
+    Q[User Query] --> E[Embed Query]
+    E --> S1[Stage 1: Vector Search]
+    S1 --> S2[Stage 2: Keyword Search]
+    S2 --> S3[Stage 3: Hybrid Fusion]
+    S3 --> S4[Stage 4: Reranking]
+    S4 --> S5[Stage 5: Deduplication]
+    S5 --> R[Ranked Results]
+    
+    subgraph Vector["Vector Search"]
+        S1 --> V1[Coarse Search<br/>Top 100]
+        V1 --> V2[Fine Search<br/>Top 50]
+    end
+    
+    subgraph Rerank["Reranking"]
+        S4 --> R1{Remote Available?}
+        R1 -->|Yes| R2[Remote Reranker]
+        R1 -->|No| R3[Local CrossEncoder]
+        R3 --> R4{Available?}
+        R4 -->|No| R5[Embedding Similarity]
+        R5 --> R6{Available?}
+        R6 -->|No| R7[BM25 Fallback]
+    end
 ```
 
-### Testing Strategy
+---
 
-1. Unit tests for individual components
-2. Integration tests for service interactions
-3. End-to-end tests with real queries
-4. Performance benchmarks against targets
+## Memory System
 
-### Git Workflow
+### Memory Flow Diagram
 
-- Branch: `main` (primary development)
-- Feature branches for new work
-- Clean commits with descriptive messages
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant A as Assistant
+    participant MP as Memory Processor
+    participant ES as Embedding Service
+    participant Q as Qdrant
+    participant EM as Emotional Memory
+
+    U->>A: Send message
+    A->>MP: Process interaction
+    
+    MP->>ES: Embed message
+    ES-->>MP: Message embedding
+    
+    MP->>EM: Analyze emotion
+    EM-->>MP: Emotional context
+    
+    MP->>Q: Store memory
+    Note over Q: Stores: text, embedding,<br/>emotion, timestamp, user_id
+    
+    A->>MP: Retrieve context
+    MP->>Q: Vector search
+    Q-->>MP: Similar memories
+    MP->>MP: Apply emotional weighting
+    MP-->>A: Relevant context
+    
+    A-->>U: Response with context
+```
 
 ---
 
-## Archived Code
+## Emotional Intelligence
 
-The following code has been archived (not deleted) in `/archive/`:
+### Emotion Processing Flow
 
-- `archive/deprecated-root-modules/` - Old CLI, standalone services
-- `archive/deprecated-modules/embeddings/` - Old embeddings module
-- `archive/deprecated-modules/infrastructure/` - Old local_embeddings.py, local_reranking.py
-- `archive/abandoned-refactors/morgan_v2/` - Incomplete Clean Architecture attempt
+```mermaid
+flowchart LR
+    subgraph Input["Input Processing"]
+        T[Text Input] --> ED[Emotion Detector]
+        ED --> E1[Joy]
+        ED --> E2[Sadness]
+        ED --> E3[Anger]
+        ED --> E4[Fear]
+        ED --> E5[Surprise]
+        ED --> E6[Neutral]
+    end
+    
+    subgraph Analysis["Emotional Analysis"]
+        E1 & E2 & E3 & E4 & E5 & E6 --> TA[Tone Analyzer]
+        TA --> EV[Emotional Validator]
+    end
+    
+    subgraph Response["Response Generation"]
+        EV --> EG[Empathy Generator]
+        EG --> EM[Emotional Mirror]
+        EM --> ES[Emotional Support]
+        ES --> R[Empathic Response]
+    end
+```
 
 ---
 
-## Success Criteria
+## Performance Targets
 
-**Phase 1 Complete When:**
-- ✅ All infrastructure services implemented
-- ✅ Service consolidation complete
-- ✅ Exception hierarchy created
-- ⏳ Integration tests passing
-- ⏳ Documentation updated
+| Operation | Target | Status |
+|-----------|--------|--------|
+| Embeddings (batch) | <200ms | ✅ Achieved |
+| Search + rerank | <500ms | ✅ Achieved |
+| Simple queries | 1-2s | ⏳ Target |
+| Complex reasoning | 5-10s | ⏳ Acceptable |
 
-**Overall Project Complete When:**
-- ✅ Emotionally intelligent responses
-- ⏳ Multi-step reasoning works well
-- ⏳ Proactive suggestions are helpful
-- ⏳ Feels like talking to a knowledgeable assistant
-- ⏳ 5-10s response time for complex queries
+---
+
+## Development Progress
+
+```mermaid
+gantt
+    title Morgan Development Timeline
+    dateFormat  YYYY-MM-DD
+    section Phase 1
+    Infrastructure Setup     :done, p1a, 2025-11-01, 30d
+    Service Consolidation    :done, p1b, 2025-11-15, 20d
+    Documentation           :done, p1c, 2025-12-20, 7d
+    section Phase 2
+    Multi-Step Reasoning    :p2, 2025-01-01, 14d
+    section Phase 3
+    Proactive Features      :p3, after p2, 14d
+    section Phase 4
+    Enhanced Context        :p4, after p3, 14d
+    section Phase 5
+    Production Polish       :p5, after p4, 14d
+```
 
 ---
 
@@ -437,7 +673,17 @@ The following code has been archived (not deleted) in `/archive/`:
 | Search Pipeline | `morgan/search/` | ✅ Excellent |
 | Configuration | `morgan/config/` | ✅ Complete |
 | Exceptions | `morgan/exceptions.py` | ✅ Complete |
-| Documentation | Various `.md` files | 🔄 In Progress |
+| Documentation | Various `.md` files | ✅ Complete |
+
+---
+
+## Key Design Principles
+
+1. **Privacy First** - All data stays on your hardware, no external APIs
+2. **Quality Over Speed** - 5-10s for thoughtful responses is acceptable
+3. **KISS (Keep It Simple)** - Simple, focused modules with clear responsibilities
+4. **Modular Enhancement** - Keep excellent existing code, add missing capabilities
+5. **Fault Tolerance** - Distributed architecture with failover and health monitoring
 
 ---
 
