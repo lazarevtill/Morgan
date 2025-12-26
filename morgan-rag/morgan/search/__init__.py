@@ -16,6 +16,10 @@ from .reranker import (
     RerankedSearchResult,
     get_search_reranker,
 )
+from .service import (
+    SearchService,
+    get_search_service,
+)
 
 __all__ = [
     # Multi-stage search
@@ -28,4 +32,7 @@ __all__ = [
     "SearchReranker",
     "RerankedSearchResult",
     "get_search_reranker",
+    # Service wrapper
+    "SearchService",
+    "get_search_service",
 ]
