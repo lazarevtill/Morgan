@@ -9,11 +9,15 @@ Provides embeddings via:
 
 Designed for 6-host distributed architecture where embeddings run on
 dedicated host (Host 5 with RTX 4070).
+
+Model weights are cached locally to avoid re-downloading on each startup.
 """
 
 import hashlib
+import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
@@ -34,6 +38,37 @@ except ImportError:
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def setup_model_cache(cache_dir: Optional[str] = None):
+    """
+    Setup model cache directories and environment variables.
+    
+    This ensures models are downloaded once and reused on subsequent starts.
+    
+    Args:
+        cache_dir: Base directory for model cache. Defaults to ~/.morgan/models
+    """
+    if cache_dir is None:
+        cache_dir = os.environ.get("MORGAN_MODEL_CACHE", "~/.morgan/models")
+    
+    cache_path = Path(cache_dir).expanduser()
+    
+    # Create subdirectories
+    sentence_transformers_path = cache_path / "sentence-transformers"
+    hf_path = cache_path / "huggingface"
+    
+    for path in [cache_path, sentence_transformers_path, hf_path]:
+        path.mkdir(parents=True, exist_ok=True)
+    
+    # Set environment variables for model caching
+    os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(sentence_transformers_path)
+    os.environ["HF_HOME"] = str(hf_path)
+    os.environ["TRANSFORMERS_CACHE"] = str(hf_path)
+    os.environ["HF_DATASETS_CACHE"] = str(hf_path / "datasets")
+    
+    logger.info(f"Model cache configured at {cache_path}")
+    return cache_path
 
 
 @dataclass
@@ -67,18 +102,25 @@ class EmbeddingStats:
 class LocalEmbeddingService:
     """
     Local embedding service for distributed Morgan setup.
+    
+    100% Self-Hosted - No API Keys Required.
 
     Supports:
-    - Remote Ollama/OpenAI-compatible endpoints (primary)
+    - Remote Ollama endpoints (primary)
     - Local sentence-transformers (fallback)
     - Batch processing with configurable size
     - Content-based caching
     - Performance tracking
+    
+    Self-hosted models:
+    - nomic-embed-text: Via Ollama, 768 dims (recommended)
+    - all-MiniLM-L6-v2: Via sentence-transformers, 384 dims (fallback)
 
     Example:
         >>> service = LocalEmbeddingService(
         ...     endpoint="http://192.168.1.22:11434/v1",
-        ...     model="nomic-embed-text"
+        ...     model="nomic-embed-text",
+        ...     dimensions=768
         ... )
         >>>
         >>> # Single embedding
@@ -107,6 +149,8 @@ class LocalEmbeddingService:
         local_device: str = "cpu",
         use_cache: bool = True,
         max_cache_size: int = 10000,
+        model_cache_dir: Optional[str] = None,
+        preload_model: bool = False,
     ):
         """
         Initialize local embedding service.
@@ -122,10 +166,15 @@ class LocalEmbeddingService:
             local_device: Device for local model ("cpu" or "cuda")
             use_cache: Enable caching
             max_cache_size: Maximum cache entries
+            model_cache_dir: Directory to cache model weights (avoids re-downloading)
+            preload_model: If True, download/load model immediately instead of lazily
         """
         if not OPENAI_AVAILABLE:
             logger.warning("openai package not available, remote embeddings disabled")
 
+        # Setup model cache directory before any model loading
+        self.model_cache_path = setup_model_cache(model_cache_dir)
+        
         self.endpoint = endpoint
         self.model = model
         self.dimensions = dimensions
@@ -140,7 +189,7 @@ class LocalEmbeddingService:
         # Initialize cache
         self._cache: Dict[str, List[float]] = {}
 
-        # Initialize local model (lazy)
+        # Initialize local model (lazy by default)
         self._local_model = None
         self._local_available = None
 
@@ -149,8 +198,14 @@ class LocalEmbeddingService:
 
         logger.info(
             f"LocalEmbeddingService initialized: "
-            f"endpoint={endpoint}, model={model}, dims={dimensions}"
+            f"endpoint={endpoint}, model={model}, dims={dimensions}, "
+            f"cache_dir={self.model_cache_path}"
         )
+        
+        # Preload model if requested (downloads weights on first run)
+        if preload_model and SENTENCE_TRANSFORMERS_AVAILABLE:
+            logger.info(f"Preloading embedding model {local_model}...")
+            self._check_local_available()
 
     async def is_available(self) -> bool:
         """

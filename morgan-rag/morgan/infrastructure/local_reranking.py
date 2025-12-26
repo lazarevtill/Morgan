@@ -9,10 +9,14 @@ Provides reranking via:
 
 Designed for 6-host distributed architecture where reranking runs on
 dedicated host (Host 6 with RTX 2060).
+
+Model weights are cached locally to avoid re-downloading on each startup.
 """
 
+import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
@@ -32,6 +36,36 @@ except ImportError:
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def setup_reranker_cache(cache_dir: Optional[str] = None):
+    """
+    Setup model cache directories and environment variables for rerankers.
+    
+    This ensures models are downloaded once and reused on subsequent starts.
+    
+    Args:
+        cache_dir: Base directory for model cache. Defaults to ~/.morgan/models
+    """
+    if cache_dir is None:
+        cache_dir = os.environ.get("MORGAN_MODEL_CACHE", "~/.morgan/models")
+    
+    cache_path = Path(cache_dir).expanduser()
+    
+    # Create subdirectories
+    sentence_transformers_path = cache_path / "sentence-transformers"
+    hf_path = cache_path / "huggingface"
+    
+    for path in [cache_path, sentence_transformers_path, hf_path]:
+        path.mkdir(parents=True, exist_ok=True)
+    
+    # Set environment variables for model caching
+    os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(sentence_transformers_path)
+    os.environ["HF_HOME"] = str(hf_path)
+    os.environ["TRANSFORMERS_CACHE"] = str(hf_path)
+    
+    logger.info(f"Reranker model cache configured at {cache_path}")
+    return cache_path
 
 
 @dataclass
@@ -55,27 +89,39 @@ class RerankStats:
     @property
     def average_time(self) -> float:
         """Calculate average reranking time."""
-        return self.total_time / self.total_requests if self.total_requests > 0 else 0.0
+        if self.total_requests > 0:
+            return self.total_time / self.total_requests
+        return 0.0
 
     @property
     def throughput(self) -> float:
         """Calculate throughput (pairs/sec)."""
-        return self.total_pairs / self.total_time if self.total_time > 0 else 0.0
+        if self.total_time > 0:
+            return self.total_pairs / self.total_time
+        return 0.0
 
 
 class LocalRerankingService:
     """
     Local reranking service for distributed Morgan setup.
+    
+    100% Self-Hosted - No API Keys Required.
 
     Supports:
     - Remote FastAPI reranking endpoint (primary)
-    - Local CrossEncoder (fallback)
+    - Local CrossEncoder via sentence-transformers (fallback)
     - Batch processing with configurable size
     - Performance tracking
+    
+    Self-hosted models (via sentence-transformers CrossEncoder):
+    - cross-encoder/ms-marco-MiniLM-L-6-v2: Fast, English (recommended)
+    - cross-encoder/ms-marco-MiniLM-L-12-v2: Better quality, English
+    - BAAI/bge-reranker-base: Multilingual
 
     Example:
         >>> service = LocalRerankingService(
-        ...     endpoint="http://192.168.1.23:8080/rerank"
+        ...     endpoint="http://192.168.1.23:8080/rerank",
+        ...     model="cross-encoder/ms-marco-MiniLM-L-6-v2"
         ... )
         >>>
         >>> # Rerank search results
@@ -98,27 +144,36 @@ class LocalRerankingService:
         timeout: float = 30.0,
         batch_size: int = 100,
         local_device: str = "cpu",
+        model_cache_dir: Optional[str] = None,
+        preload_model: bool = False,
     ):
         """
         Initialize local reranking service.
 
         Args:
-            endpoint: Reranking endpoint URL (e.g., "http://host6:8080/rerank")
+            endpoint: Reranking endpoint URL
             model: Model name for local CrossEncoder
             timeout: Request timeout in seconds
             batch_size: Batch size for processing
             local_device: Device for local model ("cpu" or "cuda")
+            model_cache_dir: Directory for model weights cache
+            preload_model: If True, load model immediately
         """
         if not REQUESTS_AVAILABLE:
-            logger.warning("requests package not available, remote reranking disabled")
+            logger.warning(
+                "requests package not available, remote reranking disabled"
+            )
 
+        # Setup model cache directory before any model loading
+        self.model_cache_path = setup_reranker_cache(model_cache_dir)
+        
         self.endpoint = endpoint
         self.model = model
         self.timeout = timeout
         self.batch_size = batch_size
         self.local_device = local_device
 
-        # Initialize local model (lazy)
+        # Initialize local model (lazy by default)
         self._local_model = None
         self._local_available = None
 
@@ -126,8 +181,14 @@ class LocalRerankingService:
         self.stats = RerankStats()
 
         logger.info(
-            f"LocalRerankingService initialized: " f"endpoint={endpoint}, model={model}"
+            "LocalRerankingService initialized: endpoint=%s, model=%s, "
+            "cache_dir=%s", endpoint, model, self.model_cache_path
         )
+
+        # Preload model if requested (downloads weights on first run)
+        if preload_model and CROSS_ENCODER_AVAILABLE:
+            logger.info("Preloading reranking model %s...", model)
+            self._check_local_available()
 
     def is_available(self) -> bool:
         """
@@ -215,7 +276,9 @@ class LocalRerankingService:
             payload["top_k"] = top_k
 
         try:
-            response = requests.post(self.endpoint, json=payload, timeout=self.timeout)
+            response = requests.post(
+                self.endpoint, json=payload, timeout=self.timeout
+            )
             response.raise_for_status()
 
             data = response.json()
@@ -249,7 +312,10 @@ class LocalRerankingService:
 
         try:
             logger.info(f"Loading local reranking model ({self.model})...")
-            self._local_model = CrossEncoder(self.model, device=self.local_device)
+            self._local_model = CrossEncoder(
+                self.model,
+                device=self.local_device,
+            )
             logger.info("Local reranking model loaded successfully")
             self._local_available = True
             return True
@@ -276,7 +342,9 @@ class LocalRerankingService:
         # Create results with original indices
         results = []
         for i, (doc, score) in enumerate(zip(documents, scores)):
-            results.append(RerankResult(text=doc, score=float(score), original_index=i))
+            results.append(RerankResult(
+                text=doc, score=float(score), original_index=i
+            ))
 
         # Sort by score (descending)
         results.sort(key=lambda x: x.score, reverse=True)
