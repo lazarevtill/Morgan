@@ -25,6 +25,5 @@ console.print("  2. Use: [green]morgan chat[/green]\n")
 console.print(
     "For migration instructions, see [yellow]MIGRATION.md[/yellow] in the root directory.\n"
 )
-console.print("To use the old CLI anyway, run: [dim]python cli.py.old[/dim]\n")
 
 sys.exit(1)

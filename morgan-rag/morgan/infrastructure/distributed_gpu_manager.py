@@ -9,9 +9,10 @@ running Ollama/inference servers on the local network.
 """
 
 import asyncio
+import sys
 import time
 from dataclasses import dataclass, field
-from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
@@ -21,28 +22,16 @@ try:
 except ImportError:
     HTTPX_AVAILABLE = False
 
+# Add shared package to path if not already there
+_shared_path = Path(__file__).parent.parent.parent.parent / "shared"
+if _shared_path.exists() and str(_shared_path) not in sys.path:
+    sys.path.insert(0, str(_shared_path.parent))
+
+from shared.models.enums import HostRole, HostStatus
+
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-class HostRole(str, Enum):
-    """Role assignment for distributed hosts."""
-
-    MAIN_LLM = "main_llm"  # Heavy reasoning (3090s)
-    FAST_LLM = "fast_llm"  # Quick responses (4070)
-    EMBEDDINGS = "embeddings"  # Embedding generation (4070)
-    RERANKING = "reranking"  # Result reranking (2060)
-    ORCHESTRATOR = "orchestrator"  # Morgan Core (CPU hosts)
-
-
-class HostStatus(str, Enum):
-    """Status of a distributed host."""
-
-    ONLINE = "online"
-    OFFLINE = "offline"
-    DEGRADED = "degraded"
-    UNKNOWN = "unknown"
 
 
 @dataclass
