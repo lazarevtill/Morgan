@@ -1,7 +1,7 @@
 """
 Tests for Background Processing System
 
-Tests the simple background processing components following KISS principles.
+Tests the simple background processing components following DDD principles.
 """
 
 import unittest
@@ -14,9 +14,11 @@ from morgan.background import (
     BackgroundTaskExecutor,
     PrecomputedSearchCache,
     BackgroundProcessingService,
+    ReindexingTask,
+    RerankingTask,
 )
-from morgan.background.scheduler import TaskFrequency, ScheduledTask
-from morgan.background.executor import TaskStatus
+from morgan.background.domain.entities import TaskFrequency, TaskStatus
+from morgan.background.infrastructure.scheduler import ScheduledTask
 
 
 class TestSimpleTaskScheduler(unittest.TestCase):
@@ -231,7 +233,7 @@ class TestBackgroundProcessingService(unittest.TestCase):
         self.assertIsInstance(task_id, str)
 
         # Check task was scheduled
-        tasks = self.service.scheduler.list_tasks()
+        tasks = self.service.orchestrator.scheduler.list_tasks()
         self.assertGreater(len(tasks), 0)
 
         # Find our task
@@ -246,7 +248,7 @@ class TestBackgroundProcessingService(unittest.TestCase):
         self.assertIsInstance(task_id, str)
 
         # Check task was scheduled
-        tasks = self.service.scheduler.list_tasks()
+        tasks = self.service.orchestrator.scheduler.list_tasks()
         our_task = next((t for t in tasks if t.task_id == task_id), None)
         self.assertIsNotNone(our_task)
         self.assertEqual(our_task.task_type, "rerank")
@@ -260,7 +262,7 @@ class TestBackgroundProcessingService(unittest.TestCase):
         self.assertIsInstance(query_hash, str)
 
         # Check query was tracked in cache
-        analytics = self.service.cache.query_analytics.get(query_hash)
+        analytics = self.service.orchestrator.cache.query_analytics.get(query_hash)
         self.assertIsNotNone(analytics)
         self.assertEqual(analytics.query_text, "test query")
 
@@ -268,23 +270,22 @@ class TestBackgroundProcessingService(unittest.TestCase):
         """Test service status reporting."""
         status = self.service.get_service_status()
 
-        self.assertIn("service_running", status)
+        self.assertIn("running", status)
         self.assertIn("resources", status)
-        self.assertIn("execution", status)
-        self.assertIn("cache", status)
-        self.assertIsInstance(status["service_running"], bool)
+        self.assertIn("execution_stats", status)
+        self.assertIsInstance(status["running"], bool)
 
     def test_start_stop_service(self):
         """Test starting and stopping the service."""
         # Start service
         result = self.service.start()
         self.assertTrue(result)
-        self.assertTrue(self.service.running)
+        self.assertTrue(self.service.orchestrator.running)
 
         # Stop service
         result = self.service.stop()
         self.assertTrue(result)
-        self.assertFalse(self.service.running)
+        self.assertFalse(self.service.orchestrator.running)
 
 
 if __name__ == "__main__":

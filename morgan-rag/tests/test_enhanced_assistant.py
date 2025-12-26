@@ -5,12 +5,13 @@ Test script for the enhanced Morgan assistant with emotional intelligence.
 
 import sys
 import os
+import asyncio
 
-# Add the morgan-rag directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "morgan-rag"))
+# Add the parent directory (morgan-rag) to the path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-def test_enhanced_assistant():
+async def test_enhanced_assistant():
     """Test the enhanced Morgan assistant functionality."""
     try:
         from morgan.core.assistant import MorganAssistant
@@ -30,16 +31,18 @@ def test_enhanced_assistant():
         print(f"👤 User ID: {test_user_id}")
 
         # Ask question with emotional intelligence
-        response = morgan.ask(question=question, user_id=test_user_id)
+        response = await morgan.ask(question=question, user_id=test_user_id)
 
         print(f"\n🤖 Response:")
         print(f"Answer: {response.answer}")
         print(f"Confidence: {response.confidence:.2f}")
         print(f"Emotional Tone: {response.emotional_tone}")
         print(f"Empathy Level: {response.empathy_level:.2f}")
-        print(f"Personalization Elements: {response.personalization_elements}")
+        
+        if hasattr(response, 'personalization_elements'):
+            print(f"Personalization Elements: {response.personalization_elements}")
 
-        if response.milestone_celebration:
+        if hasattr(response, 'milestone_celebration') and response.milestone_celebration:
             print(f"🎉 Milestone: {response.milestone_celebration.description}")
 
         # Test relationship insights
@@ -73,5 +76,5 @@ def test_enhanced_assistant():
 
 
 if __name__ == "__main__":
-    success = test_enhanced_assistant()
+    success = asyncio.run(test_enhanced_assistant())
     sys.exit(0 if success else 1)

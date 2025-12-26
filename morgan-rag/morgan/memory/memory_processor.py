@@ -14,14 +14,14 @@ from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
 from morgan.core.memory import ConversationTurn
-from morgan.emotional.intelligence_engine import get_emotional_intelligence_engine
-from morgan.emotional.models import (
+from morgan.intelligence.core.intelligence_engine import get_emotional_intelligence_engine
+from morgan.intelligence.core.models import (
     ConversationContext,
     EmotionalState,
     EmotionType,
     UserPreferences,
 )
-from morgan.services.embedding_service import get_embedding_service
+from morgan.embeddings.service import get_embedding_service
 from morgan.utils.logger import get_logger
 from morgan.vector_db.client import VectorDBClient
 

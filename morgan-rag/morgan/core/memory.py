@@ -8,93 +8,28 @@ Human-First: Make conversations feel natural and continuous.
 """
 
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
-from morgan.services.embedding_service import get_embedding_service
+from morgan.embeddings.service import get_embedding_service
 from morgan.utils.logger import get_logger
 from morgan.vector_db.client import VectorDBClient
+from morgan.core.domain.entities import Conversation, ConversationTurn
+from morgan.core.infrastructure.repositories import MemoryRepository
 
 logger = get_logger(__name__)
 
 
-@dataclass
-class ConversationTurn:
+class MemoryService:
     """
-    A single turn in a conversation.
-
-    Simple structure that captures the essence of human-AI interaction.
-    """
-
-    turn_id: str
-    conversation_id: str
-    timestamp: str
-    question: str
-    answer: str
-    sources: List[str]
-    tags: List[str]
-    feedback_rating: Optional[int] = None
-    feedback_comment: Optional[str] = None
-
-    def __post_init__(self):
-        """Ensure sources is always a list."""
-        if self.sources is None:
-            self.sources = []
-        if self.tags is None:
-            self.tags = []
-
-
-@dataclass
-class Conversation:
-    """
-    A complete conversation between human and Morgan.
-
-    Human-friendly structure that makes conversations easy to understand.
-    """
-
-    conversation_id: str
-    started_at: str
-    topic: Optional[str]
-    turns: List[ConversationTurn]
-    last_activity: str
-    total_turns: int = 0
-    average_rating: float = 0.0
-    tags: List[str] = None
-
-    def __post_init__(self):
-        """Calculate derived fields."""
-        if self.turns is None:
-            self.turns = []
-        self.total_turns = len(self.turns)
-        if self.tags is None:
-            self.tags = []
-
-        # Calculate average rating from feedback
-        ratings = [
-            turn.feedback_rating
-            for turn in self.turns
-            if turn.feedback_rating is not None
-        ]
-        self.average_rating = sum(ratings) / len(ratings) if ratings else 0.0
-
-
-class ConversationMemory:
-    """
-    Morgan's Conversation Memory
-
-    Remembers conversations to:
-    - Provide context for ongoing chats
-    - Learn from human feedback
-    - Improve responses over time
-    - Make interactions feel natural and continuous
-
-    KISS: Single responsibility - manage conversation memory and learning.
+    Service for managing Morgan's conversation memory.
+    Orchestrates turn storage and context retrieval, delegating persistence to MemoryRepository.
     """
 
     def __init__(self):
-        """Initialize conversation memory."""
+        """Initialize memory service."""
         self.settings = get_settings()
         self.embedding_service = get_embedding_service()
         self.vector_db = VectorDBClient()
@@ -103,6 +38,11 @@ class ConversationMemory:
         self.conversation_collection = "morgan_conversations"
         self.turn_collection = "morgan_turns"
 
+        # Repositories
+        self.repository = MemoryRepository(
+            self.vector_db, self.turn_collection, self.conversation_collection
+        )
+
         # Memory settings
         self.max_conversations = getattr(
             self.settings, "morgan_memory_max_conversations", 1000
@@ -110,12 +50,12 @@ class ConversationMemory:
         self.max_turns_per_conversation = getattr(
             self.settings, "morgan_memory_max_turns_per_conversation", 100
         )
-        self.context_window_turns = 5  # Number of recent turns to include in context
+        self.context_window_turns = 5
 
         # Ensure collections exist
         self._ensure_collections()
 
-        logger.info("Conversation memory initialized")
+        logger.info("Memory service initialized with repository-based persistence")
 
     def create_conversation(self, topic: Optional[str] = None) -> str:
         """
@@ -160,26 +100,9 @@ class ConversationMemory:
     ) -> str:
         """
         Add a turn to an existing conversation.
-
-        Args:
-            conversation_id: ID of the conversation
-            question: Human's question
-            answer: Morgan's answer
-            sources: Optional list of sources used
-
-        Returns:
-            Turn ID for future reference
-
-        Example:
-            >>> turn_id = memory.add_turn(
-            ...     conv_id,
-            ...     "How do I install Docker?",
-            ...     "You can install Docker by...",
-            ...     ["docker-docs.md"]
-            ... )
         """
         turn_id = str(uuid.uuid4())
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = datetime.utcnow()
 
         turn = ConversationTurn(
             turn_id=turn_id,
@@ -191,11 +114,17 @@ class ConversationMemory:
             tags=tags or [],
         )
 
-        # Store turn in vector database for semantic search
-        self._store_turn(turn)
+        # Create embedding for the turn
+        turn_text = f"Question: {question}\nAnswer: {answer}"
+        turn_embedding = self.embedding_service.encode(
+            text=turn_text, instruction="document"
+        )
+
+        # Store turn via repository
+        self.repository.store_turn(turn, turn_embedding)
 
         # Update conversation metadata
-        self._update_conversation_activity(conversation_id, timestamp)
+        self._update_conversation_activity(conversation_id, timestamp.isoformat())
 
         logger.debug(f"Added turn to conversation {conversation_id}: {turn_id}")
         return turn_id

@@ -24,7 +24,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from morgan.services.embedding_service import get_embedding_service
+from morgan.embeddings.service import get_embedding_service
 from morgan.utils.logger import get_logger
 from morgan.utils.request_context import get_request_id, set_request_id
 from morgan.vector_db.client import VectorDBClient
@@ -1036,7 +1036,7 @@ class MultiStageSearchEngine:
             from morgan.companion.relationship_manager import (
                 CompanionRelationshipManager,
             )
-            from morgan.emotional.intelligence_engine import (
+            from morgan.intelligence.core.intelligence_engine import (
                 get_emotional_intelligence_engine,
             )
             from morgan.memory.memory_processor import get_memory_processor
@@ -1055,7 +1055,7 @@ class MultiStageSearchEngine:
             )
 
             # Analyze query for emotional context
-            from morgan.emotional.models import (
+            from morgan.intelligence.core.models import (
                 ConversationContext,
                 EmotionalState,
                 EmotionType,
@@ -1248,7 +1248,7 @@ class MultiStageSearchEngine:
             from morgan.companion.relationship_manager import (
                 CompanionRelationshipManager,
             )
-            from morgan.emotional.intelligence_engine import (
+            from morgan.intelligence.core.intelligence_engine import (
                 get_emotional_intelligence_engine,
             )
 
@@ -1350,7 +1350,7 @@ class MultiStageSearchEngine:
 
             # Add emotional context if detectable from query
             try:
-                from morgan.emotional.models import ConversationContext
+                from morgan.intelligence.core.models import ConversationContext
 
                 conv_context = ConversationContext(
                     user_id=user_id,

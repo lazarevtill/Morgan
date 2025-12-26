@@ -206,7 +206,7 @@ def test_morgan_imports():
 
     modules_to_test = [
         ("morgan.config", "Settings"),
-        ("morgan.services.embedding_service", "EmbeddingService"),
+        ("morgan.embeddings.service", "EmbeddingService"),
         ("morgan.jina.reranking.service", "JinaRerankingService"),
         ("morgan.core.memory", "ConversationMemory"),
     ]

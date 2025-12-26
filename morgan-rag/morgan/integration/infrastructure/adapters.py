@@ -7,7 +7,7 @@ required by the integration workflows.
 
 from dataclasses import dataclass
 
-from ...background.service import BackgroundProcessingService
+from ...background import BackgroundProcessingService
 from ...companion.relationship_manager import CompanionRelationshipManager
 from ...emotional.intelligence_engine import EmotionalIntelligenceEngine
 from ...jina.embeddings.code_service import (
@@ -21,7 +21,10 @@ from ...memory.memory_processor import MemoryProcessor
 from ...optimization.comprehensive_batch_optimizer import (
     get_comprehensive_batch_optimizer,
 )
-from ...search.multi_stage_search import MultiStageSearchEngine
+from ...core.assistant import MorganAssistant
+from ...core.knowledge import KnowledgeService
+from ...core.memory import MemoryService
+from ...core.search import SmartSearch
 from ...utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -53,6 +56,12 @@ class ServiceContainer:
         self.search_engine = None
         self.background_service = None
 
+        # Core Components
+        self.knowledge_base = None
+        self.conversation_memory = None
+        self.assistant = None
+        self.smart_search = None
+
     def initialize(self):
         """Initialize all services if not already initialized."""
         if self._initialized:
@@ -75,6 +84,18 @@ class ServiceContainer:
         self.companion_manager = CompanionRelationshipManager()
         self.memory_processor = MemoryProcessor()
 
+        # Core components
+        from ...core.knowledge import KnowledgeService
+        from ...core.memory import MemoryService
+        from ...core.assistant import MorganAssistant
+        from ...core.search import SmartSearch
+        from ...search.multi_stage_search import MultiStageSearchEngine
+
+        self.knowledge_base = KnowledgeService()
+        self.conversation_memory = MemoryService()
+        self.assistant = MorganAssistant()
+        self.smart_search = SmartSearch()
+        
         # Search and background services
         self.search_engine = MultiStageSearchEngine()
         self.background_service = BackgroundProcessingService()

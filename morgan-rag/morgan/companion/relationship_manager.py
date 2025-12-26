@@ -11,13 +11,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-from ..emotional.models import (
+from morgan.intelligence.core.models import (
     CommunicationStyle,
     CompanionProfile,
     ConversationContext,
     ConversationStyle,
     ConversationTopic,
     EmotionalState,
+    InteractionData,
     MilestoneType,
     PersonalizedGreeting,
     RelationshipMilestone,

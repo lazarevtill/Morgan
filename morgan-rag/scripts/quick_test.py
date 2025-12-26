@@ -21,7 +21,7 @@ print(f"   ✅ Qdrant: {settings.qdrant_url}")
 
 # 2. Embedding Service
 print("\n2. Testing Embedding Service...")
-from morgan.services.embedding_service import EmbeddingService
+from morgan.embeddings.service import EmbeddingService
 emb_service = EmbeddingService()
 test_emb = emb_service.encode("Hello world")
 print(f"   ✅ Generated embedding: {len(test_emb)} dimensions")

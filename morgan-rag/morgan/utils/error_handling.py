@@ -906,7 +906,7 @@ class ErrorRecoveryManager:
         ) -> bool:
             """Attempt to recover embedding service by switching to fallback."""
             try:
-                from morgan.services.embedding_service import get_embedding_service
+                from morgan.embeddings.service import get_embedding_service
 
                 service = get_embedding_service()
 
@@ -1294,7 +1294,7 @@ def initialize_error_handling():
     # Register default health checks
     def check_embedding_service():
         try:
-            from morgan.services.embedding_service import get_embedding_service
+            from morgan.embeddings.service import get_embedding_service
 
             service = get_embedding_service()
             return service.is_available()

@@ -16,50 +16,26 @@ from morgan.caching.git_hash_tracker import GitHashTracker
 from morgan.config import get_settings
 from morgan.ingestion.document_processor import DocumentProcessor
 from morgan.monitoring.metrics_collector import MetricsCollector
-from morgan.services.embedding_service import get_embedding_service
+from morgan.embeddings.service import get_embedding_service
 from morgan.utils.logger import get_logger
 from morgan.vector_db.client import VectorDBClient
 from morgan.vectorization.hierarchical_embeddings import (
     get_hierarchical_embedding_service,
 )
+from morgan.core.domain.entities import KnowledgeChunk
+from morgan.core.infrastructure.repositories import KnowledgeRepository
 
 logger = get_logger(__name__)
 
 
-@dataclass
-class KnowledgeChunk:
+class KnowledgeService:
     """
-    A piece of knowledge with metadata.
-
-    Simple structure that's easy to understand and work with.
-    """
-
-    content: str
-    source: str
-    chunk_id: str
-    metadata: Dict[str, Any]
-    embedding: Optional[List[float]] = None
-
-    def __post_init__(self):
-        """Ensure metadata is always a dict."""
-        if self.metadata is None:
-            self.metadata = {}
-
-
-class KnowledgeBase:
-    """
-    Morgan's Knowledge Base
-
-    Stores and retrieves documents in a way that's:
-    - Easy to understand
-    - Fast to search
-    - Simple to maintain
-
-    KISS: Single responsibility - manage knowledge storage and retrieval.
+    Service for managing Morgan's knowledge.
+    Orchestrates ingestion and search, delegating persistence to KnowledgeRepository.
     """
 
     def __init__(self):
-        """Initialize knowledge base."""
+        """Initialize knowledge service."""
         self.settings = get_settings()
         self.embedding_service = get_embedding_service()
         self.hierarchical_embedding_service = get_hierarchical_embedding_service()
@@ -70,15 +46,16 @@ class KnowledgeBase:
 
         # Knowledge collections
         self.main_collection = "morgan_knowledge"
-        self.memory_collection = "morgan_memory"
-
-        # Hierarchical collection names
         self.hierarchical_collection = "morgan_knowledge_hierarchical"
+
+        # Repositories
+        self.repository = KnowledgeRepository(self.vector_db, self.main_collection)
+        self.hierarchical_repository = KnowledgeRepository(self.vector_db, self.hierarchical_collection)
 
         # Ensure collections exist
         self._ensure_collections()
 
-        logger.info("Knowledge base initialized with hierarchical embedding support")
+        logger.info("Knowledge service initialized with repository-based persistence")
 
     def ingest_documents(
         self,
@@ -374,51 +351,32 @@ class KnowledgeBase:
     ) -> List[Dict[str, Any]]:
         """
         Search Morgan's knowledge base.
-
-        Args:
-            query: Search query in natural language
-            max_results: Maximum number of results to return
-            min_score: Minimum similarity score (0.0 to 1.0)
-            collection: Optional collection to search (uses default if None)
-
-        Returns:
-            List of relevant knowledge chunks with scores
-
-        Example:
-            >>> kb = KnowledgeBase()
-            >>> results = kb.search_knowledge("Docker deployment")
-            >>> for result in results:
-            ...     print(f"Score: {result['score']:.2f}")
-            ...     print(f"Content: {result['content'][:100]}...")
         """
-        collection_name = collection or self.main_collection
-
         try:
             # Generate query embedding
             query_embedding = self.embedding_service.encode(
                 text=query,
-                instruction="query",  # Use query instruction for better matching
+                instruction="query",
             )
 
-            # Search vector database
-            search_results = self.vector_db.search(
-                collection_name=collection_name,
+            # Use repository for search
+            repo = self.hierarchical_repository if collection == self.hierarchical_collection else self.repository
+            chunks = repo.search(
                 query_vector=query_embedding,
                 limit=max_results,
                 score_threshold=min_score,
             )
 
-            # Convert to human-friendly format
+            # Convert to legacy format for compatibility (if needed) or keep as entities
             results = []
-            for result in search_results:
-                payload = result.payload
+            for chunk in chunks:
                 results.append(
                     {
-                        "content": payload.get("content", ""),
-                        "source": payload.get("source", "Unknown"),
-                        "score": result.score,
-                        "metadata": payload.get("metadata", {}),
-                        "document_type": payload.get("document_type", "unknown"),
+                        "content": chunk.content,
+                        "source": chunk.source,
+                        "score": getattr(chunk, 'score', 0.0), # Assuming repo adds score to entity or similar
+                        "metadata": chunk.metadata,
+                        "document_type": chunk.metadata.get("document_type", "unknown"),
                     }
                 )
 

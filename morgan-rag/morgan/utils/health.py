@@ -6,7 +6,7 @@ import requests
 from qdrant_client import QdrantClient
 
 from morgan.config.settings import get_settings
-from morgan.services.embedding_service import EmbeddingService
+from morgan.embeddings.service import EmbeddingService, get_embedding_service
 
 
 class HealthChecker:

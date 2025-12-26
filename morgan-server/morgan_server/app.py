@@ -25,6 +25,7 @@ from morgan_server.api.routes import (
     memory_router,
     knowledge_router,
     health_router,
+    profile_router,
 )
 
 
@@ -88,33 +89,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Note: Actual component initialization will be done here
         # For now, we're setting up the structure
         
-        # Initialize vector database client
-        logger.info("Initializing vector database client...")
-        # TODO: Initialize vector DB client and register with health system
-        # vector_db = VectorDBClient(config)
-        # await vector_db.connect()
-        # health_system.register_component("vector_db", vector_db)
-        # app.state.vector_db = vector_db
-        
-        # Initialize LLM client
-        logger.info("Initializing LLM client...")
-        from morgan_server.llm import create_llm_client
-        llm_client = create_llm_client(config)
-        app.state.llm_client = llm_client
-        logger.info(f"LLM client initialized: {config.llm_provider}")
-        
-        # Initialize assistant with basic components
-        logger.info("Initializing Morgan assistant...")
+        # Initialize assistant using Core
+        logger.info("Initializing Morgan assistant (Core)...")
         from morgan_server.assistant import MorganAssistant
         from morgan_server.api.routes.chat import set_assistant
         
+        # We can pass config_path if config object has it, otherwise default
+        config_path = getattr(config, "config_file", None)
+        
         assistant = MorganAssistant(
-            llm_client=llm_client,
+            config_path=config_path
         )
         app.state.assistant = assistant
         
         # Set assistant in chat routes
         set_assistant(assistant)
+        
+        # Register components with health system
+        health_system.register_component("assistant", assistant)
         logger.info("Morgan assistant initialized successfully")
         
         logger.info(
@@ -153,32 +145,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             # Shutdown assistant
             if hasattr(app.state, "assistant"):
                 logger.info("Shutting down assistant...")
-                # TODO: Implement assistant shutdown
-                # shutdown_tasks.append(app.state.assistant.shutdown())
-            
-            # Shutdown memory system
-            if hasattr(app.state, "memory_system"):
-                logger.info("Shutting down memory system...")
-                # TODO: Implement memory system shutdown
-                # shutdown_tasks.append(app.state.memory_system.shutdown())
-            
-            # Shutdown embedding service
-            if hasattr(app.state, "embedding_service"):
-                logger.info("Shutting down embedding service...")
-                # TODO: Implement embedding service shutdown
-                # shutdown_tasks.append(app.state.embedding_service.shutdown())
-            
-            # Shutdown LLM client
-            if hasattr(app.state, "llm_client"):
-                logger.info("Shutting down LLM client...")
-                # TODO: Implement LLM client shutdown
-                # shutdown_tasks.append(app.state.llm_client.close())
-            
-            # Shutdown vector database
-            if hasattr(app.state, "vector_db"):
-                logger.info("Shutting down vector database client...")
-                # TODO: Implement vector DB shutdown
-                # shutdown_tasks.append(app.state.vector_db.close())
+                await app.state.assistant.shutdown()
             
             # Wait for all shutdowns to complete
             if shutdown_tasks:
@@ -323,8 +290,8 @@ def create_app(
     app.include_router(memory_router, tags=["Memory"])
     app.include_router(knowledge_router, tags=["Knowledge"])
     
-    # Note: Profile router will be added when implemented
-    # app.include_router(profile_router, tags=["Profile"])
+    # Profile router
+    app.include_router(profile_router, tags=["Profile"])
     
     logger.info("API routes registered")
     
