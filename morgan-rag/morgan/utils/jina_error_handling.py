@@ -719,11 +719,37 @@ def handle_jina_multimodal_errors(
                     logger.warning("Attempting OCR text extraction from images")
 
                     try:
-                        # Basic OCR fallback (would need actual OCR library)
-                        extracted_text = ""
+                        # Use DeepSeek-OCR via Ollama
+                        from morgan.services.ocr_service import (
+                            get_ocr_service,
+                            OCRMode,
+                        )
+                        import asyncio
 
-                        # Placeholder for OCR implementation
-                        logger.info("OCR text extraction would be implemented here")
+                        ocr_service = get_ocr_service()
+
+                        # Extract text from all images
+                        async def run_ocr():
+                            results = await ocr_service.extract_text_batch(
+                                images, OCRMode.FREE
+                            )
+                            return " ".join(
+                                r.text for r in results if r.success and r.text
+                            )
+
+                        # Run async in sync context
+                        try:
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                import concurrent.futures
+
+                                with concurrent.futures.ThreadPoolExecutor() as p:
+                                    future = p.submit(asyncio.run, run_ocr())
+                                    extracted_text = future.result(timeout=120)
+                            else:
+                                extracted_text = loop.run_until_complete(run_ocr())
+                        except RuntimeError:
+                            extracted_text = asyncio.run(run_ocr())
 
                         if extracted_text:
                             # Process extracted text
@@ -733,8 +759,8 @@ def handle_jina_multimodal_errors(
 
                             embedding_service = get_embedding_service()
 
-                            combined_text = f"{text_content} {extracted_text}".strip()
-                            text_embeddings = embedding_service.encode([combined_text])
+                            combined = f"{text_content} {extracted_text}".strip()
+                            text_embeddings = embedding_service.encode([combined])
 
                             return {
                                 "text_embeddings": (
@@ -748,12 +774,12 @@ def handle_jina_multimodal_errors(
                                 "extracted_text": extracted_text,
                                 "metadata": {
                                     "original_error": str(e),
-                                    "fallback_used": "ocr_extraction",
+                                    "fallback_used": "deepseek_ocr",
                                 },
                             }
 
                     except Exception as ocr_error:
-                        logger.error(f"OCR fallback failed: {ocr_error}")
+                        logger.error("OCR fallback failed: %s", ocr_error)
 
                 raise
 
