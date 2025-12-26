@@ -621,6 +621,11 @@ class JinaRerankingService:
         """
         Precompute reranked results for popular queries.
 
+        Integrates with the search system to:
+        1. Execute search for each query pattern
+        2. Rerank results using best available model
+        3. Cache results for fast retrieval
+
         Args:
             query_patterns: List of popular query patterns
             collection_name: Collection to search and rerank
@@ -630,34 +635,100 @@ class JinaRerankingService:
         """
         precomputed_results = {}
 
+        # Try to get search service for actual queries
+        search_service = None
+        try:
+            from morgan.search.service import get_search_service
+
+            search_service = get_search_service()
+        except ImportError:
+            logger.warning("Search service not available for precomputation")
+
         for query_pattern in query_patterns:
             try:
-                # This would integrate with the search system to get initial results
-                # For now, we'll create a placeholder implementation
                 logger.info(
                     "Precomputing results for query pattern: '%s'", query_pattern
                 )
 
-                # In production, this would:
-                # 1. Execute search for the query pattern
-                # 2. Get initial results from vector database
-                # 3. Rerank the results
-                # 4. Store in precomputed cache
+                results_list: List[SearchResult] = []
 
-                # Placeholder: create empty precomputed result
+                # Execute actual search if service available
+                if search_service:
+                    try:
+                        import asyncio
+
+                        # Run async search in sync context
+                        loop = asyncio.new_event_loop()
+                        try:
+                            search_results = loop.run_until_complete(
+                                search_service.search(
+                                    query=query_pattern,
+                                    collection=collection_name,
+                                    limit=50,
+                                )
+                            )
+                            # Convert to SearchResult format
+                            for sr in search_results:
+                                results_list.append(
+                                    SearchResult(
+                                        content=sr.get("content", ""),
+                                        score=sr.get("score", 0.0),
+                                        metadata=sr.get("metadata", {}),
+                                        source=sr.get("source", collection_name),
+                                        result_id=sr.get("id"),
+                                    )
+                                )
+                        finally:
+                            loop.close()
+                    except Exception as e:
+                        logger.debug(f"Search failed for precomputation: {e}")
+
+                # Rerank results if we have any
+                if results_list:
+                    language = self._detect_language(query_pattern)
+                    model_name = self._get_model_for_language(language)
+                    reranked_results, _ = self.rerank(
+                        query=query_pattern,
+                        results=results_list,
+                        model_name=model_name,
+                    )
+                    results_list = reranked_results
+
+                # Calculate quality score based on score distribution
+                quality_score = 0.0
+                if results_list:
+                    scores = [r.score for r in results_list[:10]]
+                    if scores:
+                        # Higher average score and lower variance = better quality
+                        import statistics
+
+                        avg_score = statistics.mean(scores)
+                        score_variance = (
+                            statistics.variance(scores) if len(scores) > 1 else 0
+                        )
+                        quality_score = avg_score * (1 - min(score_variance, 0.5))
+
+                # Store in cache
                 query_hash = self._generate_query_hash(query_pattern)
                 precomputed = PrecomputedResult(
                     query_hash=query_hash,
                     query_text=query_pattern,
-                    results=[],  # Would contain actual reranked results
-                    model_used="jina-reranker-v3",
-                    language="en",
+                    results=results_list,
+                    model_used=self._get_model_for_language(
+                        self._detect_language(query_pattern)
+                    ),
+                    language=self._detect_language(query_pattern),
                     computed_at=datetime.now(),
-                    quality_score=0.85,
+                    quality_score=quality_score,
                 )
 
                 self._precomputed_cache[query_hash] = precomputed
                 precomputed_results[query_pattern] = precomputed.results
+
+                logger.debug(
+                    f"Precomputed {len(results_list)} results for '{query_pattern}' "
+                    f"(quality: {quality_score:.2f})"
+                )
 
             except Exception as e:
                 logger.error(
@@ -1107,83 +1178,150 @@ class JinaRerankingService:
         self, query: str, results: List[SearchResult], model_name: str
     ) -> List[SearchResult]:
         """
-        Enhanced mock reranking with better similarity calculation.
+        Enhanced fallback reranking using infrastructure LocalRerankingService.
+
+        Falls back through multiple strategies:
+        1. LocalRerankingService (CrossEncoder/embedding-based)
+        2. BM25-style TF-IDF scoring
 
         Args:
             query: Search query
             results: Results to rerank
-            model_name: Jina reranker model
+            model_name: Jina reranker model (for logging)
 
         Returns:
             Reranked results with updated scores
         """
-        import random
+        # First, try to use LocalRerankingService from infrastructure
+        try:
+            from morgan.infrastructure.local_reranking import (
+                get_local_reranking_service,
+            )
+
+            local_service = get_local_reranking_service()
+            documents = [r.content for r in results]
+
+            # Use synchronous wrapper for async service
+            import asyncio
+
+            loop = asyncio.new_event_loop()
+            try:
+                rerank_results = loop.run_until_complete(
+                    local_service.rerank(query, documents, top_k=len(documents))
+                )
+            finally:
+                loop.close()
+
+            if rerank_results:
+                # Map scores back to SearchResult objects
+                reranked = results.copy()
+                for rerank_result in rerank_results:
+                    idx = rerank_result.original_index
+                    if idx < len(reranked):
+                        reranked[idx].rerank_score = rerank_result.score
+                        reranked[idx].score = rerank_result.score
+
+                # Sort by reranked scores
+                reranked.sort(key=lambda x: x.rerank_score or x.score, reverse=True)
+                logger.debug(
+                    f"Reranked {len(results)} results via LocalRerankingService"
+                )
+                return reranked
+
+        except Exception as e:
+            logger.debug(f"LocalRerankingService unavailable: {e}, using TF-IDF")
+
+        # Fallback: BM25-style TF-IDF scoring
+        return self._tfidf_reranking(query, results, model_name)
+
+    def _tfidf_reranking(
+        self, query: str, results: List[SearchResult], model_name: str
+    ) -> List[SearchResult]:
+        """
+        TF-IDF based fallback reranking.
+
+        Uses BM25-style scoring for lexical matching when no model is available.
+
+        Args:
+            query: Search query
+            results: Results to rerank
+            model_name: Model name (for logging)
+
+        Returns:
+            Reranked results
+        """
+        import math
         import re
         from collections import Counter
 
-        random.seed(hash(query) % 2**32)  # Deterministic mock reranking
-
-        # Enhanced reranking: use TF-IDF-like scoring
         reranked_results = results.copy()
 
         # Tokenize query
-        query_tokens = re.findall(r"\b\w+\b", query.lower())
+        query_tokens = [t.lower() for t in re.findall(r"\w+", query) if len(t) > 1]
         query_counter = Counter(query_tokens)
 
+        # BM25 parameters
+        k1 = 1.5
+        b = 0.75
+
+        # Calculate document lengths and average
+        doc_tokens_list = []
         for result in reranked_results:
-            # Tokenize content
-            content_tokens = re.findall(r"\b\w+\b", result.content.lower())
-            content_counter = Counter(content_tokens)
+            tokens = [
+                t.lower() for t in re.findall(r"\w+", result.content) if len(t) > 1
+            ]
+            doc_tokens_list.append(tokens)
 
-            # Calculate similarity score
-            similarity = 0.0
-            for token, query_freq in query_counter.items():
-                if token in content_counter:
-                    # Simple TF-IDF approximation
-                    tf = (
-                        content_counter[token] / len(content_tokens)
-                        if content_tokens
-                        else 0
+        avg_dl = (
+            sum(len(tokens) for tokens in doc_tokens_list) / len(doc_tokens_list)
+            if doc_tokens_list
+            else 1
+        )
+
+        # Calculate document frequencies for IDF
+        df = Counter()
+        for tokens in doc_tokens_list:
+            unique_tokens = set(tokens)
+            for token in unique_tokens:
+                df[token] += 1
+
+        n_docs = len(results)
+
+        # Calculate BM25 scores
+        for i, result in enumerate(reranked_results):
+            doc_tokens = doc_tokens_list[i]
+            dl = len(doc_tokens)
+            tf = Counter(doc_tokens)
+
+            score = 0.0
+            for term in query_tokens:
+                if term in tf:
+                    # IDF component
+                    idf = math.log(
+                        (n_docs - df.get(term, 0) + 0.5) / (df.get(term, 0) + 0.5) + 1
                     )
-                    similarity += tf * query_freq
+                    # TF component with length normalization
+                    tf_score = (
+                        tf[term]
+                        * (k1 + 1)
+                        / (tf[term] + k1 * (1 - b + b * dl / avg_dl))
+                    )
+                    score += idf * tf_score
 
-            # Normalize by query length
-            if query_tokens:
-                similarity /= len(query_tokens)
-
-            # Apply model-specific adjustments
-            if "multilingual" in model_name:
-                # Multilingual model might be slightly less accurate
-                similarity *= 0.95
-            else:
-                # English model gets slight boost
-                similarity *= 1.05
-
-            # Add some randomness for realistic variation but ensure improvement
-            noise = random.uniform(-0.02, 0.08)  # Bias towards positive improvement
-
-            # Update score (blend with original score but ensure some improvement)
-            original_weight = 0.6  # Reduced to allow more reranking influence
-            rerank_weight = 0.4  # Increased reranking influence
-            improvement_boost = (
-                0.1 * similarity
-            )  # Add improvement boost based on similarity
-
-            result.rerank_score = (
-                original_weight * result.score
-                + rerank_weight * similarity
-                + improvement_boost
-                + noise
+            # Normalize to 0-1 range
+            normalized_score = (
+                min(1.0, score / (len(query_tokens) * 3)) if query_tokens else 0.0
             )
+
+            # Blend with original score for stability
+            result.rerank_score = 0.4 * result.score + 0.6 * normalized_score
             result.rerank_score = max(0.0, min(1.0, result.rerank_score))
             result.score = result.rerank_score
 
         # Sort by new scores
         reranked_results.sort(key=lambda x: x.score, reverse=True)
 
-        logger.debug(
-            f"Enhanced mock reranked {len(results)} results using model '{model_name}'"
-        )
+        logger.debug(f"TF-IDF reranked {len(results)} results (model: {model_name})")
         return reranked_results
 
     def _calculate_precision_at_k(
