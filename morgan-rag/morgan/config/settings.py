@@ -257,8 +257,8 @@ class Settings(BaseSettings):
     )
 
     morgan_session_secret: str = Field(
-        default="change-me-in-production",
-        description="Session secret for web interface",
+        default="CHANGE_ME_IN_PRODUCTION_REQUIRED",
+        description="Session secret for web interface - MUST be changed in production",
     )
 
     # ============================================================================

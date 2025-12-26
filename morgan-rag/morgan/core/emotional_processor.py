@@ -75,33 +75,35 @@ class EmotionalProcessor:
         conversation_context: ConversationContext,
         emotional_state: EmotionalState,
     ) -> Optional[RelationshipMilestone]:
-        """Check if this interaction represents a milestone."""
-        # Simple milestone detection logic
-        if user_profile.interaction_count == 1:
-            return self.relationship_manager.track_relationship_milestones(
-                user_profile.user_id, "first_conversation"
+        """
+        Check if this interaction represents a milestone.
+
+        Delegates to MilestoneTracker for comprehensive milestone detection.
+        This is the single code path for milestone detection.
+        """
+        try:
+            from morgan.core.milestone_tracker import MilestoneTracker
+
+            # Use singleton milestone tracker for consistent detection
+            tracker = MilestoneTracker()
+            milestone = tracker.check_milestones(
+                user_profile, conversation_context, emotional_state
             )
 
-        # Check for breakthrough moments (high positive emotion + engagement)
-        if (
-            emotional_state.primary_emotion.value == "joy"
-            and emotional_state.intensity > 0.7
-            and len(conversation_context.message_text) > 100
-        ):
-            return self.relationship_manager.track_relationship_milestones(
-                user_profile.user_id, "breakthrough_moment"
-            )
+            if milestone:
+                # Add milestone to user profile
+                user_profile.relationship_milestones.append(milestone)
+                logger.info(
+                    "Milestone detected for user %s: %s",
+                    user_profile.user_id,
+                    milestone.milestone_type.value,
+                )
 
-        # Check for trust building (personal sharing)
-        if any(
-            word in conversation_context.message_text.lower()
-            for word in ["personal", "share", "trust", "private"]
-        ):
-            return self.relationship_manager.track_relationship_milestones(
-                user_profile.user_id, "trust_building"
-            )
+            return milestone
 
-        return None
+        except Exception as e:
+            logger.error("Failed to check milestones: %s", e)
+            return None
 
     def process_conversation_memory(
         self,
@@ -166,20 +168,20 @@ class EmotionalProcessor:
             logger.error(f"Failed to update user profile: {e}")
 
     def generate_milestone_celebration(self, milestone: RelationshipMilestone) -> str:
-        """Generate celebration message for milestone."""
-        celebrations = {
-            "first_conversation": "Welcome! I'm excited to start this journey of learning and discovery with you.",
-            "breakthrough_moment": "What a wonderful breakthrough! I'm so glad I could help you reach this understanding.",
-            "goal_achieved": "Congratulations on achieving your goal! Your dedication and hard work have paid off.",
-            "learning_milestone": "It's amazing to see how much you've learned! Your curiosity and persistence inspire me.",
-            "emotional_support": "I'm honored that you trust me to support you through this. You're stronger than you know.",
-            "trust_building": "Thank you for sharing something so personal with me. Our growing trust means a lot.",
-        }
+        """
+        Generate celebration message for milestone.
 
-        return celebrations.get(
-            milestone.milestone_type.value,
-            "I'm grateful for this meaningful moment in our relationship.",
-        )
+        Delegates to MilestoneTracker for consistent celebration messages.
+        """
+        try:
+            from morgan.core.milestone_tracker import MilestoneTracker
+
+            tracker = MilestoneTracker()
+            return tracker.generate_celebration_message(milestone)
+
+        except Exception as e:
+            logger.error("Failed to generate celebration: %s", e)
+            return "I'm grateful for this meaningful moment in our relationship."
 
     def get_relationship_insights(self, user_id: str) -> Dict[str, Any]:
         """Get insights about the relationship with a user."""

@@ -1,15 +1,17 @@
 # Morgan 6-Host Distributed Architecture Configuration
 # 100% Self-Hosted - No API Keys Required
 #
-# This configuration is for the full 6-host distributed setup:
-# - Host 1 (192.168.1.10): Morgan Core + Qdrant + Redis
-# - Host 2 (192.168.1.11): Background Services + Monitoring
-# - Host 3 (192.168.1.20): Main LLM #1 (RTX 3090)
-# - Host 4 (192.168.1.21): Main LLM #2 (RTX 3090)
-# - Host 5 (192.168.1.22): Embeddings + Fast LLM (RTX 4070)
-# - Host 6 (192.168.1.23): Reranking (RTX 2060)
+# This configuration is for the full 6-host distributed setup.
+# 
+# REQUIRED: Set these environment variables before deploying:
+#   MORGAN_HOST_CORE=192.168.1.10       # Host 1: Morgan Core + Qdrant + Redis
+#   MORGAN_HOST_BACKGROUND=192.168.1.11 # Host 2: Background Services + Monitoring
+#   MORGAN_HOST_LLM_1=192.168.1.20      # Host 3: Main LLM #1 (RTX 3090)
+#   MORGAN_HOST_LLM_2=192.168.1.21      # Host 4: Main LLM #2 (RTX 3090)
+#   MORGAN_HOST_EMBEDDINGS=192.168.1.22 # Host 5: Embeddings + Fast LLM (RTX 4070)
+#   MORGAN_HOST_RERANKING=192.168.1.23  # Host 6: Reranking (RTX 2060)
 #
-# Copy and customize IP addresses for your network:
+# Copy and customize for your network:
 #   cp distributed.6host.yaml distributed.local.yaml
 
 # Global settings
@@ -60,10 +62,11 @@ reranking:
   top_k: 20
 
 # Host definitions for 6-host architecture
+# NOTE: Replace ${VAR} with actual values or use envsubst before deploying
 hosts:
 # CPU Host 1 - Morgan Core Orchestrator
 - host_id: "cpu-orchestrator-1"
-  address: "192.168.1.10"
+  address: "${MORGAN_HOST_CORE:-192.168.1.10}"
   port: 8080
   role: "orchestrator"
   description: "Primary Morgan core with Qdrant and Redis"
@@ -71,7 +74,7 @@ hosts:
 
 # CPU Host 2 - Background Services
 - host_id: "cpu-orchestrator-2"
-  address: "192.168.1.11"
+  address: "${MORGAN_HOST_BACKGROUND:-192.168.1.11}"
   port: 8080
   role: "orchestrator"
   description: "Background services and monitoring"
@@ -79,7 +82,7 @@ hosts:
 
 # GPU Host 3 - Main LLM Primary (RTX 3090)
 - host_id: "llm-primary"
-  address: "192.168.1.20"
+  address: "${MORGAN_HOST_LLM_1:-192.168.1.20}"
   port: 11434
   role: "main_llm"
   gpu_model: "RTX 3090"
@@ -91,7 +94,7 @@ hosts:
 
 # GPU Host 4 - Main LLM Secondary (RTX 3090)
 - host_id: "llm-secondary"
-  address: "192.168.1.21"
+  address: "${MORGAN_HOST_LLM_2:-192.168.1.21}"
   port: 11434
   role: "main_llm"
   gpu_model: "RTX 3090"
@@ -103,7 +106,7 @@ hosts:
 
 # GPU Host 5 - Embeddings + Fast LLM (RTX 4070)
 - host_id: "embeddings-host"
-  address: "192.168.1.22"
+  address: "${MORGAN_HOST_EMBEDDINGS:-192.168.1.22}"
   port: 11434
   role: "embeddings"
   gpu_model: "RTX 4070"
@@ -116,7 +119,7 @@ hosts:
 
 # GPU Host 6 - Reranking (RTX 2060)
 - host_id: "reranking-host"
-  address: "192.168.1.23"
+  address: "${MORGAN_HOST_RERANKING:-192.168.1.23}"
   port: 8080
   role: "reranking"
   gpu_model: "RTX 2060"
@@ -128,23 +131,23 @@ hosts:
 
 # Redis Configuration (on Host 1)
 redis:
-  host: "192.168.1.10"
+  host: "${MORGAN_HOST_CORE:-192.168.1.10}"
   port: 6379
   db: 0
-  password: ""
+  password: "${MORGAN_REDIS_PASSWORD:-}"
   prefix: "morgan:"
 
 # Vector Database (Qdrant on Host 1)
 qdrant:
-  host: "192.168.1.10"
+  host: "${MORGAN_HOST_CORE:-192.168.1.10}"
   port: 6333
   grpc_port: 6334
 
 # Monitoring Configuration (on Host 2)
 monitoring:
   prometheus:
-    host: "192.168.1.11"
+    host: "${MORGAN_HOST_BACKGROUND:-192.168.1.11}"
     port: 9090
   grafana:
-    host: "192.168.1.11"
+    host: "${MORGAN_HOST_BACKGROUND:-192.168.1.11}"
     port: 3000
