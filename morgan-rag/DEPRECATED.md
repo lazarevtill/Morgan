@@ -1,66 +1,58 @@
-# ⚠️ DEPRECATED - Old Morgan System
+# Morgan RAG - Status Update
 
-**This directory contains the old monolithic Morgan implementation and is now DEPRECATED.**
+**Last Updated:** December 26, 2025
 
-## Status
+## Current Status: ✅ ACTIVE
 
-- **Deprecated Date:** December 8, 2025
-- **Replacement:** New client-server architecture in `morgan-server/` and `morgan-cli/`
-- **Maintenance:** No new features, critical bug fixes only
-- **Removal:** Will be archived in a future release
+Morgan RAG is the **active core intelligence engine** of the Morgan AI Assistant. It is **not deprecated**.
 
-## Why Deprecated?
+## What Was Deprecated?
 
-The old Morgan system had several limitations:
-- Monolithic architecture with tight coupling
-- Difficult to deploy and scale
-- Mixed concerns between CLI and core logic
-- Limited API access for custom clients
-- Complex configuration management
+Some **older implementations** within morgan-rag have been consolidated and archived:
 
-## Migration Path
+| Old Module | Status | Replacement |
+|------------|--------|-------------|
+| `embeddings/service.py` | 📦 Archived | `services/embeddings/` |
+| `services/llm_service.py` | 🗑️ Deleted | `services/llm/` |
+| `services/distributed_llm_service.py` | 🗑️ Deleted | `services/llm/` |
+| `services/distributed_embedding_service.py` | 🗑️ Deleted | `services/embeddings/` |
+| `infrastructure/local_embeddings.py` | 📦 Archived | `services/embeddings/` |
+| `infrastructure/local_reranking.py` | 📦 Archived | `services/reranking/` |
 
-**Please migrate to the new system:**
+Archived code is in `/archive/deprecated-modules/`.
 
-1. **Read the Migration Guide:** See [MIGRATION.md](../MIGRATION.md) in the root directory
-2. **Install New Packages:**
-   - Server: `cd ../morgan-server && pip install -e .`
-   - Client: `cd ../morgan-cli && pip install -e .`
-3. **Configure Server:** Set up environment variables or config files
-4. **Start Services:** Use Docker Compose or manual deployment
-5. **Use New CLI:** `morgan chat` instead of old CLI
+## Current Architecture
 
-## New System Benefits
+The current unified services are:
 
-- **Clean Architecture:** Separate client and server
-- **Multiple Clients:** TUI, web, custom apps
-- **Better Deployment:** Docker support, health checks, metrics
-- **Enhanced Features:** Improved empathic engine, knowledge engine, personalization
-- **Production Ready:** Structured logging, monitoring, graceful shutdown
+```
+morgan-rag/morgan/services/
+├── llm/                 # Unified LLM service (single + distributed)
+├── embeddings/          # Unified embedding service (remote + local)
+├── reranking/           # Unified reranking service (4-level fallback)
+└── external_knowledge/  # External knowledge sources
+```
+
+## Usage
+
+```python
+from morgan.services import (
+    get_llm_service,
+    get_embedding_service,
+    get_reranking_service,
+)
+
+llm = get_llm_service()
+embeddings = get_embedding_service()
+reranking = get_reranking_service()
+```
 
 ## Documentation
 
-- **[Migration Guide](../MIGRATION.md)** - Step-by-step migration instructions
-- **[Server Documentation](../morgan-server/README.md)** - New server documentation
-- **[Client Documentation](../morgan-cli/README.md)** - New client documentation
-- **[Docker Documentation](../docker/README.md)** - Deployment guide
-
-## Support
-
-For migration assistance:
-- Check the [Migration Guide](../MIGRATION.md)
-- Review [Documentation Index](../DOCUMENTATION.md)
-- Open a GitHub issue if you encounter problems
-
-## Archive Notice
-
-This directory is kept for reference during the migration period. It will be:
-1. Moved to an `archive/` directory in a future release
-2. Eventually removed from the main repository
-3. Available in git history for reference
-
-**Please do not use this code for new projects or deployments.**
+- [README.md](./README.md) - Morgan RAG overview
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) - Architecture details
+- [../claude.md](../claude.md) - Complete project context
 
 ---
 
-**Use the new system:** `morgan-server/` and `morgan-cli/`
+**Morgan RAG** - The intelligent core of Morgan AI Assistant.
