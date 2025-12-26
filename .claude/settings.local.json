@@ -37,7 +37,8 @@
       "Bash(for service in core llm-service tts-service stt-service)",
       "Bash(do echo \"=== $service ===\")",
       "Bash(done)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []
