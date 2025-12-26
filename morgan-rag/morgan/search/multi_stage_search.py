@@ -173,7 +173,7 @@ class MultiStageSearchEngine:
 
         # Collection names
         self.knowledge_collection = "morgan_knowledge"
-        self.memory_collection = "morgan_turns"
+        self.memory_collection = "morgan_memories"  # Must match memory_processor.py
 
         # Search configuration
         self.coarse_filter_ratio = (
