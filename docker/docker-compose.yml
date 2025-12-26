@@ -28,13 +28,17 @@ services:
       - MORGAN_VECTOR_DB_URL=http://qdrant:6333
       - MORGAN_VECTOR_DB_API_KEY=${MORGAN_VECTOR_DB_API_KEY:-}
       
-      # Embedding configuration
-      - MORGAN_EMBEDDING_PROVIDER=${MORGAN_EMBEDDING_PROVIDER:-local}
-      - MORGAN_EMBEDDING_MODEL=${MORGAN_EMBEDDING_MODEL:-nomic-embed-text}
+      # Embedding configuration (Qwen3-Embedding via Ollama)
+      - MORGAN_EMBEDDING_PROVIDER=${MORGAN_EMBEDDING_PROVIDER:-ollama}
+      - MORGAN_EMBEDDING_MODEL=${MORGAN_EMBEDDING_MODEL:-qwen3-embedding:4b}
       - MORGAN_EMBEDDING_DEVICE=${MORGAN_EMBEDDING_DEVICE:-cpu}
       - MORGAN_EMBEDDING_ENDPOINT=${MORGAN_EMBEDDING_ENDPOINT:-}
-      - MORGAN_EMBEDDING_API_KEY=${MORGAN_EMBEDDING_API_KEY:-}
-      - MORGAN_EMBEDDING_DIMENSIONS=${MORGAN_EMBEDDING_DIMENSIONS:-768}
+      - MORGAN_EMBEDDING_DIMENSIONS=${MORGAN_EMBEDDING_DIMENSIONS:-2048}
+      
+      # Hugging Face token for model downloads
+      # Required for gated models (some Jina models, etc.)
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
       
       # Reranking configuration
       - MORGAN_RERANKING_ENDPOINT=${MORGAN_RERANKING_ENDPOINT:-}
@@ -49,6 +53,9 @@ services:
       - MORGAN_CACHE_DIR=/app/data/cache
       - MORGAN_CACHE_SIZE_MB=${MORGAN_CACHE_SIZE_MB:-1000}
       - MORGAN_CACHE_BACKEND=${MORGAN_CACHE_BACKEND:-redis}
+      
+      # Model cache directory
+      - MORGAN_MODEL_CACHE=/app/models
       
       # Session configuration
       - MORGAN_SESSION_BACKEND=redis

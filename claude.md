@@ -41,7 +41,7 @@ Morgan is a fully self-hosted, distributed personal AI assistant being transform
 ### Self-Hosted Models
 - **Main LLM**: Qwen2.5-32B-Instruct (Q4_K_M, ~19GB) - Complex reasoning
 - **Fast LLM**: Qwen2.5-7B-Instruct (Q5_K_M, ~4.4GB) - Simple queries
-- **Embeddings**: nomic-embed-text-v1.5 (768 dims) - RAG and semantic search
+- **Embeddings**: Qwen3-Embedding:4b (2048 dims) via Ollama - RAG and semantic search
 - **Reranking**: CrossEncoder ms-marco-MiniLM-L-6-v2 (~90MB) - Result relevance
 
 ### Infrastructure
@@ -293,8 +293,8 @@ from morgan.infrastructure import get_local_embedding_service
 
 service = get_local_embedding_service(
     endpoint="http://192.168.1.22:11434/v1",  # Host 5 (4070)
-    model="nomic-embed-text",
-    dimensions=768
+    model="qwen3-embedding:4b",  # Qwen3 embedding via Ollama
+    dimensions=2048
 )
 
 embedding = await service.embed_text("What is Python?")

@@ -61,14 +61,21 @@ llm:
   # Default max tokens
   max_tokens: 2048
 
-# Embedding Configuration (Self-Hosted)
+# Embedding Configuration (Self-Hosted via Ollama)
 embeddings:
-  # Primary: nomic-embed-text via Ollama
-  # Fallback: all-MiniLM-L6-v2 via sentence-transformers
-  model: "nomic-embed-text"
-  dimensions: 768
+  # Primary: Qwen3-Embedding via Ollama
+  # Model variants: qwen3-embedding (latest), qwen3-embedding:0.6b, :4b, :8b
+  # Recommended: 4b for RTX 4070 (12GB), 8b for RTX 3090 (24GB)
+  model: "qwen3-embedding:4b"
+
+  # Embedding dimensions (varies by model size):
+  # - 0.6b: 896 dims
+  # - 4b: 2048 dims
+  # - 8b: 4096 dims
+  dimensions: 2048
 
   # Local fallback model (sentence-transformers, CPU)
+  # Used when Ollama is unavailable
   local_fallback_model: "all-MiniLM-L6-v2"
 
   # Batch size for embedding
@@ -139,9 +146,9 @@ hosts:
   gpu_model: "RTX 4070"
   gpu_vram_gb: 12.0
   api_path: "/v1"
-  description: "Embedding generation via Ollama"
+  description: "Embedding generation via Ollama (Qwen3-Embedding)"
   models:
-  - "nomic-embed-text"
+  - "qwen3-embedding:4b"
   - "qwen2.5:7b-instruct-q5_K_M"
 
 # GPU Host 6 - Reranking (RTX 2060)

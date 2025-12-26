@@ -43,14 +43,18 @@ class LLMConfig:
 @dataclass
 class EmbeddingConfig:
     """
-    Embedding configuration (self-hosted).
+    Embedding configuration (self-hosted via Ollama).
     
-    Models:
-    - nomic-embed-text: Via Ollama, 768 dims
+    Models (Qwen3-Embedding via Ollama):
+    - qwen3-embedding:0.6b: 896 dims (lightweight)
+    - qwen3-embedding:4b: 2048 dims (recommended for RTX 4070)
+    - qwen3-embedding:8b: 4096 dims (best quality, RTX 3090)
+    
+    Fallback:
     - all-MiniLM-L6-v2: Via sentence-transformers, 384 dims
     """
-    model: str = "nomic-embed-text"
-    dimensions: int = 768
+    model: str = "qwen3-embedding:4b"
+    dimensions: int = 2048
     local_fallback_model: str = "all-MiniLM-L6-v2"
     batch_size: int = 100
 
@@ -137,14 +141,32 @@ class ModelCacheConfig:
             path.mkdir(parents=True, exist_ok=True)
     
     def set_environment_variables(self):
-        """Set environment variables for model caching."""
+        """
+        Set environment variables for model caching and HF authentication.
+        
+        Also loads HF_TOKEN from environment for gated model downloads.
+        """
         paths = self.get_expanded_paths()
         st_home = str(paths["sentence_transformers_home"])
         hf_home = str(paths["hf_home"])
+        
+        # Set cache directories
         os.environ["SENTENCE_TRANSFORMERS_HOME"] = st_home
         os.environ["HF_HOME"] = hf_home
         os.environ["TRANSFORMERS_CACHE"] = hf_home
         os.environ["HF_DATASETS_CACHE"] = str(paths["hf_home"] / "datasets")
+        
+        # Configure HF_TOKEN for gated model downloads
+        # Check multiple possible env var names
+        hf_token = (
+            os.environ.get("HF_TOKEN") or
+            os.environ.get("HUGGING_FACE_HUB_TOKEN") or
+            os.environ.get("HUGGINGFACE_TOKEN")
+        )
+        if hf_token:
+            # Set all possible HF token env vars for compatibility
+            os.environ["HF_TOKEN"] = hf_token
+            os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
 
 
 @dataclass
@@ -252,8 +274,8 @@ def _parse_config(data: Dict[str, Any]) -> DistributedArchitectureConfig:
         e = data["embeddings"]
         fallback_model = e.get("local_fallback_model", "all-MiniLM-L6-v2")
         config.embeddings = EmbeddingConfig(
-            model=e.get("model", "nomic-embed-text"),
-            dimensions=e.get("dimensions", 768),
+            model=e.get("model", "qwen3-embedding:4b"),
+            dimensions=e.get("dimensions", 2048),
             local_fallback_model=fallback_model,
             batch_size=e.get("batch_size", 100),
         )
