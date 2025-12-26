@@ -192,7 +192,7 @@ def demo_hierarchical_search_features():
 
     try:
         from morgan.vector_db.client import VectorDBClient
-        from morgan.embeddings.service import get_embedding_service
+        from morgan.services.embeddings import get_embedding_service
 
         vector_db = VectorDBClient()
         embedding_service = get_embedding_service()

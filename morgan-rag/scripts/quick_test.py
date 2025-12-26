@@ -22,7 +22,7 @@ print(f"   ✅ Qdrant: {settings.qdrant_url}")
 
 # 2. Embedding Service
 print("\n2. Testing Embedding Service...")
-from morgan.embeddings.service import EmbeddingService
+from morgan.services.embeddings import EmbeddingService
 
 emb_service = EmbeddingService()
 test_emb = emb_service.encode("Hello world")
@@ -30,7 +30,7 @@ print(f"   ✅ Generated embedding: {len(test_emb)} dimensions")
 
 # 3. LLM Service
 print("\n3. Testing LLM Service...")
-from morgan.services.llm_service import get_llm_service
+from morgan.services.llm import get_llm_service
 
 llm = get_llm_service()
 response = llm.generate("Say 'test' only", max_tokens=10)

@@ -129,7 +129,7 @@ def handle_embedding_errors(
 
                     # Try to get the embedding service and force local mode
                     try:
-                        from morgan.embeddings.service import (
+                        from morgan.services.embeddings import (
                             get_embedding_service,
                         )
 

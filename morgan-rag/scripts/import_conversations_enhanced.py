@@ -19,7 +19,7 @@ import uuid
 import time
 
 from morgan.core.memory import ConversationMemory
-from morgan.services.llm_service import get_llm_service
+from morgan.services.llm import get_llm_service
 from morgan.utils.logger import setup_logging
 from rich.console import Console
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn

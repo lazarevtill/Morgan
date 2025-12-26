@@ -19,7 +19,7 @@ from morgan.intelligence.core.models import (
     ResponseLength,
     UserPreferences,
 )
-from morgan.services.llm_service import get_llm_service
+from morgan.services.llm import get_llm_service
 from morgan.utils.cache import FileCache
 from morgan.utils.logger import get_logger
 

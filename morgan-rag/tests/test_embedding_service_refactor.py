@@ -1,5 +1,5 @@
 import pytest
-from morgan.embeddings.service import get_embedding_service
+from morgan.services.embeddings import get_embedding_service
 
 
 def test_embedding_service_initialization():

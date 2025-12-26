@@ -46,7 +46,7 @@ def check_config():
 def check_llm():
     """Check LLM service"""
     try:
-        from morgan.services.llm_service import get_llm_service
+        from morgan.services.llm import get_llm_service
 
         llm = get_llm_service()
         response = llm.generate("Say 'OK'", max_tokens=5)
@@ -61,7 +61,7 @@ def check_llm():
 def check_embeddings():
     """Check embedding service"""
     try:
-        from morgan.embeddings.service import EmbeddingService
+        from morgan.services.embeddings import EmbeddingService
 
         service = EmbeddingService()
         emb = service.encode("test")

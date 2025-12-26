@@ -4,8 +4,6 @@ Infrastructure Layer - Distributed Morgan Implementation
 This layer provides infrastructure for fully self-hosted distributed operation:
 - Distributed LLM client with load balancing and failover
 - Multi-GPU management and model routing (single-host and distributed)
-- Local embedding service (OpenAI-compatible + local fallback)
-- Local reranking service (remote + local fallback)
 - Infrastructure factory for unified service creation
 - No external API dependencies
 
@@ -19,9 +17,9 @@ Components:
     distributed_llm.py         - Distributed LLM with load balancing
     distributed_gpu_manager.py - Manage distributed GPU hosts
     multi_gpu_manager.py       - Manage models across local GPUs
-    local_embeddings.py        - Local embedding generation
-    local_reranking.py         - Local reranking implementation
     factory.py                 - Unified infrastructure factory
+
+Note: Embedding and Reranking services are now in morgan.services
 """
 
 from morgan.infrastructure.distributed_llm import (
@@ -38,20 +36,22 @@ from morgan.infrastructure.distributed_gpu_manager import (
     HostHealth,
     get_distributed_gpu_manager,
 )
-from morgan.infrastructure.local_embeddings import (
-    LocalEmbeddingService,
-    get_local_embedding_service,
-)
-from morgan.infrastructure.local_reranking import (
-    LocalRerankingService,
-    get_local_reranking_service,
-)
 from morgan.infrastructure.multi_gpu_manager import MultiGPUManager
 from morgan.infrastructure.factory import (
     InfrastructureFactory,
     InfrastructureServices,
     get_infrastructure_services,
     get_infrastructure_services_async,
+)
+
+# Re-export from services for backward compatibility
+from morgan.services.embeddings import (
+    EmbeddingService as LocalEmbeddingService,
+    get_embedding_service as get_local_embedding_service,
+)
+from morgan.services.reranking import (
+    RerankingService as LocalRerankingService,
+    get_reranking_service as get_local_reranking_service,
 )
 
 __all__ = [
@@ -69,10 +69,10 @@ __all__ = [
     "HostHealth",
     # Single-host GPU Management
     "MultiGPUManager",
-    # Embeddings
+    # Embeddings (re-exported from services)
     "LocalEmbeddingService",
     "get_local_embedding_service",
-    # Reranking
+    # Reranking (re-exported from services)
     "LocalRerankingService",
     "get_local_reranking_service",
     # Infrastructure Factory
