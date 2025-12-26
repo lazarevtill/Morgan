@@ -237,11 +237,11 @@ class HTTPClient:
                         api_name="morgan-server",
                         status_code=response.status,
                         message=error_msg,
+                        details=response_data.get("details", {}),
                         context={
                             "endpoint": endpoint,
                             "method": method,
                             "error_code": error_code,
-                            "details": response_data.get("details", {}),
                         },
                         user_message=f"Server request failed: {error_msg}",
                         recovery_suggestions=[

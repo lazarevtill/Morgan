@@ -754,6 +754,7 @@ class ExternalAPIError(ExternalIntegrationException):
         api_name: str,
         status_code: Optional[int] = None,
         message: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         msg = f"External API error from '{api_name}'"
@@ -775,4 +776,8 @@ class ExternalAPIError(ExternalIntegrationException):
             ],
             **kwargs,
         )
+        # Store as direct attributes for backward compatibility with RequestError
+        self.status_code = status_code
+        self.details = details or {}
+        self.api_name = api_name
         self.context.update({"api_name": api_name, "status_code": status_code})
