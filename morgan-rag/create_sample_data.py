@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
 from morgan.vector_db.client import VectorDBClient
-from morgan.embeddings.service import get_embedding_service
+from morgan.services.embeddings import get_embedding_service
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)

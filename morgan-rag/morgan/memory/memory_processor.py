@@ -23,7 +23,7 @@ from morgan.intelligence.core.models import (
     EmotionType,
     UserPreferences,
 )
-from morgan.embeddings.service import get_embedding_service
+from morgan.services.embeddings import get_embedding_service
 from morgan.utils.logger import get_logger
 from morgan.vector_db.client import VectorDBClient
 

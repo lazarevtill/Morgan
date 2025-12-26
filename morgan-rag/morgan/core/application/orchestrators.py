@@ -19,7 +19,7 @@ from morgan.config import get_settings
 from morgan.core.knowledge import KnowledgeService
 from morgan.core.memory import MemoryService
 from morgan.core.response_handler import Response
-from morgan.services.llm_service import LLMService
+from morgan.services.llm import LLMService
 from morgan.services.external_knowledge import (
     ExternalKnowledgeService,
     ExternalKnowledgeResult,

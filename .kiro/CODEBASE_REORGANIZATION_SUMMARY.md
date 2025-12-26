@@ -2,7 +2,7 @@
 
 > **Date**: 2025-12-26
 > **Purpose**: Summary of codebase analysis and reorganization plan
-> **Status**: ✅ Core Implementation Partially Complete (Phases 1-8 + Cleanup)
+> **Status**: ✅ Core Implementation Complete (Phases 1-10, 83%)
 
 ---
 
@@ -240,21 +240,27 @@ Multiple phases can run in parallel:
 6. ✅ **Phase 6: Shared Utilities** - Created singleton factory, model cache, deduplication
 7. ✅ **Phase 7: Configuration Standardization** - Created defaults module, updated env vars
 8. ✅ **Phase 8: Integration Layer** - Created unified services module
+9. ✅ **Phase 9: Dead Code Cleanup** - Removed unused code, archived old modules
+10. ✅ **Phase 10: Pattern Standardization** - Created exception hierarchy
 
-**Additional Cleanup (2025-12-26):**
+**Final Cleanup (2025-12-26):**
 
-- ✅ **Fixed shared/__init__.py** - Created missing package init file
-- ✅ **Fixed shared/utils/__init__.py** - Created missing utils init with proper exports
-- ✅ **Archived deprecated code** - Moved to `/archive/` directory:
-  - `cli.py.old` → `archive/deprecated-root-modules/`
-  - `core/` (orphaned emotional_handler) → `archive/deprecated-root-modules/`
-  - `services/` (standalone Docker services) → `archive/deprecated-root-modules/`
-  - `morgan_v2/` (abandoned refactor) → `archive/abandoned-refactors/`
-- ✅ **Fixed docker-compose.yml** - Updated Grafana default password
+- ✅ **Deleted old duplicate services:**
+  - `morgan/services/llm_service.py`
+  - `morgan/services/distributed_llm_service.py`
+  - `morgan/services/distributed_embedding_service.py`
+- ✅ **Updated all imports** - 50+ files updated to use new unified services
+- ✅ **Archived old modules:**
+  - `morgan/embeddings/` → `archive/deprecated-modules/embeddings/`
+  - `morgan/infrastructure/local_embeddings.py` → `archive/deprecated-modules/infrastructure/`
+  - `morgan/infrastructure/local_reranking.py` → `archive/deprecated-modules/infrastructure/`
+- ✅ **Created exception hierarchy** - `morgan/exceptions.py`
+- ✅ **Fixed dead code** - Removed unused expression in learning/patterns.py
 
 **Remaining (Low Priority):**
 
-- Phase 9-12: Dead code cleanup, pattern standardization, documentation, testing
+- Phase 11: Documentation updates
+- Phase 12: Testing & validation
 - Note: `.env` files are NOT tracked by git (this is correct behavior)
 
 ---
@@ -281,8 +287,9 @@ morgan-rag/morgan/
 │   ├── singleton.py          ← SingletonFactory utility
 │   ├── model_cache.py        ← Unified model cache setup
 │   └── deduplication.py      ← ResultDeduplicator utility
-└── config/
-    └── defaults.py           ← Configuration defaults
+├── config/
+│   └── defaults.py           ← Configuration defaults
+└── exceptions.py             ← Exception hierarchy
 
 shared/models/
 ├── __init__.py
@@ -294,6 +301,9 @@ archive/
 │   ├── cli.py.old           ← Old CLI (replaced by morgan-cli)
 │   ├── core/                ← Orphaned emotional_handler
 │   └── services/            ← Standalone Docker services
+├── deprecated-modules/
+│   ├── embeddings/          ← Old embeddings module
+│   └── infrastructure/      ← Old local_embeddings.py, local_reranking.py
 └── abandoned-refactors/
     └── morgan_v2/           ← Incomplete Clean Architecture attempt
 ```
@@ -313,12 +323,26 @@ archive/
 - `.gitignore` - Comprehensive update
 - `shared/__init__.py` - Created (was missing)
 - `shared/utils/__init__.py` - Created with proper exports
+- `morgan-rag/morgan/infrastructure/__init__.py` - Updated to re-export from services
+- `morgan-rag/morgan/infrastructure/factory.py` - Updated to use unified services
+- `morgan-rag/morgan/search/reranker.py` - Updated to use unified reranking service
+- `morgan-rag/morgan/learning/patterns.py` - Removed dead code expression
+- 50+ files - Updated imports to use new unified services
+
+## 🗑️ Files Deleted
+
+- `morgan-rag/morgan/services/llm_service.py` - Replaced by `morgan/services/llm/`
+- `morgan-rag/morgan/services/distributed_llm_service.py` - Replaced by `morgan/services/llm/`
+- `morgan-rag/morgan/services/distributed_embedding_service.py` - Replaced by `morgan/services/embeddings/`
+- `morgan-rag/morgan/embeddings/` (entire directory) - Archived to `archive/deprecated-modules/`
+- `morgan-rag/morgan/infrastructure/local_embeddings.py` - Archived
+- `morgan-rag/morgan/infrastructure/local_reranking.py` - Archived
 
 ---
 
-**Status**: ✅ Core Implementation Complete
+**Status**: ✅ Core Implementation Complete (83%)
 
-**Remaining**: Phases 9-12 are optional cleanup and polish (dead code removal, pattern standardization)
+**Remaining**: Phases 11-12 are documentation and testing
 
 **Note**: The `.env` files are correctly NOT tracked by git. The `env.example` files provide proper templates with `CHANGE_ME` placeholders.
 

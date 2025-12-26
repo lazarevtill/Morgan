@@ -12,10 +12,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
-from morgan.infrastructure.local_reranking import (
-    LocalRerankingService,
+from morgan.services.reranking import (
+    RerankingService,
     RerankResult,
-    get_local_reranking_service,
+    get_reranking_service,
 )
 from morgan.infrastructure.distributed_gpu_manager import (
     HostRole,
@@ -93,7 +93,7 @@ class SearchReranker:
         self._original_weight = original_weight
 
         # Service instance (lazy initialization)
-        self._reranking_service: Optional[LocalRerankingService] = None
+        self._reranking_service: Optional[RerankingService] = None
         self._initialized = False
 
         # Statistics
@@ -133,7 +133,7 @@ class SearchReranker:
             endpoint = getattr(self.settings, "reranking_endpoint", None)
 
         # Initialize reranking service
-        self._reranking_service = LocalRerankingService(
+        self._reranking_service = get_reranking_service(
             endpoint=endpoint,
             model=self._model,
         )

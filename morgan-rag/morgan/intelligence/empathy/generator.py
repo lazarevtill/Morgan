@@ -17,7 +17,7 @@ from morgan.intelligence.core.models import (
     EmotionType,
     EmpatheticResponse,
 )
-from morgan.services.llm_service import get_llm_service
+from morgan.services.llm import get_llm_service
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)

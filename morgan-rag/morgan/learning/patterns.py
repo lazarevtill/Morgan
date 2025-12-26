@@ -425,7 +425,6 @@ class InteractionPatternAnalyzer:
         """Calculate formality level from messages."""
         formal_count = 0
         casual_count = 0
-        len(messages)
 
         for message in messages:
             message_lower = message.lower()

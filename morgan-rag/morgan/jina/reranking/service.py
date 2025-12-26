@@ -1192,13 +1192,13 @@ class JinaRerankingService:
         Returns:
             Reranked results with updated scores
         """
-        # First, try to use LocalRerankingService from infrastructure
+        # First, try to use RerankingService from services
         try:
-            from morgan.infrastructure.local_reranking import (
-                get_local_reranking_service,
+            from morgan.services.reranking import (
+                get_reranking_service,
             )
 
-            local_service = get_local_reranking_service()
+            local_service = get_reranking_service()
             documents = [r.content for r in results]
 
             # Use synchronous wrapper for async service

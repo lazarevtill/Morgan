@@ -15,7 +15,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
-from morgan.services.llm_service import LLMService, get_llm_service
+from morgan.services.llm import LLMService, get_llm_service
 from morgan.proactive.monitor import ContextMonitor, UserContext, get_context_monitor
 from morgan.utils.logger import get_logger
 

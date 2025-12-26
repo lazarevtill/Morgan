@@ -16,7 +16,7 @@ from morgan.caching.git_hash_tracker import GitHashTracker
 from morgan.config import get_settings
 from morgan.ingestion.document_processor import DocumentProcessor
 from morgan.monitoring.metrics_collector import MetricsCollector
-from morgan.embeddings.service import get_embedding_service
+from morgan.services.embeddings import get_embedding_service
 from morgan.utils.logger import get_logger
 from morgan.vector_db.client import VectorDBClient
 from morgan.vectorization.hierarchical_embeddings import (

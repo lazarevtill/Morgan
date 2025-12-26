@@ -11,8 +11,8 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from morgan.config import get_settings
-from morgan.services.llm_service import LLMService
-from morgan.embeddings.service import get_embedding_service
+from morgan.services.llm import LLMService
+from morgan.services.embeddings import get_embedding_service
 
 
 def test_settings():

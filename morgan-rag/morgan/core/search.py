@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 from morgan.config import get_settings
 from morgan.optimization.async_processor import get_async_processor
 from morgan.optimization.emotional_optimizer import get_emotional_optimizer
-from morgan.embeddings.service import get_embedding_service
+from morgan.services.embeddings import get_embedding_service
 from morgan.utils.error_decorators import handle_search_errors, monitor_performance
 from morgan.utils.error_handling import SearchError
 from morgan.utils.logger import get_logger

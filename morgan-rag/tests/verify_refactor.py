@@ -17,7 +17,7 @@ try:
 
     # 2. Embeddings
     print("Checking morgan.embeddings...")
-    from morgan.embeddings.service import get_embedding_service
+    from morgan.services.embeddings import get_embedding_service
 
     service = get_embedding_service()
     print(f"  - Embedding Service initialized. Available: {service.is_available()}")

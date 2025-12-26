@@ -17,7 +17,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
 from morgan.config import get_settings
-from morgan.services.llm_service import LLMService, get_llm_service
+from morgan.services.llm import LLMService, get_llm_service
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)

@@ -24,7 +24,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from morgan.embeddings.service import get_embedding_service
+from morgan.services.embeddings import get_embedding_service
 from morgan.utils.logger import get_logger
 from morgan.utils.request_context import get_request_id, set_request_id
 from morgan.vector_db.client import VectorDBClient

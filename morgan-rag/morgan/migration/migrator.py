@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 
 from morgan.caching.git_hash_tracker import GitHashTracker
 from morgan.config import get_settings
-from morgan.embeddings.service import get_embedding_service
+from morgan.services.embeddings import get_embedding_service
 from morgan.utils.logger import get_logger
 from morgan.vector_db.client import VectorDBClient
 from morgan.vectorization.hierarchical_embeddings import (

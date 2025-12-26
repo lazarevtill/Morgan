@@ -491,7 +491,7 @@ def handle_jina_embedding_errors(
 
                         try:
                             # Attempt to use local embedding service
-                            from morgan.embeddings.service import (
+                            from morgan.services.embeddings import (
                                 get_embedding_service,
                             )
 
@@ -688,7 +688,7 @@ def handle_jina_multimodal_errors(
 
                     try:
                         # Process only text content
-                        from morgan.embeddings.service import (
+                        from morgan.services.embeddings import (
                             get_embedding_service,
                         )
 
@@ -753,7 +753,7 @@ def handle_jina_multimodal_errors(
 
                         if extracted_text:
                             # Process extracted text
-                            from morgan.embeddings.service import (
+                            from morgan.services.embeddings import (
                                 get_embedding_service,
                             )
 

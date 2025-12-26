@@ -68,7 +68,7 @@ def test_embedding_service():
     print("=" * 60)
 
     try:
-        from morgan.embeddings.service import get_embedding_service
+        from morgan.services.embeddings import get_embedding_service
         from morgan.config import get_settings
 
         settings = get_settings()

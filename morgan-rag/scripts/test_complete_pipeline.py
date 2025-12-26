@@ -168,8 +168,8 @@ def test_advanced_rag():
     console.print("\n[bold blue]🔍 Testing Advanced RAG Pipeline[/bold blue]")
 
     try:
-        from morgan.embeddings.service import EmbeddingService
-        from morgan.jina.reranking.service import JinaRerankingService
+        from morgan.services.embeddings import EmbeddingService
+        from morgan.services.reranking import RerankingService
         from morgan.vector_db.client import VectorDBClient
         from morgan.search.multi_stage_search import MultiStageSearch
 

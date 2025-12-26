@@ -168,7 +168,7 @@ class InfrastructureFactory:
 
     def _create_llm_service(self):
         """Create LLM service."""
-        from morgan.services.llm_service import LLMService
+        from morgan.services.llm import LLMService
 
         if self.distributed and self.distributed_config:
             # Get LLM endpoints from config
@@ -192,7 +192,7 @@ class InfrastructureFactory:
     def _create_embedding_service(self):
         """Create embedding service (synchronous)."""
         try:
-            from morgan.infrastructure.local_embeddings import LocalEmbeddingService
+            from morgan.services.embeddings import EmbeddingService, get_embedding_service
 
             if self.distributed and self.distributed_config:
                 # Get embedding host
@@ -203,17 +203,17 @@ class InfrastructureFactory:
                     endpoint = f"http://{host.address}:{host.port}"
                     endpoint += host.api_path
 
-                    return LocalEmbeddingService(
+                    return get_embedding_service(
                         endpoint=endpoint,
                         model=self.distributed_config.embeddings.model,
                         dimensions=self.distributed_config.embeddings.dimensions,
                     )
 
-            # Default local embedding service
-            return LocalEmbeddingService()
+            # Default embedding service
+            return get_embedding_service()
 
         except ImportError:
-            logger.warning("LocalEmbeddingService not available")
+            logger.warning("EmbeddingService not available")
             return None
 
     async def _create_embedding_service_async(self):
@@ -223,7 +223,7 @@ class InfrastructureFactory:
     def _create_reranking_service(self):
         """Create reranking service (synchronous)."""
         try:
-            from morgan.infrastructure.local_reranking import LocalRerankingService
+            from morgan.services.reranking import RerankingService, get_reranking_service
 
             if self.distributed and self.distributed_config:
                 # Get reranking host
@@ -233,16 +233,16 @@ class InfrastructureFactory:
                     host = rerank_hosts[0]
                     endpoint = f"http://{host.address}:{host.port}/rerank"
 
-                    return LocalRerankingService(
+                    return get_reranking_service(
                         endpoint=endpoint,
                         model=self.distributed_config.reranking.model,
                     )
 
-            # Default local reranking service
-            return LocalRerankingService()
+            # Default reranking service
+            return get_reranking_service()
 
         except ImportError:
-            logger.warning("LocalRerankingService not available")
+            logger.warning("RerankingService not available")
             return None
 
     async def _create_reranking_service_async(self):
