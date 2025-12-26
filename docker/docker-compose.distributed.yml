@@ -44,10 +44,10 @@ services:
       - MORGAN_LLM_FAST_MODEL=qwen2.5:7b-instruct-q5_K_M
       - MORGAN_LLM_STRATEGY=round_robin
       
-      # Embeddings (connect to embedding host)
+      # Embeddings (Qwen3-Embedding via Ollama on embedding host)
       - MORGAN_EMBEDDING_ENDPOINT=http://192.168.1.22:11434/v1
-      - MORGAN_EMBEDDING_MODEL=nomic-embed-text
-      - MORGAN_EMBEDDING_DIMENSIONS=768
+      - MORGAN_EMBEDDING_MODEL=qwen3-embedding:4b
+      - MORGAN_EMBEDDING_DIMENSIONS=2048
       
       # Reranking (connect to reranking host)
       - MORGAN_RERANKING_ENDPOINT=http://192.168.1.23:8080/rerank
@@ -69,6 +69,11 @@ services:
       
       # Model cache - weights are downloaded once and reused
       - MORGAN_MODEL_CACHE=/app/models
+      
+      # Hugging Face token for model downloads
+      # Required for gated models (some Jina models, etc.)
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
       
       # Logging
       - MORGAN_LOG_LEVEL=INFO
@@ -368,6 +373,9 @@ services:
       - RERANKING_PRELOAD=true
       # Model cache - weights are downloaded once and reused
       - MODEL_CACHE_DIR=/app/models
+      # Hugging Face token for model downloads
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
     volumes:
       - reranking-models:/app/models  # Persistent model cache
     networks:

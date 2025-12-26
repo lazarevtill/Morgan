@@ -86,9 +86,9 @@ class DistributedEmbeddingService:
         self._lock = threading.Lock()
         self._initialized = False
 
-        # Configuration
+        # Configuration (Qwen3-Embedding via Ollama by default)
         self.model = model or getattr(
-            self.settings, "embedding_model", "nomic-embed-text"
+            self.settings, "embedding_model", "qwen3-embedding:4b"
         )
         self.dimensions = dimensions
         self._endpoint = endpoint

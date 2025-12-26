@@ -26,7 +26,21 @@ def setup_model_cache():
     Setup model cache directories to avoid re-downloading on each startup.
     
     Models are downloaded once to the cache directory and reused later.
+    Also configures HF_TOKEN for gated model downloads.
+    
+    Environment variables:
+        - MODEL_CACHE_DIR: Cache directory (default: /app/models)
+        - HF_TOKEN: Hugging Face API token (for gated models)
+        - HUGGING_FACE_HUB_TOKEN: Alternative HF token variable
     """
+    # Try to load .env file if available
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+        print("Loaded environment from .env file")
+    except ImportError:
+        pass  # dotenv not installed
+    
     cache_dir = os.getenv("MODEL_CACHE_DIR", "/app/models")
     cache_path = Path(cache_dir)
     
@@ -41,6 +55,19 @@ def setup_model_cache():
     os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(st_cache)
     os.environ["HF_HOME"] = str(hf_cache)
     os.environ["TRANSFORMERS_CACHE"] = str(hf_cache)
+    
+    # Configure HF_TOKEN for gated model downloads
+    hf_token = (
+        os.getenv("HF_TOKEN") or
+        os.getenv("HUGGING_FACE_HUB_TOKEN") or
+        os.getenv("HUGGINGFACE_TOKEN")
+    )
+    if hf_token:
+        os.environ["HF_TOKEN"] = hf_token
+        os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
+        print("HF_TOKEN configured for authenticated model downloads")
+    else:
+        print("Warning: No HF_TOKEN - some gated models may not download")
     
     print(f"Model cache configured at {cache_path}")
     return cache_path

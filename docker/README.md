@@ -19,13 +19,36 @@ docker compose --profile monitoring up -d
 Copy and customize the environment file:
 
 ```bash
-cp .env.example .env
+cp env.example .env
+# Edit with your values
+vi .env
 ```
 
-Key variables:
+**Key variables:**
 - `MORGAN_LLM_ENDPOINT` - Ollama endpoint URL
 - `MORGAN_LLM_MODEL` - Main LLM model name
 - `MORGAN_DISTRIBUTED_CONFIG` - Path to distributed config YAML
+- `HF_TOKEN` - Hugging Face API token (for gated model downloads)
+
+### Hugging Face Token
+
+Some models require authentication to download (gated models). To use them:
+
+1. Create an account at [huggingface.co](https://huggingface.co)
+2. Get your token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+3. Add to your `.env` file:
+
+```bash
+HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+Models that may require HF_TOKEN:
+- Some Jina AI models (embeddings, rerankers)
+- Gated community models
+- Private organization models
+
+**Note:** Most public models (like `all-MiniLM-L6-v2`, `nomic-embed-text`) 
+work without a token.
 
 ### Distributed Architecture Configuration
 
@@ -209,9 +232,20 @@ These are set automatically by the configuration:
 ### First Run
 
 The first startup may take several minutes as models are downloaded:
-- Embedding models: ~400MB
-- Reranking models: ~100MB
-- Ollama models: Managed by Ollama (separate volume)
+
+**Ollama Models (pull manually before starting):**
+```bash
+# Qwen3-Embedding (recommended: 4b for RTX 4070, 8b for RTX 3090)
+ollama pull qwen3-embedding:4b
+
+# LLM models
+ollama pull qwen2.5:32b-instruct-q4_K_M
+ollama pull qwen2.5:7b-instruct-q5_K_M
+```
+
+**Auto-downloaded Models:**
+- Reranking models (CrossEncoder): ~100MB
+- Fallback embedding models (sentence-transformers): ~90MB
 
 ### Clearing Cache
 

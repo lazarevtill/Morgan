@@ -45,10 +45,24 @@ def setup_model_cache(cache_dir: Optional[str] = None):
     Setup model cache directories and environment variables.
     
     This ensures models are downloaded once and reused on subsequent starts.
+    Also configures HF_TOKEN for downloading gated models if available.
     
     Args:
         cache_dir: Base directory for model cache. Defaults to ~/.morgan/models
+    
+    Environment variables loaded from .env:
+        - HF_TOKEN: Hugging Face API token (for gated models)
+        - HUGGING_FACE_HUB_TOKEN: Alternative HF token variable
+        - MORGAN_MODEL_CACHE: Override default cache directory
     """
+    # Try to load .env file if python-dotenv is available
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+        logger.debug("Loaded environment from .env file")
+    except ImportError:
+        pass  # dotenv not installed, use existing env vars
+    
     if cache_dir is None:
         cache_dir = os.environ.get("MORGAN_MODEL_CACHE", "~/.morgan/models")
     
@@ -67,7 +81,24 @@ def setup_model_cache(cache_dir: Optional[str] = None):
     os.environ["TRANSFORMERS_CACHE"] = str(hf_path)
     os.environ["HF_DATASETS_CACHE"] = str(hf_path / "datasets")
     
-    logger.info(f"Model cache configured at {cache_path}")
+    # Configure HF_TOKEN for gated model downloads
+    # Check multiple possible env var names
+    hf_token = (
+        os.environ.get("HF_TOKEN") or
+        os.environ.get("HUGGING_FACE_HUB_TOKEN") or
+        os.environ.get("HUGGINGFACE_TOKEN")
+    )
+    if hf_token:
+        # Set all possible HF token env vars for compatibility
+        os.environ["HF_TOKEN"] = hf_token
+        os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
+        logger.info("HF_TOKEN configured for authenticated model downloads")
+    else:
+        logger.debug(
+            "No HF_TOKEN found - some gated models may not be accessible"
+        )
+    
+    logger.info("Model cache configured at %s", cache_path)
     return cache_path
 
 
@@ -112,15 +143,17 @@ class LocalEmbeddingService:
     - Content-based caching
     - Performance tracking
     
-    Self-hosted models:
-    - nomic-embed-text: Via Ollama, 768 dims (recommended)
+    Self-hosted models (Qwen3-Embedding via Ollama):
+    - qwen3-embedding:0.6b: 896 dims (lightweight)
+    - qwen3-embedding:4b: 2048 dims (recommended for RTX 4070)
+    - qwen3-embedding:8b: 4096 dims (best quality, RTX 3090)
     - all-MiniLM-L6-v2: Via sentence-transformers, 384 dims (fallback)
 
     Example:
         >>> service = LocalEmbeddingService(
         ...     endpoint="http://192.168.1.22:11434/v1",
-        ...     model="nomic-embed-text",
-        ...     dimensions=768
+        ...     model="qwen3-embedding:4b",
+        ...     dimensions=2048
         ... )
         >>>
         >>> # Single embedding
@@ -140,8 +173,8 @@ class LocalEmbeddingService:
     def __init__(
         self,
         endpoint: Optional[str] = None,
-        model: str = "nomic-embed-text",
-        dimensions: int = 768,
+        model: str = "qwen3-embedding:4b",
+        dimensions: int = 2048,
         api_key: str = "ollama",
         timeout: float = 30.0,
         batch_size: int = 100,
@@ -157,8 +190,8 @@ class LocalEmbeddingService:
 
         Args:
             endpoint: OpenAI-compatible endpoint URL (e.g., "http://host5:11434/v1")
-            model: Model name for remote embeddings
-            dimensions: Embedding dimensions (768 for nomic-embed-text)
+            model: Model name for remote embeddings (default: qwen3-embedding:4b)
+            dimensions: Embedding dimensions (2048 for qwen3-embedding:4b)
             api_key: API key for endpoint (default: "ollama")
             timeout: Request timeout in seconds
             batch_size: Batch size for processing
@@ -166,8 +199,8 @@ class LocalEmbeddingService:
             local_device: Device for local model ("cpu" or "cuda")
             use_cache: Enable caching
             max_cache_size: Maximum cache entries
-            model_cache_dir: Directory to cache model weights (avoids re-downloading)
-            preload_model: If True, download/load model immediately instead of lazily
+            model_cache_dir: Directory for model weights cache
+            preload_model: If True, load model immediately
         """
         if not OPENAI_AVAILABLE:
             logger.warning("openai package not available, remote embeddings disabled")
@@ -547,7 +580,7 @@ def get_local_embedding_service(
             raise ValueError("endpoint required for first initialization")
 
         if model is None:
-            model = "nomic-embed-text"
+            model = "qwen3-embedding:4b"
 
         _service = LocalEmbeddingService(endpoint=endpoint, model=model, **kwargs)
 

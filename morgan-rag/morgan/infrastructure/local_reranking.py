@@ -43,10 +43,24 @@ def setup_reranker_cache(cache_dir: Optional[str] = None):
     Setup model cache directories and environment variables for rerankers.
     
     This ensures models are downloaded once and reused on subsequent starts.
+    Also configures HF_TOKEN for downloading gated models if available.
     
     Args:
         cache_dir: Base directory for model cache. Defaults to ~/.morgan/models
+    
+    Environment variables loaded from .env:
+        - HF_TOKEN: Hugging Face API token (for gated models)
+        - HUGGING_FACE_HUB_TOKEN: Alternative HF token variable
+        - MORGAN_MODEL_CACHE: Override default cache directory
     """
+    # Try to load .env file if python-dotenv is available
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+        logger.debug("Loaded environment from .env file")
+    except ImportError:
+        pass  # dotenv not installed, use existing env vars
+    
     if cache_dir is None:
         cache_dir = os.environ.get("MORGAN_MODEL_CACHE", "~/.morgan/models")
     
@@ -64,7 +78,22 @@ def setup_reranker_cache(cache_dir: Optional[str] = None):
     os.environ["HF_HOME"] = str(hf_path)
     os.environ["TRANSFORMERS_CACHE"] = str(hf_path)
     
-    logger.info(f"Reranker model cache configured at {cache_path}")
+    # Configure HF_TOKEN for gated model downloads
+    hf_token = (
+        os.environ.get("HF_TOKEN") or
+        os.environ.get("HUGGING_FACE_HUB_TOKEN") or
+        os.environ.get("HUGGINGFACE_TOKEN")
+    )
+    if hf_token:
+        os.environ["HF_TOKEN"] = hf_token
+        os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
+        logger.info("HF_TOKEN configured for authenticated model downloads")
+    else:
+        logger.debug(
+            "No HF_TOKEN found - some gated models may not be accessible"
+        )
+    
+    logger.info("Reranker model cache configured at %s", cache_path)
     return cache_path
 
 
