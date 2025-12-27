@@ -1,3 +1,16 @@
+```
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   ███╗   ███╗ ██████╗ ██████╗  ██████╗  █████╗ ███╗   ██╗    ║
+║   ████╗ ████║██╔═══██╗██╔══██╗██╔════╝ ██╔══██╗████╗  ██║    ║
+║   ██╔████╔██║██║   ██║██████╔╝██║  ███╗███████║██╔██╗ ██║    ║
+║   ██║╚██╔╝██║██║   ██║██╔══██╗██║   ██║██╔══██║██║╚██╗██║    ║
+║   ██║ ╚═╝ ██║╚██████╔╝██║  ██║╚██████╔╝██║  ██║██║ ╚████║    ║
+║   ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝    ║
+║                                                              ║
+║              Personal AI Assistant - Self-Hosted             ║
+╚══════════════════════════════════════════════════════════════╝
+```
 # Morgan AI Assistant
 
 Morgan is a self-hosted, distributed personal AI assistant with emotional intelligence, knowledge management, and natural conversation capabilities. Built with a clean modular architecture for privacy-focused deployment.
