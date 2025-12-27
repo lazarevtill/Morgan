@@ -15,20 +15,18 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
 from morgan.utils.logger import get_logger
 
 from morgan.services.external_knowledge.web_search import (
     WebSearchService,
-    WebSearchResult,
     get_web_search_service,
 )
 from morgan.services.external_knowledge.context7 import (
     Context7Service,
     DocumentationMode,
-    DocumentationResult,
     LibraryInfo,
     get_context7_service,
 )

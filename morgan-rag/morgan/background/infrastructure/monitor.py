@@ -7,7 +7,7 @@ Single responsibility: resource monitoring only.
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, Any
+from typing import Dict
 from datetime import datetime
 from morgan.background.domain.interfaces import ResourceMonitor as IResourceMonitor
 

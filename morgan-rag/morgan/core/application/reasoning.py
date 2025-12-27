@@ -3,7 +3,7 @@ Reasoning Engine for Morgan Core.
 Handles query contextualization and intent analysis for multi-turn conversations.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from morgan.services.llm import LLMService
 from morgan.utils.logger import get_logger
 

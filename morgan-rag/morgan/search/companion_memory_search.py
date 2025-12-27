@@ -21,6 +21,7 @@ from morgan.intelligence.core.intelligence_engine import (
 from morgan.intelligence.core.models import EmotionalState
 from morgan.memory.memory_processor import get_memory_processor
 from morgan.search.multi_stage_search import SearchResult, get_multi_stage_search_engine
+from morgan.utils.deduplication import ResultDeduplicator
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -1057,19 +1058,17 @@ class CompanionMemorySearchEngine:
     def _deduplicate_search_results(
         self, results: List[SearchResult]
     ) -> List[SearchResult]:
-        """Remove duplicate search results."""
+        """Remove duplicate search results using unified ResultDeduplicator."""
         try:
-            seen_content = set()
-            unique_results = []
-
-            for result in results:
-                content_key = result.content[:100].lower().strip()
-                if content_key not in seen_content:
-                    seen_content.add(content_key)
-                    unique_results.append(result)
-
-            return unique_results
-
+            deduplicator = ResultDeduplicator(
+                strategy="content_hash",
+                similarity_threshold=0.85
+            )
+            return deduplicator.deduplicate(
+                items=results,
+                key_fn=lambda r: r.content[:100],
+                keep_first=True
+            )
         except Exception as e:
             logger.warning(f"Failed to deduplicate search results: {e}")
             return results

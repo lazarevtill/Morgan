@@ -9,10 +9,10 @@ content and assistance.
 import json
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from ..config import get_settings
 from ..emotional.models import InteractionData

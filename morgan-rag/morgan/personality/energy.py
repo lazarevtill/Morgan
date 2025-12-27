@@ -8,7 +8,7 @@ based on emotional indicators, time patterns, and personality traits.
 import re
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, time
+from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 

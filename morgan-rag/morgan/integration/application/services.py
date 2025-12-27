@@ -5,13 +5,12 @@ This module contains the orchestration logic for integration workflows.
 """
 
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from ...config import get_settings
 from ...utils.logger import get_logger
 from ..domain.entities import (
     IntegrationWorkflowResult,
-    SystemValidationResult,
 )
 from ..infrastructure.adapters import ServiceContainer
 

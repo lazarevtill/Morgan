@@ -7,7 +7,6 @@ into a single implementation with multiple fallback strategies.
 
 import asyncio
 import math
-import os
 import re
 import threading
 import time

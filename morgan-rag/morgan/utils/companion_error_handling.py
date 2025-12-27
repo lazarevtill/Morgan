@@ -23,7 +23,6 @@ from morgan.exceptions import (
 )
 from morgan.utils.error_handling import (
     DegradationLevel,
-    ErrorCategory,
     get_degradation_manager,
     get_recovery_manager,
 )

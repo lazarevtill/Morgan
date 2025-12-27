@@ -8,10 +8,10 @@ and providing domain-aware context for better assistance.
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional
 
 from ..config import get_settings
 from ..emotional.models import InteractionData

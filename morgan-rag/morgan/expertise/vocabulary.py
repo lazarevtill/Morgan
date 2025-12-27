@@ -6,13 +6,12 @@ to improve understanding and communication within specialized fields.
 """
 
 import json
-import uuid
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config import get_settings
 from ..emotional.models import InteractionData
