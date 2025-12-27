@@ -1,0 +1,122 @@
+# Morgan Distributed Architecture Configuration
+# Multi-host GPU cluster settings for self-hosted AI
+#
+# This file configures the distributed infrastructure.
+# Environment variables can override these values with MORGAN_DIST_ prefix.
+
+# Global distributed settings
+settings:
+  # Enable distributed mode
+  enabled: false
+  # Health check interval in seconds
+  health_check_interval: 60
+  # Default request timeout
+  default_timeout: 30.0
+  # Load balancing strategy: round_robin, least_busy, random, weighted
+  load_balancing_strategy: "round_robin"
+  # Enable automatic failover
+  enable_failover: true
+  # Maximum retries before failover
+  max_retries: 3
+  # Retry delay in seconds
+  retry_delay: 1.0
+
+# Model cache configuration
+model_cache:
+  # Base directory for cached model weights
+  base_dir: "~/.morgan/models"
+  # Sentence-transformers cache
+  sentence_transformers_home: "~/.morgan/models/sentence-transformers"
+  # Hugging Face cache
+  hf_home: "~/.morgan/models/huggingface"
+  # Ollama models directory
+  ollama_models: "~/.ollama/models"
+  # Pre-download models on startup
+  preload_on_startup: true
+
+# Host definitions for distributed cluster
+hosts:
+  # Host 1: Core Services (CPU)
+  - host_id: "core-1"
+    address: "192.168.1.10"
+    port: 8080
+    role: "orchestrator"
+    description: "Core orchestrator + Qdrant + Redis"
+
+  # Host 2: Background Services (CPU)
+  - host_id: "background-1"
+    address: "192.168.1.11"
+    port: 8080
+    role: "background"
+    description: "Prometheus + Grafana + Background jobs"
+
+  # Host 3: LLM Primary (GPU: RTX 3090, 12GB)
+  - host_id: "llm-1"
+    address: "192.168.1.20"
+    port: 11434
+    role: "main_llm"
+    api_path: "/v1"
+    description: "Primary LLM (Qwen2.5-32B)"
+    gpu:
+      type: "RTX 3090"
+      vram_gb: 12
+    models:
+      - "qwen2.5:32b-instruct-q4_K_M"
+
+  # Host 4: LLM Secondary (GPU: RTX 3090, 12GB)
+  - host_id: "llm-2"
+    address: "192.168.1.21"
+    port: 11434
+    role: "main_llm"
+    api_path: "/v1"
+    description: "Secondary LLM (Qwen2.5-32B)"
+    gpu:
+      type: "RTX 3090"
+      vram_gb: 12
+    models:
+      - "qwen2.5:32b-instruct-q4_K_M"
+
+  # Host 5: Embeddings + Fast LLM (GPU: RTX 4070, 8GB)
+  - host_id: "embeddings-1"
+    address: "192.168.1.22"
+    port: 11434
+    role: "embeddings"
+    api_path: "/v1"
+    description: "Embeddings + Fast LLM (Qwen2.5-7B)"
+    gpu:
+      type: "RTX 4070"
+      vram_gb: 8
+    models:
+      - "qwen3-embedding:4b"
+      - "qwen2.5:7b-instruct-q5_K_M"
+
+  # Host 6: Reranking (GPU: RTX 2060, 6GB)
+  - host_id: "reranking-1"
+    address: "192.168.1.23"
+    port: 8001
+    role: "reranking"
+    api_path: "/rerank"
+    description: "CrossEncoder reranking service"
+    gpu:
+      type: "RTX 2060"
+      vram_gb: 6
+    models:
+      - "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+# Service-specific host mappings
+services:
+  llm:
+    # Endpoints for LLM service (load balanced)
+    endpoints:
+      - "http://192.168.1.20:11434/v1"
+      - "http://192.168.1.21:11434/v1"
+    # Failover endpoint for fast model
+    fast_endpoint: "http://192.168.1.22:11434/v1"
+
+  embeddings:
+    # Primary embedding endpoint
+    endpoint: "http://192.168.1.22:11434/v1"
+
+  reranking:
+    # Reranking service endpoint
+    endpoint: "http://192.168.1.23:8001/rerank"

@@ -21,6 +21,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Type
 
 from morgan.utils.logger import get_logger
+from morgan.utils.singleton import SingletonFactory
 
 logger = get_logger(__name__)
 
@@ -90,9 +91,193 @@ class ErrorContext:
 # Custom Exception Hierarchy
 # ========================================
 
+# Import canonical exceptions from morgan.exceptions
+from morgan.exceptions import (
+    MorganError,
+    ValidationError,
+    ConfigurationError,
+    CompanionError,
+    EmotionalProcessingError,
+    MemoryProcessingError,
+)
 
-class MorganError(Exception):
-    """Base exception for all Morgan RAG errors."""
+
+class ErrorHandlingMixin:
+    """
+    Mixin providing rich error context for error handling exceptions.
+    
+    Adds category, severity, and context tracking to exceptions used
+    in the error handling system (retry, circuit breaker, degradation).
+    """
+    
+    category: ErrorCategory = ErrorCategory.VECTORIZATION
+    severity: ErrorSeverity = ErrorSeverity.MEDIUM
+    error_id: str = ""
+    timestamp: datetime = None
+    user_id: Optional[str] = None
+    request_id: Optional[str] = None
+    metadata: Dict[str, Any] = None
+    cause: Optional[Exception] = None
+    component: str = "unknown"
+    
+    def _init_error_context(
+        self,
+        category: ErrorCategory = ErrorCategory.VECTORIZATION,
+        severity: ErrorSeverity = ErrorSeverity.MEDIUM,
+        component: str = "unknown",
+        user_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        cause: Optional[Exception] = None,
+    ):
+        """Initialize error context attributes."""
+        import uuid
+        self.category = category
+        self.severity = severity
+        self.component = component
+        self.user_id = user_id
+        self.request_id = request_id
+        self.metadata = metadata or {}
+        self.cause = cause
+        self.error_id = f"morgan_{category.value}_{uuid.uuid4().hex[:8]}"
+        self.timestamp = datetime.utcnow()
+    
+    def get_context(self) -> ErrorContext:
+        """Get structured error context."""
+        import traceback
+        return ErrorContext(
+            error_id=self.error_id,
+            timestamp=self.timestamp,
+            operation=getattr(self, 'operation', 'unknown'),
+            component=self.component,
+            category=self.category,
+            severity=self.severity,
+            user_id=self.user_id,
+            request_id=self.request_id,
+            metadata=self.metadata,
+            stack_trace=traceback.format_exc() if self.cause else None,
+        )
+
+
+# ========================================
+# Error Handling Specific Exceptions
+# These extend base exceptions with ErrorHandlingMixin for rich context
+# ========================================
+
+
+class VectorizationError(MorganError, ErrorHandlingMixin):
+    """Errors related to document vectorization operations."""
+
+    def __init__(self, message: str, **kwargs):
+        component = kwargs.pop("component", "vectorization_service")
+        category = kwargs.pop("category", ErrorCategory.VECTORIZATION)
+        severity = kwargs.pop("severity", ErrorSeverity.MEDIUM)
+        user_id = kwargs.pop("user_id", None)
+        request_id = kwargs.pop("request_id", None)
+        metadata = kwargs.pop("metadata", None)
+        cause = kwargs.pop("cause", None)
+        operation = kwargs.pop("operation", "vectorization")
+        
+        super().__init__(message, service="vectorization", operation=operation, details=metadata)
+        self._init_error_context(category, severity, component, user_id, request_id, metadata, cause)
+
+
+class EmbeddingError(MorganError, ErrorHandlingMixin):
+    """Errors related to embedding generation (with rich error context)."""
+
+    def __init__(self, message: str, **kwargs):
+        component = kwargs.pop("component", "embedding_service")
+        category = kwargs.pop("category", ErrorCategory.EMBEDDING)
+        severity = kwargs.pop("severity", ErrorSeverity.MEDIUM)
+        user_id = kwargs.pop("user_id", None)
+        request_id = kwargs.pop("request_id", None)
+        metadata = kwargs.pop("metadata", None)
+        cause = kwargs.pop("cause", None)
+        operation = kwargs.pop("operation", "embedding")
+        
+        super().__init__(message, service="embeddings", operation=operation, details=metadata)
+        self._init_error_context(category, severity, component, user_id, request_id, metadata, cause)
+
+
+class StorageError(MorganError, ErrorHandlingMixin):
+    """Errors related to vector database operations."""
+
+    def __init__(self, message: str, **kwargs):
+        component = kwargs.pop("component", "vector_db_client")
+        category = kwargs.pop("category", ErrorCategory.STORAGE)
+        severity = kwargs.pop("severity", ErrorSeverity.MEDIUM)
+        user_id = kwargs.pop("user_id", None)
+        request_id = kwargs.pop("request_id", None)
+        metadata = kwargs.pop("metadata", None)
+        cause = kwargs.pop("cause", None)
+        operation = kwargs.pop("operation", "storage")
+        
+        super().__init__(message, service="storage", operation=operation, details=metadata)
+        self._init_error_context(category, severity, component, user_id, request_id, metadata, cause)
+
+
+class SearchError(MorganError, ErrorHandlingMixin):
+    """Errors related to search operations."""
+
+    def __init__(self, message: str, **kwargs):
+        component = kwargs.pop("component", "search_engine")
+        category = kwargs.pop("category", ErrorCategory.SEARCH)
+        severity = kwargs.pop("severity", ErrorSeverity.MEDIUM)
+        user_id = kwargs.pop("user_id", None)
+        request_id = kwargs.pop("request_id", None)
+        metadata = kwargs.pop("metadata", None)
+        cause = kwargs.pop("cause", None)
+        operation = kwargs.pop("operation", "search")
+        
+        super().__init__(message, service="search", operation=operation, details=metadata)
+        self._init_error_context(category, severity, component, user_id, request_id, metadata, cause)
+
+
+class CacheError(MorganError, ErrorHandlingMixin):
+    """Errors related to caching operations."""
+
+    def __init__(self, message: str, **kwargs):
+        component = kwargs.pop("component", "cache_manager")
+        category = kwargs.pop("category", ErrorCategory.CACHE)
+        severity = kwargs.pop("severity", ErrorSeverity.MEDIUM)
+        user_id = kwargs.pop("user_id", None)
+        request_id = kwargs.pop("request_id", None)
+        metadata = kwargs.pop("metadata", None)
+        cause = kwargs.pop("cause", None)
+        operation = kwargs.pop("operation", "cache")
+        
+        super().__init__(message, service="cache", operation=operation, details=metadata)
+        self._init_error_context(category, severity, component, user_id, request_id, metadata, cause)
+
+
+class NetworkError(MorganError, ErrorHandlingMixin):
+    """Errors related to network operations."""
+
+    def __init__(self, message: str, **kwargs):
+        component = kwargs.pop("component", "network")
+        category = kwargs.pop("category", ErrorCategory.NETWORK)
+        severity = kwargs.pop("severity", ErrorSeverity.HIGH)
+        user_id = kwargs.pop("user_id", None)
+        request_id = kwargs.pop("request_id", None)
+        metadata = kwargs.pop("metadata", None)
+        cause = kwargs.pop("cause", None)
+        operation = kwargs.pop("operation", "network")
+        
+        super().__init__(message, service="network", operation=operation, details=metadata)
+        self._init_error_context(category, severity, component, user_id, request_id, metadata, cause)
+
+
+# ========================================
+# Contextual Error Helper
+# ========================================
+
+
+class ContextualError(MorganError, ErrorHandlingMixin):
+    """
+    Generic contextual error for wrapping exceptions with rich error context.
+    
+    Used by the error_context context manager to wrap arbitrary exceptions.
+    """
 
     def __init__(
         self,
@@ -106,160 +291,41 @@ class MorganError(Exception):
         metadata: Optional[Dict[str, Any]] = None,
         cause: Optional[Exception] = None,
     ):
-        super().__init__(message)
-        self.message = message
-        self.category = category
-        self.severity = severity
-        self.operation = operation
-        self.component = component
-        self.user_id = user_id
-        self.request_id = request_id
-        self.metadata = metadata or {}
-        self.cause = cause
-        self.error_id = self._generate_error_id()
-        self.timestamp = datetime.utcnow()
-
-    def _generate_error_id(self) -> str:
-        """Generate unique error ID for tracking."""
-        import uuid
-
-        return f"morgan_{self.category.value}_{uuid.uuid4().hex[:8]}"
-
-    def get_context(self) -> ErrorContext:
-        """Get structured error context."""
-        import traceback
-
-        return ErrorContext(
-            error_id=self.error_id,
-            timestamp=self.timestamp,
-            operation=self.operation,
-            component=self.component,
-            category=self.category,
-            severity=self.severity,
-            user_id=self.user_id,
-            request_id=self.request_id,
-            metadata=self.metadata,
-            stack_trace=traceback.format_exc() if self.cause else None,
+        super().__init__(message, service=component, operation=operation, details=metadata)
+        self._init_error_context(
+            category=category,
+            severity=severity,
+            component=component,
+            user_id=user_id,
+            request_id=request_id,
+            metadata=metadata,
+            cause=cause,
         )
 
 
-class VectorizationError(MorganError):
-    """Errors related to document vectorization operations."""
-
-    def __init__(self, message: str, **kwargs):
-        # Set default component if not provided
-        if "component" not in kwargs:
-            kwargs["component"] = "vectorization_service"
-        super().__init__(message, category=ErrorCategory.VECTORIZATION, **kwargs)
-
-
-class EmbeddingError(MorganError):
-    """Errors related to embedding generation."""
-
-    def __init__(self, message: str, **kwargs):
-        # Set default component if not provided
-        if "component" not in kwargs:
-            kwargs["component"] = "embedding_service"
-        super().__init__(message, category=ErrorCategory.EMBEDDING, **kwargs)
-
-
-class StorageError(MorganError):
-    """Errors related to vector database operations."""
-
-    def __init__(self, message: str, **kwargs):
-        # Set default component if not provided
-        if "component" not in kwargs:
-            kwargs["component"] = "vector_db_client"
-        super().__init__(message, category=ErrorCategory.STORAGE, **kwargs)
-
-
-class SearchError(MorganError):
-    """Errors related to search operations."""
-
-    def __init__(self, message: str, **kwargs):
-        # Set default component if not provided
-        if "component" not in kwargs:
-            kwargs["component"] = "search_engine"
-        super().__init__(message, category=ErrorCategory.SEARCH, **kwargs)
-
-
-class CacheError(MorganError):
-    """Errors related to caching operations."""
-
-    def __init__(self, message: str, **kwargs):
-        super().__init__(
-            message, category=ErrorCategory.CACHE, component="cache_manager", **kwargs
-        )
-
-
-class NetworkError(MorganError):
-    """Errors related to network operations."""
-
-    def __init__(self, message: str, **kwargs):
-        super().__init__(
-            message,
-            category=ErrorCategory.NETWORK,
-            severity=ErrorSeverity.HIGH,
-            **kwargs,
-        )
-
-
-class CompanionError(MorganError):
-    """Errors related to companion features."""
-
-    def __init__(self, message: str, **kwargs):
-        # Set default component if not provided
-        if "component" not in kwargs:
-            kwargs["component"] = "companion_manager"
-        super().__init__(message, category=ErrorCategory.COMPANION, **kwargs)
-
-
-class EmotionalProcessingError(MorganError):
-    """Errors related to emotional intelligence processing."""
-
-    def __init__(self, message: str, **kwargs):
-        super().__init__(
-            message,
-            category=ErrorCategory.EMOTIONAL,
-            component="emotional_intelligence",
-            **kwargs,
-        )
-
-
-class MemoryProcessingError(MorganError):
-    """Errors related to memory processing operations."""
-
-    def __init__(self, message: str, **kwargs):
-        super().__init__(
-            message,
-            category=ErrorCategory.MEMORY,
-            component="memory_processor",
-            **kwargs,
-        )
-
-
-class ValidationError(MorganError):
-    """Errors related to data validation."""
-
-    def __init__(self, message: str, **kwargs):
-        super().__init__(
-            message,
-            category=ErrorCategory.VALIDATION,
-            severity=ErrorSeverity.LOW,
-            **kwargs,
-        )
-
-
-class ConfigurationError(MorganError):
-    """Errors related to system configuration."""
-
-    def __init__(self, message: str, **kwargs):
-        super().__init__(
-            message,
-            category=ErrorCategory.CONFIGURATION,
-            severity=ErrorSeverity.CRITICAL,
-            **kwargs,
-        )
+def _create_contextual_error(
+    message: str,
+    category: ErrorCategory = ErrorCategory.VECTORIZATION,
+    severity: ErrorSeverity = ErrorSeverity.MEDIUM,
+    operation: str = "unknown",
+    component: str = "unknown",
+    user_id: Optional[str] = None,
+    request_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    cause: Optional[Exception] = None,
+) -> ContextualError:
+    """Create a contextual error with full error handling context."""
+    return ContextualError(
+        message=message,
+        category=category,
+        severity=severity,
+        operation=operation,
+        component=component,
+        user_id=user_id,
+        request_id=request_id,
+        metadata=metadata,
+        cause=cause,
+    )
 
 
 # ========================================
@@ -281,17 +347,26 @@ class RetryConfig:
     non_retryable_exceptions: tuple = (ValidationError, ConfigurationError)
 
 
-class RetryExhaustedError(MorganError):
+class RetryExhaustedError(MorganError, ErrorHandlingMixin):
     """Raised when all retry attempts are exhausted."""
 
     def __init__(self, original_error: Exception, attempts: int, **kwargs):
         message = f"Retry exhausted after {attempts} attempts: {original_error}"
-        super().__init__(
-            message,
+        operation = kwargs.pop("operation", "retry")
+        component = kwargs.pop("component", "retry_handler")
+        user_id = kwargs.pop("user_id", None)
+        request_id = kwargs.pop("request_id", None)
+        
+        metadata = {"original_error": str(original_error), "attempts": attempts}
+        super().__init__(message, service="error_handling", operation=operation, details=metadata)
+        self._init_error_context(
+            category=ErrorCategory.NETWORK,
             severity=ErrorSeverity.HIGH,
-            metadata={"original_error": str(original_error), "attempts": attempts},
+            component=component,
+            user_id=user_id,
+            request_id=request_id,
+            metadata=metadata,
             cause=original_error,
-            **kwargs,
         )
 
 
@@ -401,17 +476,25 @@ class CircuitBreakerConfig:
     timeout: float = 30.0
 
 
-class CircuitBreakerError(MorganError):
+class CircuitBreakerError(MorganError, ErrorHandlingMixin):
     """Raised when circuit breaker is open."""
 
     def __init__(self, service_name: str, **kwargs):
         message = f"Circuit breaker open for service: {service_name}"
-        super().__init__(
-            message,
+        operation = kwargs.pop("operation", "circuit_breaker_call")
+        component = kwargs.pop("component", "circuit_breaker")
+        user_id = kwargs.pop("user_id", None)
+        request_id = kwargs.pop("request_id", None)
+        
+        metadata = {"service_name": service_name}
+        super().__init__(message, service="error_handling", operation=operation, details=metadata)
+        self._init_error_context(
             category=ErrorCategory.NETWORK,
             severity=ErrorSeverity.HIGH,
-            metadata={"service_name": service_name},
-            **kwargs,
+            component=component,
+            user_id=user_id,
+            request_id=request_id,
+            metadata=metadata,
         )
 
 
@@ -1066,12 +1149,16 @@ def error_context(
 
     except MorganError as e:
         # Morgan error - already has context, just log and re-raise
-        logger.error(f"Morgan error in {operation}: {e.get_context().to_dict()}")
+        # Check if error has get_context method (ErrorHandlingMixin)
+        if hasattr(e, 'get_context'):
+            logger.error(f"Morgan error in {operation}: {e.get_context().to_dict()}")
+        else:
+            logger.error(f"Morgan error in {operation}: {e.to_dict()}")
         raise
 
     except Exception as e:
-        # Convert to Morgan error with context
-        morgan_error = MorganError(
+        # Convert to Morgan error with context using a contextual wrapper
+        morgan_error = _create_contextual_error(
             message=str(e),
             category=category,
             operation=operation,
@@ -1103,37 +1190,25 @@ def error_context(
 
 
 # ========================================
-# Singleton Instances
+# Singleton Instances (using SingletonFactory)
 # ========================================
 
-_degradation_manager_instance = None
-_recovery_manager_instance = None
-_degradation_lock = threading.Lock()
-_recovery_lock = threading.Lock()
+_degradation_manager_factory: SingletonFactory[GracefulDegradationManager] = (
+    SingletonFactory(GracefulDegradationManager)
+)
+_recovery_manager_factory: SingletonFactory[ErrorRecoveryManager] = SingletonFactory(
+    ErrorRecoveryManager
+)
 
 
 def get_degradation_manager() -> GracefulDegradationManager:
     """Get singleton graceful degradation manager instance."""
-    global _degradation_manager_instance
-
-    if _degradation_manager_instance is None:
-        with _degradation_lock:
-            if _degradation_manager_instance is None:
-                _degradation_manager_instance = GracefulDegradationManager()
-
-    return _degradation_manager_instance
+    return _degradation_manager_factory.get_instance()
 
 
 def get_recovery_manager() -> ErrorRecoveryManager:
     """Get singleton error recovery manager instance."""
-    global _recovery_manager_instance
-
-    if _recovery_manager_instance is None:
-        with _recovery_lock:
-            if _recovery_manager_instance is None:
-                _recovery_manager_instance = ErrorRecoveryManager()
-
-    return _recovery_manager_instance
+    return _recovery_manager_factory.get_instance()
 
 
 # ========================================

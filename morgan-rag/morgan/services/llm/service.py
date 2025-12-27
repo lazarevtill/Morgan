@@ -684,8 +684,10 @@ class LLMService:
 # Singleton Management
 # =============================================================================
 
-_llm_service_instance: Optional[LLMService] = None
-_llm_service_lock = threading.Lock()
+from morgan.utils.singleton import SingletonFactory
+
+# Create singleton factory with cleanup method
+_llm_service_factory = SingletonFactory(LLMService, cleanup_method="shutdown")
 
 
 def get_llm_service(
@@ -706,29 +708,18 @@ def get_llm_service(
     Returns:
         Shared LLMService instance
     """
-    global _llm_service_instance
+    # Determine mode from settings if not specified
+    settings = get_settings()
+    actual_mode = mode or getattr(settings, "llm_mode", "single")
 
-    if _llm_service_instance is None or force_new:
-        with _llm_service_lock:
-            if _llm_service_instance is None or force_new:
-                # Determine mode from settings if not specified
-                settings = get_settings()
-                actual_mode = mode or getattr(settings, "llm_mode", "single")
-
-                _llm_service_instance = LLMService(
-                    mode=actual_mode,
-                    endpoints=endpoints,
-                    **kwargs,
-                )
-
-    return _llm_service_instance
+    return _llm_service_factory.get_instance(
+        force_new=force_new,
+        mode=actual_mode,
+        endpoints=endpoints,
+        **kwargs,
+    )
 
 
 def reset_llm_service():
     """Reset singleton instance (useful for testing)."""
-    global _llm_service_instance
-
-    with _llm_service_lock:
-        if _llm_service_instance:
-            _llm_service_instance.shutdown()
-        _llm_service_instance = None
+    _llm_service_factory.reset()

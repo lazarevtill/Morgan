@@ -81,11 +81,36 @@ class MorganError(Exception):
 # =============================================================================
 
 
-class LLMServiceError(MorganError):
+class ServiceError(MorganError):
+    """
+    Base error for all service operations.
+
+    Parent class for LLMServiceError, EmbeddingServiceError, etc.
+    Use specific subclasses for better error handling.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        service: str = "service",
+        operation: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            service=service,
+            operation=operation,
+            details=details,
+        )
+
+
+class LLMServiceError(ServiceError):
     """
     Error from LLM service operations.
 
     Raised when LLM generation, chat, or streaming fails.
+    
+    Alias: LLMError
     """
 
     def __init__(
@@ -102,11 +127,17 @@ class LLMServiceError(MorganError):
         )
 
 
-class EmbeddingServiceError(MorganError):
+# Alias for convenience
+LLMError = LLMServiceError
+
+
+class EmbeddingServiceError(ServiceError):
     """
     Error from embedding service operations.
 
     Raised when text encoding or batch embedding fails.
+    
+    Alias: EmbeddingError
     """
 
     def __init__(
@@ -123,11 +154,17 @@ class EmbeddingServiceError(MorganError):
         )
 
 
-class RerankingServiceError(MorganError):
+# Alias for convenience
+EmbeddingError = EmbeddingServiceError
+
+
+class RerankingServiceError(ServiceError):
     """
     Error from reranking service operations.
 
     Raised when document reranking fails.
+    
+    Alias: RerankingError
     """
 
     def __init__(
@@ -142,6 +179,10 @@ class RerankingServiceError(MorganError):
             operation=operation,
             details=details,
         )
+
+
+# Alias for convenience
+RerankingError = RerankingServiceError
 
 
 class VectorDBError(MorganError):
@@ -202,6 +243,77 @@ class SearchServiceError(MorganError):
         super().__init__(
             message=message,
             service="search",
+            operation=operation,
+            details=details,
+        )
+
+
+# =============================================================================
+# Companion & Intelligence Exceptions
+# =============================================================================
+
+
+class CompanionError(MorganError):
+    """
+    Error from companion service operations.
+
+    Raised when relationship management, profile operations,
+    or companion interactions fail.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        operation: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            service="companion",
+            operation=operation,
+            details=details,
+        )
+
+
+class EmotionalProcessingError(MorganError):
+    """
+    Error from emotional processing operations.
+
+    Raised when emotion detection, empathy generation,
+    or emotional analysis fails.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        operation: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            service="emotional_intelligence",
+            operation=operation,
+            details=details,
+        )
+
+
+class MemoryProcessingError(MorganError):
+    """
+    Error from memory processing operations.
+
+    Raised when memory storage, retrieval, or consolidation fails.
+    Distinct from MemoryServiceError which is for service-level failures.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        operation: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            service="memory_processing",
             operation=operation,
             details=details,
         )
@@ -336,19 +448,84 @@ class TimeoutError(InfrastructureError):
 
 
 # =============================================================================
+# Companion-Specific Exceptions (used by companion_error_handling.py)
+# =============================================================================
+
+
+class RelationshipTrackingError(CompanionError):
+    """
+    Error from relationship tracking operations.
+
+    Raised when user relationship tracking or engagement metrics fail.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        user_id: Optional[str] = None,
+        operation: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        details = details or {}
+        if user_id:
+            details["user_id"] = user_id
+        super().__init__(
+            message=message,
+            operation=operation or "relationship_tracking",
+            details=details,
+        )
+
+
+class EmpathyGenerationError(CompanionError):
+    """
+    Error from empathy generation operations.
+
+    Raised when generating empathetic responses fails.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        context_type: Optional[str] = None,
+        operation: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        details = details or {}
+        if context_type:
+            details["context_type"] = context_type
+        super().__init__(
+            message=message,
+            operation=operation or "empathy_generation",
+            details=details,
+        )
+
+
+# =============================================================================
 # Convenience exports
 # =============================================================================
 
 __all__ = [
     # Base
     "MorganError",
-    # Services
+    # Service base
+    "ServiceError",
+    # Services (full names)
     "LLMServiceError",
     "EmbeddingServiceError",
     "RerankingServiceError",
     "VectorDBError",
     "MemoryServiceError",
     "SearchServiceError",
+    # Service aliases (short names)
+    "LLMError",
+    "EmbeddingError",
+    "RerankingError",
+    # Companion & Intelligence
+    "CompanionError",
+    "EmotionalProcessingError",
+    "MemoryProcessingError",
+    "RelationshipTrackingError",
+    "EmpathyGenerationError",
     # Configuration
     "ConfigurationError",
     "ValidationError",

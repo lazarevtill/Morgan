@@ -101,6 +101,7 @@ class RerankingService:
         """
         self.settings = get_settings()
         self._lock = threading.Lock()
+        self._availability_lock = threading.Lock()
 
         # Setup model cache
         self.model_cache_path = setup_model_cache(model_cache_dir)
@@ -287,18 +288,21 @@ class RerankingService:
 
         if not CROSS_ENCODER_AVAILABLE:
             logger.debug("CrossEncoder not installed")
-            self._cross_encoder_available = False
+            with self._availability_lock:
+                self._cross_encoder_available = False
             return False
 
         try:
             logger.info("Loading CrossEncoder model (%s)...", self.model)
             self._cross_encoder = CrossEncoder(self.model, device=self.local_device)
             logger.info("CrossEncoder model loaded successfully")
-            self._cross_encoder_available = True
+            with self._availability_lock:
+                self._cross_encoder_available = True
             return True
         except Exception as e:
             logger.error("Failed to load CrossEncoder: %s", e)
-            self._cross_encoder_available = False
+            with self._availability_lock:
+                self._cross_encoder_available = False
             return False
 
     def _rerank_cross_encoder(
@@ -343,7 +347,8 @@ class RerankingService:
 
         if not SENTENCE_TRANSFORMERS_AVAILABLE:
             logger.debug("SentenceTransformer not installed")
-            self._embedding_available = False
+            with self._availability_lock:
+                self._embedding_available = False
             return False
 
         try:
@@ -352,11 +357,13 @@ class RerankingService:
                 self.embedding_model_name, device=self.local_device
             )
             logger.info("Embedding model loaded successfully")
-            self._embedding_available = True
+            with self._availability_lock:
+                self._embedding_available = True
             return True
         except Exception as e:
             logger.error("Failed to load embedding model: %s", e)
-            self._embedding_available = False
+            with self._availability_lock:
+                self._embedding_available = False
             return False
 
     async def _rerank_embedding(
@@ -494,8 +501,8 @@ class RerankingService:
                 response = requests.get(health_url, timeout=5.0)
                 if response.status_code == 200:
                     return True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Remote reranking endpoint not available: %s", e)
 
         # Check local CrossEncoder
         if self._check_cross_encoder_available():
@@ -537,8 +544,10 @@ class RerankingService:
 # Singleton Management
 # =============================================================================
 
-_reranking_service_instance: Optional[RerankingService] = None
-_reranking_service_lock = threading.Lock()
+from morgan.utils.singleton import SingletonFactory
+
+# Create singleton factory (no cleanup needed for reranking service)
+_reranking_service_factory = SingletonFactory(RerankingService)
 
 
 def get_reranking_service(
@@ -559,23 +568,14 @@ def get_reranking_service(
     Returns:
         Shared RerankingService instance
     """
-    global _reranking_service_instance
-
-    if _reranking_service_instance is None or force_new:
-        with _reranking_service_lock:
-            if _reranking_service_instance is None or force_new:
-                _reranking_service_instance = RerankingService(
-                    endpoint=endpoint,
-                    model=model,
-                    **kwargs,
-                )
-
-    return _reranking_service_instance
+    return _reranking_service_factory.get_instance(
+        force_new=force_new,
+        endpoint=endpoint,
+        model=model,
+        **kwargs,
+    )
 
 
 def reset_reranking_service():
     """Reset singleton instance (useful for testing)."""
-    global _reranking_service_instance
-
-    with _reranking_service_lock:
-        _reranking_service_instance = None
+    _reranking_service_factory.reset()

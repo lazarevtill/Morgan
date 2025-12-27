@@ -19,6 +19,7 @@ except ImportError:
     YAML_AVAILABLE = False
 
 from morgan.utils.logger import get_logger
+from morgan.utils.singleton import SingletonFactory
 
 logger = get_logger(__name__)
 
@@ -508,8 +509,10 @@ def save_distributed_config(
         return False
 
 
-# Singleton cached config
-_cached_config: Optional[DistributedArchitectureConfig] = None
+# Singleton factory for distributed config
+_config_factory: SingletonFactory[DistributedArchitectureConfig] = SingletonFactory(
+    DistributedArchitectureConfig
+)
 
 
 def get_distributed_config(
@@ -526,9 +529,12 @@ def get_distributed_config(
     Returns:
         Distributed configuration
     """
-    global _cached_config
+    if reload or not _config_factory.has_instance:
+        # Load config and reset factory with new instance
+        config = load_distributed_config(config_path=config_path)
+        # Reset and store the loaded config
+        _config_factory.reset()
+        # Store the loaded config as the singleton instance
+        _config_factory._instance = config
 
-    if _cached_config is None or reload:
-        _cached_config = load_distributed_config(config_path=config_path)
-
-    return _cached_config
+    return _config_factory.instance
