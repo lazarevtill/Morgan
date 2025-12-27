@@ -523,10 +523,18 @@ goto :eof
 :load_env_file
 if exist "%ENV_FILE%" (
     echo [INFO] Loading environment from: %ENV_FILE%
-    for /f "usebackq tokens=1,* delims==" %%a in ("%ENV_FILE%") do (
-        REM Skip comments and empty lines
-        echo %%a | findstr /b /c:"#" >nul || (
-            if not "%%a"=="" if not "%%b"=="" set "%%a=%%b"
+    for /f "usebackq eol=# tokens=1,* delims==" %%a in ("%ENV_FILE%") do (
+        REM Only process lines that have a valid variable name (no spaces, not empty)
+        if not "%%a"=="" (
+            REM Check if it looks like a valid env var name (no spaces at start)
+            echo %%a | findstr /r "^[A-Za-z_][A-Za-z0-9_]*$" >nul 2>&1 && (
+                if not "%%b"=="" (
+                    set "%%a=%%b"
+                ) else (
+                    REM Handle empty values
+                    set "%%a="
+                )
+            )
         )
     )
     REM Update OLLAMA_HOST if set in env file

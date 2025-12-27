@@ -443,7 +443,7 @@ class MemoryService:
         """Ensure required collections exist."""
         try:
             # Get embedding dimension
-            embedding_dim = self.embedding_service.get_embedding_dimension()
+            embedding_dim = self.embedding_service.get_dimension()
 
             # Create conversation metadata collection
             if self.vector_db.collection_exists(self.conversation_collection):

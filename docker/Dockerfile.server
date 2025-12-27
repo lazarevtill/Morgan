@@ -27,9 +27,9 @@ RUN pip install --upgrade pip setuptools wheel
 COPY morgan-rag/pyproject.toml morgan-rag/README.md /build/morgan-rag/
 COPY morgan-rag/morgan /build/morgan-rag/morgan
 
-# Install morgan-rag in virtual environment
+# Install morgan-rag in virtual environment with server extras
 WORKDIR /build/morgan-rag
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -e ".[server]"
 
 # Copy server package files
 COPY morgan-server/pyproject.toml morgan-server/README.md /build/morgan-server/

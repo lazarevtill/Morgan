@@ -54,7 +54,7 @@ class Defaults:
     # =========================================================================
 
     LLM_BASE_URL = "http://localhost:11434/v1"
-    LLM_API_KEY = "ollama"
+    LLM_API_KEY = "ollama-local"  # Placeholder for Ollama (no auth required)
     LLM_MODEL = "qwen2.5:32b-instruct-q4_K_M"
     LLM_FAST_MODEL = "qwen2.5:7b-instruct-q5_K_M"
     LLM_MAX_TOKENS = 2048

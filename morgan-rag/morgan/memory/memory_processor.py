@@ -784,7 +784,7 @@ class MemoryProcessor:
         """Ensure required collections exist."""
         try:
             # Get embedding dimension
-            embedding_dim = self.embedding_service.get_embedding_dimension()
+            embedding_dim = self.embedding_service.get_dimension()
 
             # Create memory collection
             if not self.vector_db.collection_exists(self.memory_collection):

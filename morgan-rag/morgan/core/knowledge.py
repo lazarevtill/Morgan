@@ -547,7 +547,7 @@ class KnowledgeService:
         """Ensure required collections exist."""
         try:
             # Get embedding dimension for legacy collections
-            embedding_dim = self.embedding_service.get_embedding_dimension()
+            embedding_dim = self.embedding_service.get_dimension()
 
             # Create main knowledge collection (legacy)
             if not self.vector_db.collection_exists(self.main_collection):
