@@ -40,7 +40,8 @@
       "Bash(find:*)",
       "Bash(mkdir:*)",
       "Bash(pip show:*)",
-      "Bash(ruff check:*)"
+      "Bash(ruff check:*)",
+      "Bash(setup.bat --help)"
     ],
     "deny": [],
     "ask": []

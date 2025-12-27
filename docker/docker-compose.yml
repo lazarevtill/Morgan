@@ -47,7 +47,7 @@ services:
       # Redis configuration
       - MORGAN_REDIS_URL=redis://redis:6379/0
       - MORGAN_REDIS_PASSWORD=${MORGAN_REDIS_PASSWORD:-}
-      - MORGAN_REDIS_PREFIX=morgan:
+      - MORGAN_REDIS_PREFIX="morgan:"
       
       # Cache configuration
       - MORGAN_CACHE_DIR=/app/data/cache
