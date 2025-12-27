@@ -3,7 +3,6 @@ Jina AI Adapters for Morgan Infrastructure.
 Implements domain interfaces using Jina services.
 """
 
-import asyncio
 from typing import Any, Dict, List, Optional
 from morgan.core.domain.interfaces import (
     EmbeddingProvider,

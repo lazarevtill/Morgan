@@ -5,8 +5,7 @@ Enforces dependency inversion principle.
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
-from datetime import datetime
-from .entities import BackgroundTask, TaskFrequency
+from .entities import BackgroundTask
 
 
 class TaskScheduler(ABC):

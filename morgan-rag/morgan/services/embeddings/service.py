@@ -7,7 +7,6 @@ and services/distributed_embedding_service.py into a single implementation.
 
 import asyncio
 import hashlib
-import os
 import threading
 import time
 from typing import Any, Dict, List, Optional

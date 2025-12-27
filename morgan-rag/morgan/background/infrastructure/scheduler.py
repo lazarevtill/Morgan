@@ -8,7 +8,7 @@ Single responsibility: task scheduling only.
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from morgan.background.domain.entities import TaskFrequency
 from morgan.background.domain.interfaces import TaskScheduler
 

@@ -24,6 +24,7 @@ from morgan.intelligence.core.models import (
     UserPreferences,
 )
 from morgan.services.embeddings import get_embedding_service
+from morgan.utils.deduplication import ResultDeduplicator
 from morgan.utils.logger import get_logger
 from morgan.vector_db.client import VectorDBClient
 
@@ -606,21 +607,23 @@ class MemoryProcessor:
         return min(1.0, significance)
 
     def _deduplicate_memories(self, memories: List[Memory]) -> List[Memory]:
-        """Remove duplicate memories based on content similarity."""
+        """Remove duplicate memories using unified ResultDeduplicator."""
         if not memories:
             return memories
 
-        unique_memories = []
-        seen_content = set()
-
-        for memory in memories:
-            # Simple deduplication based on content similarity
-            content_key = memory.content.lower().strip()
-            if content_key not in seen_content:
-                seen_content.add(content_key)
-                unique_memories.append(memory)
-
-        return unique_memories
+        try:
+            deduplicator = ResultDeduplicator(
+                strategy="content_hash",
+                similarity_threshold=0.85
+            )
+            return deduplicator.deduplicate(
+                items=memories,
+                key_fn=lambda m: m.content,
+                keep_first=True
+            )
+        except Exception as e:
+            logger.warning(f"Memory deduplication failed, returning original: {e}")
+            return memories
 
     def _extract_emotional_insights(
         self, conversation_turn: ConversationTurn, emotional_context: EmotionalState

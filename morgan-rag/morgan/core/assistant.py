@@ -8,8 +8,7 @@ Now includes companion features for building meaningful relationships.
 KISS Principle: Clean interface that orchestrates specialized modules.
 """
 
-import time
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, List, Optional
 
 from ..companion.relationship_manager import CompanionRelationshipManager
 from ..config import get_settings
@@ -18,7 +17,6 @@ from ..config import get_settings
 from morgan.intelligence.core.intelligence_engine import (
     get_emotional_intelligence_engine,
 )
-from morgan.intelligence.core.models import ConversationContext, EmotionalState
 from morgan.memory.memory_processor import get_memory_processor
 from ..services.llm import LLMService
 from ..utils.logger import get_logger

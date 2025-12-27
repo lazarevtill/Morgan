@@ -19,13 +19,14 @@ from shared.utils.exceptions import (
     ErrorCategory,
     ErrorSeverity,
 )
-from shared.utils.deduplication import (
-    DeduplicationResult,
-    deduplicate_by_content,
-    deduplicate_by_id,
-    deduplicate_by_similarity,
-    deduplicate_search_results,
-)
+# Deduplication moved to morgan.utils.deduplication (canonical implementation)
+# from shared.utils.deduplication import (
+#     DeduplicationResult,
+#     deduplicate_by_content,
+#     deduplicate_by_id,
+#     deduplicate_by_similarity,
+#     deduplicate_search_results,
+# )
 from shared.utils.text_extraction import (
     Entity,
     extract_entities,
@@ -53,12 +54,7 @@ __all__ = [
     "MorganException",
     "ErrorCategory",
     "ErrorSeverity",
-    # Deduplication
-    "DeduplicationResult",
-    "deduplicate_by_content",
-    "deduplicate_by_id",
-    "deduplicate_by_similarity",
-    "deduplicate_search_results",
+    # Deduplication - moved to morgan.utils.deduplication
     # Text extraction
     "Entity",
     "extract_entities",

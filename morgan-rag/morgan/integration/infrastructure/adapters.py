@@ -5,7 +5,6 @@ This module handles the initialization and access to external services
 required by the integration workflows.
 """
 
-from dataclasses import dataclass
 
 from ...background import BackgroundProcessingService
 from ...companion.relationship_manager import CompanionRelationshipManager
@@ -21,10 +20,6 @@ from ...memory.memory_processor import MemoryProcessor
 from ...optimization.comprehensive_batch_optimizer import (
     get_comprehensive_batch_optimizer,
 )
-from ...core.assistant import MorganAssistant
-from ...core.knowledge import KnowledgeService
-from ...core.memory import MemoryService
-from ...core.search import SmartSearch
 from ...utils.logger import get_logger
 
 logger = get_logger(__name__)

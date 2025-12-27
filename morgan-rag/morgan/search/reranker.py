@@ -14,7 +14,6 @@ from typing import Any, Dict, List, Optional
 from morgan.config import get_settings
 from morgan.services.reranking import (
     RerankingService,
-    RerankResult,
     get_reranking_service,
 )
 from morgan.infrastructure.distributed_gpu_manager import (

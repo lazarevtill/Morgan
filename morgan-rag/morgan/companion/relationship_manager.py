@@ -18,7 +18,6 @@ from morgan.intelligence.core.models import (
     ConversationStyle,
     ConversationTopic,
     EmotionalState,
-    InteractionData,
     MilestoneType,
     PersonalizedGreeting,
     RelationshipMilestone,

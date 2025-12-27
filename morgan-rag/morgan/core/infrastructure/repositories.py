@@ -4,9 +4,9 @@ Handles persistence using VectorDBClient.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List
 
-from morgan.core.domain.entities import KnowledgeChunk, Conversation, ConversationTurn
+from morgan.core.domain.entities import KnowledgeChunk, ConversationTurn
 from morgan.utils.logger import get_logger
 from morgan.vector_db.client import VectorDBClient
 

@@ -38,7 +38,9 @@
       "Bash(do echo \"=== $service ===\")",
       "Bash(done)",
       "Bash(find:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(pip show:*)",
+      "Bash(ruff check:*)"
     ],
     "deny": [],
     "ask": []
