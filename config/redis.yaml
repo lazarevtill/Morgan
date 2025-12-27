@@ -1,0 +1,62 @@
+# Morgan Redis Configuration
+# Cache and session storage settings
+#
+# This file configures the Redis cache connection.
+# Environment variables can override these values with MORGAN_REDIS_ prefix.
+
+# Connection settings
+connection:
+  # Redis server host
+  host: "localhost"
+  # Redis server port
+  port: 6379
+  # Database number (0-15)
+  db: 0
+  # Password (leave empty for no authentication)
+  password: ""
+  # Full URL (alternative to host/port/db)
+  # url: "redis://localhost:6379/0"
+  # Connection timeout in seconds
+  timeout: 5.0
+
+# Key prefix settings
+keys:
+  # Prefix for all Morgan keys
+  prefix: "morgan:"
+  # Separator between key parts
+  separator: ":"
+
+# Cache settings
+cache:
+  # Default TTL in seconds (1 hour)
+  default_ttl: 3600
+  # Maximum memory (in MB, 0 = unlimited)
+  max_memory: 512
+  # Eviction policy when max memory reached
+  # Options: noeviction, allkeys-lru, volatile-lru, allkeys-random, volatile-random, volatile-ttl
+  eviction_policy: "volatile-lru"
+
+# Session settings
+session:
+  # Session TTL in seconds (24 hours)
+  ttl: 86400
+  # Session key prefix
+  prefix: "session:"
+
+# Embedding cache settings
+embeddings:
+  # Cache embeddings for faster repeated queries
+  enabled: true
+  # TTL for embedding cache (1 week)
+  ttl: 604800
+  # Key prefix for embeddings
+  prefix: "emb:"
+
+# Connection pool settings
+pool:
+  # Maximum connections
+  max_connections: 20
+  # Retry on timeout
+  retry_on_timeout: true
+  # Health check interval in seconds
+  health_check_interval: 30

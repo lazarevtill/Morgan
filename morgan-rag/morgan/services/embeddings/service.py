@@ -107,6 +107,7 @@ class EmbeddingService:
         """
         self.settings = get_settings()
         self._lock = threading.Lock()
+        self._availability_lock = threading.Lock()
 
         # Setup model cache
         self.model_cache_path = setup_model_cache(model_cache_dir)
@@ -222,13 +223,15 @@ class EmbeddingService:
             response = client.embeddings.create(model=self.model, input="test")
 
             if response.data and len(response.data) > 0:
-                self._remote_available = True
+                with self._availability_lock:
+                    self._remote_available = True
                 logger.info("Remote embedding service available at %s", self.endpoint)
                 return True
 
         except Exception as e:
             logger.warning("Remote embedding service not available: %s", e)
-            self._remote_available = False
+            with self._availability_lock:
+                self._remote_available = False
 
         return False
 
@@ -250,13 +253,15 @@ class EmbeddingService:
             response = await client.embeddings.create(model=self.model, input="test")
 
             if response.data and len(response.data) > 0:
-                self._remote_available = True
+                with self._availability_lock:
+                    self._remote_available = True
                 logger.info("Remote embedding service available at %s", self.endpoint)
                 return True
 
         except Exception as e:
             logger.warning("Remote embedding service not available: %s", e)
-            self._remote_available = False
+            with self._availability_lock:
+                self._remote_available = False
 
         return False
 
@@ -267,7 +272,8 @@ class EmbeddingService:
 
         if not SENTENCE_TRANSFORMERS_AVAILABLE:
             logger.warning("sentence-transformers not installed")
-            self._local_available = False
+            with self._availability_lock:
+                self._local_available = False
             return False
 
         try:
@@ -276,11 +282,13 @@ class EmbeddingService:
                 self.local_model_name, device=self.local_device
             )
             logger.info("Local embedding model loaded successfully")
-            self._local_available = True
+            with self._availability_lock:
+                self._local_available = True
             return True
         except Exception as e:
             logger.error("Failed to load local model: %s", e)
-            self._local_available = False
+            with self._availability_lock:
+                self._local_available = False
             return False
 
     def get_dimension(self) -> int:
@@ -772,8 +780,17 @@ class EmbeddingService:
 # Singleton Management
 # =============================================================================
 
-_embedding_service_instance: Optional[EmbeddingService] = None
-_embedding_service_lock = threading.Lock()
+from morgan.utils.singleton import SingletonFactory
+
+
+def _cleanup_embedding_service(service: EmbeddingService) -> None:
+    """Cleanup function for embedding service."""
+    if service:
+        service.clear_cache()
+
+
+# Create singleton factory with cleanup
+_embedding_service_factory = SingletonFactory(EmbeddingService, cleanup_method="clear_cache")
 
 
 def get_embedding_service(
@@ -794,25 +811,14 @@ def get_embedding_service(
     Returns:
         Shared EmbeddingService instance
     """
-    global _embedding_service_instance
-
-    if _embedding_service_instance is None or force_new:
-        with _embedding_service_lock:
-            if _embedding_service_instance is None or force_new:
-                _embedding_service_instance = EmbeddingService(
-                    endpoint=endpoint,
-                    model=model,
-                    **kwargs,
-                )
-
-    return _embedding_service_instance
+    return _embedding_service_factory.get_instance(
+        force_new=force_new,
+        endpoint=endpoint,
+        model=model,
+        **kwargs,
+    )
 
 
 def reset_embedding_service():
     """Reset singleton instance (useful for testing)."""
-    global _embedding_service_instance
-
-    with _embedding_service_lock:
-        if _embedding_service_instance:
-            _embedding_service_instance.clear_cache()
-        _embedding_service_instance = None
+    _embedding_service_factory.reset()

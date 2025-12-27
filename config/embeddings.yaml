@@ -1,0 +1,47 @@
+# Morgan Embeddings Configuration
+# Self-hosted embedding service settings
+#
+# This file configures the embedding service layer.
+# Environment variables can override these values with MORGAN_EMBEDDING_ prefix.
+
+# Primary embedding model (remote via Ollama)
+remote:
+  # OpenAI-compatible endpoint for embeddings
+  endpoint: "http://localhost:11434/v1"
+  # Qwen3-Embedding via Ollama
+  # Variants:
+  #   - qwen3-embedding:0.6b (896 dims, lightweight)
+  #   - qwen3-embedding:4b (2048 dims, recommended)
+  #   - qwen3-embedding:8b (4096 dims, best quality)
+  model: "qwen3-embedding:4b"
+  # Embedding dimensions (must match model)
+  dimensions: 2048
+  # API key (use "ollama" for Ollama)
+  api_key: "ollama"
+  # Force remote only (fail if unavailable, no local fallback)
+  force_remote: false
+
+# Local fallback model (sentence-transformers)
+local:
+  # Model name from Hugging Face
+  model: "all-MiniLM-L6-v2"
+  # Embedding dimensions (384 for all-MiniLM-L6-v2)
+  dimensions: 384
+  # Device: cpu, cuda, mps
+  device: "cpu"
+
+# Processing settings
+processing:
+  # Batch size for embedding operations
+  batch_size: 100
+  # Request timeout in seconds
+  timeout: 30.0
+  # Use instruction prefixes for 22% better relevance
+  use_instructions: true
+
+# Caching settings
+cache:
+  # Enable embedding cache
+  enabled: true
+  # Maximum cache entries
+  max_size: 10000

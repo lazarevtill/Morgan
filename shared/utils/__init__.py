@@ -19,10 +19,6 @@ from shared.utils.exceptions import (
     ErrorCategory,
     ErrorSeverity,
 )
-from shared.utils.singleton import (
-    SingletonFactory,
-    singleton,
-)
 from shared.utils.deduplication import (
     DeduplicationResult,
     deduplicate_by_content,
@@ -57,9 +53,6 @@ __all__ = [
     "MorganException",
     "ErrorCategory",
     "ErrorSeverity",
-    # Singleton
-    "SingletonFactory",
-    "singleton",
     # Deduplication
     "DeduplicationResult",
     "deduplicate_by_content",
