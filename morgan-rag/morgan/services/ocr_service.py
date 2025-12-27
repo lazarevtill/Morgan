@@ -420,3 +420,5 @@ async def extract_to_markdown(image: Union[str, bytes, Path]) -> str:
     service = get_ocr_service()
     result = await service.extract_to_markdown(image)
     return result.text if result.success else ""
+
+
