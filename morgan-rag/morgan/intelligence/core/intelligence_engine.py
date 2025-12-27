@@ -15,6 +15,11 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from morgan.config import get_settings
+# Use relative import to avoid circular dependency via intelligence/__init__.py
+from ..constants import (
+    EMOTION_PATTERNS,
+    INTENSITY_MODIFIERS,
+)
 from morgan.intelligence.core.models import (
     CompanionProfile,
     ConversationContext,
@@ -45,61 +50,10 @@ class EmotionalIntelligenceEngine:
     - Empathetic response generation with emotional awareness
     - Personal preference learning and adaptation
     - Relationship milestone detection and tracking
+
+    Note: Emotion patterns and modifiers are imported from
+    morgan.intelligence.constants for centralized management.
     """
-
-    # Emotion detection patterns (rule-based + LLM hybrid approach)
-    EMOTION_PATTERNS = {
-        EmotionType.JOY: [
-            r"\b(happy|joy|excited|thrilled|delighted|pleased|glad|cheerful|elated)\b",
-            r"\b(awesome|amazing|fantastic|wonderful|great|excellent|perfect)\b",
-            r"\b(love|adore|enjoy)\b",
-            r"[!]{2,}",  # Multiple exclamation marks
-            r":\)|:D|😊|😄|😃|🎉|❤️",  # Emoticons and emojis
-        ],
-        EmotionType.SADNESS: [
-            r"\b(sad|depressed|down|upset|disappointed|heartbroken|miserable)\b",
-            r"\b(cry|crying|tears|weep)\b",
-            r"\b(lonely|alone|isolated)\b",
-            r":\(|😢|😭|💔",  # Sad emoticons
-        ],
-        EmotionType.ANGER: [
-            r"\b(angry|mad|furious|irritated|annoyed|frustrated|pissed)\b",
-            r"\b(hate|despise|can\'t stand)\b",
-            r"\b(stupid|idiotic|ridiculous|absurd)\b",
-            r"[!]{3,}",  # Many exclamation marks (anger indicator)
-            r"😠|😡|🤬",  # Angry emojis
-        ],
-        EmotionType.FEAR: [
-            r"\b(scared|afraid|terrified|worried|anxious|nervous|panic)\b",
-            r"\b(fear|phobia|dread)\b",
-            r"\b(what if|concerned about)\b",
-            r"😰|😨|😱",  # Fear emojis
-        ],
-        EmotionType.SURPRISE: [
-            r"\b(surprised|shocked|amazed|astonished|wow|whoa)\b",
-            r"\b(unexpected|sudden|didn\'t expect)\b",
-            r"😲|😮|🤯",  # Surprise emojis
-        ],
-        EmotionType.DISGUST: [
-            r"\b(disgusting|gross|revolting|sick|nauseating)\b",
-            r"\b(ugh|eww|yuck)\b",
-            r"🤢|🤮|😷",  # Disgust emojis
-        ],
-    }
-
-    # Intensity modifiers
-    INTENSITY_MODIFIERS = {
-        "very": 1.3,
-        "extremely": 1.5,
-        "really": 1.2,
-        "so": 1.2,
-        "quite": 1.1,
-        "somewhat": 0.8,
-        "a bit": 0.7,
-        "slightly": 0.6,
-        "not very": 0.4,
-        "barely": 0.3,
-    }
 
     def __init__(self):
         """Initialize emotional intelligence engine."""
@@ -366,7 +320,7 @@ class EmotionalIntelligenceEngine:
         text_lower = text.lower()
         emotion_scores = {}
 
-        for emotion_type, patterns in self.EMOTION_PATTERNS.items():
+        for emotion_type, patterns in EMOTION_PATTERNS.items():
             score = 0.0
             matches = []
 
@@ -377,7 +331,7 @@ class EmotionalIntelligenceEngine:
                     score += len(matches_found) * 0.3
 
             # Apply intensity modifiers
-            for modifier, multiplier in self.INTENSITY_MODIFIERS.items():
+            for modifier, multiplier in INTENSITY_MODIFIERS.items():
                 if modifier in text_lower:
                     score *= multiplier
 

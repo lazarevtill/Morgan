@@ -5,6 +5,8 @@ Simple, secure configuration with sensible defaults.
 Based on InspecTor's proven configuration patterns but simplified for human use.
 
 KISS Principle: Easy to configure, secure by default, human-readable.
+
+All default values come from morgan.config.defaults.Defaults class.
 """
 
 from functools import lru_cache
@@ -15,6 +17,7 @@ from dotenv import load_dotenv
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from morgan.config.defaults import Defaults
 from morgan.utils.validators import ValidationError as ValidatorError
 from morgan.utils.validators import (
     validate_int_range,
@@ -40,22 +43,22 @@ class Settings(BaseSettings):
     # ============================================================================
 
     llm_base_url: str = Field(
-        default="https://ai.ishosting.com/api",
+        default=Defaults.LLM_BASE_URL,
         description="OpenAI-compatible LLM endpoint",
     )
 
     llm_api_key: Optional[str] = Field(
-        default=None, description="API key for LLM service"
+        default=Defaults.LLM_API_KEY, description="API key for LLM service"
     )
 
-    llm_model: str = Field(default="gemma3:latest", description="LLM model name")
+    llm_model: str = Field(default=Defaults.LLM_MODEL, description="LLM model name")
 
     llm_max_tokens: int = Field(
-        default=2048, description="Maximum tokens for responses", ge=100, le=32000
+        default=Defaults.LLM_MAX_TOKENS, description="Maximum tokens for responses", ge=100, le=32000
     )
 
     llm_temperature: float = Field(
-        default=0.7,
+        default=Defaults.LLM_TEMPERATURE,
         description="LLM temperature (0.0 = deterministic, 1.0 = creative)",
         ge=0.0,
         le=2.0,
@@ -66,7 +69,7 @@ class Settings(BaseSettings):
     # ============================================================================
 
     embedding_model: str = Field(
-        default="qwen3:latest", description="Primary embedding model (remote)"
+        default=Defaults.EMBEDDING_MODEL, description="Primary embedding model (remote)"
     )
 
     ollama_host: Optional[str] = Field(
@@ -80,15 +83,15 @@ class Settings(BaseSettings):
     )
 
     embedding_local_model: str = Field(
-        default="all-MiniLM-L6-v2", description="Fallback local embedding model"
+        default=Defaults.EMBEDDING_LOCAL_MODEL, description="Fallback local embedding model"
     )
 
     embedding_batch_size: int = Field(
-        default=100, description="Batch size for embedding operations", ge=1, le=1000
+        default=Defaults.EMBEDDING_BATCH_SIZE, description="Batch size for embedding operations", ge=1, le=1000
     )
 
     embedding_device: str = Field(
-        default="cpu", description="Device for local embeddings (cpu, cuda, mps)"
+        default=Defaults.EMBEDDING_DEVICE, description="Device for local embeddings (cpu, cuda, mps)"
     )
 
     embedding_use_instructions: bool = Field(
@@ -96,7 +99,7 @@ class Settings(BaseSettings):
     )
 
     embedding_force_remote: bool = Field(
-        default=False,
+        default=Defaults.EMBEDDING_FORCE_REMOTE,
         description="Force remote embeddings even in dev mode (no local fallback)",
     )
 
@@ -121,7 +124,7 @@ class Settings(BaseSettings):
     )
 
     morgan_log_level: str = Field(
-        default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR)"
+        default=Defaults.LOG_LEVEL, description="Logging level (DEBUG, INFO, WARNING, ERROR)"
     )
 
     morgan_debug: bool = Field(default=False, description="Enable debug mode")
@@ -139,15 +142,15 @@ class Settings(BaseSettings):
     # ============================================================================
 
     morgan_max_search_results: int = Field(
-        default=10, description="Maximum search results to return", ge=1, le=50
+        default=Defaults.SEARCH_MAX_RESULTS, description="Maximum search results to return", ge=1, le=50
     )
 
     morgan_default_search_results: int = Field(
-        default=5, description="Default number of search results", ge=1, le=20
+        default=Defaults.SEARCH_DEFAULT_RESULTS, description="Default number of search results", ge=1, le=20
     )
 
     morgan_min_search_score: float = Field(
-        default=0.7,
+        default=Defaults.SEARCH_SIMILARITY_THRESHOLD,
         description="Minimum similarity score for search results",
         ge=0.0,
         le=1.0,
@@ -158,22 +161,22 @@ class Settings(BaseSettings):
     # ============================================================================
 
     morgan_memory_enabled: bool = Field(
-        default=True, description="Enable conversation memory"
+        default=Defaults.MEMORY_ENABLED, description="Enable conversation memory"
     )
 
     morgan_memory_max_conversations: int = Field(
-        default=1000,
+        default=Defaults.MEMORY_MAX_CONVERSATIONS,
         description="Maximum conversations to keep in memory",
         ge=10,
         le=10000,
     )
 
     morgan_memory_max_turns_per_conversation: int = Field(
-        default=100, description="Maximum turns per conversation", ge=5, le=500
+        default=Defaults.MEMORY_MAX_TURNS, description="Maximum turns per conversation", ge=5, le=500
     )
 
     morgan_learning_enabled: bool = Field(
-        default=True, description="Enable learning from feedback"
+        default=Defaults.LEARNING_ENABLED, description="Enable learning from feedback"
     )
 
     # ============================================================================
@@ -204,14 +207,14 @@ class Settings(BaseSettings):
     # Web Interface Settings
     # ============================================================================
 
-    morgan_host: str = Field(default="0.0.0.0", description="Web server host")
+    morgan_host: str = Field(default=Defaults.MORGAN_HOST, description="Web server host")
 
     morgan_port: int = Field(
-        default=8080, description="Web server port", ge=1024, le=65535
+        default=Defaults.MORGAN_PORT, description="Web server port", ge=1024, le=65535
     )
 
     morgan_api_port: int = Field(
-        default=8000, description="API server port", ge=1024, le=65535
+        default=Defaults.MORGAN_API_PORT, description="API server port", ge=1024, le=65535
     )
 
     morgan_web_enabled: bool = Field(default=True, description="Enable web interface")
@@ -221,7 +224,7 @@ class Settings(BaseSettings):
     )
 
     morgan_cors_origins: str = Field(
-        default="*", description="Allowed CORS origins (comma-separated)"
+        default=Defaults.CORS_ORIGINS, description="Allowed CORS origins (comma-separated)"
     )
 
     # ============================================================================
@@ -229,7 +232,7 @@ class Settings(BaseSettings):
     # ============================================================================
 
     morgan_workers: int = Field(
-        default=4, description="Number of worker processes", ge=1, le=16
+        default=Defaults.MORGAN_WORKERS, description="Number of worker processes", ge=1, le=16
     )
 
     morgan_cache_size: int = Field(
@@ -237,7 +240,7 @@ class Settings(BaseSettings):
     )
 
     morgan_cache_ttl: int = Field(
-        default=3600, description="Cache TTL in seconds", ge=60, le=86400
+        default=Defaults.REDIS_TTL, description="Cache TTL in seconds", ge=60, le=86400
     )
 
     # ============================================================================
@@ -245,15 +248,15 @@ class Settings(BaseSettings):
     # ============================================================================
 
     morgan_allow_file_upload: bool = Field(
-        default=True, description="Allow file uploads"
+        default=Defaults.ALLOW_FILE_UPLOAD, description="Allow file uploads"
     )
 
     morgan_allow_url_ingestion: bool = Field(
-        default=True, description="Allow URL ingestion"
+        default=Defaults.ALLOW_URL_INGESTION, description="Allow URL ingestion"
     )
 
     morgan_allow_code_execution: bool = Field(
-        default=False, description="Allow code execution (dangerous!)"
+        default=Defaults.ALLOW_CODE_EXECUTION, description="Allow code execution (dangerous!)"
     )
 
     morgan_session_secret: str = Field(

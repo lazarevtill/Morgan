@@ -12,7 +12,6 @@ import re
 import threading
 import time
 from collections import Counter
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
@@ -107,7 +106,7 @@ class RerankingService:
         self.model_cache_path = setup_model_cache(model_cache_dir)
 
         # Configuration
-        self.endpoint = endpoint or os.environ.get("MORGAN_RERANKING_ENDPOINT")
+        self.endpoint = endpoint or getattr(self.settings, "reranking_endpoint", None)
         self.model = model or getattr(
             self.settings, "reranking_model", "cross-encoder/ms-marco-MiniLM-L-6-v2"
         )
@@ -243,11 +242,17 @@ class RerankingService:
         Returns:
             List of RerankResult sorted by score (descending)
         """
-        loop = asyncio.new_event_loop()
         try:
-            return loop.run_until_complete(self.rerank(query, documents, top_k))
-        finally:
-            loop.close()
+            # Try to use existing event loop if available
+            loop = asyncio.get_running_loop()
+            # Already in async context, create a task
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, self.rerank(query, documents, top_k))
+                return future.result()
+        except RuntimeError:
+            # No running event loop, safe to use asyncio.run()
+            return asyncio.run(self.rerank(query, documents, top_k))
 
     # =========================================================================
     # Reranking Strategies
