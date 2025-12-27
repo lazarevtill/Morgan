@@ -2,16 +2,17 @@
 
 ## Introduction
 
-This requirements specification defines the comprehensive cleanup and reorganization of the Morgan codebase based on findings from 11 parallel exploration agents. The analysis identified 150+ issues including code duplications, inconsistent patterns, missing implementations, dead code, and configuration chaos.
+This requirements specification defines the comprehensive cleanup and reorganization of the Morgan codebase based on findings from 7 parallel exploration agents. The analysis identified **87 issues** including code duplications, inconsistent patterns, missing implementations, dead code, and configuration chaos.
 
-**Date**: 2025-12-26
-**Status**: Planning Complete - Ready for Implementation
+**Date**: 2025-12-27
+**Status**: Requirements Complete - Ready for Implementation
 **Priority**: Critical - Technical Debt & Data Integrity
+**Note**: App is in development - NO backward compatibility required
 
 ## Glossary
 
-- **morgan-rag** - Core RAG (Retrieval Augmented Generation) library with services, infrastructure, and intelligence modules
-- **morgan-server** - FastAPI server exposing morgan-rag functionality via REST/WebSocket APIs
+- **morgan-rag** - Core RAG library with services, infrastructure, and intelligence modules
+- **morgan-server** - FastAPI server exposing morgan-rag functionality
 - **morgan-cli** - Command-line client for interacting with morgan-server
 - **shared** - Cross-project shared utilities, models, and configuration
 - **Collection** - Qdrant vector database collection for storing embeddings
@@ -19,348 +20,397 @@ This requirements specification defines the comprehensive cleanup and reorganiza
 
 ---
 
-## 1. Critical Data Integrity Requirements
+## 1. Critical Exception & Error Handling Requirements
 
-### REQ-DATA-1: Collection Name Consistency
+### REQ-EXC-1: Single Exception Hierarchy (CRITICAL)
 **Priority**: CRITICAL
-**WHEN** memory is stored via `MemoryProcessor`
-**SHALL** use collection name `morgan_memories`
-**AND** search operations must query the same collection name
+**WHEN** custom exceptions are needed
+**SHALL** use single `MorganError` base class in `morgan/exceptions.py`
+**AND** DELETE all duplicate exception definitions
+
+**Current State**:
+- `MorganError` defined in `exceptions.py:47-58` AND `error_handling.py:97-108` with DIFFERENT APIs
+- `ValidationError` defined in 3 places (exceptions.py:249, error_handling.py:241, validators.py:10)
+- `ConfigurationError` defined in 2 places
 
 **Acceptance Criteria**:
-- [ ] `memory_processor.py:124` uses `morgan_memories`
-- [ ] `multi_stage_search.py:176` uses `morgan_memories` (not `morgan_turns`)
-- [ ] All memory-related searches find stored memories
-- [ ] Integration test validates store-then-search works
+- [ ] `morgan/exceptions.py` is ONLY exception source (delete all duplicates)
+- [ ] Delete `MorganError` from `utils/error_handling.py:94-262`
+- [ ] Delete `ValidationError` from `utils/validators.py:10`
+- [ ] Delete exception definitions from `utils/companion_error_handling.py`
+- [ ] All imports use `from morgan.exceptions import X`
 
-### REQ-DATA-2: Test Import Fixes
-**Priority**: CRITICAL
-**WHEN** tests in morgan-cli are executed
-**SHALL** have all required imports defined
-**AND** no NameError exceptions during test execution
+### REQ-EXC-2: Fix Bare Exception Handling
+**Priority**: HIGH
+**WHEN** exceptions are caught
+**SHALL** use specific exception types and log errors
+**AND** eliminate bare `except:` or `except Exception: pass`
+
+**Current State**:
+- `reranking/service.py:497-498`: `except Exception: pass` (silent failure)
+- `profile.py:131,139`: `except: pass` (silent suppression)
 
 **Acceptance Criteria**:
-- [ ] `test_client_properties.py:372` uses `ConnectionError` (not undefined `ClientConnectionError`)
-- [ ] `test_client_properties.py:15-22` imports `WebSocketClient`
-- [ ] All morgan-cli tests pass without import errors
+- [ ] Fix `reranking/service.py:497` - add logging
+- [ ] Fix `profile.py:131,139` - add logging
+- [ ] No bare `except:` or silent `pass` in codebase
 
 ---
 
-## 2. Exception Handling Requirements
+## 2. Singleton Pattern Consolidation Requirements
 
-### REQ-EXC-1: Single Exception Hierarchy
+### REQ-SING-1: Unified Singleton Factory (CRITICAL)
+**Priority**: CRITICAL
+**WHEN** singleton services are created
+**SHALL** use single `SingletonFactory` from `utils/singleton.py`
+**AND** DELETE all duplicate implementations
+
+**Current State (4+ implementations)**:
+- `morgan-rag/morgan/utils/singleton.py:49-141` - Instance-based with generics
+- `shared/utils/singleton.py:15-126` - Static class methods (DIFFERENT!)
+- `error_handling.py:1109-1136` - Manual `_instance + _lock` pattern
+- `distributed_config.py:511-534` - Manual `_cached_config` pattern
+- Each service has own `_service_instance + _service_lock` pattern
+
+**Acceptance Criteria**:
+- [ ] Keep `morgan/utils/singleton.py` as authoritative (more complete)
+- [ ] Update or delete `shared/utils/singleton.py`
+- [ ] Delete manual singletons from `error_handling.py:1109-1136`
+- [ ] Delete `_cached_config` pattern from `distributed_config.py`
+- [ ] Migrate all services to use `SingletonFactory`
+
+### REQ-SING-2: Thread-Safe Service Singletons
 **Priority**: HIGH
-**WHEN** custom exceptions are needed
-**SHALL** inherit from single `MorganError` base class in `morgan/exceptions.py`
-**AND** no duplicate exception definitions shall exist
+**WHEN** service singletons are accessed
+**SHALL** be thread-safe with proper locking
+**AND** use consistent cleanup patterns
+
+**Current State**:
+- `llm/service.py:683-735` - Has lock but different cleanup
+- `embeddings/service.py:771-819` - Has lock, calls `clear_cache()`
+- `reranking/service.py:536-582` - Has lock, NO cleanup
+- Race conditions in availability flags (embeddings:240, reranking:285)
 
 **Acceptance Criteria**:
-- [ ] `morgan/exceptions.py` is single source of truth
-- [ ] `utils/error_handling.py` imports from `exceptions.py` (no redefinitions)
-- [ ] `utils/companion_error_handling.py` imports from `exceptions.py`
-- [ ] `utils/validators.py` imports `ValidationError` from `exceptions.py`
-- [ ] `services/ocr_service.py` exceptions inherit from `MorganError`
-- [ ] `services/external_knowledge/mcp_client.py` exceptions inherit from `MorganError`
-
-### REQ-EXC-2: Remove Unused Exceptions
-**Priority**: HIGH
-**WHEN** exception classes are defined
-**SHALL** be used somewhere in the codebase
-**AND** unused exceptions must be removed
-
-**Acceptance Criteria**:
-- [ ] Remove unused `LLMServiceError` from `exceptions.py:84-103`
-- [ ] Remove unused `EmbeddingServiceError` from `exceptions.py:105-124`
-- [ ] Remove unused `RerankingServiceError` from `exceptions.py:126-145`
-- [ ] Remove unused `VectorDBError` from `exceptions.py:147-166`
-- [ ] Remove unused `MemoryServiceError` from `exceptions.py:168-187`
-- [ ] Remove unused `SearchServiceError` from `exceptions.py:189-208`
-
-### REQ-EXC-3: Specific Exception Handling
-**Priority**: MEDIUM
-**WHEN** exceptions are caught
-**SHALL** use specific exception types instead of bare `Exception`
-**AND** bare `except:` clauses must be eliminated
-
-**Acceptance Criteria**:
-- [ ] Reduce 708 `except Exception` to <200 with specific types
-- [ ] Eliminate 15+ bare `except:` clauses
-- [ ] Critical paths (vector_db, search, memory) use typed exceptions
+- [ ] Add locks to availability flag updates in `embeddings/service.py:240`
+- [ ] Add locks to availability flags in `reranking/service.py:285`
+- [ ] Consistent `shutdown()` or `cleanup()` in all reset functions
 
 ---
 
 ## 3. Code Deduplication Requirements
 
-### REQ-DUP-1: Single setup_model_cache Implementation
+### REQ-DUP-1: Unified Deduplication Logic (HIGH)
 **Priority**: HIGH
-**WHEN** model cache directories are initialized
-**SHALL** use single `setup_model_cache()` from `morgan/utils/model_cache.py`
-**AND** no duplicate implementations shall exist
-
-**Acceptance Criteria**:
-- [ ] Remove `setup_model_cache()` from `embeddings/service.py:39-87`
-- [ ] Remove `setup_model_cache()` from `reranking/service.py:47-84`
-- [ ] Remove `setup_model_cache()` from `config/distributed_config.py`
-- [ ] All services import from `morgan.utils.model_cache`
-
-### REQ-DUP-2: Single HostRole Enum
-**Priority**: HIGH
-**WHEN** host roles are defined for distributed deployment
-**SHALL** use single `HostRole` enum in shared location
-**AND** no conflicting definitions shall exist
-
-**Acceptance Criteria**:
-- [ ] Create `shared/models/enums.py` with `HostRole`
-- [ ] Remove `HostRole` from `distributed_gpu_manager.py:29-36`
-- [ ] Remove `HostRole` from `distributed_manager.py:41-49`
-- [ ] All infrastructure uses shared `HostRole`
-
-### REQ-DUP-3: Unified Deduplication Logic
-**Priority**: MEDIUM
 **WHEN** search results or memories need deduplication
-**SHALL** use single deduplication utility
-**AND** consistent strategy across all modules
+**SHALL** use `utils/deduplication.py` `ResultDeduplicator`
+**AND** DELETE all 5 duplicate implementations
+
+**Current State (5 implementations, utility unused)**:
+- `search/multi_stage_search.py:1729-1775` - `_deduplicate_results()`
+- `search/multi_stage_search.py:1660-1727` - `_apply_rrf_deduplication()`
+- `search/multi_stage_search.py:2300-2334` - `_deduplicate_memory_results()`
+- `search/companion_memory_search.py:1057-1075` - `_deduplicate_search_results()`
+- `memory/memory_processor.py:608-623` - `_deduplicate_memories()`
+- `utils/deduplication.py` - `ResultDeduplicator` EXISTS BUT UNUSED!
 
 **Acceptance Criteria**:
-- [ ] Create `shared/utils/deduplication.py`
-- [ ] Consolidate 5 deduplication implementations
-- [ ] Memory, search, companion modules use shared utility
+- [ ] Use `ResultDeduplicator` in all search modules
+- [ ] Delete 5 duplicate dedup methods
+- [ ] Consolidate `shared/utils/deduplication.py` and `morgan/utils/deduplication.py`
 
-### REQ-DUP-4: Unified Text Extraction
+### REQ-DUP-2: Unified Emotion Detection (HIGH)
+**Priority**: HIGH
+**WHEN** emotion detection is performed
+**SHALL** use single implementation in `emotions/detector.py`
+**AND** DELETE duplicate logic from `intelligence_engine.py`
+
+**Current State (~140 lines duplicated)**:
+- `detector.py:197` AND `intelligence_engine.py:364` - `_detect_emotions_rule_based()`
+- `detector.py:250` AND `intelligence_engine.py:393` - `_detect_emotions_llm()`
+- `detector.py:342` AND `intelligence_engine.py:438` - `_combine_emotion_results()`
+- `detector.py:40-82` AND `intelligence_engine.py:51-88` - `EMOTION_PATTERNS`
+- `detector.py:85-98` AND `intelligence_engine.py:91-102` - `INTENSITY_MODIFIERS`
+
+**Acceptance Criteria**:
+- [ ] Make `detector.py` the single source for emotion detection
+- [ ] Have `intelligence_engine.py` delegate to detector
+- [ ] Delete duplicate methods from `intelligence_engine.py`
+- [ ] Create `intelligence/constants.py` for shared patterns
+
+### REQ-DUP-3: Unified Memory Search (MEDIUM)
 **Priority**: MEDIUM
-**WHEN** entities, keywords, or topics are extracted from text
-**SHALL** use single extraction utility
-**AND** consistent patterns across all modules
+**WHEN** memory search is performed
+**SHALL** use single implementation
+**AND** DELETE duplicate memory search logic
+
+**Current State (3 implementations)**:
+- `multi_stage_search.py:1022` - `_memory_search()`
+- `multi_stage_search.py:1185` - `_basic_memory_search()`
+- `companion_memory_search.py:727` - `_execute_enhanced_memory_search()`
 
 **Acceptance Criteria**:
-- [ ] Create `shared/utils/text_extraction.py`
-- [ ] Consolidate entity detection from `memory_processor.py:286-314`
-- [ ] Consolidate concept extraction from `memory_processor.py:523-548`
-- [ ] Consolidate keyword extraction from `multi_stage_search.py:1852-1902`
+- [ ] Consolidate to single `_memory_search()` implementation
+- [ ] Companion search delegates to main implementation
+- [ ] Delete redundant `_basic_memory_search()`
 
-### REQ-DUP-5: Unified Valence Mapping
+### REQ-DUP-4: Cross-Package Duplicates (MEDIUM)
 **Priority**: MEDIUM
-**WHEN** emotion valence values are needed
-**SHALL** use single constant definition
-**AND** no duplicate mappings in multiple files
+**WHEN** shared utilities are needed
+**SHALL** exist in single location
+**AND** be imported from there
+
+**Current State**:
+- `shared/utils/deduplication.py` (195 lines) vs `morgan/utils/deduplication.py` (154 lines)
+- `shared/utils/singleton.py` vs `morgan/utils/singleton.py`
+- `shared/utils/exceptions.py` (784 lines) vs `morgan/exceptions.py` (359 lines) vs `morgan/utils/error_handling.py` (1136 lines)
 
 **Acceptance Criteria**:
-- [ ] Create `intelligence/constants.py` with `EMOTION_VALENCE`
-- [ ] Remove duplicate from `emotions/analyzer.py:44-52`
-- [ ] Remove duplicate from `emotions/context.py:135-143`
-- [ ] Remove duplicate from `emotions/recovery.py:110-119`
+- [ ] Choose ONE location for each utility
+- [ ] Delete duplicates
+- [ ] Update all imports
 
 ---
 
 ## 4. Configuration Requirements
 
-### REQ-CFG-1: Unified Configuration Base
+### REQ-CFG-1: Unified Default Values (CRITICAL)
+**Priority**: CRITICAL
+**WHEN** default configuration values are defined
+**SHALL** have single source of truth
+**AND** DELETE conflicting defaults
+
+**Current State (3 sources with DIFFERENT values!)**:
+- `defaults.py`: `llm_model = "qwen2.5:32b-instruct-q4_K_M"`
+- `settings.py`: `llm_model = "gemma3:latest"` (DIFFERENT MODEL FAMILY!)
+- `distributed_config.py`: `main_model = "qwen2.5:32b-instruct-q4_K_M"`
+
+**Acceptance Criteria**:
+- [ ] Keep `defaults.py` as authoritative
+- [ ] Update `settings.py` to use `defaults.py` values
+- [ ] Update `distributed_config.py` to use `defaults.py` values
+- [ ] Single model family (Qwen) across all configs
+
+### REQ-CFG-2: Consistent Configuration Access (HIGH)
 **Priority**: HIGH
-**WHEN** settings classes are defined
-**SHALL** inherit from shared base configuration
-**AND** consistent field naming across all services
+**WHEN** configuration values are accessed
+**SHALL** use settings object consistently
+**AND** NOT use direct `os.environ.get()`
+
+**Current State**:
+- `llm/service.py` - Uses `getattr(self.settings, ...)` CORRECT
+- `embeddings/service.py` - Uses settings with fallback
+- `reranking/service.py:109` - Uses `os.environ.get()` INCONSISTENT!
 
 **Acceptance Criteria**:
-- [ ] Create `shared/config/base.py` with `BaseSettings`
-- [ ] `morgan-rag/config/settings.py` inherits from base
-- [ ] `morgan-server/config.py` inherits from base
-- [ ] `morgan-cli/config.py` inherits from base
-- [ ] Unified field names: `llm_endpoint`, `vector_db_url`, etc.
+- [ ] Fix `reranking/service.py:109` to use settings
+- [ ] All services use `getattr(self.settings, "key", default)` pattern
+- [ ] Remove direct `os.environ.get()` from service code
 
-### REQ-CFG-2: Single Environment Variable Convention
+### REQ-CFG-3: Single Configuration Paradigm (MEDIUM)
 **Priority**: MEDIUM
-**WHEN** environment variables are used
-**SHALL** follow `MORGAN_*` prefix convention
-**AND** no conflicting variable names
+**WHEN** configuration classes are defined
+**SHALL** use Pydantic BaseSettings consistently
+**AND** DELETE dataclass-based configs
+
+**Current State**:
+- `settings.py` - Pydantic BaseSettings
+- `distributed_config.py` - Python dataclasses (DIFFERENT!)
 
 **Acceptance Criteria**:
-- [ ] All env vars use `MORGAN_` prefix consistently
-- [ ] Remove `LLM_BASE_URL` in favor of `MORGAN_LLM_ENDPOINT`
-- [ ] Remove `QDRANT_URL` in favor of `MORGAN_VECTOR_DB_URL`
-- [ ] Migration guide for old variable names
+- [ ] Convert `distributed_config.py` to Pydantic if needed, or
+- [ ] Document why dataclasses are used for YAML configs
 
-### REQ-CFG-3: Merge Duplicate Example Files
+---
+
+## 5. API Consistency Requirements
+
+### REQ-API-1: Consistent Async/Sync Naming (HIGH)
+**Priority**: HIGH
+**WHEN** async/sync method pairs are defined
+**SHALL** use consistent naming convention
+**AND** all services follow same pattern
+
+**Current State**:
+- LLM: `generate()` → `agenerate()` BUT `stream_generate()` → `astream()` (MISMATCH)
+- Embedding: `encode()` → `aencode()` CONSISTENT
+- Reranking: `rerank()` (async) → `rerank_sync()` REVERSED (async-first)
+
+**Acceptance Criteria**:
+- [ ] Fix LLM: `stream_generate()` → `astream_generate()` or `stream()` → `astream()`
+- [ ] Fix Reranking: Make sync-first like other services
+- [ ] All services: `method()` (sync) + `amethod()` (async)
+
+### REQ-API-2: Fix Deprecated Event Loop Patterns (MEDIUM)
+**Priority**: MEDIUM
+**WHEN** async code runs in sync context
+**SHALL** use `asyncio.run()` or proper patterns
+**AND** NOT use deprecated `asyncio.new_event_loop()`
+
+**Current State**:
+- `llm/service.py:288-298` - Creates new loop each call
+- `reranking/service.py:245-249` - Creates new loop each call
+
+**Acceptance Criteria**:
+- [ ] Replace `asyncio.new_event_loop()` with `asyncio.run()`
+- [ ] Or use `asyncio.get_running_loop()` where appropriate
+
+---
+
+## 6. Missing Implementation Requirements
+
+### REQ-IMPL-1: Implement CulturalEmotionalAwareness (CRITICAL)
+**Priority**: CRITICAL
+**WHEN** cultural awareness module is used
+**SHALL** have actual implementation
+**AND** NOT just docstring
+
+**Current State**:
+- `communication/cultural.py:1-7` - EMPTY (only docstring)
+- `communication/__init__.py` imports `CulturalEmotionalAwareness` - WILL FAIL
+
+**Acceptance Criteria**:
+- [ ] EITHER: Implement `CulturalEmotionalAwareness` class
+- [ ] OR: Remove from `__init__.py` exports
+
+### REQ-IMPL-2: Fix Stub Methods in Learning (MEDIUM)
+**Priority**: MEDIUM
+**WHEN** learning pattern methods are called
+**SHALL** return meaningful results
+**AND** NOT always return empty/hardcoded values
+
+**Current State (7 stub methods)**:
+- `learning/patterns.py:552-557` - `_identify_learning_areas()` returns `[]`
+- `learning/patterns.py:559-564` - `_identify_avoided_topics()` returns `[]`
+- `learning/patterns.py:566-571` - `_analyze_topic_transitions()` returns `{}`
+- `learning/patterns.py:622-625` - `_determine_interaction_style()` returns `"conversational"`
+- `learning/patterns.py:639-644` - `_analyze_help_seeking_behavior()` returns `"direct"`
+- `learning/patterns.py:651-654` - `_determine_learning_style()` returns `"textual"`
+- `learning/patterns.py:661-664` - `_estimate_attention_span()` returns `"medium"`
+
+**Acceptance Criteria**:
+- [ ] EITHER: Implement these methods properly
+- [ ] OR: Add `# TODO: Implement` comments and create tracking issue
+- [ ] OR: Remove if not needed
+
+### REQ-IMPL-3: Connect Companion to Storage (MEDIUM)
+**Priority**: MEDIUM
+**WHEN** companion profiles are created
+**SHALL** persist to Qdrant via `CompanionStorage`
+**AND** NOT only store in memory
+
+**Current State**:
+- `relationship_manager.py` stores in `self.profiles: Dict` (memory only)
+- `companion/storage.py` EXISTS with Qdrant methods but NOT USED
+
+**Acceptance Criteria**:
+- [ ] Add `self.storage = CompanionStorage()` to `__init__`
+- [ ] Call `storage.store_*` methods after profile updates
+- [ ] Load profiles from storage on startup
+
+---
+
+## 7. Dead Code Removal Requirements
+
+### REQ-DEAD-1: Remove Unused Imports (LOW)
 **Priority**: LOW
-**WHEN** example configuration files exist
-**SHALL** have single canonical example per type
-**AND** no duplicate example files
+**WHEN** code is imported
+**SHALL** be used
+**AND** unused imports deleted
+
+**Current State**:
+- `embeddings/service.py:13` - `from pathlib import Path` UNUSED
+- `reranking/service.py:15` - `from pathlib import Path` UNUSED
 
 **Acceptance Criteria**:
-- [ ] Merge `docker/.env.example` and `docker/env.example`
-- [ ] Single set of default values for all examples
-- [ ] Consistent model names across all examples
+- [ ] Delete unused `Path` imports
+- [ ] Run linter to find other unused imports
 
----
-
-## 5. Service Pattern Requirements
-
-### REQ-SVC-1: Unified Singleton Factory
-**Priority**: HIGH
-**WHEN** singleton services are created
-**SHALL** use shared factory pattern
-**AND** thread-safe with consistent cleanup
-
-**Acceptance Criteria**:
-- [ ] All 8+ services use `SingletonFactory` or `@singleton`
-- [ ] Consistent cleanup in `shutdown()` methods
-- [ ] Thread-safe double-checked locking
-
-### REQ-SVC-2: Complete Service Interface
-**Priority**: MEDIUM
-**WHEN** services are defined
-**SHALL** implement complete interface including health_check and shutdown
-**AND** consistent async/sync method pairs
-
-**Acceptance Criteria**:
-- [ ] Add `health_check()` to EmbeddingService
-- [ ] Add `health_check()` to RerankingService
-- [ ] Add `shutdown()` to all services
-- [ ] Both sync and async variants for all methods
-
-### REQ-SVC-3: Health Monitoring Consolidation
-**Priority**: MEDIUM
-**WHEN** health monitoring is needed
-**SHALL** use shared `HealthMonitorMixin`
-**AND** consistent monitoring patterns
-
-**Acceptance Criteria**:
-- [ ] Create `shared/utils/health_monitor.py`
-- [ ] Consolidate from `distributed_llm.py:173-195`
-- [ ] Consolidate from `distributed_gpu_manager.py:400-422`
-- [ ] Consolidate from `distributed_manager.py:571-661`
-
----
-
-## 6. Client Requirements
-
-### REQ-CLI-1: Fix Client Bugs
-**Priority**: HIGH
-**WHEN** morgan-cli client methods are called
-**SHALL** work correctly without bugs
-**AND** all parameters properly used
-
-**Acceptance Criteria**:
-- [ ] Fix `cleanup_memory()` to pass `params` to `delete()` method
-- [ ] Add `params` support to `delete()` method signature
-- [ ] All client methods properly use their parameters
-
-### REQ-CLI-2: Extract Common Client Code
-**Priority**: MEDIUM
-**WHEN** HTTP and WebSocket clients are defined
-**SHALL** share common functionality via base class
-**AND** no duplicate method implementations
-
-**Acceptance Criteria**:
-- [ ] Create `BaseClient` with shared methods
-- [ ] `HTTPClient` and `WebSocketClient` inherit from base
-- [ ] Eliminate 5 duplicate methods (~40 lines)
-
-### REQ-SRV-1: Remove Global State Anti-Pattern
-**Priority**: MEDIUM
-**WHEN** morgan-server routes need dependencies
-**SHALL** use FastAPI `Depends()` injection
-**AND** no module-level global state
-
-**Acceptance Criteria**:
-- [ ] Replace global `_assistant` in `chat.py` with `Depends()`
-- [ ] Replace global `_health_system` in `health.py` with `Depends()`
-- [ ] Replace global `_session_manager` in `session.py` with `Depends()`
-
-### REQ-SRV-2: Fix Silent Error Suppression
-**Priority**: HIGH
-**WHEN** errors occur in profile handling
-**SHALL** log errors instead of silently suppressing
-**AND** no bare `pass` in except blocks
-
-**Acceptance Criteria**:
-- [ ] Fix `profile.py:131` - log error instead of `pass`
-- [ ] Fix `profile.py:139` - log error instead of `pass`
-- [ ] Replace all silent `except: pass` patterns
-
----
-
-## 7. Dead Code Requirements
-
-### REQ-DEAD-1: Remove Deprecated Files
+### REQ-DEAD-2: Remove Deprecated Files (LOW)
 **Priority**: LOW
 **WHEN** codebase is cleaned
-**SHALL** remove deprecated files and stubs
-**AND** no orphaned code remains
+**SHALL** remove deprecated files
+**AND** document or delete archive
+
+**Current State**:
+- `cli.py` (root) - DEPRECATED notice but still exists
+- `archive/` - 18 Python files
+- `morgan-server/tests_archive/` - 15 test files
 
 **Acceptance Criteria**:
-- [ ] Delete `cli.py` (deprecated stub)
-- [ ] Delete `infrastructure/consul_client.py` (unused)
-- [ ] Archive or delete incomplete stub methods in learning module
+- [ ] Delete `cli.py` from root
+- [ ] Review `archive/` - delete or document
+- [ ] Review `tests_archive/` - delete or document
 
-### REQ-DEAD-2: Remove Unused Imports
+### REQ-DEAD-3: Remove Unused Methods (LOW)
 **Priority**: LOW
-**WHEN** modules are imported
-**SHALL** only import what is used
-**AND** no unused imports
+**WHEN** methods are defined
+**SHALL** be called somewhere
+**AND** unused methods deleted
+
+**Current State**:
+- `companion/relationship_manager.py:361-427` - `suggest_conversation_topics()` UNUSED
+- `companion/storage.py:329-367` - `search_similar_emotional_states()` UNUSED
+- `utils/validators.py:109-130` - `validate_file_path()` UNUSED
+- `empathy/validator.py` - Exported but never imported
 
 **Acceptance Criteria**:
-- [ ] Remove unused imports across codebase
-- [ ] Run linter to identify unused imports
-- [ ] Clean up conditional imports that are never used
+- [ ] Delete or integrate unused methods
+- [ ] Remove orphaned modules from exports
 
 ---
 
-## 8. Intelligence Module Requirements
+## 8. Data Integrity Requirements
 
-### REQ-INT-1: Emotion Detection Consolidation
-**Priority**: MEDIUM
-**WHEN** emotion detection is needed
-**SHALL** use single implementation in `detector.py`
-**AND** `intelligence_engine.py` delegates to detector
+### REQ-DATA-1: Collection Name Consistency
+**Priority**: HIGH
+**WHEN** memory is stored and searched
+**SHALL** use same collection name
+**AND** fix mismatched collection names
 
-**Acceptance Criteria**:
-- [ ] `detector.py` is single source of emotion detection
-- [ ] `intelligence_engine.py` imports from detector
-- [ ] Remove duplicate patterns from `intelligence_engine.py:119-176`
-
-### REQ-INT-2: Complete Stub Implementations
-**Priority**: LOW
-**WHEN** learning/communication methods are called
-**SHALL** provide meaningful implementations
-**AND** no methods returning empty collections as stubs
+**Current State**:
+- `memory_processor.py:124` uses `morgan_memories`
+- `multi_stage_search.py:176` may use `morgan_turns` (MISMATCH)
 
 **Acceptance Criteria**:
-- [ ] Implement or document `_adapt_vocabulary_level()` in `adaptation.py`
-- [ ] Implement or document stub methods in `patterns.py:552-571`
-- [ ] Implement or document `_create_adapted_style()` in `style.py`
+- [ ] Verify and fix collection name consistency
+- [ ] Add integration test for store-then-search
 
 ---
 
 ## Summary
 
-| Category | Critical | High | Medium | Low |
-|----------|----------|------|--------|-----|
-| Data Integrity | 2 | 0 | 0 | 0 |
-| Exceptions | 0 | 2 | 1 | 0 |
-| Deduplication | 0 | 2 | 3 | 0 |
-| Configuration | 0 | 1 | 1 | 1 |
-| Services | 0 | 1 | 2 | 0 |
-| Clients | 0 | 2 | 2 | 0 |
-| Dead Code | 0 | 0 | 0 | 2 |
-| Intelligence | 0 | 0 | 1 | 1 |
-| **Total** | **2** | **8** | **10** | **4** |
+| Category | Critical | High | Medium | Low | Total |
+|----------|----------|------|--------|-----|-------|
+| Exceptions | 1 | 1 | 0 | 0 | 2 |
+| Singletons | 1 | 1 | 0 | 0 | 2 |
+| Deduplication | 0 | 2 | 2 | 0 | 4 |
+| Configuration | 1 | 1 | 1 | 0 | 3 |
+| API Consistency | 0 | 1 | 1 | 0 | 2 |
+| Missing Implementation | 1 | 0 | 2 | 0 | 3 |
+| Dead Code | 0 | 0 | 0 | 3 | 3 |
+| Data Integrity | 0 | 1 | 0 | 0 | 1 |
+| **Total** | **4** | **7** | **6** | **3** | **20** |
 
-**Total Requirements**: 24
-**Estimated Impact**: ~2,500 lines of duplicate code removed
+**Estimated Impact**: ~1,500+ lines of duplicate code removed
 
 ---
 
 ## Traceability Matrix
 
-| Requirement | Design Component | Files Affected | Priority |
-|-------------|------------------|----------------|----------|
-| REQ-DATA-1 | Collection Names | memory_processor.py, multi_stage_search.py | CRITICAL |
-| REQ-DATA-2 | Test Imports | test_client_properties.py | CRITICAL |
-| REQ-EXC-1 | Exception Hierarchy | exceptions.py, error_handling.py, validators.py | HIGH |
-| REQ-EXC-2 | Dead Exceptions | exceptions.py | HIGH |
-| REQ-DUP-1 | Model Cache | embeddings/service.py, reranking/service.py | HIGH |
-| REQ-DUP-2 | HostRole Enum | distributed_gpu_manager.py, distributed_manager.py | HIGH |
-| REQ-CFG-1 | Config Base | shared/config/, settings.py, config.py | HIGH |
-| REQ-SVC-1 | Singleton Factory | All services | HIGH |
-| REQ-CLI-1 | Client Bugs | client.py | HIGH |
-| REQ-SRV-2 | Error Suppression | profile.py | HIGH |
+| Requirement | Files Affected | Priority |
+|-------------|----------------|----------|
+| REQ-EXC-1 | exceptions.py, error_handling.py, validators.py | CRITICAL |
+| REQ-EXC-2 | reranking/service.py, profile.py | HIGH |
+| REQ-SING-1 | utils/singleton.py, error_handling.py, distributed_config.py | CRITICAL |
+| REQ-SING-2 | embeddings/service.py, reranking/service.py | HIGH |
+| REQ-DUP-1 | multi_stage_search.py, companion_memory_search.py, memory_processor.py | HIGH |
+| REQ-DUP-2 | detector.py, intelligence_engine.py | HIGH |
+| REQ-CFG-1 | defaults.py, settings.py, distributed_config.py | CRITICAL |
+| REQ-CFG-2 | reranking/service.py | HIGH |
+| REQ-API-1 | llm/service.py, reranking/service.py | HIGH |
+| REQ-IMPL-1 | communication/cultural.py | CRITICAL |
+
+---
+
+*Last Updated: 2025-12-27*
