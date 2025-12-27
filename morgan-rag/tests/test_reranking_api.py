@@ -22,7 +22,12 @@ def test_rerank_fallback(client):
         "query": "docker deploy",
         "results": [
             {"content": "A short snippet", "score": 0.2, "metadata": {}, "source": "a"},
-            {"content": "A much longer snippet about docker and deployment practices", "score": 0.1, "metadata": {}, "source": "b"},
+            {
+                "content": "A much longer snippet about docker and deployment practices",
+                "score": 0.1,
+                "metadata": {},
+                "source": "b",
+            },
         ],
         "top_k": 1,
     }

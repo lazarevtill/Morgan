@@ -16,23 +16,50 @@ services:
       # LLM configuration (remote Ollama - not in compose)
       - MORGAN_LLM_PROVIDER=ollama
       - MORGAN_LLM_ENDPOINT=${MORGAN_LLM_ENDPOINT:-http://host.docker.internal:11434}
-      - MORGAN_LLM_MODEL=${MORGAN_LLM_MODEL:-gemma3}
+      - MORGAN_LLM_MODEL=${MORGAN_LLM_MODEL:-qwen2.5:32b-instruct-q4_K_M}
       - MORGAN_LLM_API_KEY=${MORGAN_LLM_API_KEY:-}
+      - MORGAN_LLM_FAST_MODEL=${MORGAN_LLM_FAST_MODEL:-qwen2.5:7b-instruct-q5_K_M}
+      
+      # Distributed LLM endpoints (comma-separated)
+      - MORGAN_LLM_ENDPOINTS=${MORGAN_LLM_ENDPOINTS:-}
+      - MORGAN_LLM_STRATEGY=${MORGAN_LLM_STRATEGY:-round_robin}
       
       # Vector database configuration
       - MORGAN_VECTOR_DB_URL=http://qdrant:6333
       - MORGAN_VECTOR_DB_API_KEY=${MORGAN_VECTOR_DB_API_KEY:-}
       
-      # Embedding configuration
-      - MORGAN_EMBEDDING_PROVIDER=${MORGAN_EMBEDDING_PROVIDER:-local}
-      - MORGAN_EMBEDDING_MODEL=${MORGAN_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      # Embedding configuration (Qwen3-Embedding via Ollama)
+      - MORGAN_EMBEDDING_PROVIDER=${MORGAN_EMBEDDING_PROVIDER:-ollama}
+      - MORGAN_EMBEDDING_MODEL=${MORGAN_EMBEDDING_MODEL:-qwen3-embedding:4b}
       - MORGAN_EMBEDDING_DEVICE=${MORGAN_EMBEDDING_DEVICE:-cpu}
       - MORGAN_EMBEDDING_ENDPOINT=${MORGAN_EMBEDDING_ENDPOINT:-}
-      - MORGAN_EMBEDDING_API_KEY=${MORGAN_EMBEDDING_API_KEY:-}
+      - MORGAN_EMBEDDING_DIMENSIONS=${MORGAN_EMBEDDING_DIMENSIONS:-2048}
+      
+      # Hugging Face token for model downloads
+      # Required for gated models (some Jina models, etc.)
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+      
+      # Reranking configuration
+      - MORGAN_RERANKING_ENDPOINT=${MORGAN_RERANKING_ENDPOINT:-}
+      - MORGAN_RERANKING_MODEL=${MORGAN_RERANKING_MODEL:-cross-encoder/ms-marco-MiniLM-L-6-v2}
+      
+      # Redis configuration
+      - MORGAN_REDIS_URL=redis://redis:6379/0
+      - MORGAN_REDIS_PASSWORD=${MORGAN_REDIS_PASSWORD:-}
+      - MORGAN_REDIS_PREFIX="morgan:"
       
       # Cache configuration
       - MORGAN_CACHE_DIR=/app/data/cache
       - MORGAN_CACHE_SIZE_MB=${MORGAN_CACHE_SIZE_MB:-1000}
+      - MORGAN_CACHE_BACKEND=${MORGAN_CACHE_BACKEND:-redis}
+      
+      # Model cache directory
+      - MORGAN_MODEL_CACHE=/app/data/models
+      
+      # Session configuration
+      - MORGAN_SESSION_BACKEND=redis
+      - MORGAN_SESSION_TTL=${MORGAN_SESSION_TTL:-3600}
       
       # Logging configuration
       - MORGAN_LOG_LEVEL=${MORGAN_LOG_LEVEL:-INFO}
@@ -42,12 +69,27 @@ services:
       - MORGAN_MAX_CONCURRENT=${MORGAN_MAX_CONCURRENT:-100}
       - MORGAN_REQUEST_TIMEOUT=${MORGAN_REQUEST_TIMEOUT:-60}
       - MORGAN_SESSION_TIMEOUT=${MORGAN_SESSION_TIMEOUT:-60}
+      
+      # Reasoning configuration
+      - MORGAN_REASONING_ENABLED=${MORGAN_REASONING_ENABLED:-true}
+      - MORGAN_REASONING_MAX_STEPS=${MORGAN_REASONING_MAX_STEPS:-10}
+      
+      # Proactive features
+      - MORGAN_PROACTIVE_ENABLED=${MORGAN_PROACTIVE_ENABLED:-true}
+      - MORGAN_PROACTIVE_SUGGESTIONS_MAX=${MORGAN_PROACTIVE_SUGGESTIONS_MAX:-5}
+      
+      # Distributed configuration file path
+      - MORGAN_DISTRIBUTED_CONFIG=${MORGAN_DISTRIBUTED_CONFIG:-/app/config/distributed.yaml}
     depends_on:
       qdrant:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - morgan-cache:/app/data/cache
       - morgan-data:/app/data
+      - morgan-models:/app/models  # Persistent model cache
+      - ./config:/app/config:ro
     networks:
       - morgan-network
     restart: unless-stopped
@@ -58,6 +100,32 @@ services:
       retries: 3
       start_period: 40s
 
+  # Redis - Session and cache storage
+  redis:
+    image: redis:7-alpine
+    container_name: morgan-redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --save 300 100
+      --loglevel warning
+    volumes:
+      - redis-data:/data
+    networks:
+      - morgan-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   # Qdrant - Vector database for semantic search
   qdrant:
     image: qdrant/qdrant:latest
@@ -67,6 +135,8 @@ services:
       - "6334:6334"  # gRPC port
     environment:
       - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__STORAGE__STORAGE_PATH=/qdrant/storage
+      - QDRANT__CLUSTER__ENABLED=false
     volumes:
       - qdrant-storage:/qdrant/storage
       - qdrant-snapshots:/qdrant/snapshots
@@ -74,7 +144,7 @@ services:
       - morgan-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -106,6 +176,26 @@ services:
       timeout: 10s
       retries: 3
 
+  # Grafana - Metrics visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: morgan-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-CHANGE_ME_IN_PRODUCTION}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - morgan-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    depends_on:
+      - prometheus
+
 # Named volumes for data persistence
 volumes:
   morgan-cache:
@@ -114,6 +204,12 @@ volumes:
   morgan-data:
     driver: local
     name: morgan-data
+  morgan-models:
+    driver: local
+    name: morgan-models  # Model weights cache - persists across restarts
+  redis-data:
+    driver: local
+    name: morgan-redis-data
   qdrant-storage:
     driver: local
     name: morgan-qdrant-storage
@@ -123,9 +219,15 @@ volumes:
   prometheus-data:
     driver: local
     name: morgan-prometheus-data
+  grafana-data:
+    driver: local
+    name: morgan-grafana-data
 
 # Network for service communication
 networks:
   morgan-network:
     driver: bridge
     name: morgan-network
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

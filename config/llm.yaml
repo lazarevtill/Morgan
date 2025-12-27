@@ -1,0 +1,50 @@
+# Morgan LLM Configuration
+# Self-hosted LLM settings for main and fast models
+#
+# This file configures the LLM service layer.
+# Environment variables can override these values with MORGAN_LLM_ prefix.
+
+# Main LLM (for complex reasoning, 5-10s response time acceptable)
+main:
+  # Primary endpoint (Ollama or OpenAI-compatible)
+  endpoint: "http://localhost:11434/v1"
+  # Model name (quantized for GPU efficiency)
+  model: "qwen2.5:32b-instruct-q4_K_M"
+  # API key (use "ollama" for Ollama, or your API key)
+  api_key: "ollama"
+
+# Fast LLM (for simple queries, 1-2s response time)
+fast:
+  # Can use same or different endpoint
+  endpoint: "http://localhost:11434/v1"
+  # Smaller model for quick responses
+  model: "qwen2.5:7b-instruct-q5_K_M"
+  api_key: "ollama"
+
+# Generation parameters
+generation:
+  # Maximum tokens to generate
+  max_tokens: 2048
+  # Sampling temperature (0.0 = deterministic, 1.0 = creative)
+  temperature: 0.7
+  # Request timeout in seconds
+  timeout: 60.0
+
+# Distributed mode settings (for multi-GPU setups)
+distributed:
+  # Enable distributed mode across multiple hosts
+  enabled: false
+  # Load balancing strategy: round_robin, least_busy, random
+  strategy: "round_robin"
+  # List of endpoints for distributed mode
+  endpoints:
+    - "http://192.168.1.20:11434/v1"  # Host 3 (RTX 3090 #1)
+    - "http://192.168.1.21:11434/v1"  # Host 4 (RTX 3090 #2)
+  # Auto-discover endpoints from distributed config
+  auto_discover: true
+  # Health check interval in seconds
+  health_check_interval: 30
+  # Maximum retries before failover
+  max_retries: 3
+  # Enable automatic failover to healthy endpoints
+  enable_failover: true

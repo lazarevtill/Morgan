@@ -38,14 +38,16 @@ console = Console()
 
 def test_llm_connection():
     """Test LLM connection to ai.ishosting.com"""
-    console.print("\n[bold blue]1. Testing LLM Connection (ai.ishosting.com)[/bold blue]")
+    console.print(
+        "\n[bold blue]1. Testing LLM Connection (ai.ishosting.com)[/bold blue]"
+    )
 
     try:
         # Test model list
         response = requests.get(
             "https://ai.ishosting.com/api/models",
             headers={"Authorization": "Bearer sk-7903d76996ad42f7ade45455d92745c2"},
-            timeout=10
+            timeout=10,
         )
         response.raise_for_status()
         data = response.json()
@@ -69,15 +71,15 @@ def test_llm_connection():
             "https://ai.ishosting.com/api/chat/completions",
             headers={
                 "Authorization": "Bearer sk-7903d76996ad42f7ade45455d92745c2",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             },
             json={
                 "model": "gemma3:latest",
                 "messages": [{"role": "user", "content": "Say 'test' only"}],
                 "max_tokens": 10,
-                "temperature": 0.1
+                "temperature": 0.1,
             },
-            timeout=30
+            timeout=30,
         )
         chat_response.raise_for_status()
         chat_data = chat_response.json()
@@ -94,20 +96,19 @@ def test_llm_connection():
 
 def test_embeddings():
     """Test embedding service"""
-    console.print("\n[bold blue]2. Testing Embedding Service (qwen3:latest)[/bold blue]")
+    console.print(
+        "\n[bold blue]2. Testing Embedding Service (qwen3:latest)[/bold blue]"
+    )
 
     try:
         response = requests.post(
             "https://ai.ishosting.com/api/embeddings",
             headers={
                 "Authorization": "Bearer sk-7903d76996ad42f7ade45455d92745c2",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             },
-            json={
-                "model": "qwen3:latest",
-                "input": "This is a test embedding"
-            },
-            timeout=30
+            json={"model": "qwen3:latest", "input": "This is a test embedding"},
+            timeout=30,
         )
         response.raise_for_status()
         data = response.json()
@@ -206,7 +207,7 @@ def test_morgan_imports():
 
     modules_to_test = [
         ("morgan.config", "Settings"),
-        ("morgan.services.embedding_service", "EmbeddingService"),
+        ("morgan.embeddings.service", "EmbeddingService"),
         ("morgan.jina.reranking.service", "JinaRerankingService"),
         ("morgan.core.memory", "ConversationMemory"),
     ]
@@ -243,20 +244,26 @@ def show_summary(results):
     # Overall status
     all_passed = all(results.values())
     if all_passed:
-        console.print("\n[bold green]✅ All tests passed! Morgan is ready to use.[/bold green]")
+        console.print(
+            "\n[bold green]✅ All tests passed! Morgan is ready to use.[/bold green]"
+        )
     else:
         failed = [k for k, v in results.items() if not v]
-        console.print(f"\n[bold red]❌ Some tests failed: {', '.join(failed)}[/bold red]")
+        console.print(
+            f"\n[bold red]❌ Some tests failed: {', '.join(failed)}[/bold red]"
+        )
         console.print("[yellow]ℹ️  Morgan may have limited functionality[/yellow]")
 
 
 def main():
     """Main test runner"""
-    console.print(Panel.fit(
-        "[bold cyan]Morgan Setup & Test Script[/bold cyan]\n"
-        "Testing all components...",
-        border_style="blue"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold cyan]Morgan Setup & Test Script[/bold cyan]\n"
+            "Testing all components...",
+            border_style="blue",
+        )
+    )
 
     results = {}
 

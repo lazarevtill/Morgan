@@ -1,0 +1,64 @@
+# Morgan Qdrant Configuration
+# Vector database settings for semantic search and memory
+#
+# This file configures the Qdrant vector database connection.
+# Environment variables can override these values with MORGAN_QDRANT_ prefix.
+
+# Connection settings
+connection:
+  # Qdrant server host
+  host: "localhost"
+  # HTTP port
+  port: 6333
+  # gRPC port (for high-performance operations)
+  grpc_port: 6334
+  # Full URL (alternative to host/port)
+  # url: "http://localhost:6333"
+  # API key (optional, for secured deployments)
+  api_key: ""
+  # Request timeout in seconds
+  timeout: 30.0
+
+# Collection settings
+collections:
+  # Main knowledge collection
+  knowledge:
+    name: "morgan_knowledge"
+    # Vector dimensions (must match embedding model)
+    dimensions: 2048
+    # Distance metric: Cosine, Euclid, Dot
+    distance: "Cosine"
+  # Conversation memory collection
+  memory:
+    name: "morgan_memory"
+    dimensions: 2048
+    distance: "Cosine"
+  # Companion relationship data collection
+  companion:
+    name: "morgan_companion"
+    dimensions: 2048
+    distance: "Cosine"
+
+# Search settings
+search:
+  # Maximum results to return
+  max_results: 50
+  # Default results count
+  default_results: 10
+  # Minimum similarity threshold (0.0 - 1.0)
+  similarity_threshold: 0.7
+  # Enable HNSW indexing for fast search
+  enable_hnsw: true
+  # HNSW M parameter (connections per element)
+  hnsw_m: 16
+  # HNSW ef_construct (construction-time parameter)
+  hnsw_ef_construct: 100
+
+# Performance settings
+performance:
+  # Connection pool size
+  pool_size: 10
+  # Enable compression for storage
+  compression: true
+  # Shard number (for large collections)
+  shard_number: 1

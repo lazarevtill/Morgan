@@ -1,0 +1,180 @@
+# Prometheus configuration for distributed Morgan setup
+# Scrapes metrics from all hosts in the 6-host architecture
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'morgan-distributed'
+    env: 'production'
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets: []
+
+# Rule files
+rule_files: []
+
+# Scrape configurations
+scrape_configs:
+# Self-monitoring
+- job_name: 'prometheus'
+  static_configs:
+  - targets: [ 'localhost:9090' ]
+    labels:
+      host: 'host2'
+      role: 'monitoring'
+
+# Morgan Core (Host 1)
+- job_name: 'morgan-core'
+  static_configs:
+  - targets: [ '192.168.1.10:8080' ]
+    labels:
+      host: 'host1'
+      role: 'core'
+      service: 'morgan-server'
+  metrics_path: '/metrics'
+  scrape_interval: 10s
+
+# Qdrant (Host 1)
+- job_name: 'qdrant'
+  static_configs:
+  - targets: [ '192.168.1.10:6333' ]
+    labels:
+      host: 'host1'
+      role: 'core'
+      service: 'qdrant'
+  metrics_path: '/metrics'
+  scrape_interval: 30s
+
+# Redis (Host 1)
+- job_name: 'redis'
+  static_configs:
+  - targets: [ '192.168.1.10:9121' ] # Redis exporter port
+    labels:
+      host: 'host1'
+      role: 'core'
+      service: 'redis'
+  scrape_interval: 30s
+
+# Background Services (Host 2)
+- job_name: 'morgan-background'
+  static_configs:
+  - targets: [ '192.168.1.11:8080' ]
+    labels:
+      host: 'host2'
+      role: 'background'
+      service: 'morgan-background'
+  metrics_path: '/metrics'
+
+# Main LLM #1 (Host 3)
+- job_name: 'ollama-llm-1'
+  static_configs:
+  - targets: [ '192.168.1.20:11434' ]
+    labels:
+      host: 'host3'
+      role: 'llm-primary'
+      service: 'ollama'
+      gpu: 'rtx3090'
+  metrics_path: '/api/health'
+  scrape_interval: 30s
+
+# Main LLM #2 (Host 4)
+- job_name: 'ollama-llm-2'
+  static_configs:
+  - targets: [ '192.168.1.21:11434' ]
+    labels:
+      host: 'host4'
+      role: 'llm-secondary'
+      service: 'ollama'
+      gpu: 'rtx3090'
+  metrics_path: '/api/health'
+  scrape_interval: 30s
+
+# Embeddings (Host 5)
+- job_name: 'ollama-embeddings'
+  static_configs:
+  - targets: [ '192.168.1.22:11434' ]
+    labels:
+      host: 'host5'
+      role: 'embeddings'
+      service: 'ollama'
+      gpu: 'rtx4070'
+  metrics_path: '/api/health'
+  scrape_interval: 30s
+
+# Reranking (Host 6)
+- job_name: 'reranking-service'
+  static_configs:
+  - targets: [ '192.168.1.23:8080' ]
+    labels:
+      host: 'host6'
+      role: 'reranking'
+      service: 'reranking'
+      gpu: 'rtx2060'
+  metrics_path: '/health'
+  scrape_interval: 30s
+
+# Node exporters for system metrics (optional, if installed)
+- job_name: 'node-exporters'
+  static_configs:
+  - targets:
+    - '192.168.1.10:9100'
+    - '192.168.1.11:9100'
+    - '192.168.1.20:9100'
+    - '192.168.1.21:9100'
+    - '192.168.1.22:9100'
+    - '192.168.1.23:9100'
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    regex: '192\.168\.1\.10:.*'
+    target_label: host
+    replacement: 'host1'
+  - source_labels: [ __address__ ]
+    regex: '192\.168\.1\.11:.*'
+    target_label: host
+    replacement: 'host2'
+  - source_labels: [ __address__ ]
+    regex: '192\.168\.1\.20:.*'
+    target_label: host
+    replacement: 'host3'
+  - source_labels: [ __address__ ]
+    regex: '192\.168\.1\.21:.*'
+    target_label: host
+    replacement: 'host4'
+  - source_labels: [ __address__ ]
+    regex: '192\.168\.1\.22:.*'
+    target_label: host
+    replacement: 'host5'
+  - source_labels: [ __address__ ]
+    regex: '192\.168\.1\.23:.*'
+    target_label: host
+    replacement: 'host6'
+
+# NVIDIA GPU exporters (optional, if installed)
+- job_name: 'nvidia-gpu'
+  static_configs:
+  - targets:
+    - '192.168.1.20:9400'
+    - '192.168.1.21:9400'
+    - '192.168.1.22:9400'
+    - '192.168.1.23:9400'
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    regex: '192\.168\.1\.20:.*'
+    target_label: host
+    replacement: 'host3'
+  - source_labels: [ __address__ ]
+    regex: '192\.168\.1\.21:.*'
+    target_label: host
+    replacement: 'host4'
+  - source_labels: [ __address__ ]
+    regex: '192\.168\.1\.22:.*'
+    target_label: host
+    replacement: 'host5'
+  - source_labels: [ __address__ ]
+    regex: '192\.168\.1\.23:.*'
+    target_label: host
+    replacement: 'host6'

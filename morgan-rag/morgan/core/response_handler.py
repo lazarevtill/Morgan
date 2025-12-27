@@ -8,7 +8,7 @@ following KISS principles - one clear responsibility.
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from ..emotional.models import EmotionalState, RelationshipMilestone
+from morgan.intelligence.core.models import EmotionalState, RelationshipMilestone
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)

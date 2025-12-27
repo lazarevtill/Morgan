@@ -229,17 +229,17 @@ def main():
     # Get the script directory
     script_dir = Path(__file__).parent
     env_file = script_dir / ".env"
-    
+
     # Check if .env already exists
     if env_file.exists():
         response = input(f".env file already exists at {env_file}. Overwrite? (y/N): ")
-        if response.lower() != 'y':
+        if response.lower() != "y":
             print("Aborted. .env file not created.")
             return
-    
+
     # Write .env file
     try:
-        env_file.write_text(ENV_CONTENT, encoding='utf-8')
+        env_file.write_text(ENV_CONTENT, encoding="utf-8")
         print(f"✅ Created .env file at {env_file}")
         print("\n📝 Next steps:")
         print("1. Review the .env file and adjust settings if needed")
@@ -252,5 +252,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

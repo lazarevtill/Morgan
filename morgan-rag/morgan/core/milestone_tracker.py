@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional
 
-from ..emotional.models import (
+from morgan.intelligence.core.models import (
     CompanionProfile,
     ConversationContext,
     EmotionalState,
@@ -214,7 +214,7 @@ class MilestoneTracker:
         emotional_state: EmotionalState,
     ) -> RelationshipMilestone:
         """Create a new milestone."""
-        from ..emotional.models import MilestoneType as ModelMilestoneType
+        from morgan.intelligence.core.models import MilestoneType as ModelMilestoneType
 
         # Map our enum to the model enum
         model_milestone_type = ModelMilestoneType(milestone_type.value)

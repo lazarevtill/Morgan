@@ -1,234 +1,123 @@
-# ⚠️ Deprecation Notice - Old Morgan System
+# Deprecation Notice - Archived Code
 
-**Date:** December 8, 2025  
-**Status:** DEPRECATED  
-**Action Required:** Please migrate to the new client-server architecture
+**Last Updated:** December 26, 2025
 
 ## Summary
 
-The old monolithic Morgan system has been deprecated and replaced with a new client-server architecture that provides better separation of concerns, enhanced features, and production-ready deployment options.
+Several components of the Morgan codebase have been archived as part of the codebase reorganization. This document explains what was archived and why.
 
-## What's Deprecated
+## Archived Components
 
-### Deprecated Components
+All deprecated code has been moved to the `/archive/` directory:
 
-The following components are deprecated and will be removed in a future release:
-
-1. **`morgan-rag/` directory** - Old monolithic system
-   - All code in `morgan-rag/morgan/`
-   - Old CLI in `morgan-rag/morgan/cli/`
-   - Old configuration system
-   - Old deployment scripts
-
-2. **`cli.py.old`** - Old standalone CLI (renamed from `cli.py`)
-   - Simple CLI that connected to old system
-   - Now replaced by `morgan-cli` package
-
-3. **`cli.py`** - Now shows deprecation warning
-   - Redirects users to new system
-   - Exits with error message
-
-4. **Old documentation** - Marked as deprecated
-   - `docs/CI_CD.md` (for old system)
-   - `docs/ERROR_HANDLING_GUIDE.md` (for old system)
-   - `docs/ERROR_HANDLING_QUICK_REFERENCE.md` (for old system)
-
-### What Replaces What
-
-| Deprecated Component | New Component | Location |
-|---------------------|---------------|----------|
-| `morgan-rag/` | `morgan-server/` | Server package |
-| `cli.py` | `morgan-cli/` | Client package |
-| `morgan/cli/click_cli.py` | `morgan-cli/morgan_cli/cli.py` | New CLI |
-| Direct imports | HTTP/WebSocket APIs | API calls |
-| Old config system | Environment-based config | Server config |
-| Old deployment | Docker Compose | `docker/` |
-
-## Why Deprecated?
-
-The old system had several limitations:
-
-### Technical Issues
-- ❌ Monolithic architecture with tight coupling
-- ❌ Mixed concerns between CLI and core logic
-- ❌ Difficult to test components independently
-- ❌ Complex configuration management
-- ❌ Limited API access for custom clients
-
-### Deployment Issues
-- ❌ Difficult to deploy and scale
-- ❌ No containerization support
-- ❌ No health checks or monitoring
-- ❌ No graceful shutdown handling
-- ❌ Limited production readiness
-
-### Feature Limitations
-- ❌ Basic emotional intelligence
-- ❌ Limited personalization
-- ❌ No relationship tracking
-- ❌ Basic RAG implementation
-- ❌ No structured logging
-
-## New System Benefits
-
-The new client-server architecture provides:
-
-### Architecture Benefits
-- ✅ Clean client-server separation
-- ✅ Independent component testing
-- ✅ Multiple client support (TUI, web, custom)
-- ✅ Well-defined API boundaries
-- ✅ Modular design
-
-### Deployment Benefits
-- ✅ Docker and Docker Compose support
-- ✅ Health checks and monitoring
-- ✅ Graceful shutdown handling
-- ✅ Prometheus metrics
-- ✅ Production-ready configuration
-
-### Feature Benefits
-- ✅ Enhanced empathic engine
-- ✅ Advanced knowledge engine
-- ✅ Comprehensive personalization
-- ✅ Relationship management
-- ✅ Structured logging
-- ✅ Better error handling
-
-## Migration Path
-
-### Quick Migration (5 minutes)
-
-```bash
-# 1. Start new system with Docker
-cd docker
-docker-compose up -d
-
-# 2. Install new CLI
-pip install -e ../morgan-cli
-
-# 3. Start chatting
-export MORGAN_SERVER_URL=http://localhost:8080
-morgan chat
+```
+archive/
+├── README.md                      # Archive documentation
+├── deprecated-root-modules/       # Old root-level modules
+│   ├── cli.py.old                 # Old CLI (replaced by morgan-cli)
+│   ├── core/                      # Orphaned emotional_handler
+│   └── services/                  # Standalone Docker services
+├── deprecated-modules/            # Old morgan-rag modules
+│   ├── embeddings/                # Old embeddings module
+│   └── infrastructure/            # Old local_embeddings.py, local_reranking.py
+└── abandoned-refactors/           # Incomplete refactoring attempts
+    └── morgan_v2/                 # Incomplete Clean Architecture attempt
 ```
 
-### Detailed Migration
+## What Replaced What
 
-See the comprehensive [Migration Guide](./MIGRATION.md) for:
-- Step-by-step instructions
-- Configuration mapping
-- Data migration
-- Feature mapping
-- Troubleshooting
+| Archived Component | Replacement | Location |
+|-------------------|-------------|----------|
+| `cli.py.old` | `morgan-cli/` | Terminal client package |
+| `embeddings/` module | `morgan/services/embeddings/` | Unified embedding service |
+| `local_embeddings.py` | `morgan/services/embeddings/` | Unified embedding service |
+| `local_reranking.py` | `morgan/services/reranking/` | Unified reranking service |
+| `llm_service.py` | `morgan/services/llm/` | Unified LLM service |
+| `distributed_llm_service.py` | `morgan/services/llm/` | Unified LLM service |
+| `distributed_embedding_service.py` | `morgan/services/embeddings/` | Unified embedding service |
+| `morgan_v2/` | N/A | Abandoned (incomplete) |
 
-## Timeline
+## Why Archived?
 
-### Current Status (December 8, 2025)
-- ✅ Old system marked as deprecated
-- ✅ Deprecation notices added to all old components
-- ✅ Migration guide created
-- ✅ New system fully functional
+### Service Consolidation
 
-### Future Milestones
+The codebase had multiple duplicate implementations of core services:
 
-**Phase 1: Deprecation Period (Current)**
-- Old system remains in repository
-- Marked with deprecation warnings
-- No new features, critical bug fixes only
-- Users encouraged to migrate
+- **LLM**: `llm_service.py` + `distributed_llm_service.py` (~400 duplicate lines)
+- **Embeddings**: `embeddings/service.py` + `distributed_embedding_service.py` + `local_embeddings.py` (~700 duplicate lines)
+- **Reranking**: `jina/reranking/service.py` + `local_reranking.py` (~600 duplicate lines)
 
-**Phase 2: Archive (Future Release)**
-- Old system moved to `archive/` directory
-- Still available for reference
-- No maintenance or bug fixes
+These have been consolidated into unified services in `morgan/services/`:
 
-**Phase 3: Removal (Future Release)**
-- Old system removed from main repository
-- Available in git history
-- Complete migration required
+- `morgan/services/llm/` - Single LLM service with single + distributed modes
+- `morgan/services/embeddings/` - Single embedding service with remote + local fallback
+- `morgan/services/reranking/` - Single reranking service with 4-level fallback
 
-## Support During Migration
+### Abandoned Refactors
 
-### Documentation
-- **[Migration Guide](./MIGRATION.md)** - Complete migration instructions
-- **[Server Documentation](./morgan-server/README.md)** - New server docs
-- **[Client Documentation](./morgan-cli/README.md)** - New client docs
-- **[Docker Documentation](./docker/README.md)** - Deployment guide
-- **[API Documentation](./morgan-server/docs/API.md)** - API reference
+The `morgan_v2/` directory contained an incomplete Clean Architecture refactoring attempt that was never completed. This has been archived rather than deleted to preserve the work for reference.
 
-### Getting Help
-- Check the [Migration Guide](./MIGRATION.md) first
-- Review [Documentation Index](./DOCUMENTATION.md)
-- Search existing GitHub issues
-- Open a new issue if needed
+### Old CLI
 
-### Temporary Old System Use
+The old `cli.py` has been replaced by the `morgan-cli` package which provides a better user experience with:
+- Rich terminal UI
+- HTTP/WebSocket client
+- Multiple commands (chat, learn, memory, knowledge, health)
 
-If you must use the old system temporarily (not recommended):
+## Using Archived Code
+
+If you need to reference archived code:
 
 ```bash
-# Use old CLI
-python cli.py.old
+# View archived files
+ls archive/
 
-# Or use old morgan-rag directly
-cd morgan-rag
-python -m morgan.cli.click_cli
+# Read archived code
+cat archive/deprecated-modules/embeddings/service.py
 ```
 
-**Warning:** The old system receives no new features and only critical bug fixes.
+**Note:** Archived code is not maintained and should not be used in production.
 
-## Frequently Asked Questions
+## Current Architecture
 
-### Q: Why was the old system deprecated?
-A: The old monolithic architecture had limitations in deployment, testing, and feature development. The new client-server architecture provides better separation of concerns, enhanced features, and production-ready deployment.
+The current active architecture is:
 
-### Q: How long will the old system be available?
-A: The old system will remain in the repository during a deprecation period, then be moved to an archive directory, and eventually removed. Exact timeline TBD.
+```
+morgan-rag/morgan/
+├── services/                    # Unified Services Layer
+│   ├── llm/                     # LLM service
+│   ├── embeddings/              # Embedding service
+│   ├── reranking/               # Reranking service
+│   └── external_knowledge/      # External knowledge sources
+├── intelligence/                # Emotional intelligence
+├── memory/                      # Memory system
+├── search/                      # Search pipeline
+├── infrastructure/              # Distributed infrastructure
+├── config/                      # Configuration
+├── utils/                       # Utilities
+└── exceptions.py                # Exception hierarchy
+```
 
-### Q: Can I still use the old system?
-A: Yes, but it's not recommended. The old system receives no new features and only critical bug fixes. Please migrate to the new system.
+## Documentation
 
-### Q: Will my data be lost during migration?
-A: No. The migration guide includes instructions for migrating vector database data and conversation history.
+For current documentation, see:
 
-### Q: Is the new system compatible with my existing setup?
-A: The new system uses the same external services (Ollama, Qdrant) but with a different architecture. Configuration needs to be updated. See the migration guide.
-
-### Q: What if I encounter issues during migration?
-A: Check the migration guide, review documentation, and open a GitHub issue if needed. The old system remains available during the migration period.
-
-### Q: Can I run both systems simultaneously?
-A: Yes, they use different ports and can run side-by-side. This allows gradual migration and testing.
-
-### Q: What about custom integrations with the old system?
-A: Custom integrations need to be updated to use the new HTTP/WebSocket APIs. The new system provides comprehensive API documentation.
-
-## Action Items
-
-### For Users
-1. ✅ Read this deprecation notice
-2. ✅ Review the [Migration Guide](./MIGRATION.md)
-3. ✅ Test the new system in a development environment
-4. ✅ Migrate production deployments
-5. ✅ Update any custom integrations
-
-### For Developers
-1. ✅ Stop using deprecated components
-2. ✅ Use new `morgan-server` and `morgan-cli` packages
-3. ✅ Update documentation references
-4. ✅ Update CI/CD pipelines
-5. ✅ Test with new APIs
-
-## Contact
-
-For questions or assistance:
-- **Documentation:** [Complete Documentation Index](./DOCUMENTATION.md)
-- **Migration Guide:** [MIGRATION.md](./MIGRATION.md)
-- **GitHub Issues:** Report problems or ask questions
-- **Discussions:** Share experiences and tips
+- [claude.md](./claude.md) - Complete project context
+- [README.md](./README.md) - Project overview
+- [DOCUMENTATION.md](./DOCUMENTATION.md) - Documentation index
+- [morgan-rag/docs/ARCHITECTURE.md](./morgan-rag/docs/ARCHITECTURE.md) - Architecture details
 
 ---
 
-**Thank you for using Morgan! We believe the new architecture will provide a much better experience.**
+## License
 
-**Please migrate to the new system:** `morgan-server/` and `morgan-cli/`
+```
+Copyright 2025 Morgan AI Assistant Contributors
+Licensed under the Apache License, Version 2.0
+```
+
+See [LICENSE](./LICENSE) for the full license text.
+
+---
+
+**Morgan** - Your private, emotionally intelligent AI companion.

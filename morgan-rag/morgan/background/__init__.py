@@ -1,24 +1,31 @@
 """
-Background Processing Module
+Background Processing Module for Morgan Core.
 
-Simple background processing system following KISS principles.
-Each component has single responsibility and minimal interface.
+Organized using Domain-Driven Design (DDD) principles:
+- application/: Service facades and orchestrators
+- infrastructure/: Implementation of scheduling, monitoring, and caching
+- domain/: (Planned) Core business rules for background tasks
+- tasks/: Concrete task implementations
 """
 
-from .executor import BackgroundTaskExecutor
-from .monitor import ResourceMonitor
-from .precomputed_cache import PrecomputedSearchCache
-from .scheduler import SimpleTaskScheduler
-from .service import BackgroundProcessingService
-from .tasks.reindexing import ReindexingTask
-from .tasks.reranking import RerankingTask
+from morgan.background.infrastructure.executor import BackgroundTaskExecutor
+from morgan.background.infrastructure.monitor import ResourceMonitor
+from morgan.background.infrastructure.precomputed_cache import PrecomputedSearchCache
+from morgan.background.infrastructure.scheduler import SimpleTaskScheduler
+from morgan.background.application.service import BackgroundProcessingService
+from morgan.background.tasks.reindexing import ReindexingTask
+from morgan.background.tasks.reranking import RerankingTask
+from morgan.background.domain.entities import TaskStatus, TaskType, TaskFrequency
 
 __all__ = [
-    "SimpleTaskScheduler",
-    "ResourceMonitor",
     "BackgroundTaskExecutor",
+    "ResourceMonitor",
     "PrecomputedSearchCache",
+    "SimpleTaskScheduler",
     "BackgroundProcessingService",
     "ReindexingTask",
     "RerankingTask",
+    "TaskStatus",
+    "TaskType",
+    "TaskFrequency",
 ]

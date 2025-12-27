@@ -1,27 +1,73 @@
 # Morgan Server Dockerfile
-# Production-ready image with only server dependencies
-FROM python:3.11-slim
+# Multi-stage build for production-ready image
+
+# =============================================================================
+# Stage 1: Build stage - Install dependencies and build packages
+# =============================================================================
+FROM python:3.11-slim AS builder
+
+# Set working directory
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install pip and upgrade
+RUN pip install --upgrade pip setuptools wheel
+
+# Copy morgan-rag package (dependency for morgan-server)
+COPY morgan-rag/pyproject.toml morgan-rag/README.md /build/morgan-rag/
+COPY morgan-rag/morgan /build/morgan-rag/morgan
+
+# Install morgan-rag in virtual environment with server extras
+WORKDIR /build/morgan-rag
+RUN pip install --no-cache-dir -e ".[server]"
+
+# Copy server package files
+COPY morgan-server/pyproject.toml morgan-server/README.md /build/morgan-server/
+COPY morgan-server/morgan_server /build/morgan-server/morgan_server
+
+# Install morgan-server and its dependencies
+WORKDIR /build/morgan-server
+RUN pip install --no-cache-dir -e .
+
+# =============================================================================
+# Stage 2: Production stage - Minimal runtime image
+# =============================================================================
+FROM python:3.11-slim AS production
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install only runtime dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Create non-root user for security
-RUN useradd -m -u 1000 morgan && \
-    mkdir -p /app/data/cache && \
+RUN useradd -m -u 1000 -s /bin/bash morgan && \
+    mkdir -p /app/data/cache /app/data/models /app/config && \
     chown -R morgan:morgan /app
 
-# Copy server package files
-COPY --chown=morgan:morgan morgan-server/pyproject.toml morgan-server/README.md ./
-COPY --chown=morgan:morgan morgan-server/morgan_server ./morgan_server
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Install dependencies (production only, no dev dependencies)
-RUN pip install --no-cache-dir -e .
+# Copy application packages (needed for editable installs)
+COPY --from=builder --chown=morgan:morgan /build/morgan-rag /app/morgan-rag
+COPY --from=builder --chown=morgan:morgan /build/morgan-server /app/morgan-server
+
+# Set Python path for package discovery
+ENV PYTHONPATH="/app/morgan-rag:/app/morgan-server:${PYTHONPATH}"
 
 # Switch to non-root user
 USER morgan
@@ -30,13 +76,14 @@ USER morgan
 EXPOSE 8080
 
 # Health check - verifies server is responding
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
 # Set environment variables
-ENV MORGAN_HOST=0.0.0.0
-ENV MORGAN_PORT=8080
-ENV PYTHONUNBUFFERED=1
+ENV MORGAN_HOST=0.0.0.0 \
+    MORGAN_PORT=8080 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
 # Configure graceful shutdown
 # Uvicorn handles SIGTERM gracefully by default
@@ -46,3 +93,31 @@ STOPSIGNAL SIGTERM
 # Run server
 # Uvicorn will handle SIGTERM and trigger the lifespan shutdown
 CMD ["python", "-m", "morgan_server"]
+
+# =============================================================================
+# Stage 3: Development stage - Includes dev tools
+# =============================================================================
+FROM production AS development
+
+USER root
+
+# Install development dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    vim \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install dev dependencies in virtual environment
+RUN pip install --no-cache-dir \
+    pytest \
+    pytest-asyncio \
+    pytest-cov \
+    httpx \
+    black \
+    ruff \
+    mypy
+
+USER morgan
+
+# Override command for development (with auto-reload)
+CMD ["python", "-m", "uvicorn", "morgan_server.app:create_app", "--host", "0.0.0.0", "--port", "8080", "--reload", "--factory"]

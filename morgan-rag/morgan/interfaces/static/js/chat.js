@@ -1,7 +1,7 @@
 // Morgan Chat Interface JavaScript
 
 let ws = null;
-let userId = 'user_' + Math.random().toString(36).substr(2, 9);
+let userId = 'user_' + generateSecureRandomId(9);
 let conversationId = null;
 let selectedRating = 0;
 

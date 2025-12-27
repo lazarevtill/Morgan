@@ -1,467 +1,480 @@
 """
-Distributed GPU Manager for Morgan 6-Host Setup
+Distributed GPU Manager for Multi-Host Morgan Setup
 
-Manages GPU resources across distributed hosts:
-- Host 3: RTX 3090 (12GB) - Main LLM #1
-- Host 4: RTX 3090 (12GB) - Main LLM #2
-- Host 5: RTX 4070 (8GB) - Embeddings + Fast LLM
-- Host 6: RTX 2060 (6GB) - Reranking
+Manages model allocation across distributed GPU hosts.
+Configuration is loaded from YAML config file (config/distributed.yaml).
 
-Provides centralized GPU monitoring and resource management.
+Unlike the single-host MultiGPUManager, this manages remote hosts
+running Ollama/inference servers on the local network.
 """
 
 import asyncio
+import sys
 import time
-from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Dict, Optional
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+try:
+    import httpx
+
+    HTTPX_AVAILABLE = True
+except ImportError:
+    HTTPX_AVAILABLE = False
+
+# Add shared package to path if not already there
+_shared_path = Path(__file__).parent.parent.parent.parent / "shared"
+if _shared_path.exists() and str(_shared_path) not in sys.path:
+    sys.path.insert(0, str(_shared_path.parent))
+
+from shared.models.enums import HostRole, HostStatus
 
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-class GPURole(str, Enum):
-    """GPU role assignment in distributed architecture."""
+@dataclass
+class HostConfig:
+    """Configuration for a distributed host."""
 
-    MAIN_LLM_1 = "main_llm_1"  # Host 3 - RTX 3090 #1
-    MAIN_LLM_2 = "main_llm_2"  # Host 4 - RTX 3090 #2
-    EMBEDDINGS = "embeddings"  # Host 5 - RTX 4070 (embeddings)
-    FAST_LLM = "fast_llm"  # Host 5 - RTX 4070 (fast LLM)
-    RERANKING = "reranking"  # Host 6 - RTX 2060
+    host_id: str
+    address: str  # IP or hostname
+    port: int
+    role: HostRole
+    gpu_model: Optional[str] = None
+    gpu_vram_gb: float = 0.0
+    models: List[str] = field(default_factory=list)
+    api_path: str = "/v1"  # OpenAI-compatible API path
 
 
 @dataclass
-class GPUStatus:
-    """GPU status information."""
+class HostHealth:
+    """Health status of a distributed host."""
 
-    hostname: str  # Host hostname/IP
-    gpu_id: int = 0  # GPU ID on host (usually 0 for 1 GPU per host)
-    gpu_model: str = "Unknown"  # GPU model (RTX 3090, etc.)
-    vram_total_mb: int = 0  # Total VRAM in MB
-    vram_used_mb: int = 0  # Used VRAM in MB
-    vram_free_mb: int = 0  # Free VRAM in MB
-    utilization_percent: int = 0  # GPU utilization %
-    temperature_c: int = 0  # Temperature in Celsius
-    power_draw_w: int = 0  # Power draw in Watts
-    role: Optional[GPURole] = None  # Assigned role
-    model_loaded: Optional[str] = None  # Currently loaded model
-    healthy: bool = True  # Health status
-    last_check: float = 0.0  # Last health check timestamp
-
-    @property
-    def vram_usage_percent(self) -> float:
-        """Calculate VRAM usage percentage."""
-        if self.vram_total_mb == 0:
-            return 0.0
-        return (self.vram_used_mb / self.vram_total_mb) * 100
-
-    @property
-    def vram_available_gb(self) -> float:
-        """Calculate available VRAM in GB."""
-        return self.vram_free_mb / 1024
+    host_id: str
+    status: HostStatus
+    latency_ms: float = 0.0
+    gpu_utilization: float = 0.0
+    gpu_memory_used_gb: float = 0.0
+    gpu_memory_total_gb: float = 0.0
+    models_loaded: List[str] = field(default_factory=list)
+    last_check: float = 0.0
+    error_message: Optional[str] = None
 
 
 @dataclass
-class HostGPUConfig:
-    """GPU configuration for a host."""
+class DistributedConfig:
+    """Complete distributed system configuration."""
 
-    hostname: str
-    role: GPURole
-    gpu_model: str
-    expected_vram_gb: int
-    expected_model: Optional[str] = None
+    hosts: Dict[str, HostConfig] = field(default_factory=dict)
+    health: Dict[str, HostHealth] = field(default_factory=dict)
+    default_timeout: float = 30.0
+    health_check_interval: int = 60
 
 
 class DistributedGPUManager:
     """
-    Manage GPU resources across distributed Morgan hosts.
+    Manage distributed GPU hosts for Morgan.
 
-    Provides:
-    - GPU status monitoring across all hosts
-    - Resource usage tracking
-    - Health checks
-    - Performance metrics
-    - Load recommendations
+    Configuration is loaded from YAML config file. Set the config path via:
+    - Constructor parameter: config_path
+    - Environment variable: MORGAN_DISTRIBUTED_CONFIG
+    - Default locations: config/distributed.yaml
 
     Example:
-        >>> manager = DistributedGPUManager()
-        >>> manager.register_host(
-        ...     hostname="192.168.1.20",
-        ...     role=GPURole.MAIN_LLM_1,
-        ...     gpu_model="RTX 3090",
-        ...     expected_vram_gb=24
+        >>> # Load from default config
+        >>> manager = DistributedGPUManager.from_config()
+        >>>
+        >>> # Or specify config path
+        >>> manager = DistributedGPUManager.from_config(
+        ...     config_path="config/distributed.local.yaml"
         ... )
         >>>
-        >>> # Get GPU status
-        >>> status = await manager.get_gpu_status("192.168.1.20")
+        >>> # Get healthy endpoints for a role
+        >>> endpoints = await manager.get_endpoints(HostRole.MAIN_LLM)
         >>>
-        >>> # Check all GPUs
-        >>> all_status = await manager.check_all_gpus()
-        >>>
-        >>> # Get recommendations
-        >>> recommendations = manager.get_load_recommendations()
+        >>> # Health check all hosts
+        >>> health = await manager.check_all_health()
     """
 
-    def __init__(self, distributed_manager=None):
+    def __init__(
+        self,
+        config: Optional[DistributedConfig] = None,
+    ):
         """
         Initialize distributed GPU manager.
 
         Args:
-            distributed_manager: DistributedHostManager instance (optional)
+            config: Pre-configured DistributedConfig
         """
-        self.distributed_manager = distributed_manager
-        self.hosts: Dict[str, HostGPUConfig] = {}
-        self.status_cache: Dict[str, GPUStatus] = {}
+        self.config = config or DistributedConfig()
+        self._health_check_task: Optional[asyncio.Task] = None
+        self._http_client: Optional[httpx.AsyncClient] = None
 
-        logger.info("DistributedGPUManager initialized")
+        logger.info(
+            "DistributedGPUManager initialized with %d hosts", len(self.config.hosts)
+        )
 
-    def register_host(
-        self,
-        hostname: str,
-        role: GPURole,
-        gpu_model: str,
-        expected_vram_gb: int,
-        expected_model: Optional[str] = None,
-    ):
+    @classmethod
+    def from_config(
+        cls,
+        config_path: Optional[str] = None,
+    ) -> "DistributedGPUManager":
         """
-        Register a GPU host.
+        Create manager from YAML configuration file.
 
         Args:
-            hostname: Hostname or IP
-            role: GPU role
-            gpu_model: GPU model name
-            expected_vram_gb: Expected VRAM in GB
-            expected_model: Expected model name (optional)
-        """
-        config = HostGPUConfig(
-            hostname=hostname,
-            role=role,
-            gpu_model=gpu_model,
-            expected_vram_gb=expected_vram_gb,
-            expected_model=expected_model,
-        )
-
-        self.hosts[hostname] = config
-        logger.info(f"Registered GPU host: {hostname} ({gpu_model}, {role.value})")
-
-    def load_default_config(self):
-        """
-        Load default 6-host GPU configuration.
-
-        Network: 192.168.1.x
-        - Host 3 (20): RTX 3090 - Main LLM #1
-        - Host 4 (21): RTX 3090 - Main LLM #2
-        - Host 5 (22): RTX 4070 - Embeddings + Fast LLM
-        - Host 6 (23): RTX 2060 - Reranking
-        """
-        # Host 3 - Main LLM #1 (RTX 3090)
-        self.register_host(
-            hostname="192.168.1.20",
-            role=GPURole.MAIN_LLM_1,
-            gpu_model="RTX 3090",
-            expected_vram_gb=24,
-            expected_model="qwen2.5:32b-instruct-q4_K_M",
-        )
-
-        # Host 4 - Main LLM #2 (RTX 3090)
-        self.register_host(
-            hostname="192.168.1.21",
-            role=GPURole.MAIN_LLM_2,
-            gpu_model="RTX 3090",
-            expected_vram_gb=24,
-            expected_model="qwen2.5:32b-instruct-q4_K_M",
-        )
-
-        # Host 5 - Embeddings (RTX 4070)
-        self.register_host(
-            hostname="192.168.1.22",
-            role=GPURole.EMBEDDINGS,
-            gpu_model="RTX 4070",
-            expected_vram_gb=8,
-            expected_model="nomic-embed-text",
-        )
-
-        # Host 6 - Reranking (RTX 2060)
-        self.register_host(
-            hostname="192.168.1.23",
-            role=GPURole.RERANKING,
-            gpu_model="RTX 2060",
-            expected_vram_gb=6,
-            expected_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
-        )
-
-        logger.info(f"Loaded default GPU config with {len(self.hosts)} hosts")
-
-    async def get_gpu_status(self, hostname: str) -> Optional[GPUStatus]:
-        """
-        Get GPU status for a specific host.
-
-        Args:
-            hostname: Target hostname
+            config_path: Path to config file (optional)
 
         Returns:
-            GPUStatus or None if unavailable
+            Configured DistributedGPUManager
         """
-        config = self.hosts.get(hostname)
-        if not config:
-            logger.error(f"Host {hostname} not registered")
-            return None
+        # Import here to avoid circular imports
+        from morgan.config.distributed_config import get_distributed_config
 
-        if not self.distributed_manager:
-            logger.warning("DistributedHostManager not configured, using mock data")
-            return self._get_mock_gpu_status(hostname)
+        # Load configuration
+        arch_config = get_distributed_config(config_path=config_path)
 
-        # Query GPU via SSH
-        command = (
-            "nvidia-smi --query-gpu=memory.total,memory.used,memory.free,"
-            "utilization.gpu,temperature.gpu,power.draw "
-            "--format=csv,noheader,nounits"
+        # Convert to internal config
+        distributed_config = DistributedConfig(
+            default_timeout=arch_config.settings.default_timeout,
+            health_check_interval=arch_config.settings.health_check_interval,
         )
 
-        try:
-            success, stdout, stderr = await self.distributed_manager._run_ssh_command(
-                hostname, command, timeout=10.0
-            )
-
-            if not success:
-                logger.error(f"Failed to query GPU on {hostname}: {stderr}")
-                return GPUStatus(
-                    hostname=hostname,
-                    role=config.role,
-                    gpu_model=config.gpu_model,
-                    healthy=False,
-                    last_check=time.time(),
-                )
-
-            # Parse output: vram_total, vram_used, vram_free, util, temp, power
-            parts = stdout.strip().split(",")
-            if len(parts) < 6:
-                logger.error(f"Invalid nvidia-smi output from {hostname}")
-                return None
-
-            status = GPUStatus(
-                hostname=hostname,
-                gpu_id=0,
-                gpu_model=config.gpu_model,
-                vram_total_mb=int(float(parts[0].strip())),
-                vram_used_mb=int(float(parts[1].strip())),
-                vram_free_mb=int(float(parts[2].strip())),
-                utilization_percent=int(float(parts[3].strip())),
-                temperature_c=int(float(parts[4].strip())),
-                power_draw_w=int(float(parts[5].strip())),
-                role=config.role,
-                model_loaded=config.expected_model,
-                healthy=True,
-                last_check=time.time(),
-            )
-
-            # Cache status
-            self.status_cache[hostname] = status
-
-            logger.debug(
-                f"GPU status for {hostname}: "
-                f"{status.utilization_percent}% util, "
-                f"{status.vram_usage_percent:.1f}% VRAM, "
-                f"{status.temperature_c}°C"
-            )
-
-            return status
-
-        except Exception as e:
-            logger.error(f"Error querying GPU on {hostname}: {e}")
-            return GPUStatus(
-                hostname=hostname,
-                role=config.role,
-                gpu_model=config.gpu_model,
-                healthy=False,
-                last_check=time.time(),
-            )
-
-    def _get_mock_gpu_status(self, hostname: str) -> GPUStatus:
-        """Get mock GPU status for testing."""
-        config = self.hosts.get(hostname)
-        if not config:
-            return None
-
-        # Return mock data
-        return GPUStatus(
-            hostname=hostname,
-            gpu_id=0,
-            gpu_model=config.gpu_model,
-            vram_total_mb=config.expected_vram_gb * 1024,
-            vram_used_mb=config.expected_vram_gb * 1024 // 2,  # 50% used
-            vram_free_mb=config.expected_vram_gb * 1024 // 2,
-            utilization_percent=50,
-            temperature_c=65,
-            power_draw_w=200,
-            role=config.role,
-            model_loaded=config.expected_model,
-            healthy=True,
-            last_check=time.time(),
-        )
-
-    async def check_all_gpus(self) -> Dict[str, GPUStatus]:
-        """
-        Check GPU status on all hosts.
-
-        Returns:
-            Dict mapping hostname to GPUStatus
-        """
-        logger.info(f"Checking GPU status on {len(self.hosts)} hosts...")
-
-        # Query all hosts in parallel
-        tasks = [self.get_gpu_status(hostname) for hostname in self.hosts.keys()]
-        results = await asyncio.gather(*tasks)
-
-        # Build result dict
-        status_dict = {}
-        for hostname, status in zip(self.hosts.keys(), results):
-            if status:
-                status_dict[hostname] = status
-
-        return status_dict
-
-    def get_load_recommendations(self) -> Dict[str, Any]:
-        """
-        Get load balancing recommendations based on current GPU status.
-
-        Returns:
-            Recommendations dict
-        """
-        recommendations = {"timestamp": time.time(), "hosts": []}
-
-        for hostname, config in self.hosts.items():
-            status = self.status_cache.get(hostname)
-
-            if not status:
-                recommendations["hosts"].append(
-                    {
-                        "hostname": hostname,
-                        "role": config.role.value,
-                        "recommendation": "Unable to assess - no status data",
-                        "priority": "unknown",
-                    }
+        # Add hosts from config
+        for host_def in arch_config.hosts:
+            try:
+                role = HostRole(host_def.role)
+            except ValueError:
+                logger.warning(
+                    "Unknown role '%s' for host '%s', skipping",
+                    host_def.role,
+                    host_def.host_id,
                 )
                 continue
 
-            # Analyze load
-            rec = {
-                "hostname": hostname,
-                "role": config.role.value,
-                "gpu_model": status.gpu_model,
-                "utilization": f"{status.utilization_percent}%",
-                "vram_usage": f"{status.vram_usage_percent:.1f}%",
-                "temperature": f"{status.temperature_c}°C",
-            }
+            host_config = HostConfig(
+                host_id=host_def.host_id,
+                address=host_def.address,
+                port=host_def.port,
+                role=role,
+                gpu_model=host_def.gpu_model,
+                gpu_vram_gb=host_def.gpu_vram_gb,
+                models=host_def.models,
+                api_path=host_def.api_path,
+            )
+            distributed_config.hosts[host_def.host_id] = host_config
 
-            # Recommendations based on metrics
-            if not status.healthy:
-                rec["recommendation"] = "CRITICAL: GPU unhealthy or unreachable"
-                rec["priority"] = "critical"
-            elif status.temperature_c > 85:
-                rec["recommendation"] = "WARNING: High temperature, reduce load"
-                rec["priority"] = "high"
-            elif status.vram_usage_percent > 95:
-                rec["recommendation"] = "WARNING: VRAM near capacity"
-                rec["priority"] = "high"
-            elif status.utilization_percent > 90:
-                rec["recommendation"] = "High utilization, consider load balancing"
-                rec["priority"] = "medium"
-            elif status.utilization_percent < 20:
-                rec["recommendation"] = "Low utilization, can handle more load"
-                rec["priority"] = "low"
-            else:
-                rec["recommendation"] = "Normal operation"
-                rec["priority"] = "normal"
-
-            recommendations["hosts"].append(rec)
-
-        return recommendations
-
-    def get_summary(self) -> Dict[str, Any]:
-        """
-        Get summary of all GPU resources.
-
-        Returns:
-            Summary dict
-        """
-        summary = {
-            "total_hosts": len(self.hosts),
-            "healthy_hosts": 0,
-            "unhealthy_hosts": 0,
-            "total_vram_gb": 0,
-            "used_vram_gb": 0,
-            "average_utilization": 0.0,
-            "average_temperature": 0.0,
-            "hosts_by_role": {},
-        }
-
-        for hostname, config in self.hosts.items():
-            status = self.status_cache.get(hostname)
-
-            if status:
-                if status.healthy:
-                    summary["healthy_hosts"] += 1
-                else:
-                    summary["unhealthy_hosts"] += 1
-
-                summary["total_vram_gb"] += status.vram_total_mb / 1024
-                summary["used_vram_gb"] += status.vram_used_mb / 1024
-                summary["average_utilization"] += status.utilization_percent
-                summary["average_temperature"] += status.temperature_c
-
-                # Group by role
-                role = config.role.value
-                if role not in summary["hosts_by_role"]:
-                    summary["hosts_by_role"][role] = []
-
-                summary["hosts_by_role"][role].append(
-                    {
-                        "hostname": hostname,
-                        "gpu_model": status.gpu_model,
-                        "utilization": status.utilization_percent,
-                        "vram_usage_percent": status.vram_usage_percent,
-                    }
-                )
-
-        # Calculate averages
-        if summary["healthy_hosts"] > 0:
-            summary["average_utilization"] /= summary["healthy_hosts"]
-            summary["average_temperature"] /= summary["healthy_hosts"]
-
-        summary["vram_usage_percent"] = (
-            (summary["used_vram_gb"] / summary["total_vram_gb"] * 100)
-            if summary["total_vram_gb"] > 0
-            else 0.0
+        logger.info(
+            "Loaded %d hosts from config: %s",
+            len(distributed_config.hosts),
+            arch_config.config_source or "defaults",
         )
 
-        return summary
+        return cls(config=distributed_config)
+
+    def add_host(
+        self,
+        host_id: str,
+        address: str,
+        port: int,
+        role: HostRole,
+        gpu_model: Optional[str] = None,
+        gpu_vram_gb: float = 0.0,
+        models: Optional[List[str]] = None,
+        api_path: str = "/v1",
+    ) -> HostConfig:
+        """
+        Add a host to the distributed configuration.
+
+        Args:
+            host_id: Unique identifier for the host
+            address: IP address or hostname
+            port: Port number for the inference server
+            role: Role of the host
+            gpu_model: GPU model name
+            gpu_vram_gb: GPU VRAM in GB
+            models: List of models available on this host
+            api_path: API path for OpenAI-compatible endpoint
+
+        Returns:
+            HostConfig for the added host
+        """
+        host = HostConfig(
+            host_id=host_id,
+            address=address,
+            port=port,
+            role=role,
+            gpu_model=gpu_model,
+            gpu_vram_gb=gpu_vram_gb,
+            models=models or [],
+            api_path=api_path,
+        )
+
+        self.config.hosts[host_id] = host
+
+        logger.info(
+            "Added host %s: %s:%d (%s) with %d models",
+            host_id,
+            address,
+            port,
+            role.value,
+            len(models or []),
+        )
+
+        return host
+
+    def remove_host(self, host_id: str) -> bool:
+        """Remove a host from the configuration."""
+        if host_id in self.config.hosts:
+            del self.config.hosts[host_id]
+            if host_id in self.config.health:
+                del self.config.health[host_id]
+            logger.info("Removed host %s", host_id)
+            return True
+        return False
+
+    def get_host(self, host_id: str) -> Optional[HostConfig]:
+        """Get a host by ID."""
+        return self.config.hosts.get(host_id)
+
+    def get_hosts_by_role(self, role: HostRole) -> List[HostConfig]:
+        """Get all hosts with a specific role."""
+        return [host for host in self.config.hosts.values() if host.role == role]
+
+    def get_endpoint_url(self, host: HostConfig) -> str:
+        """Get the full endpoint URL for a host."""
+        return f"http://{host.address}:{host.port}{host.api_path}"
+
+    async def get_endpoints(
+        self,
+        role: HostRole,
+        healthy_only: bool = True,
+    ) -> List[str]:
+        """
+        Get endpoint URLs for hosts with a specific role.
+
+        Args:
+            role: Host role to filter by
+            healthy_only: Only return endpoints for healthy hosts
+
+        Returns:
+            List of endpoint URLs
+        """
+        hosts = self.get_hosts_by_role(role)
+
+        if healthy_only:
+            # Check health if not recently checked
+            await self.check_all_health()
+
+            endpoints = []
+            for host in hosts:
+                health = self.config.health.get(host.host_id)
+                if health and health.status == HostStatus.ONLINE:
+                    endpoints.append(self.get_endpoint_url(host))
+        else:
+            endpoints = [self.get_endpoint_url(host) for host in hosts]
+
+        return endpoints
+
+    async def check_host_health(self, host: HostConfig) -> HostHealth:
+        """
+        Check health of a specific host.
+
+        Args:
+            host: Host configuration
+
+        Returns:
+            HostHealth status
+        """
+        if self._http_client is None:
+            self._http_client = httpx.AsyncClient(timeout=10.0)
+
+        health = HostHealth(
+            host_id=host.host_id,
+            status=HostStatus.UNKNOWN,
+            last_check=time.time(),
+        )
+
+        try:
+            start_time = time.time()
+
+            # Check Ollama-style health endpoint
+            base_url = f"http://{host.address}:{host.port}"
+
+            # Try Ollama API endpoint
+            response = await self._http_client.get(f"{base_url}/api/tags")
+
+            latency_ms = (time.time() - start_time) * 1000
+
+            if response.status_code == 200:
+                health.status = HostStatus.ONLINE
+                health.latency_ms = latency_ms
+
+                # Parse Ollama response for loaded models
+                data = response.json()
+                if "models" in data:
+                    health.models_loaded = [m.get("name", "") for m in data["models"]]
+
+                logger.debug(
+                    "Host %s healthy: %.1fms, %d models",
+                    host.host_id,
+                    latency_ms,
+                    len(health.models_loaded),
+                )
+            else:
+                health.status = HostStatus.DEGRADED
+                health.error_message = f"HTTP {response.status_code}"
+                logger.warning(
+                    "Host %s degraded: HTTP %d",
+                    host.host_id,
+                    response.status_code,
+                )
+
+        except httpx.ConnectError as e:
+            health.status = HostStatus.OFFLINE
+            health.error_message = f"Connection failed: {e}"
+            logger.warning("Host %s offline: %s", host.host_id, e)
+
+        except httpx.TimeoutException:
+            health.status = HostStatus.OFFLINE
+            health.error_message = "Connection timeout"
+            logger.warning("Host %s timeout", host.host_id)
+
+        except Exception as e:
+            health.status = HostStatus.UNKNOWN
+            health.error_message = str(e)
+            logger.error("Host %s health check error: %s", host.host_id, e)
+
+        # Store health status
+        self.config.health[host.host_id] = health
+
+        return health
+
+    async def check_all_health(self) -> Dict[str, HostHealth]:
+        """
+        Check health of all configured hosts in parallel.
+
+        Returns:
+            Dict mapping host_id to HostHealth
+        """
+        if not self.config.hosts:
+            return {}
+
+        logger.debug("Checking health of %d hosts...", len(self.config.hosts))
+
+        # Check all hosts in parallel
+        tasks = [self.check_host_health(host) for host in self.config.hosts.values()]
+
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Count status
+        online = sum(
+            1 for h in self.config.health.values() if h.status == HostStatus.ONLINE
+        )
+        offline = sum(
+            1 for h in self.config.health.values() if h.status == HostStatus.OFFLINE
+        )
+
+        logger.info(
+            "Health check complete: %d online, %d offline, %d other",
+            online,
+            offline,
+            len(self.config.hosts) - online - offline,
+        )
+
+        return self.config.health
+
+    def start_health_monitoring(self):
+        """Start background health monitoring."""
+        if self._health_check_task is None:
+            self._health_check_task = asyncio.create_task(self._health_monitor_loop())
+            logger.info("Started background health monitoring")
+
+    def stop_health_monitoring(self):
+        """Stop background health monitoring."""
+        if self._health_check_task:
+            self._health_check_task.cancel()
+            self._health_check_task = None
+            logger.info("Stopped background health monitoring")
+
+    async def _health_monitor_loop(self):
+        """Background health monitoring loop."""
+        while True:
+            try:
+                await asyncio.sleep(self.config.health_check_interval)
+                await self.check_all_health()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error("Error in health monitor loop: %s", e)
+
+    def get_status_summary(self) -> Dict[str, Any]:
+        """
+        Get a summary of the distributed system status.
+
+        Returns:
+            Dict with status summary
+        """
+        hosts_by_role = {}
+        for role in HostRole:
+            hosts = self.get_hosts_by_role(role)
+            online = sum(
+                1
+                for h in hosts
+                if self.config.health.get(
+                    h.host_id, HostHealth(host_id=h.host_id, status=HostStatus.UNKNOWN)
+                ).status
+                == HostStatus.ONLINE
+            )
+            hosts_by_role[role.value] = {
+                "total": len(hosts),
+                "online": online,
+            }
+
+        return {
+            "total_hosts": len(self.config.hosts),
+            "hosts_by_role": hosts_by_role,
+            "health_summary": {
+                host_id: {
+                    "status": h.status.value,
+                    "latency_ms": h.latency_ms,
+                    "models": h.models_loaded,
+                }
+                for host_id, h in self.config.health.items()
+            },
+        }
+
+    async def close(self):
+        """Clean up resources."""
+        self.stop_health_monitoring()
+        if self._http_client:
+            await self._http_client.aclose()
+            self._http_client = None
 
 
-# Global instance for singleton pattern
-_gpu_manager: Optional[DistributedGPUManager] = None
+# Global instance
+_manager: Optional[DistributedGPUManager] = None
 
 
 def get_distributed_gpu_manager(
-    distributed_manager=None, auto_load_config: bool = True
+    config_path: Optional[str] = None,
+    reload: bool = False,
 ) -> DistributedGPUManager:
     """
-    Get global distributed GPU manager instance (singleton).
+    Get global distributed GPU manager instance.
+
+    Loads configuration from YAML file on first call.
 
     Args:
-        distributed_manager: DistributedHostManager instance
-        auto_load_config: Automatically load default config
+        config_path: Path to config file (optional)
+        reload: Force reload configuration
 
     Returns:
-        DistributedGPUManager instance
+        Singleton DistributedGPUManager instance
     """
-    global _gpu_manager
-
-    if _gpu_manager is None:
-        _gpu_manager = DistributedGPUManager(distributed_manager=distributed_manager)
-
-        if auto_load_config:
-            _gpu_manager.load_default_config()
-
-    return _gpu_manager
+    global _manager
+    if _manager is None or reload:
+        _manager = DistributedGPUManager.from_config(config_path=config_path)
+    return _manager

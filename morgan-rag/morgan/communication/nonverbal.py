@@ -14,7 +14,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
-from morgan.emotional.models import ConversationContext
+from morgan.intelligence.core.models import ConversationContext
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)

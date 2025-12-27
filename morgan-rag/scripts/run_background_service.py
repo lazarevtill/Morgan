@@ -61,7 +61,11 @@ def main():
         address=None,
         port=metrics_port,
         tags=["background", "metrics"],
-        check_http=f"http://morgan-background:{metrics_port}" if registry.config.enabled else None,
+        check_http=(
+            f"http://morgan-background:{metrics_port}"
+            if registry.config.enabled
+            else None
+        ),
     )
 
     if not service.start():
@@ -71,7 +75,9 @@ def main():
     logger.info("Background processing service is running")
 
     def _shutdown(signum=None, frame=None):
-        logger.info("Received stop signal (%s); shutting down background service", signum)
+        logger.info(
+            "Received stop signal (%s); shutting down background service", signum
+        )
         service.stop()
 
     signal.signal(signal.SIGTERM, _shutdown)

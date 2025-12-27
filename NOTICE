@@ -1,0 +1,25 @@
+Morgan AI Assistant
+Copyright 2025 Morgan AI Assistant Contributors
+
+This product includes software developed by the Morgan AI Assistant project
+(https://github.com/lazarevtill/morgan).
+
+Licensed under the Apache License, Version 2.0.
+
+================================================================================
+
+This project uses the following third-party libraries:
+
+- FastAPI (MIT License)
+- Pydantic (MIT License)
+- Ollama (MIT License)
+- Qdrant (Apache License 2.0)
+- Redis (BSD License)
+- sentence-transformers (Apache License 2.0)
+- Rich (MIT License)
+- Click (BSD License)
+- httpx (BSD License)
+- aiohttp (Apache License 2.0)
+
+For full license texts of dependencies, see their respective repositories.
+

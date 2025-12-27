@@ -36,6 +36,13 @@ class TestHierarchicalEmbeddingService:
         ]
         self.mock_embedding_service.encode_batch.return_value = self.mock_embeddings
 
+        # Mock clustering engine to returned unmodified embeddings
+        self.mock_clustering_engine = Mock()
+        self.mock_clustering_engine.apply_contrastive_bias.side_effect = (
+            lambda emb, *args: emb
+        )
+        self.service.clustering_engine = self.mock_clustering_engine
+
     def test_create_hierarchical_embeddings(self):
         """Test creating hierarchical embeddings for single content."""
         content = "def login(username, password):\n    return authenticate(username, password)"

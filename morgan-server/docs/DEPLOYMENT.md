@@ -63,7 +63,7 @@ mkdir morgan-deployment
 cd morgan-deployment
 
 # Download docker-compose.yml
-curl -O https://raw.githubusercontent.com/your-repo/morgan/main/docker/docker-compose.yml
+curl -O https://raw.githubusercontent.com/lazarevtill/morgan/main/docker/docker-compose.yml
 ```
 
 #### Step 2: Configure Environment
@@ -143,7 +143,7 @@ If you have external Ollama and Qdrant instances:
 
 ```bash
 # Clone repository
-git clone https://github.com/your-repo/morgan.git
+git clone https://github.com/lazarevtill/morgan.git
 cd morgan
 
 # Build server image
@@ -277,7 +277,7 @@ ollama pull gemma3
 
 ```bash
 # Clone repository
-git clone https://github.com/your-repo/morgan.git
+git clone https://github.com/lazarevtill/morgan.git
 cd morgan/morgan-server
 
 # Create virtual environment

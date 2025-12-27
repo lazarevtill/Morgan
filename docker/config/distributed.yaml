@@ -1,0 +1,94 @@
+# Morgan Distributed Architecture Configuration for Docker
+# 100% Self-Hosted - No API Keys Required
+#
+# This file is mounted into the container at /app/config/distributed.yaml
+#
+# Customize host addresses for your Docker network setup:
+# - Use container names for Docker Compose networking
+# - Use IP addresses for external hosts
+
+# Global settings
+settings:
+  health_check_interval: 60
+  default_timeout: 30.0
+  load_balancing_strategy: round_robin
+  enable_failover: true
+  max_retries: 3
+
+# Model cache configuration
+# Models are downloaded once to this location and reused on subsequent starts
+# This avoids re-downloading weights on each container restart
+model_cache:
+  # Base directory for all cached model weights (inside container)
+  base_dir: "/app/models"
+  # sentence-transformers cache (embeddings, rerankers)
+  sentence_transformers_home: "/app/models/sentence-transformers"
+  # Hugging Face cache
+  hf_home: "/app/models/huggingface"
+  # Ollama models (on host machine, not in container)
+  ollama_models: "~/.ollama/models"
+  # Pre-download models on startup (first run may take a few minutes)
+  preload_on_startup: true
+
+# LLM Configuration (Ollama)
+llm:
+  main_model: "qwen2.5:32b-instruct-q4_K_M"
+  fast_model: "qwen2.5:7b-instruct-q5_K_M"
+  temperature: 0.7
+  max_tokens: 2048
+
+# Embedding Configuration (Self-Hosted via Ollama)
+embeddings:
+  # Qwen3-Embedding via Ollama
+  # Variants: qwen3-embedding:0.6b (896 dims), :4b (2048 dims), :8b (4096 dims)
+  model: "qwen3-embedding:4b"
+  dimensions: 2048
+  # Fallback: sentence-transformers (384 dims)
+  local_fallback_model: "all-MiniLM-L6-v2"
+  batch_size: 100
+
+# Reranking Configuration (Self-Hosted)
+reranking:
+  # CrossEncoder via sentence-transformers
+  model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+  rerank_weight: 0.6
+  original_weight: 0.4
+  top_k: 20
+
+# Host definitions
+# For single-machine Docker Compose, use host.docker.internal or container names
+hosts:
+  # External Ollama LLM (on host machine)
+  - host_id: "llm-local"
+    address: "host.docker.internal"
+    port: 11434
+    role: "main_llm"
+    api_path: "/v1"
+    description: "Local Ollama instance on host machine"
+    models:
+      - "qwen2.5:32b-instruct-q4_K_M"
+      - "qwen2.5:7b-instruct-q5_K_M"
+      - "qwen3-embedding:4b"
+
+# Redis Configuration (Docker container)
+redis:
+  host: "redis"
+  port: 6379
+  db: 0
+  password: ""
+  prefix: "morgan:"
+  
+# Vector Database (Qdrant Docker container)
+qdrant:
+  host: "qdrant"
+  port: 6333
+  grpc_port: 6334
+  
+# Monitoring Configuration
+monitoring:
+  prometheus:
+    host: "prometheus"
+    port: 9090
+  grafana:
+    host: "grafana"
+    port: 3000

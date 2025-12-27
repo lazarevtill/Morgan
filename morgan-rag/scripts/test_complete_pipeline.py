@@ -40,7 +40,9 @@ console = Console()
 
 def test_emotion_detection():
     """Test all 11 emotion detection modules"""
-    console.print("\n[bold blue]📊 Testing Emotion Detection System (11 modules)[/bold blue]")
+    console.print(
+        "\n[bold blue]📊 Testing Emotion Detection System (11 modules)[/bold blue]"
+    )
 
     test_inputs = [
         ("I'm so happy about this achievement!", "joy", 0.8),
@@ -69,13 +71,15 @@ def test_emotion_detection():
 
             status = "✅" if match and intensity_ok else "⚠️"
             console.print(f"  {status} '{text[:40]}...'")
-            console.print(f"     Expected: {expected_emotion} | Detected: {detected} ({intensity:.2f})")
+            console.print(
+                f"     Expected: {expected_emotion} | Detected: {detected} ({intensity:.2f})"
+            )
 
             results[text] = {
                 "expected": expected_emotion,
                 "detected": detected,
                 "intensity": intensity,
-                "match": match
+                "match": match,
             }
 
         # Test emotional memory
@@ -93,6 +97,7 @@ def test_emotion_detection():
     except Exception as e:
         console.print(f"  ❌ Emotion detection failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False, {}
 
@@ -112,27 +117,23 @@ def test_empathy_engine():
         console.print("\n  1. Testing Empathy Generator...")
         generator = EmpathyGenerator()
         empathetic_response = generator.generate_response(
-            emotion="sadness",
-            intensity=0.8,
-            context="Failed an important exam"
+            emotion="sadness", intensity=0.8, context="Failed an important exam"
         )
-        console.print(f"  ✅ Generated empathetic response: {empathetic_response[:80]}...")
+        console.print(
+            f"  ✅ Generated empathetic response: {empathetic_response[:80]}..."
+        )
 
         # Test Emotional Mirror
         console.print("\n  2. Testing Emotional Mirror...")
         mirror = EmotionalMirror()
-        mirrored = mirror.reflect_emotion(
-            user_emotion="anxiety",
-            intensity=0.7
-        )
+        mirrored = mirror.reflect_emotion(user_emotion="anxiety", intensity=0.7)
         console.print(f"  ✅ Emotional mirroring: {mirrored}")
 
         # Test Support Generator
         console.print("\n  3. Testing Support Generator...")
         support = SupportGenerator()
         support_response = support.generate_support(
-            emotion="stress",
-            context="Work deadline pressure"
+            emotion="stress", context="Work deadline pressure"
         )
         console.print(f"  ✅ Support response: {support_response[:80]}...")
 
@@ -140,9 +141,7 @@ def test_empathy_engine():
         console.print("\n  4. Testing Tone Adjuster...")
         adjuster = ToneAdjuster()
         adjusted = adjuster.adjust_tone(
-            base_response="Here's how to solve it.",
-            emotion="sadness",
-            intensity=0.8
+            base_response="Here's how to solve it.", emotion="sadness", intensity=0.8
         )
         console.print(f"  ✅ Tone adjusted: {adjusted[:80]}...")
 
@@ -150,9 +149,7 @@ def test_empathy_engine():
         console.print("\n  5. Testing Validation Engine...")
         validator = ValidationEngine()
         validation_score = validator.validate_empathy(
-            response=empathetic_response,
-            emotion="sadness",
-            intensity=0.8
+            response=empathetic_response, emotion="sadness", intensity=0.8
         )
         console.print(f"  ✅ Empathy validation score: {validation_score:.2f}")
 
@@ -161,6 +158,7 @@ def test_empathy_engine():
     except Exception as e:
         console.print(f"  ❌ Empathy engine failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -170,8 +168,8 @@ def test_advanced_rag():
     console.print("\n[bold blue]🔍 Testing Advanced RAG Pipeline[/bold blue]")
 
     try:
-        from morgan.services.embedding_service import EmbeddingService
-        from morgan.jina.reranking.service import JinaRerankingService
+        from morgan.services.embeddings import EmbeddingService
+        from morgan.services.reranking import RerankingService
         from morgan.vector_db.client import VectorDBClient
         from morgan.search.multi_stage_search import MultiStageSearch
 
@@ -188,15 +186,15 @@ def test_advanced_rag():
         test_docs = [
             "Docker deployment involves creating containers from images",
             "Use docker run to start a container from an image",
-            "Docker Compose helps manage multi-container applications"
+            "Docker Compose helps manage multi-container applications",
         ]
 
         doc_embeddings = embedding_service.encode_batch(
-            test_docs,
-            instruction="document",
-            show_progress=False
+            test_docs, instruction="document", show_progress=False
         )
-        console.print(f"  ✅ Document embeddings generated ({len(doc_embeddings)} docs)")
+        console.print(
+            f"  ✅ Document embeddings generated ({len(doc_embeddings)} docs)"
+        )
 
         # Test Reranking Service
         console.print("\n  2. Testing Jina Reranking Service...")
@@ -210,15 +208,13 @@ def test_advanced_rag():
                 content=doc,
                 score=0.5 + i * 0.1,
                 metadata={"source": f"doc_{i}"},
-                source=f"doc_{i}.txt"
+                source=f"doc_{i}.txt",
             )
             for i, doc in enumerate(test_docs)
         ]
 
         reranked_results, metrics = reranker.rerank_results(
-            query=test_query,
-            results=mock_results,
-            top_k=3
+            query=test_query, results=mock_results, top_k=3
         )
 
         console.print(f"  ✅ Reranking complete")
@@ -234,24 +230,25 @@ def test_advanced_rag():
             search_engine = MultiStageSearch(
                 vector_db=vector_db,
                 embedding_service=embedding_service,
-                reranker=reranker
+                reranker=reranker,
             )
 
             results = search_engine.search(
-                query=test_query,
-                collection="morgan_knowledge",
-                top_k=5
+                query=test_query, collection="morgan_knowledge", top_k=5
             )
 
             console.print(f"  ✅ Multi-stage search complete ({len(results)} results)")
         else:
-            console.print(f"  ⚠️  Collection 'morgan_knowledge' not found, skipping search")
+            console.print(
+                f"  ⚠️  Collection 'morgan_knowledge' not found, skipping search"
+            )
 
         return True
 
     except Exception as e:
         console.print(f"  ❌ RAG pipeline failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -273,8 +270,14 @@ def test_memory_system():
 
         # Add turns
         test_turns = [
-            ("How do I deploy with Docker?", "To deploy with Docker, you first need to..."),
-            ("What about Docker Compose?", "Docker Compose is a tool for defining and running...")
+            (
+                "How do I deploy with Docker?",
+                "To deploy with Docker, you first need to...",
+            ),
+            (
+                "What about Docker Compose?",
+                "Docker Compose is a tool for defining and running...",
+            ),
         ]
 
         for question, answer in test_turns:
@@ -282,17 +285,14 @@ def test_memory_system():
                 conversation_id=conv_id,
                 question=question,
                 answer=answer,
-                tags=["docker", "deployment"]
+                tags=["docker", "deployment"],
             )
 
         console.print(f"  ✅ Added {len(test_turns)} conversation turns")
 
         # Search conversations
         console.print("\n  Testing conversation search...")
-        search_results = memory.search_conversations(
-            query="Docker deployment",
-            limit=5
-        )
+        search_results = memory.search_conversations(query="Docker deployment", limit=5)
         console.print(f"  ✅ Found {len(search_results)} relevant conversations")
 
         # Get conversation history
@@ -304,6 +304,7 @@ def test_memory_system():
     except Exception as e:
         console.print(f"  ❌ Memory system failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -326,7 +327,7 @@ def test_learning_system():
             query="Docker help",
             response="Here's how to use Docker...",
             rating=5,
-            feedback_type="explicit"
+            feedback_type="explicit",
         )
         console.print("  ✅ Feedback recorded")
 
@@ -334,11 +335,13 @@ def test_learning_system():
         console.print("\n  2. Testing Pattern Recognition...")
         pattern_recognizer = PatternRecognition()
 
-        patterns = pattern_recognizer.identify_patterns([
-            {"query": "Docker deployment", "topic": "DevOps"},
-            {"query": "Docker Compose", "topic": "DevOps"},
-            {"query": "Python async", "topic": "Programming"},
-        ])
+        patterns = pattern_recognizer.identify_patterns(
+            [
+                {"query": "Docker deployment", "topic": "DevOps"},
+                {"query": "Docker Compose", "topic": "DevOps"},
+                {"query": "Python async", "topic": "Programming"},
+            ]
+        )
         console.print(f"  ✅ Identified {len(patterns)} patterns")
 
         # Test Adaptation Engine
@@ -347,7 +350,7 @@ def test_learning_system():
 
         adapted_response = adapter.adapt_response(
             base_response="Here's the answer.",
-            user_preferences={"detail_level": "high", "tone": "technical"}
+            user_preferences={"detail_level": "high", "tone": "technical"},
         )
         console.print(f"  ✅ Response adapted: {adapted_response[:60]}...")
 
@@ -356,9 +359,7 @@ def test_learning_system():
         pref_learner = PreferenceLearning()
 
         pref_learner.learn_preference(
-            category="response_style",
-            value="detailed_technical",
-            confidence=0.85
+            category="response_style", value="detailed_technical", confidence=0.85
         )
 
         preferences = pref_learner.get_preferences()
@@ -369,6 +370,7 @@ def test_learning_system():
     except Exception as e:
         console.print(f"  ❌ Learning system failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -393,7 +395,7 @@ def test_complete_pipeline():
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
-            console=console
+            console=console,
         ) as progress:
             task = progress.add_task("Processing...", total=None)
 
@@ -401,7 +403,7 @@ def test_complete_pipeline():
                 query=test_query,
                 user_id="test_user",
                 show_emotions=True,
-                show_sources=True
+                show_sources=True,
             )
 
             progress.remove_task(task)
@@ -409,23 +411,23 @@ def test_complete_pipeline():
         console.print("\n  [bold green]✅ Complete Pipeline Response:[/bold green]")
 
         # Response is a Response object with .answer
-        answer = response.answer if hasattr(response, 'answer') else str(response)
-        console.print(Panel(
-            answer,
-            title="Morgan's Response",
-            border_style="green"
-        ))
+        answer = response.answer if hasattr(response, "answer") else str(response)
+        console.print(Panel(answer, title="Morgan's Response", border_style="green"))
 
         # Show emotional tone
-        if hasattr(response, 'emotional_tone') and response.emotional_tone:
-            console.print(f"\n  [yellow]Emotional Tone: {response.emotional_tone}[/yellow]")
+        if hasattr(response, "emotional_tone") and response.emotional_tone:
+            console.print(
+                f"\n  [yellow]Emotional Tone: {response.emotional_tone}[/yellow]"
+            )
 
         # Show empathy level
-        if hasattr(response, 'empathy_level') and response.empathy_level > 0:
-            console.print(f"  [yellow]Empathy Level: {response.empathy_level:.0%}[/yellow]")
+        if hasattr(response, "empathy_level") and response.empathy_level > 0:
+            console.print(
+                f"  [yellow]Empathy Level: {response.empathy_level:.0%}[/yellow]"
+            )
 
         # Show RAG sources
-        if hasattr(response, 'sources') and response.sources:
+        if hasattr(response, "sources") and response.sources:
             console.print("\n  [cyan]Knowledge Sources:[/cyan]")
             for i, source in enumerate(response.sources[:3], 1):
                 console.print(f"    {i}. {source[:60]}...")
@@ -435,17 +437,20 @@ def test_complete_pipeline():
     except Exception as e:
         console.print(f"  ❌ Complete pipeline failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
 
 def main():
     """Run all tests"""
-    console.print(Panel.fit(
-        "[bold cyan]Morgan v2-0.0.1 Complete Pipeline Test[/bold cyan]\n"
-        "Testing ALL components: Emotions, Empathy, RAG, Memory, Learning",
-        border_style="blue"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold cyan]Morgan v2-0.0.1 Complete Pipeline Test[/bold cyan]\n"
+            "Testing ALL components: Emotions, Empathy, RAG, Memory, Learning",
+            border_style="blue",
+        )
+    )
 
     results = {}
 
@@ -473,7 +478,7 @@ def main():
         "Advanced RAG": "Multi-stage search + Jina reranking",
         "Memory System": "Conversation, emotional, knowledge, relationship",
         "Learning System": "Feedback, patterns, adaptation, preferences",
-        "Complete Pipeline": "End-to-end emotion → RAG → empathy → response"
+        "Complete Pipeline": "End-to-end emotion → RAG → empathy → response",
     }
 
     for component, status in results.items():
@@ -488,8 +493,12 @@ def main():
     total = len(results)
 
     if passed == total:
-        console.print(f"\n[bold green]✅ All {total} component tests passed![/bold green]")
-        console.print("[green]Morgan v2-0.0.1 is fully operational with complete emotional intelligence + RAG[/green]")
+        console.print(
+            f"\n[bold green]✅ All {total} component tests passed![/bold green]"
+        )
+        console.print(
+            "[green]Morgan v2-0.0.1 is fully operational with complete emotional intelligence + RAG[/green]"
+        )
         return 0
     else:
         console.print(f"\n[bold yellow]⚠️  {passed}/{total} tests passed[/bold yellow]")

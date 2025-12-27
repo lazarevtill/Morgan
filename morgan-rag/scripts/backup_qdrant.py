@@ -14,7 +14,7 @@ collections = [
     "morgan_knowledge",
     "morgan_knowledge_hierarchical",
     "morgan_memory",
-    "morgan_memories"
+    "morgan_memories",
 ]
 
 print("Creating Qdrant backups...")
@@ -40,7 +40,9 @@ for collection in collections:
             if snap_resp.status_code == 200:
                 backup_file = BACKUP_DIR / f"{collection}_{snapshot_name}"
                 backup_file.write_bytes(snap_resp.content)
-                print(f"  ✅ Saved: {backup_file.name} ({len(snap_resp.content)} bytes)")
+                print(
+                    f"  ✅ Saved: {backup_file.name} ({len(snap_resp.content)} bytes)"
+                )
             else:
                 print(f"  ⚠️  Could not download snapshot")
         else:

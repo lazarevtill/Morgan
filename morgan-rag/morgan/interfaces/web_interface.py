@@ -194,14 +194,14 @@ class MorganWebInterface:
 
                 # Update preferences
                 if preferences.communication_style:
-                    from ..emotional.models import CommunicationStyle
+                    from morgan.intelligence.core.models import CommunicationStyle
 
                     profile.communication_preferences.communication_style = (
                         CommunicationStyle(preferences.communication_style)
                     )
 
                 if preferences.response_length:
-                    from ..emotional.models import ResponseLength
+                    from morgan.intelligence.core.models import ResponseLength
 
                     profile.communication_preferences.preferred_response_length = (
                         ResponseLength(preferences.response_length)

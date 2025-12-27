@@ -1,0 +1,101 @@
+# Morgan Search Configuration
+# Multi-stage search and retrieval settings
+#
+# This file configures the search pipeline.
+# Environment variables can override these values with MORGAN_SEARCH_ prefix.
+
+# General search settings
+general:
+  # Maximum results to return
+  max_results: 50
+  # Default results count
+  default_results: 10
+  # Minimum similarity score (0.0 - 1.0)
+  min_score: 0.7
+  # Enable search caching
+  cache_enabled: true
+  # Cache TTL in seconds
+  cache_ttl: 300
+
+# Vector search settings (Stage 1)
+vector:
+  # Enable vector search
+  enabled: true
+  # Coarse search limit (initial retrieval)
+  coarse_limit: 100
+  # Fine search limit (after filtering)
+  fine_limit: 50
+  # Use approximate search (HNSW)
+  approximate: true
+  # Oversampling factor for accuracy
+  oversampling: 2.0
+
+# Keyword search settings (Stage 2)
+keyword:
+  # Enable keyword search
+  enabled: true
+  # Maximum keyword results
+  max_results: 50
+  # Boost exact matches
+  exact_match_boost: 1.5
+  # Enable fuzzy matching
+  fuzzy_matching: true
+  # Fuzzy distance threshold
+  fuzzy_distance: 2
+
+# Hybrid fusion settings (Stage 3)
+hybrid:
+  # Enable hybrid fusion
+  enabled: true
+  # Fusion method: rrf (Reciprocal Rank Fusion), linear, weighted
+  method: "rrf"
+  # RRF k parameter
+  rrf_k: 60
+  # Vector weight (for weighted fusion)
+  vector_weight: 0.6
+  # Keyword weight (for weighted fusion)
+  keyword_weight: 0.4
+
+# Reranking settings (Stage 4)
+reranking:
+  # Enable reranking
+  enabled: true
+  # Rerank top N results
+  top_n: 50
+  # Minimum score after reranking
+  min_score: 0.3
+  # Use cross-encoder for reranking
+  use_cross_encoder: true
+
+# Deduplication settings (Stage 5)
+deduplication:
+  # Enable deduplication
+  enabled: true
+  # Similarity threshold for duplicates (0.0 - 1.0)
+  threshold: 0.95
+  # Deduplication method: exact, fuzzy, semantic
+  method: "semantic"
+  # Keep highest scoring duplicate
+  keep_best: true
+
+# Memory search settings
+memory:
+  # Enable memory search
+  enabled: true
+  # Weight for memory results
+  weight: 0.3
+  # Maximum memory results
+  max_results: 10
+  # Boost recent memories
+  recency_boost: 1.2
+
+# Context enhancement settings
+context:
+  # Enable context enhancement
+  enabled: true
+  # Include surrounding chunks
+  include_neighbors: true
+  # Number of neighbor chunks
+  neighbor_count: 1
+  # Maximum context length
+  max_length: 4096

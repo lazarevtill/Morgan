@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 
 from morgan.core.memory import ConversationMemory
-from morgan.services.llm_service import get_llm_service
+from morgan.services.llm import get_llm_service
 from morgan.utils.logger import setup_logging
 from rich.console import Console
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
@@ -68,7 +68,9 @@ def extract_turns(mapping: dict) -> List[Tuple[str, str]]:
     return turns
 
 
-def generate_llm_tags(title: str, turns: List[Tuple[str, str]], llm_service) -> List[str]:
+def generate_llm_tags(
+    title: str, turns: List[Tuple[str, str]], llm_service
+) -> List[str]:
     """Generate semantic tags for a conversation using LLM."""
     try:
         # Create a summary of the conversation
@@ -106,7 +108,9 @@ def import_conversations_batch(path: Path, batch_size: int = 50):
     console.print("\n[bold cyan]Morgan FAST Batch Import (Fully Optimized)[/bold cyan]")
     console.print(f"[dim]Source: {path}[/dim]")
     console.print(f"[dim]Batch size: {batch_size} conversations[/dim]")
-    console.print(f"[dim]Parallelization: 10 LLM workers + 10 embedding workers[/dim]\n")
+    console.print(
+        f"[dim]Parallelization: 10 LLM workers + 10 embedding workers[/dim]\n"
+    )
 
     setup_logging()
 
@@ -116,11 +120,16 @@ def import_conversations_batch(path: Path, batch_size: int = 50):
 
     # Get actual service configurations
     from morgan.config import get_settings
+
     settings = get_settings()
 
     console.print("[green]✓[/green] Memory system ready")
-    console.print(f"[green]✓[/green] LLM service ready ({settings.llm_model} via {settings.llm_base_url})")
-    console.print(f"[green]✓[/green] Embeddings ready ({settings.embedding_model} via {settings.embedding_base_url})\n")
+    console.print(
+        f"[green]✓[/green] LLM service ready ({settings.llm_model} via {settings.llm_base_url})"
+    )
+    console.print(
+        f"[green]✓[/green] Embeddings ready ({settings.embedding_model} via {settings.embedding_base_url})\n"
+    )
 
     conversations = load_conversations(path)
     console.print(f"[bold]Processing {len(conversations)} conversations...[/bold]\n")
@@ -133,17 +142,16 @@ def import_conversations_batch(path: Path, batch_size: int = 50):
         BarColumn(),
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         TimeElapsedColumn(),
-        console=console
+        console=console,
     ) as progress:
 
         task = progress.add_task(
-            "[cyan]Importing conversations...",
-            total=len(conversations)
+            "[cyan]Importing conversations...", total=len(conversations)
         )
 
         # Process conversations in batches
         for batch_start in range(0, len(conversations), batch_size):
-            batch = conversations[batch_start:batch_start + batch_size]
+            batch = conversations[batch_start : batch_start + batch_size]
             batch_convs = []  # Store processed conversation data
 
             # Step 1: Parse all conversations in batch
@@ -157,26 +165,29 @@ def import_conversations_batch(path: Path, batch_size: int = 50):
                     progress.update(task, advance=1)
                     continue
 
-                batch_convs.append({
-                    "index": conv_idx,
-                    "title": title,
-                    "turns": turns,
-                    "llm_tags": []
-                })
+                batch_convs.append(
+                    {"index": conv_idx, "title": title, "turns": turns, "llm_tags": []}
+                )
 
             if not batch_convs:
                 continue
 
             # Step 2: PARALLEL LLM TAG GENERATION (ai.ishosting.com)
-            console.print(f"[yellow]Generating LLM tags for {len(batch_convs)} conversations (parallel)...[/yellow]")
+            console.print(
+                f"[yellow]Generating LLM tags for {len(batch_convs)} conversations (parallel)...[/yellow]"
+            )
 
             def generate_tags_for_conv(conv_data):
-                tags = generate_llm_tags(conv_data["title"], conv_data["turns"], llm_service)
+                tags = generate_llm_tags(
+                    conv_data["title"], conv_data["turns"], llm_service
+                )
                 return conv_data["index"], tags
 
             with ThreadPoolExecutor(max_workers=10) as llm_executor:
-                llm_futures = {llm_executor.submit(generate_tags_for_conv, conv): i
-                              for i, conv in enumerate(batch_convs)}
+                llm_futures = {
+                    llm_executor.submit(generate_tags_for_conv, conv): i
+                    for i, conv in enumerate(batch_convs)
+                }
 
                 for future in as_completed(llm_futures):
                     try:
@@ -209,17 +220,23 @@ def import_conversations_batch(path: Path, batch_size: int = 50):
                     all_texts.append(combined_turn)
 
             # Step 4: PARALLEL EMBEDDING GENERATION (separate provider)
-            console.print(f"[yellow]Generating {len(all_texts)} embeddings (parallel)...[/yellow]")
+            console.print(
+                f"[yellow]Generating {len(all_texts)} embeddings (parallel)...[/yellow]"
+            )
             embeddings = [None] * len(all_texts)
 
             def embed_single(idx_text):
                 idx, text = idx_text
-                embedding = memory.embedding_service.encode(text=text, instruction="document")
+                embedding = memory.embedding_service.encode(
+                    text=text, instruction="document"
+                )
                 return idx, embedding
 
             with ThreadPoolExecutor(max_workers=10) as embed_executor:
-                embed_futures = {embed_executor.submit(embed_single, (i, text)): i
-                                for i, text in enumerate(all_texts)}
+                embed_futures = {
+                    embed_executor.submit(embed_single, (i, text)): i
+                    for i, text in enumerate(all_texts)
+                }
 
                 for future in as_completed(embed_futures):
                     try:
@@ -228,7 +245,9 @@ def import_conversations_batch(path: Path, batch_size: int = 50):
                     except Exception as e:
                         console.print(f"[red]Embedding error at index {idx}: {e}[/red]")
                         # Use zero vector as fallback
-                        embeddings[idx] = [0.0] * memory.embedding_service.get_embedding_dimension()
+                        embeddings[idx] = [
+                            0.0
+                        ] * memory.embedding_service.get_embedding_dimension()
 
             # Step 5: Build all points with embeddings and tags
             console.print(f"[yellow]Building vector DB points...[/yellow]")
@@ -249,17 +268,19 @@ def import_conversations_batch(path: Path, batch_size: int = 50):
                 tags = ["conversation", f"title:{title}"]
                 tags.extend([f"llm:{tag}" for tag in llm_tags])
 
-                conv_points.append({
-                    "id": conv_id,
-                    "vector": embeddings[embedding_idx],
-                    "payload": {
-                        "topic": title,
-                        "tags": tags,
-                        "llm_tags": llm_tags,
-                        "conversation_id": conv_id,
-                        "turns_count": len(turns),
-                    },
-                })
+                conv_points.append(
+                    {
+                        "id": conv_id,
+                        "vector": embeddings[embedding_idx],
+                        "payload": {
+                            "topic": title,
+                            "tags": tags,
+                            "llm_tags": llm_tags,
+                            "conversation_id": conv_id,
+                            "turns_count": len(turns),
+                        },
+                    }
+                )
                 embedding_idx += 1
 
                 # Create turn points
@@ -267,38 +288,40 @@ def import_conversations_batch(path: Path, batch_size: int = 50):
                     turn_id = str(uuid.uuid4())
                     turn_tags = tags + [f"turn:{turn_idx}"]
 
-                    turn_points.append({
-                        "id": turn_id,
-                        "vector": embeddings[embedding_idx],
-                        "payload": {
-                            "conversation_id": conv_id,
-                            "turn_id": turn_id,
-                            "question": q,
-                            "answer": a,
-                            "turn_index": turn_idx,
-                            "tags": turn_tags,
-                            "llm_tags": llm_tags,
-                        },
-                    })
+                    turn_points.append(
+                        {
+                            "id": turn_id,
+                            "vector": embeddings[embedding_idx],
+                            "payload": {
+                                "conversation_id": conv_id,
+                                "turn_id": turn_id,
+                                "question": q,
+                                "answer": a,
+                                "turn_index": turn_idx,
+                                "tags": turn_tags,
+                                "llm_tags": llm_tags,
+                            },
+                        }
+                    )
                     embedding_idx += 1
                     turns_total += 1
 
             # Step 6: BULK INSERT TO VECTOR DB
-            console.print(f"[yellow]Inserting {len(conv_points)} conversations + {len(turn_points)} turns to vector DB (bulk)...[/yellow]")
+            console.print(
+                f"[yellow]Inserting {len(conv_points)} conversations + {len(turn_points)} turns to vector DB (bulk)...[/yellow]"
+            )
 
             if conv_points:
                 memory.vector_db.upsert_points(
                     memory.conversation_collection,
                     conv_points,
-                    use_batch_optimization=True
+                    use_batch_optimization=True,
                 )
                 imported += len(conv_points)
 
             if turn_points:
                 memory.vector_db.upsert_points(
-                    memory.turn_collection,
-                    turn_points,
-                    use_batch_optimization=True
+                    memory.turn_collection, turn_points, use_batch_optimization=True
                 )
 
             progress.update(task, advance=len(batch_convs))
@@ -314,7 +337,9 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         console.print("[red]Error: Please provide path to conversations.json[/red]")
         console.print("\nUsage:")
-        console.print("  python3 scripts/import_conversations_batch.py /path/to/conversations.json")
+        console.print(
+            "  python3 scripts/import_conversations_batch.py /path/to/conversations.json"
+        )
         sys.exit(1)
 
     conv_file = Path(sys.argv[1])

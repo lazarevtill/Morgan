@@ -27,6 +27,7 @@ from morgan_server.api.models import (
 # Property 15: API Consistency
 # ============================================================================
 
+
 class TestAPIConsistency:
     """
     Property-based tests for API consistency.
@@ -59,10 +60,10 @@ class TestAPIConsistency:
         )
 
         # Verify consistent structure
-        assert hasattr(request, 'message')
-        assert hasattr(request, 'user_id')
-        assert hasattr(request, 'conversation_id')
-        assert hasattr(request, 'metadata')
+        assert hasattr(request, "message")
+        assert hasattr(request, "user_id")
+        assert hasattr(request, "conversation_id")
+        assert hasattr(request, "metadata")
 
         # Verify message is stripped
         assert request.message == message.strip()
@@ -72,14 +73,15 @@ class TestAPIConsistency:
         assert request.conversation_id == conversation_id
         assert isinstance(request.metadata, dict)
 
-
     @given(
         answer=st.text(min_size=1, max_size=5000),
         conversation_id=st.text(min_size=1, max_size=100),
         confidence=st.floats(min_value=0.0, max_value=1.0),
     )
     @settings(max_examples=100)
-    def test_property_chat_response_consistency(self, answer, conversation_id, confidence):
+    def test_property_chat_response_consistency(
+        self, answer, conversation_id, confidence
+    ):
         """
         Property: ChatResponse models have consistent structure.
 
@@ -98,12 +100,12 @@ class TestAPIConsistency:
         assert response.confidence == confidence
 
         # Verify consistent structure
-        assert hasattr(response, 'emotional_tone')
-        assert hasattr(response, 'empathy_level')
-        assert hasattr(response, 'personalization_elements')
-        assert hasattr(response, 'milestone_celebration')
-        assert hasattr(response, 'sources')
-        assert hasattr(response, 'metadata')
+        assert hasattr(response, "emotional_tone")
+        assert hasattr(response, "empathy_level")
+        assert hasattr(response, "personalization_elements")
+        assert hasattr(response, "milestone_celebration")
+        assert hasattr(response, "sources")
+        assert hasattr(response, "metadata")
 
         # Verify default values
         assert isinstance(response.personalization_elements, list)
@@ -130,9 +132,9 @@ class TestAPIConsistency:
         )
 
         # Verify consistent structure
-        assert hasattr(request, 'query')
-        assert hasattr(request, 'user_id')
-        assert hasattr(request, 'limit')
+        assert hasattr(request, "query")
+        assert hasattr(request, "user_id")
+        assert hasattr(request, "limit")
 
         # Verify query is stripped
         assert request.query == query.strip()
@@ -157,11 +159,11 @@ class TestAPIConsistency:
         )
 
         # Verify consistent structure
-        assert hasattr(request, 'source')
-        assert hasattr(request, 'url')
-        assert hasattr(request, 'content')
-        assert hasattr(request, 'doc_type')
-        assert hasattr(request, 'metadata')
+        assert hasattr(request, "source")
+        assert hasattr(request, "url")
+        assert hasattr(request, "content")
+        assert hasattr(request, "doc_type")
+        assert hasattr(request, "metadata")
 
         # Verify values
         assert request.content == content
@@ -174,7 +176,9 @@ class TestAPIConsistency:
         uptime_seconds=st.floats(min_value=0.0, max_value=1e9),
     )
     @settings(max_examples=100)
-    def test_property_health_response_consistency(self, status, version, uptime_seconds):
+    def test_property_health_response_consistency(
+        self, status, version, uptime_seconds
+    ):
         """
         Property: HealthResponse models have consistent structure.
 
@@ -188,10 +192,10 @@ class TestAPIConsistency:
         )
 
         # Verify consistent structure
-        assert hasattr(response, 'status')
-        assert hasattr(response, 'timestamp')
-        assert hasattr(response, 'version')
-        assert hasattr(response, 'uptime_seconds')
+        assert hasattr(response, "status")
+        assert hasattr(response, "timestamp")
+        assert hasattr(response, "version")
+        assert hasattr(response, "uptime_seconds")
 
         # Verify values
         assert response.status == status
@@ -202,15 +206,18 @@ class TestAPIConsistency:
     @given(
         communication_style=st.one_of(
             st.none(),
-            st.sampled_from(["casual", "professional", "friendly", "technical", "playful"])
+            st.sampled_from(
+                ["casual", "professional", "friendly", "technical", "playful"]
+            ),
         ),
         response_length=st.one_of(
-            st.none(),
-            st.sampled_from(["brief", "moderate", "detailed"])
+            st.none(), st.sampled_from(["brief", "moderate", "detailed"])
         ),
     )
     @settings(max_examples=100)
-    def test_property_preference_update_consistency(self, communication_style, response_length):
+    def test_property_preference_update_consistency(
+        self, communication_style, response_length
+    ):
         """
         Property: PreferenceUpdate models are consistently validated.
 
@@ -223,10 +230,10 @@ class TestAPIConsistency:
         )
 
         # Verify consistent structure
-        assert hasattr(request, 'communication_style')
-        assert hasattr(request, 'response_length')
-        assert hasattr(request, 'topics_of_interest')
-        assert hasattr(request, 'preferred_name')
+        assert hasattr(request, "communication_style")
+        assert hasattr(request, "response_length")
+        assert hasattr(request, "topics_of_interest")
+        assert hasattr(request, "preferred_name")
 
         # Verify values
         assert request.communication_style == communication_style
@@ -236,6 +243,7 @@ class TestAPIConsistency:
 # ============================================================================
 # Property 16: Error Response Structure
 # ============================================================================
+
 
 class TestErrorResponseStructure:
     """
@@ -268,11 +276,11 @@ class TestErrorResponseStructure:
         )
 
         # Verify required fields exist
-        assert hasattr(response, 'error')
-        assert hasattr(response, 'message')
-        assert hasattr(response, 'details')
-        assert hasattr(response, 'timestamp')
-        assert hasattr(response, 'request_id')
+        assert hasattr(response, "error")
+        assert hasattr(response, "message")
+        assert hasattr(response, "details")
+        assert hasattr(response, "timestamp")
+        assert hasattr(response, "request_id")
 
         # Verify values
         assert response.error == error_code
@@ -299,7 +307,9 @@ class TestErrorResponseStructure:
         request_id=st.one_of(st.none(), st.text(min_size=1, max_size=100)),
     )
     @settings(max_examples=100)
-    def test_property_error_response_with_details(self, error_code, message, details, request_id):
+    def test_property_error_response_with_details(
+        self, error_code, message, details, request_id
+    ):
         """
         Property: ErrorResponse with details maintains structure.
 
@@ -327,7 +337,9 @@ class TestErrorResponseStructure:
         message=st.text(min_size=1, max_size=500),
     )
     @settings(max_examples=100)
-    def test_property_error_response_rejects_invalid_codes(self, invalid_error_code, message):
+    def test_property_error_response_rejects_invalid_codes(
+        self, invalid_error_code, message
+    ):
         """
         Property: ErrorResponse rejects invalid error codes.
 
@@ -361,11 +373,11 @@ class TestErrorResponseStructure:
         )
 
         # Verify consistent structure
-        assert hasattr(status, 'name')
-        assert hasattr(status, 'status')
-        assert hasattr(status, 'latency_ms')
-        assert hasattr(status, 'error')
-        assert hasattr(status, 'details')
+        assert hasattr(status, "name")
+        assert hasattr(status, "status")
+        assert hasattr(status, "latency_ms")
+        assert hasattr(status, "error")
+        assert hasattr(status, "details")
 
         # Verify values
         assert status.name == name
@@ -427,4 +439,3 @@ class TestErrorResponseStructure:
 
         # Verify validation error mentions doc_type
         assert "doc_type" in str(exc_info.value).lower()
-
