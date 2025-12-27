@@ -55,7 +55,7 @@ services:
       - MORGAN_CACHE_BACKEND=${MORGAN_CACHE_BACKEND:-redis}
       
       # Model cache directory
-      - MORGAN_MODEL_CACHE=/app/models
+      - MORGAN_MODEL_CACHE=/app/data/models
       
       # Session configuration
       - MORGAN_SESSION_BACKEND=redis
@@ -144,7 +144,7 @@ services:
       - morgan-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
       interval: 30s
       timeout: 10s
       retries: 3
