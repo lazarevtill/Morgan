@@ -20,7 +20,7 @@ from morgan.intelligence.core.intelligence_engine import (
 )
 from morgan.intelligence.core.models import ConversationContext, EmotionalState
 from morgan.memory.memory_processor import get_memory_processor
-from ..services.llm_service import LLMService
+from ..services.llm import LLMService
 from ..utils.logger import get_logger
 from .conversation_manager import ConversationManager
 from .emotional_processor import EmotionalProcessor

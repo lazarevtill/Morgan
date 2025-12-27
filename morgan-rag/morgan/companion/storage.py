@@ -14,7 +14,7 @@ from morgan.intelligence.core.models import (
     RelationshipMilestone,
     UserPreferences,
 )
-from morgan.embeddings import EmbeddingService
+from morgan.services.embeddings import EmbeddingService
 from morgan.utils.logger import get_logger
 from morgan.vector_db.client import VectorDBClient
 

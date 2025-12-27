@@ -285,17 +285,30 @@ class LLMService:
             start_time = time.time()
 
             # Run async in sync context
-            loop = asyncio.new_event_loop()
             try:
-                content = loop.run_until_complete(
+                # Check if we're already in an async context
+                asyncio.get_running_loop()
+                # Already in async context, use thread pool
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(
+                        asyncio.run,
+                        self._distributed_client.generate(
+                            prompt=full_prompt,
+                            temperature=temperature or self.settings.llm_temperature,
+                            max_tokens=max_tokens or self.settings.llm_max_tokens,
+                        )
+                    )
+                    content = future.result()
+            except RuntimeError:
+                # No running event loop, safe to use asyncio.run()
+                content = asyncio.run(
                     self._distributed_client.generate(
                         prompt=full_prompt,
                         temperature=temperature or self.settings.llm_temperature,
                         max_tokens=max_tokens or self.settings.llm_max_tokens,
                     )
                 )
-            finally:
-                loop.close()
 
             latency_ms = (time.time() - start_time) * 1000
 

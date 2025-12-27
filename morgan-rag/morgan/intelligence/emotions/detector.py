@@ -13,6 +13,11 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from morgan.config import get_settings
+from morgan.intelligence.constants import (
+    EMOTION_PATTERNS,
+    INTENSITY_MODIFIERS,
+    NEGATION_PATTERNS,
+)
 from morgan.intelligence.core.models import (
     ConversationContext,
     EmotionalState,
@@ -34,75 +39,10 @@ class EmotionDetector:
     - Performance-optimized caching
     - Multi-pattern emotion recognition
     - Confidence scoring and validation
+
+    Note: Emotion patterns and modifiers are imported from
+    morgan.intelligence.constants for centralized management.
     """
-
-    # Core emotion detection patterns
-    EMOTION_PATTERNS = {
-        EmotionType.JOY: [
-            r"\b(happy|joy|excited|thrilled|delighted|pleased|glad|cheerful|elated|wonderful)\b",
-            r"\b(awesome|amazing|fantastic|great|excellent|perfect|brilliant|outstanding)\b",
-            r"\b(love|adore|enjoy|celebrate|rejoice)\b",
-            r"[!]{2,}",  # Multiple exclamation marks
-            r":\)|:D|😊|😄|😃|🎉|❤️|🥳|✨",  # Joy emoticons and emojis
-        ],
-        EmotionType.SADNESS: [
-            r"\b(sad|depressed|down|upset|disappointed|heartbroken|miserable|devastated)\b",
-            r"\b(cry|crying|tears|weep|sob|mourn)\b",
-            r"\b(lonely|alone|isolated|empty|hopeless)\b",
-            r"\b(loss|grief|sorrow|despair)\b",
-            r":\(|😢|😭|💔|😞|😔",  # Sad emoticons
-        ],
-        EmotionType.ANGER: [
-            r"\b(angry|mad|furious|irritated|annoyed|frustrated|pissed|enraged)\b",
-            r"\b(hate|despise|can\'t stand|loathe|detest)\b",
-            r"\b(stupid|idiotic|ridiculous|absurd|outrageous)\b",
-            r"\b(damn|hell|shit|fuck)\b",  # Strong language indicators
-            r"[!]{3,}",  # Many exclamation marks (anger indicator)
-            r"😠|😡|🤬|👿|💢",  # Angry emojis
-        ],
-        EmotionType.FEAR: [
-            r"\b(scared|afraid|terrified|worried|anxious|nervous|panic|frightened)\b",
-            r"\b(fear|phobia|dread|terror|horror)\b",
-            r"\b(what if|concerned about|worried that|afraid that)\b",
-            r"\b(stress|stressed|overwhelmed|helpless)\b",
-            r"😰|😨|😱|😟|😧",  # Fear emojis
-        ],
-        EmotionType.SURPRISE: [
-            r"\b(surprised|shocked|amazed|astonished|wow|whoa|incredible|unbelievable)\b",
-            r"\b(unexpected|sudden|didn\'t expect|never thought)\b",
-            r"\b(blown away|mind blown|can\'t believe)\b",
-            r"😲|😮|🤯|😯|🙀",  # Surprise emojis
-        ],
-        EmotionType.DISGUST: [
-            r"\b(disgusting|gross|revolting|sick|nauseating|repulsive|vile)\b",
-            r"\b(ugh|eww|yuck|blech|nasty)\b",
-            r"\b(horrible|awful|terrible|dreadful)\b",
-            r"🤢|🤮|😷|🤧|😖",  # Disgust emojis
-        ],
-    }
-
-    # Intensity modifiers that affect emotion strength
-    INTENSITY_MODIFIERS = {
-        "extremely": 1.5,
-        "very": 1.3,
-        "really": 1.2,
-        "so": 1.2,
-        "quite": 1.1,
-        "pretty": 1.1,
-        "somewhat": 0.8,
-        "a bit": 0.7,
-        "slightly": 0.6,
-        "barely": 0.4,
-        "not very": 0.4,
-        "hardly": 0.3,
-    }
-
-    # Negation patterns that can flip emotion polarity
-    NEGATION_PATTERNS = [
-        r"\b(not|no|never|nothing|nobody|nowhere|neither|nor)\b",
-        r"\b(don\'t|doesn\'t|didn\'t|won\'t|wouldn\'t|can\'t|couldn\'t)\b",
-        r"\b(isn\'t|aren\'t|wasn\'t|weren\'t|haven\'t|hasn\'t|hadn\'t)\b",
-    ]
 
     def __init__(self):
         """Initialize emotion detector with caching and LLM service."""
@@ -209,10 +149,10 @@ class EmotionDetector:
 
         # Check for negation context
         has_negation = any(
-            re.search(pattern, text_lower) for pattern in self.NEGATION_PATTERNS
+            re.search(pattern, text_lower) for pattern in NEGATION_PATTERNS
         )
 
-        for emotion_type, patterns in self.EMOTION_PATTERNS.items():
+        for emotion_type, patterns in EMOTION_PATTERNS.items():
             score = 0.0
             matched_patterns = []
 
@@ -412,7 +352,7 @@ class EmotionDetector:
         """
         modified_score = base_score
 
-        for modifier, multiplier in self.INTENSITY_MODIFIERS.items():
+        for modifier, multiplier in INTENSITY_MODIFIERS.items():
             if modifier in text:
                 modified_score *= multiplier
                 break  # Apply only the first modifier found
