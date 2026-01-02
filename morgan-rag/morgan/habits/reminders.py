@@ -13,7 +13,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Any, Callable
 
 from .detector import HabitPattern, HabitType, HabitAnalysis
-from ..emotional.models import InteractionData, EmotionalState
+from ..intelligence.core.models import InteractionData, EmotionalState
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)

@@ -187,7 +187,7 @@ Primary Goal: Build a modular AI assistant with advanced emotional intelligence 
     - Create `morgan/conversation/quality.py` for conversation quality assessment
     - _Requirements: 24.1, 24.4, 24.5_
 
-  - [-] 3.5 Build habit and routine recognition
+  - [ ] 3.5 Build habit and routine recognition
 
     - Create `morgan/habits/detector.py` for habit pattern detection
     - Add `morgan/habits/scheduler.py` for routine-based interactions
@@ -208,7 +208,7 @@ Primary Goal: Build a modular AI assistant with advanced emotional intelligence 
 ## Phase 4: Modular Reasoning and Intelligence System (Priority: HIGH)
 
 - [ ] 4. Build comprehensive reasoning modules
-  - [ ] 4.1 Create core reasoning engine
+  - [x] 4.1 Create core reasoning engine
     - Build `morgan/reasoning/engine.py` for main reasoning coordination
     - Create `morgan/reasoning/decomposer.py` for problem decomposition
     - Add `morgan/reasoning/chains.py` for logical reasoning chains
