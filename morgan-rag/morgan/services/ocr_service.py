@@ -422,3 +422,4 @@ async def extract_to_markdown(image: Union[str, bytes, Path]) -> str:
     return result.text if result.success else ""
 
 
+
