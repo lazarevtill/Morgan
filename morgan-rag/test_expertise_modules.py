@@ -28,10 +28,10 @@ def test_imports():
 
         print("✓ Logger imported")
 
-        # Import emotional models (dependency)
-        from morgan.emotional.models import InteractionData
+        # Import intelligence models (dependency)
+        from morgan.intelligence.core.models import InteractionData
 
-        print("✓ Emotional models imported")
+        print("✓ Intelligence models imported")
 
         # Import expertise modules
         from morgan.expertise.domains import DomainKnowledgeTracker, DomainProfile

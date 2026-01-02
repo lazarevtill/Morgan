@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..config import get_settings
-from ..emotional.models import InteractionData
+from ..intelligence.core.models import InteractionData
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -296,7 +296,7 @@ class KnowledgeDepthAssessor:
     def __init__(self):
         """Initialize the knowledge depth assessor."""
         self.settings = get_settings()
-        self.storage_path = Path(self.settings.data_dir) / "depth"
+        self.storage_path = Path(self.settings.morgan_data_dir) / "depth"
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
         # In-memory cache

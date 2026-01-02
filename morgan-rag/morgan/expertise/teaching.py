@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..config import get_settings
-from ..emotional.models import InteractionData
+from ..intelligence.core.models import InteractionData
 from ..utils.logger import get_logger
 from .depth import KnowledgeLevel, get_depth_assessor
 
@@ -251,7 +251,7 @@ class AdaptiveTeachingEngine:
     def __init__(self):
         """Initialize the adaptive teaching engine."""
         self.settings = get_settings()
-        self.storage_path = Path(self.settings.data_dir) / "teaching"
+        self.storage_path = Path(self.settings.morgan_data_dir) / "teaching"
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
         # In-memory cache
