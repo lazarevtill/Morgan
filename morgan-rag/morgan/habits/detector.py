@@ -12,8 +12,7 @@ from datetime import datetime, timedelta, time
 from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple
 
-from ..emotional.models import InteractionData
-from ..learning.patterns import InteractionPatterns, TimingPattern
+from ..intelligence.core.models import InteractionData
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -157,7 +156,6 @@ class HabitDetector:
         self,
         user_id: str,
         interactions: List[InteractionData],
-        interaction_patterns: Optional[InteractionPatterns] = None,
         analysis_period: timedelta = timedelta(days=30)
     ) -> HabitAnalysis:
         """
