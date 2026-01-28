@@ -26,6 +26,7 @@ from morgan_server.api.routes import (
     knowledge_router,
     health_router,
     profile_router,
+    features_router,
 )
 
 
@@ -95,6 +96,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Initializing Morgan assistant (Core)...")
         from morgan_server.assistant import MorganAssistant
         from morgan_server.api.routes.chat import set_assistant
+        from morgan_server.api.routes.features import set_assistant as set_features_assistant
 
         # We can pass config_path if config object has it, otherwise default
         config_path = getattr(config, "config_file", None)
@@ -102,8 +104,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         assistant = MorganAssistant(config_path=config_path)
         app.state.assistant = assistant
 
-        # Set assistant in chat routes
+        # Set assistant in chat routes and feature routes
         set_assistant(assistant)
+        set_features_assistant(assistant)
 
         # Register components with health system
         health_system.register_component("assistant", assistant)
@@ -283,6 +286,9 @@ def create_app(
 
     # Profile router
     app.include_router(profile_router, tags=["Profile"])
+
+    # Feature module routes (suggestions, wellness, habits, quality)
+    app.include_router(features_router, tags=["Features"])
 
     logger.info("API routes registered")
 

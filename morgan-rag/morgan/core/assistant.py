@@ -8,10 +8,14 @@ Now includes companion features for building meaningful relationships.
 KISS Principle: Clean interface that orchestrates specialized modules.
 """
 
-from typing import Any, Dict, List, Optional
+import asyncio
+import uuid
+from datetime import datetime
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from ..companion.relationship_manager import CompanionRelationshipManager
 from ..config import get_settings
+from ..intelligence.core.models import ConversationContext
 
 # Legacy imports removed
 from morgan.intelligence.core.intelligence_engine import (
@@ -105,18 +109,121 @@ class MorganAssistant:
         question: str,
         conversation_id: Optional[str] = None,
         user_id: Optional[str] = None,
-    ):
+    ) -> AsyncGenerator[str, None]:
         """
         Ask Morgan a question with streaming response.
+
+        Runs the full orchestrator pipeline (Steps 1-8) for context gathering,
+        emotion analysis, and style adaptation, then streams only the LLM
+        generation step. Post-generation steps (memory, learning) run after
+        streaming completes.
         """
-        # For now, delegating to LLM directly but using Knowledge/Memory
-        search_results = self.knowledge.search_knowledge(question)
+        conv_id = conversation_id or str(uuid.uuid4())
+        uid = user_id or "anonymous"
+        orch = self.orchestrator
+
+        # === Pre-generation pipeline (Steps 1-8) ===
+        # Step 1: Memory context
+        memory_history = []
         memory_context = ""
         if conversation_id:
-            memory_context = self.memory.get_conversation_context(conversation_id)
+            history_turns = self.memory.get_conversation_history(conversation_id)
+            memory_history = [
+                {"question": t.get("question", ""), "answer": t.get("answer", "")}
+                for t in history_turns[-3:]
+            ]
+            memory_context = self.memory.get_conversation_context(
+                conversation_id, max_turns=5
+            )
 
-        context = f"Knowledge: {search_results}\nMemory: {memory_context}"
+        # Step 2: Contextualize query
+        search_query = await orch.reasoning.contextualize_query(
+            question, memory_history
+        )
 
+        conv_context = ConversationContext(
+            user_id=uid,
+            conversation_id=conv_id,
+            message_text=question,
+            timestamp=datetime.utcnow(),
+            previous_messages=[m.get("question", "") for m in memory_history],
+        )
+
+        # Step 2b: Non-verbal cues
+        nonverbal_analysis = None
+        if orch._nonverbal_detector:
+            try:
+                nonverbal_analysis = orch._nonverbal_detector.analyze_text(
+                    text=question, context=conv_context,
+                )
+            except Exception:
+                pass
+
+        # Step 3: Emotion analysis
+        emotional_state = orch.emotional_processor.emotional_engine.analyze_emotion(
+            question, conv_context
+        )
+
+        # Step 3b: Flow management
+        flow_result = None
+        if orch._flow_manager:
+            try:
+                flow_result = orch._flow_manager.process_turn(
+                    conversation_id=conv_id, user_id=uid,
+                    message=question, emotional_state=emotional_state,
+                )
+            except Exception:
+                pass
+
+        # Step 4: User profile
+        user_profile = None
+        if user_id:
+            user_profile = orch.emotional_processor.get_or_create_user_profile(user_id)
+
+        # Step 5: Style adaptation
+        conversation_style = None
+        if user_profile:
+            conversation_style = orch.emotional_processor.relationship_manager.adapt_conversation_style(
+                user_profile, emotional_state
+            )
+
+        # Step 5b: Communication style
+        comm_style_result = None
+        if orch._communication_adapter and user_profile:
+            try:
+                comm_style_result = orch._communication_adapter.adapt_style(
+                    user_id=uid, emotional_state=emotional_state,
+                    conversation_context=conv_context,
+                )
+            except Exception:
+                pass
+
+        # Step 7: Knowledge search
+        search_results = self.knowledge.search_knowledge(
+            query=search_query, max_results=self.settings.morgan_max_search_results
+        )
+
+        # Step 7b: External knowledge
+        external_results = await orch._fetch_external_knowledge(search_query)
+
+        # Step 8: Build context
+        knowledge_context = orch._build_knowledge_context(
+            search_results, external_results
+        )
+        style_context = str(conversation_style) if conversation_style else ""
+        if comm_style_result:
+            style_context += f"\nCommunication: {comm_style_result}"
+        if flow_result:
+            style_context += f"\nFlow: {flow_result}"
+
+        context = (
+            f"Emotional State: {emotional_state}\n"
+            f"Style: {style_context}\n"
+            f"Knowledge:\n{knowledge_context}\n"
+            f"Memory: {memory_context}"
+        )
+
+        # === Step 9: Stream LLM generation ===
         full_response = ""
         for chunk in self.llm.stream_generate(
             prompt=f"Question: {question}", system_prompt=context
@@ -125,13 +232,60 @@ class MorganAssistant:
             full_response += chunk_text
             yield chunk_text
 
-        # Update memory at the end
+        # === Post-generation pipeline (Steps 10-13) ===
+        # Step 12: Memory update
         if conversation_id:
-            self.memory.add_turn(
-                conversation_id=conversation_id,
-                question=question,
-                answer=full_response,
-                sources=[res.get("source") for res in search_results],
+            orch.emotional_processor.process_conversation_memory(
+                conv_context, emotional_state, full_response,
+                orch._collect_sources(search_results, external_results, True)
+            )
+
+        if user_profile:
+            orch.emotional_processor.update_user_profile(
+                user_profile, conv_context, emotional_state, 0.8, []
+            )
+
+        # Step 12b-f: Post-processing (non-blocking)
+        if orch._quality_assessor:
+            try:
+                orch._quality_assessor.assess_turn(
+                    conversation_id=conv_id, user_id=uid,
+                    user_message=question, assistant_response=full_response,
+                    emotional_state=emotional_state,
+                )
+            except Exception:
+                pass
+
+        if orch._topic_learner:
+            try:
+                orch._topic_learner.learn_from_conversation(
+                    user_id=uid, message=question, response=full_response,
+                    emotional_state=emotional_state,
+                )
+            except Exception:
+                pass
+
+        if orch._learning_engine:
+            try:
+                orch._learning_engine.process_interaction(
+                    user_id=uid, context=conv_context, response=full_response,
+                    emotional_state=emotional_state,
+                )
+            except Exception:
+                pass
+
+        if orch._habit_detector:
+            try:
+                orch._habit_detector.record_interaction(
+                    user_id=uid, message=question, timestamp=datetime.utcnow(),
+                )
+            except Exception:
+                pass
+
+        # Step 13: Proactive context
+        if orch.enable_proactive:
+            await orch._update_proactive_context(
+                uid, question, full_response, emotional_state
             )
 
     def learn_from_documents(
@@ -323,6 +477,14 @@ class MorganAssistant:
         """Get milestone statistics for a user."""
         user_profile = self.emotional_processor.get_or_create_user_profile(user_id)
         return self.milestone_tracker.get_milestone_statistics(user_profile)
+
+    async def get_wellness_insights(self, user_id: str) -> dict:
+        """Get wellness insights for a user."""
+        return await self.orchestrator.get_wellness_insights(user_id)
+
+    async def get_habit_patterns(self, user_id: str) -> dict:
+        """Get detected habit patterns for a user."""
+        return await self.orchestrator.get_habit_patterns(user_id)
 
     def __str__(self) -> str:
         """Human-friendly string representation."""

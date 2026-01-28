@@ -34,6 +34,14 @@ class Response:
     personalization_elements: List[str] = None  # Personalization applied
     relationship_context: str = None  # Relationship context used
     milestone_celebration: Optional[RelationshipMilestone] = None
+    # Integrated module fields
+    flow_state: Optional[str] = None  # Conversation flow state
+    quality_score: Optional[float] = None  # Conversation quality score
+    proactive_suggestions: List[str] = None  # Proactive suggestions
+    reasoning_summary: Optional[str] = None  # Deep reasoning summary
+    cultural_adaptations: List[str] = None  # Cultural adaptations applied
+    habit_adaptations: List[str] = None  # Habit-based adaptations applied
+    nonverbal_cues_detected: List[str] = None  # Non-verbal cues found in input
 
     def __post_init__(self):
         """Ensure lists are always initialized."""
@@ -43,6 +51,14 @@ class Response:
             self.suggestions = []
         if self.personalization_elements is None:
             self.personalization_elements = []
+        if self.proactive_suggestions is None:
+            self.proactive_suggestions = []
+        if self.cultural_adaptations is None:
+            self.cultural_adaptations = []
+        if self.habit_adaptations is None:
+            self.habit_adaptations = []
+        if self.nonverbal_cues_detected is None:
+            self.nonverbal_cues_detected = []
 
 
 class ResponseHandler:

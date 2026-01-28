@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
-from ..emotional.models import InteractionData
+from ..intelligence.core.models import InteractionData
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)

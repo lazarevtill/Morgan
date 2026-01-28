@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
-from ..emotional.models import ConversationContext, EmotionalState
+from ..intelligence.core.models import ConversationContext, EmotionalState
 from ..utils.logger import get_logger
 from .traits import PersonalityProfile, PersonalityTrait, TraitLevel
 

@@ -647,22 +647,40 @@ class MemoryService:
 
     def _learn_from_feedback(self, turn_id: str, rating: int, comment: Optional[str]):
         """
-        Learn from user feedback.
+        Learn from user feedback using the Learning Engine.
 
-        Simple learning approach for now - could be enhanced with ML later.
+        Routes feedback to LearningEngine for pattern analysis and behavioral adaptation.
         """
         try:
-            # For now, just log the feedback for analysis
+            settings = get_settings()
+            if not settings.morgan_enable_learning:
+                logger.debug("Learning disabled, skipping feedback processing")
+                return
+
+            from morgan.learning.engine import get_learning_engine
+            engine = get_learning_engine()
+
+            # Get turn data for context
+            turn_data = self.vector_db.get_point(self.turn_collection, turn_id)
+            payload = turn_data.get("payload", {}) if turn_data else {}
+
+            from morgan.learning.feedback import UserFeedback
+            feedback = UserFeedback(
+                feedback_id=turn_id,
+                user_id=payload.get("user_id", "anonymous"),
+                rating=rating,
+                comment=comment,
+                conversation_id=payload.get("conversation_id", ""),
+                turn_id=turn_id,
+            )
+
+            engine.feedback_processor.process_feedback(feedback)
             logger.info(
                 f"Learning from feedback - Turn: {turn_id}, Rating: {rating}, Comment: {comment}"
             )
 
-            # Future enhancements could include:
-            # - Adjusting response patterns based on feedback
-            # - Identifying common issues from low ratings
-            # - Improving source selection based on feedback
-            # - Fine-tuning retrieval based on successful responses
-
+        except ImportError:
+            logger.debug("Learning engine not available, feedback logged only")
         except Exception as e:
             logger.error(f"Failed to learn from feedback: {e}")
 

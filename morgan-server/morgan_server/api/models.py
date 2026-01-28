@@ -80,6 +80,26 @@ class ChatResponse(BaseModel):
     metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata"
     )
+    # Integrated module fields
+    flow_state: Optional[str] = Field(None, description="Conversation flow state")
+    quality_score: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Conversation quality score"
+    )
+    proactive_suggestions: List[str] = Field(
+        default_factory=list, description="Proactive suggestions"
+    )
+    reasoning_summary: Optional[str] = Field(
+        None, description="Deep reasoning summary"
+    )
+    cultural_adaptations: List[str] = Field(
+        default_factory=list, description="Cultural adaptations applied"
+    )
+    habit_adaptations: List[str] = Field(
+        default_factory=list, description="Habit-based adaptations applied"
+    )
+    nonverbal_cues_detected: List[str] = Field(
+        default_factory=list, description="Non-verbal cues detected in input"
+    )
 
 
 # ============================================================================
@@ -350,6 +370,83 @@ class ErrorResponse(BaseModel):
                 "Error code must be uppercase with underscores (e.g., INVALID_REQUEST)"
             )
         return v
+
+
+# ============================================================================
+# Timeline API Models
+# ============================================================================
+
+
+# ============================================================================
+# Feature Module API Models
+# ============================================================================
+
+
+class WellnessInsight(BaseModel):
+    """Wellness insight for a user."""
+
+    category: str = Field(..., description="Wellness category")
+    score: Optional[float] = Field(None, ge=0.0, le=10.0, description="Wellness score")
+    trend: Optional[str] = Field(None, description="Trend direction (improving, declining, stable)")
+    recommendations: List[str] = Field(default_factory=list, description="Wellness recommendations")
+
+
+class WellnessResponse(BaseModel):
+    """Response model for wellness insights."""
+
+    user_id: str = Field(..., description="User identifier")
+    insights: List[WellnessInsight] = Field(default_factory=list, description="Wellness insights")
+    overall_score: Optional[float] = Field(None, ge=0.0, le=10.0, description="Overall wellness score")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional data")
+
+
+class HabitPatternItem(BaseModel):
+    """A single detected habit pattern."""
+
+    name: str = Field(..., description="Habit name")
+    habit_type: str = Field(..., description="Type of habit")
+    frequency: str = Field(..., description="Habit frequency")
+    confidence: str = Field(..., description="Detection confidence level")
+    consistency: float = Field(..., ge=0.0, le=1.0, description="Consistency score")
+
+
+class HabitsResponse(BaseModel):
+    """Response model for habit patterns."""
+
+    user_id: str = Field(..., description="User identifier")
+    habits: List[HabitPatternItem] = Field(default_factory=list, description="Detected habits")
+    total_interactions: int = Field(0, ge=0, description="Total analyzed interactions")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional data")
+
+
+class QualityDimensionScore(BaseModel):
+    """Score for a single quality dimension."""
+
+    dimension: str = Field(..., description="Quality dimension name")
+    score: float = Field(..., ge=0.0, le=1.0, description="Dimension score")
+    level: str = Field(..., description="Quality level")
+
+
+class ConversationQualityResponse(BaseModel):
+    """Response model for conversation quality."""
+
+    conversation_id: str = Field(..., description="Conversation identifier")
+    overall_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Overall quality score")
+    overall_level: Optional[str] = Field(None, description="Overall quality level")
+    dimensions: List[QualityDimensionScore] = Field(
+        default_factory=list, description="Per-dimension scores"
+    )
+    strengths: List[str] = Field(default_factory=list, description="Key strengths")
+    improvements: List[str] = Field(default_factory=list, description="Improvement areas")
+
+
+class SuggestionsResponse(BaseModel):
+    """Response model for proactive suggestions."""
+
+    user_id: str = Field(..., description="User identifier")
+    suggestions: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Proactive suggestions"
+    )
 
 
 # ============================================================================

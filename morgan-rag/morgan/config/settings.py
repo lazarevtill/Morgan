@@ -180,6 +180,38 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # Feature Module Flags
+    # ============================================================================
+
+    morgan_enable_conversation_flow: bool = Field(
+        default=True, description="Enable conversation flow management (topics, interruptions, quality)"
+    )
+
+    morgan_enable_communication_adapter: bool = Field(
+        default=True, description="Enable communication style adaptation"
+    )
+
+    morgan_enable_habits: bool = Field(
+        default=True, description="Enable habit detection and adaptation"
+    )
+
+    morgan_enable_learning: bool = Field(
+        default=True, description="Enable learning engine (pattern analysis, preference extraction)"
+    )
+
+    morgan_enable_quality_assessment: bool = Field(
+        default=True, description="Enable conversation quality assessment"
+    )
+
+    morgan_enable_cultural_awareness: bool = Field(
+        default=True, description="Enable cultural emotional awareness"
+    )
+
+    morgan_enable_nonverbal_detection: bool = Field(
+        default=True, description="Enable non-verbal cue detection from text patterns"
+    )
+
+    # ============================================================================
     # Document Processing Settings
     # ============================================================================
 

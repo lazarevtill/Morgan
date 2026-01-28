@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from ..emotional.models import (
+from ..intelligence.core.models import (
     CompanionProfile,
     ConversationContext,
     ConversationStyle,

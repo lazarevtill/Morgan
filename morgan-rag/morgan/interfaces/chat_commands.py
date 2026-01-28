@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Dict
 
 from ..core.assistant import MorganAssistant
-from ..emotional.models import CommunicationStyle, CompanionProfile, ResponseLength
+from ..intelligence.core.models import CommunicationStyle, CompanionProfile, ResponseLength
 from ..utils.logger import get_logger
 from .chat_display import ChatDisplay
 
