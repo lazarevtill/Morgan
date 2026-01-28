@@ -17,7 +17,7 @@ import mimetypes
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
@@ -339,7 +339,7 @@ class EnhancedDocumentProcessor:
             "source": source_path,
             "document_type": document_type,
             "content_length": len(content),
-            "processed_at": datetime.utcnow().isoformat(),
+            "processed_at": datetime.now(timezone.utc).isoformat(),
             "processor_version": "enhanced_v1.0",
         }
 

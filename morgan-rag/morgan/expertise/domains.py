@@ -8,7 +8,7 @@ and maintains domain-specific interaction history for personalized assistance.
 import json
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
@@ -104,7 +104,7 @@ class DomainProfile:
         if not self.first_interaction:
             self.first_interaction = interaction.timestamp
         self.last_interaction = interaction.timestamp
-        self.last_updated = datetime.utcnow()
+        self.last_updated = datetime.now(timezone.utc)
 
         # Update known concepts
         self.known_concepts.update(interaction.concepts_mentioned)
@@ -116,7 +116,7 @@ class DomainProfile:
 
     def get_learning_velocity(self, days: int = 30) -> float:
         """Calculate learning velocity over specified period."""
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         recent_concepts = [
             concept
             for concept, learned_date in self.concepts_learned.items()
@@ -624,7 +624,7 @@ class DomainKnowledgeTracker:
         return DomainInteraction(
             interaction_id=str(uuid.uuid4()),
             domain_name=domain_name,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             topics_discussed=topics,
             questions_asked=questions,
             concepts_mentioned=concepts,

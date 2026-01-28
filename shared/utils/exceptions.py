@@ -12,7 +12,7 @@ import uuid
 import traceback
 from typing import Dict, Any, Optional, List
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class ErrorSeverity(Enum):
@@ -126,7 +126,7 @@ class MorganException(Exception):
             user_message or "An error occurred while processing your request"
         )
         self.recovery_suggestions = recovery_suggestions or []
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(timezone.utc)
         self.stack_trace = traceback.format_exc()
 
     def to_dict(self) -> Dict[str, Any]:

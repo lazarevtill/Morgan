@@ -8,7 +8,7 @@ calibration, normalization, and contextual adjustment capabilities.
 import statistics
 import threading
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
@@ -235,7 +235,7 @@ class IntensityMeasurer:
 
         # Filter by timeframe
         days = int(timeframe.rstrip("d"))
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         recent_emotions = [e for e in emotional_states if e.timestamp >= cutoff_date]
 
         if len(recent_emotions) < 3:

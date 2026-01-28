@@ -6,7 +6,7 @@ styles, tracking milestones, and generating personalized interactions.
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 from morgan.companion.relationship_manager import (
@@ -36,7 +36,7 @@ class TestCompanionRelationshipManager:
             Interaction(
                 interaction_id="int_1",
                 user_id=self.user_id,
-                timestamp=datetime.utcnow() - timedelta(days=5),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=5),
                 message_content="Hello, I'm interested in learning about Python programming",
                 topics_discussed=["python", "programming"],
                 user_satisfaction=0.8,
@@ -44,7 +44,7 @@ class TestCompanionRelationshipManager:
             Interaction(
                 interaction_id="int_2",
                 user_id=self.user_id,
-                timestamp=datetime.utcnow() - timedelta(days=3),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=3),
                 message_content="Could you please help me understand machine learning concepts?",
                 topics_discussed=["machine learning", "concepts"],
                 user_satisfaction=0.9,
@@ -52,7 +52,7 @@ class TestCompanionRelationshipManager:
             Interaction(
                 interaction_id="int_3",
                 user_id=self.user_id,
-                timestamp=datetime.utcnow() - timedelta(days=1),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=1),
                 message_content="Thank you for the detailed explanation. Call me Alex.",
                 topics_discussed=["feedback"],
                 user_satisfaction=0.95,
@@ -180,7 +180,7 @@ class TestCompanionRelationshipManager:
             user_id=self.user_id,
             conversation_id="conv_123",
             message_text="I want to learn more about neural networks",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             previous_messages=["Tell me about machine learning algorithms"],
         )
 

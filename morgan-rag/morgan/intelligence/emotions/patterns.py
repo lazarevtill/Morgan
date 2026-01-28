@@ -3,12 +3,19 @@ Emotional pattern recognition module.
 
 Provides focused emotional pattern detection, trend analysis, and behavioral
 pattern recognition for enhanced emotional intelligence and user understanding.
+
+Semantic-First Architecture:
+- LLM analysis interprets patterns for deeper understanding
+- Provides insights into what patterns reveal about the user
+- Identifies hidden emotional dynamics
+- Predicts future emotional states with reasoning
 """
 
+import json
 import statistics
 import threading
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
@@ -17,6 +24,8 @@ from morgan.intelligence.emotions.memory import (
     EmotionalMemory,
     get_emotional_memory_storage,
 )
+from morgan.services.llm import get_llm_service
+from morgan.utils.llm_parsing import parse_llm_json
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -55,13 +64,13 @@ class EmotionalPattern:
         self.emotional_characteristics = emotional_characteristics
         self.behavioral_implications = behavioral_implications
         self.supporting_evidence = supporting_evidence
-        self.detected_at = datetime.utcnow()
-        self.last_observed = datetime.utcnow()
+        self.detected_at = datetime.now(timezone.utc)
+        self.last_observed = datetime.now(timezone.utc)
         self.observation_count = 1
 
     def update_observation(self):
         """Update pattern observation tracking."""
-        self.last_observed = datetime.utcnow()
+        self.last_observed = datetime.now(timezone.utc)
         self.observation_count += 1
 
     def calculate_pattern_strength(self) -> float:
@@ -89,7 +98,7 @@ class EmotionalPattern:
         Returns:
             True if pattern is still active
         """
-        age = datetime.utcnow() - self.last_observed
+        age = datetime.now(timezone.utc) - self.last_observed
         return age.days <= max_age_days
 
 
@@ -97,8 +106,15 @@ class EmotionalPatternRecognizer:
     """
     Recognizes and analyzes emotional patterns in user behavior.
 
+    Semantic-First Architecture:
+    - Statistical pattern detection identifies raw patterns
+    - LLM semantic interpretation provides deeper understanding
+    - Reveals what patterns mean about the user
+    - Identifies hidden emotional dynamics and predictions
+
     Features:
     - Multi-type pattern detection
+    - Semantic pattern interpretation
     - Temporal pattern analysis
     - Behavioral pattern recognition
     - Adaptive pattern learning
@@ -117,15 +133,17 @@ class EmotionalPatternRecognizer:
     }
 
     def __init__(self):
-        """Initialize emotional pattern recognizer."""
+        """Initialize emotional pattern recognizer with LLM service."""
         self.settings = get_settings()
         self.memory_storage = get_emotional_memory_storage()
+        self.llm_service = get_llm_service()
 
         # Pattern storage
         self._detected_patterns = {}  # user_id -> List[EmotionalPattern]
         self._pattern_cache = {}
+        self._semantic_interpretations = {}  # Cache for semantic insights
 
-        logger.info("Emotional Pattern Recognizer initialized")
+        logger.info("Emotional Pattern Recognizer initialized (semantic mode)")
 
     def detect_patterns(
         self, user_id: str, analysis_days: int = 30, min_pattern_confidence: float = 0.6
@@ -224,13 +242,16 @@ class EmotionalPatternRecognizer:
         self, patterns: List[EmotionalPattern]
     ) -> Dict[str, Any]:
         """
-        Analyze implications of detected patterns.
+        Analyze implications of detected patterns with semantic interpretation.
+
+        This combines statistical analysis with LLM semantic interpretation
+        to provide deeper insights into what patterns reveal about the user.
 
         Args:
             patterns: List of emotional patterns
 
         Returns:
-            Pattern implications analysis
+            Pattern implications analysis with semantic insights
         """
         if not patterns:
             return {"implications": "no_patterns_detected"}
@@ -258,7 +279,10 @@ class EmotionalPatternRecognizer:
         # Generate recommendations
         recommendations = self._generate_pattern_recommendations(patterns)
 
-        return {
+        # SEMANTIC: Add deep interpretation of patterns
+        semantic_insights = self._interpret_patterns_semantically(patterns)
+
+        result = {
             "total_patterns": len(patterns),
             "pattern_strength_distribution": {
                 "strong": len(strong_patterns),
@@ -269,8 +293,111 @@ class EmotionalPatternRecognizer:
             "top_implications": dict(implication_counts.most_common(5)),
             "emotional_profile": emotional_profile,
             "recommendations": recommendations,
-            "analysis_timestamp": datetime.utcnow().isoformat(),
+            "semantic_insights": semantic_insights,
+            "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
         }
+
+        return result
+
+    def _interpret_patterns_semantically(
+        self, patterns: List[EmotionalPattern]
+    ) -> Dict[str, Any]:
+        """
+        Semantic interpretation of statistical patterns using LLM.
+
+        This provides deeper understanding of what patterns reveal:
+        - What these patterns say about the user
+        - Hidden emotional dynamics
+        - Potential underlying causes
+        - Predictions for future emotional states
+        - Recommendations for support
+
+        Args:
+            patterns: List of detected patterns
+
+        Returns:
+            Semantic interpretation of patterns
+        """
+        if not patterns:
+            return {"interpretation": "insufficient_patterns"}
+
+        try:
+            # Prepare pattern summaries for analysis
+            pattern_summaries = []
+            for pattern in patterns[:10]:  # Limit for context
+                summary = {
+                    "type": pattern.pattern_type,
+                    "description": pattern.description,
+                    "confidence": pattern.confidence,
+                    "frequency": pattern.frequency,
+                    "emotional_characteristics": pattern.emotional_characteristics,
+                    "behavioral_implications": pattern.behavioral_implications[:3],
+                }
+                pattern_summaries.append(summary)
+
+            prompt = f"""Interpret these emotional patterns to provide deep psychological insight.
+
+Detected Patterns:
+{json.dumps(pattern_summaries, indent=2)}
+
+Provide a thoughtful interpretation covering:
+
+1. WHAT THESE PATTERNS REVEAL: What do these patterns say about this person's emotional life?
+
+2. HIDDEN DYNAMICS: What emotional dynamics might be underneath the surface that aren't explicitly shown in the patterns?
+
+3. UNDERLYING CAUSES: What life circumstances or psychological factors might be driving these patterns?
+
+4. PREDICTIONS: Based on these patterns, what emotional states or challenges might this person face in the near future?
+
+5. SUPPORT STRATEGIES: How can Morgan best support this person given these patterns?
+
+6. STRENGTHS: What emotional strengths do these patterns reveal?
+
+Respond with JSON ONLY:
+{{
+    "overall_interpretation": "comprehensive understanding of what patterns reveal",
+    "hidden_dynamics": ["dynamic1", "dynamic2"],
+    "likely_underlying_causes": ["cause1", "cause2"],
+    "predictions": {{
+        "short_term": "what to expect soon",
+        "potential_challenges": ["challenge1"],
+        "positive_trends": ["trend1"]
+    }},
+    "support_strategies": ["strategy1", "strategy2"],
+    "emotional_strengths": ["strength1", "strength2"],
+    "areas_of_concern": ["concern1"],
+    "confidence": 0.0-1.0
+}}"""
+
+            response = self.llm_service.generate(
+                prompt=prompt,
+                temperature=0.4,
+                max_tokens=800,  # Increased for reasoning models
+            )
+
+            # Parse JSON using utility that handles reasoning blocks
+            interpretation = parse_llm_json(response.content)
+            if interpretation is None:
+                logger.warning("Failed to parse semantic pattern interpretation")
+                return {
+                    "interpretation": "parse_error",
+                    "error": "failed_to_parse_response",
+                }
+
+            logger.debug(
+                f"Semantic pattern interpretation completed with "
+                f"confidence {interpretation.get('confidence', 'unknown')}"
+            )
+
+            return interpretation
+
+        except Exception as e:
+            logger.warning(f"Semantic pattern interpretation failed: {e}")
+            return {
+                "interpretation": "semantic_analysis_unavailable",
+                "error": str(e),
+            }
 
     def predict_emotional_response(
         self,

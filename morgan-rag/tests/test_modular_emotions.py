@@ -5,17 +5,17 @@ Tests the new modular components: detector, analyzer, tracker, classifier, and i
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 import tempfile
 import os
 
-from morgan.emotions.detector import EmotionDetector
-from morgan.emotions.analyzer import MoodAnalyzer
-from morgan.emotions.tracker import EmotionalStateTracker
-from morgan.emotions.classifier import EmotionClassifier
-from morgan.emotions.intensity import IntensityMeasurer
-from morgan.emotional.models import EmotionalState, EmotionType, ConversationContext
+from morgan.intelligence.emotions.detector import EmotionDetector
+from morgan.intelligence.emotions.analyzer import MoodAnalyzer
+from morgan.intelligence.emotions.tracker import EmotionalStateTracker
+from morgan.intelligence.emotions.classifier import EmotionClassifier
+from morgan.intelligence.emotions.intensity import IntensityMeasurer
+from morgan.intelligence.core.models import EmotionalState, EmotionType, ConversationContext
 
 
 class TestEmotionDetector:
@@ -24,7 +24,7 @@ class TestEmotionDetector:
     @pytest.fixture
     def detector(self):
         """Create emotion detector for testing."""
-        with patch("morgan.emotions.detector.get_llm_service"):
+        with patch("morgan.intelligence.emotions.detector.get_llm_service"):
             return EmotionDetector()
 
     @pytest.fixture
@@ -83,19 +83,19 @@ class TestMoodAnalyzer:
                 primary_emotion=EmotionType.JOY,
                 intensity=0.8,
                 confidence=0.9,
-                timestamp=datetime.now() - timedelta(days=1),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=1),
             ),
             EmotionalState(
                 primary_emotion=EmotionType.JOY,
                 intensity=0.7,
                 confidence=0.8,
-                timestamp=datetime.now() - timedelta(hours=12),
+                timestamp=datetime.now(timezone.utc) - timedelta(hours=12),
             ),
             EmotionalState(
                 primary_emotion=EmotionType.NEUTRAL,
                 intensity=0.5,
                 confidence=0.7,
-                timestamp=datetime.now(),
+                timestamp=datetime.now(timezone.utc),
             ),
         ]
 
@@ -114,7 +114,7 @@ class TestMoodAnalyzer:
                 primary_emotion=EmotionType.JOY,
                 intensity=0.8,
                 confidence=0.9,
-                timestamp=datetime.now(),
+                timestamp=datetime.now(timezone.utc),
             )
         ]
 
@@ -130,7 +130,7 @@ class TestEmotionalStateTracker:
     @pytest.fixture
     def tracker(self):
         """Create emotional state tracker with temporary database."""
-        with patch("morgan.emotions.tracker.get_settings") as mock_settings:
+        with patch("morgan.intelligence.emotions.tracker.get_settings") as mock_settings:
             # Create temporary directory for test database
             temp_dir = tempfile.mkdtemp()
 
@@ -291,19 +291,19 @@ class TestIntensityMeasurer:
                 primary_emotion=EmotionType.JOY,
                 intensity=0.8,
                 confidence=0.9,
-                timestamp=datetime.now() - timedelta(days=1),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=1),
             ),
             EmotionalState(
                 primary_emotion=EmotionType.SADNESS,
                 intensity=0.6,
                 confidence=0.8,
-                timestamp=datetime.now() - timedelta(hours=12),
+                timestamp=datetime.now(timezone.utc) - timedelta(hours=12),
             ),
             EmotionalState(
                 primary_emotion=EmotionType.NEUTRAL,
                 intensity=0.5,
                 confidence=0.7,
-                timestamp=datetime.now(),
+                timestamp=datetime.now(timezone.utc),
             ),
         ]
 
@@ -337,8 +337,8 @@ class TestModularIntegration:
     @pytest.fixture
     def components(self):
         """Create all modular components for integration testing."""
-        with patch("morgan.emotions.detector.get_llm_service"), patch(
-            "morgan.emotions.tracker.get_settings"
+        with patch("morgan.intelligence.emotions.detector.get_llm_service"), patch(
+            "morgan.intelligence.emotions.tracker.get_settings"
         ) as mock_settings:
 
             # Setup temporary directory for tracker

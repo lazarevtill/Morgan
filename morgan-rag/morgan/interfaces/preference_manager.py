@@ -8,7 +8,7 @@ and intelligent defaults based on user behavior patterns.
 import json
 import uuid
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -89,7 +89,7 @@ class UserPreferenceManager:
                     personal_context=data.get("personal_context", {}),
                     interaction_preferences=data.get("interaction_preferences", {}),
                     last_updated=datetime.fromisoformat(
-                        data.get("last_updated", datetime.utcnow().isoformat())
+                        data.get("last_updated", datetime.now(timezone.utc).isoformat())
                     ),
                 )
 
@@ -295,7 +295,7 @@ class UserPreferenceManager:
                     updated = True
 
             if updated:
-                current_prefs.last_updated = datetime.utcnow()
+                current_prefs.last_updated = datetime.now(timezone.utc)
                 self._save_preferences(user_id, current_prefs)
                 logger.info(f"Learned and updated preferences for user {user_id}")
                 return current_prefs
@@ -361,7 +361,7 @@ class UserPreferenceManager:
                 )
 
             # Suggest preference review if not updated recently
-            days_since_update = (datetime.utcnow() - preferences.last_updated).days
+            days_since_update = (datetime.now(timezone.utc) - preferences.last_updated).days
             if days_since_update > 30:
                 suggestions.append(
                     {
@@ -390,7 +390,7 @@ class UserPreferenceManager:
             export_data = {
                 "user_id": user_id,
                 "preferences": asdict(preferences),
-                "export_timestamp": datetime.utcnow().isoformat(),
+                "export_timestamp": datetime.now(timezone.utc).isoformat(),
                 "version": "1.0",
             }
 
@@ -433,7 +433,7 @@ class UserPreferenceManager:
                 learning_goals=pref_data.get("learning_goals", []),
                 personal_context=pref_data.get("personal_context", {}),
                 interaction_preferences=pref_data.get("interaction_preferences", {}),
-                last_updated=datetime.utcnow(),
+                last_updated=datetime.now(timezone.utc),
             )
 
             # Merge with existing preferences if requested
@@ -507,7 +507,7 @@ class UserPreferenceManager:
                 if hasattr(current_prefs, change.preference_type):
                     setattr(current_prefs, change.preference_type, change.old_value)
 
-            current_prefs.last_updated = datetime.utcnow()
+            current_prefs.last_updated = datetime.now(timezone.utc)
 
             # Save rolled back preferences
             self._save_preferences(user_id, current_prefs)
@@ -535,7 +535,7 @@ class UserPreferenceManager:
                 "formality_level": 0.3,
                 "technical_depth": 0.5,
             },
-            last_updated=datetime.utcnow(),
+            last_updated=datetime.now(timezone.utc),
         )
 
     def _merge_preference_updates(
@@ -550,7 +550,7 @@ class UserPreferenceManager:
             learning_goals=current.learning_goals.copy(),
             personal_context=current.personal_context.copy(),
             interaction_preferences=current.interaction_preferences.copy(),
-            last_updated=datetime.utcnow(),
+            last_updated=datetime.now(timezone.utc),
         )
 
         # Apply updates
@@ -592,7 +592,7 @@ class UserPreferenceManager:
             learning_goals=merged_goals,
             personal_context=merged_context,
             interaction_preferences=merged_interaction_prefs,
-            last_updated=datetime.utcnow(),
+            last_updated=datetime.now(timezone.utc),
         )
 
     def _track_preference_changes(
@@ -617,7 +617,7 @@ class UserPreferenceManager:
                     preference_type="communication_style",
                     old_value=old_prefs.communication_style.value,
                     new_value=new_prefs.communication_style.value,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     reason=reason,
                 )
             )
@@ -630,7 +630,7 @@ class UserPreferenceManager:
                     preference_type="preferred_response_length",
                     old_value=old_prefs.preferred_response_length.value,
                     new_value=new_prefs.preferred_response_length.value,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     reason=reason,
                 )
             )
@@ -643,7 +643,7 @@ class UserPreferenceManager:
                     preference_type="topics_of_interest",
                     old_value=old_prefs.topics_of_interest,
                     new_value=new_prefs.topics_of_interest,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     reason=reason,
                 )
             )

@@ -6,17 +6,18 @@ supportive responses, and relationship-aware responses.
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch, MagicMock
 
-from morgan.empathy.generator import EmpatheticResponseGenerator
-from morgan.emotional.models import (
+from morgan.intelligence.empathy.generator import EmpatheticResponseGenerator
+from morgan.intelligence.core.models import (
     EmotionalState,
     EmotionType,
     ConversationContext,
     CompanionProfile,
     RelationshipMilestone,
     EmpatheticResponse,
+    UserPreferences,
 )
 
 
@@ -26,8 +27,12 @@ class TestEmpatheticResponseGenerator:
     @pytest.fixture
     def generator(self):
         """Create empathetic response generator for testing."""
-        with patch("morgan.empathy.generator.get_llm_service"):
-            with patch("morgan.empathy.generator.get_settings"):
+        with patch("morgan.intelligence.empathy.generator.get_llm_service") as mock_llm:
+            # Configure mock to return proper response with .content.strip() chain
+            mock_response = Mock()
+            mock_response.content = "I understand how you're feeling and I'm here to support you."
+            mock_llm.return_value.generate.return_value = mock_response
+            with patch("morgan.intelligence.empathy.generator.get_settings"):
                 return EmpatheticResponseGenerator()
 
     @pytest.fixture
@@ -37,7 +42,7 @@ class TestEmpatheticResponseGenerator:
             primary_emotion=EmotionType.JOY,
             intensity=0.8,
             confidence=0.9,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     @pytest.fixture
@@ -47,7 +52,7 @@ class TestEmpatheticResponseGenerator:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.7,
             confidence=0.85,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     @pytest.fixture
@@ -57,7 +62,7 @@ class TestEmpatheticResponseGenerator:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="I'm feeling so happy about my new job!",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     @pytest.fixture
@@ -68,6 +73,7 @@ class TestEmpatheticResponseGenerator:
             preferred_name="friend",
             relationship_duration=timedelta(days=60),
             interaction_count=25,
+            communication_preferences=UserPreferences(),
             trust_level=0.75,
             engagement_score=0.8,
         )
@@ -95,7 +101,7 @@ class TestEmpatheticResponseGenerator:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="I'm feeling really down today",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         response = generator.generate_empathetic_response(
@@ -158,7 +164,7 @@ class TestEmpatheticResponseGenerator:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.9,
             confidence=0.85,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         empathy_level = generator._calculate_empathy_level(
@@ -176,7 +182,7 @@ class TestEmpatheticResponseGenerator:
             primary_emotion=EmotionType.NEUTRAL,
             intensity=0.2,
             confidence=0.6,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         empathy_level = generator._calculate_empathy_level(
@@ -208,7 +214,7 @@ class TestEmpatheticResponseGenerator:
             primary_emotion=EmotionType.FEAR,
             intensity=0.85,
             confidence=0.9,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         elements = generator._identify_personalization_elements(
@@ -239,6 +245,7 @@ class TestEmpatheticResponseGenerator:
             preferred_name="friend",
             relationship_duration=timedelta(days=2),
             interaction_count=3,
+            communication_preferences=UserPreferences(),
             trust_level=0.3,
             engagement_score=0.5,
         )

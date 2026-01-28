@@ -413,15 +413,19 @@ class AsyncProcessor:
                     await asyncio.sleep(0.1)
                     continue
 
-                # Get next task from queue
+                # Get next task from queue (non-blocking to let event loop run)
                 try:
-                    async_task = self.task_queue.get(timeout=1.0)
+                    async_task = self.task_queue.get(timeout=0)
                 except Empty:
+                    await asyncio.sleep(0.05)
                     continue
 
                 # Create and start asyncio task
                 task = asyncio.create_task(self._execute_task(async_task))
                 self.active_tasks[async_task.task_id] = task
+
+                # Yield to let tasks execute
+                await asyncio.sleep(0)
 
                 # Clean up completed tasks
                 await self._cleanup_completed_tasks()

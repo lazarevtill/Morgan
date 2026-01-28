@@ -6,7 +6,7 @@ and overall behavioral adaptation based on user preferences.
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 from morgan.learning.adaptation import (
@@ -18,11 +18,12 @@ from morgan.learning.adaptation import (
     Adaptation,
 )
 from morgan.learning.preferences import UserPreferenceProfile, PreferenceCategory
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     ConversationContext,
     CompanionProfile,
     CommunicationStyle,
     ResponseLength,
+    UserPreferences,
 )
 
 
@@ -42,6 +43,7 @@ class TestResponseStyleAdapter:
             preferred_name="friend",
             relationship_duration=timedelta(days=30),
             interaction_count=15,
+            communication_preferences=UserPreferences(),
             trust_level=0.7,
             engagement_score=0.75,
         )
@@ -72,7 +74,7 @@ class TestResponseStyleAdapter:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="Can you explain this technical concept?",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     def test_adapt_response_style(
@@ -132,6 +134,7 @@ class TestContentSelectionAdapter:
             preferred_name="friend",
             relationship_duration=timedelta(days=30),
             interaction_count=15,
+            communication_preferences=UserPreferences(),
             trust_level=0.7,
             engagement_score=0.75,
         )
@@ -164,7 +167,7 @@ class TestContentSelectionAdapter:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="Tell me about Python programming",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     def test_adapt_content_selection(
@@ -220,6 +223,7 @@ class TestBehavioralAdaptationEngine:
             preferred_name="friend",
             relationship_duration=timedelta(days=30),
             interaction_count=15,
+            communication_preferences=UserPreferences(),
             trust_level=0.7,
             engagement_score=0.75,
         )
@@ -250,7 +254,7 @@ class TestBehavioralAdaptationEngine:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="Can you help me understand this?",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     def test_adapt_behavior(

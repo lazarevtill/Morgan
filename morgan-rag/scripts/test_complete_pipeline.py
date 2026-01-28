@@ -55,7 +55,7 @@ def test_emotion_detection():
     results = {}
 
     try:
-        from morgan.emotional.intelligence_engine import EmotionalIntelligenceEngine
+        from morgan.intelligence.core.intelligence_engine import EmotionalIntelligenceEngine
 
         engine = EmotionalIntelligenceEngine()
         console.print("  ✅ Emotional Intelligence Engine initialized")

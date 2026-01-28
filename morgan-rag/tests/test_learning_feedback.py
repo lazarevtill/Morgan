@@ -6,7 +6,7 @@ behavioral signal analysis, and satisfaction trend tracking.
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 from morgan.learning.feedback import (
@@ -17,7 +17,7 @@ from morgan.learning.feedback import (
     FeedbackAnalysis,
     LearningUpdate,
 )
-from morgan.emotional.models import ConversationContext
+from morgan.intelligence.core.models import ConversationContext
 
 
 class TestFeedbackProcessor:
@@ -35,7 +35,7 @@ class TestFeedbackProcessor:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="This response was helpful",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     @pytest.fixture
@@ -249,13 +249,13 @@ class TestFeedbackProcessor:
                 user_id="test_user",
                 feedback_type=FeedbackType.EXPLICIT_RATING,
                 satisfaction_rating=0.7 + (i * 0.05),
-                timestamp=datetime.utcnow() - timedelta(days=i),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=i),
             )
             context = ConversationContext(
                 user_id="test_user",
                 conversation_id=f"conv_{i}",
                 message_text="Test",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
             processor.process_feedback("test_user", feedback, context)
 

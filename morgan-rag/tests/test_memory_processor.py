@@ -3,7 +3,7 @@ Tests for enhanced memory processor with emotional awareness.
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch, MagicMock
 
 from morgan.memory.memory_processor import (
@@ -13,7 +13,7 @@ from morgan.memory.memory_processor import (
     get_memory_processor,
 )
 from morgan.core.memory import ConversationTurn
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     EmotionalState,
     EmotionType,
     ConversationContext,
@@ -76,7 +76,7 @@ class TestMemoryProcessor:
         return ConversationTurn(
             turn_id="turn_123",
             conversation_id="conv_456",
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             question="I'm really excited about learning Python! It's been my goal for months.",
             answer="That's wonderful! Python is a great language to start with. Let me help you get started.",
             sources=["python-tutorial.md"],
@@ -160,7 +160,7 @@ class TestMemoryProcessor:
             ConversationTurn(
                 turn_id="1",
                 conversation_id="conv1",
-                timestamp=datetime.utcnow().isoformat(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 question="I love working with Python and machine learning",
                 answer="Great choice!",
                 sources=[],
@@ -168,7 +168,7 @@ class TestMemoryProcessor:
             ConversationTurn(
                 turn_id="2",
                 conversation_id="conv1",
-                timestamp=datetime.utcnow().isoformat(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 question="I want to learn more about Docker containers",
                 answer="Docker is very useful!",
                 sources=[],
@@ -199,7 +199,7 @@ class TestMemoryProcessor:
             concepts=["programming", "learning"],
             conversation_id="conv_456",
             turn_id="turn_123",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             feedback_rating=5,
             emotional_context={
                 "primary_emotion": "joy",
@@ -266,7 +266,7 @@ class TestMemoryProcessor:
                 concepts=[],
                 conversation_id="conv1",
                 turn_id="turn1",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             ),
             Memory(
                 memory_id="2",
@@ -276,7 +276,7 @@ class TestMemoryProcessor:
                 concepts=[],
                 conversation_id="conv1",
                 turn_id="turn1",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             ),
             Memory(
                 memory_id="3",
@@ -286,7 +286,7 @@ class TestMemoryProcessor:
                 concepts=[],
                 conversation_id="conv1",
                 turn_id="turn1",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             ),
         ]
 
@@ -335,7 +335,7 @@ class TestMemoryProcessor:
         turn_with_trust = ConversationTurn(
             turn_id="turn_123",
             conversation_id="conv_456",
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             question="I feel comfortable sharing this personal information with you because I trust your advice and guidance. This is something very important to me and I really appreciate having someone I can rely on for help with these complex technical challenges.",
             answer="Thank you for trusting me with this.",
             sources=[],
@@ -359,7 +359,7 @@ class TestMemoryProcessor:
             ConversationTurn(
                 turn_id="1",
                 conversation_id="conv1",
-                timestamp=datetime.utcnow().isoformat(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 question="Could you please help me understand this concept?",
                 answer="Certainly!",
                 sources=[],
@@ -367,7 +367,7 @@ class TestMemoryProcessor:
             ConversationTurn(
                 turn_id="2",
                 conversation_id="conv1",
-                timestamp=datetime.utcnow().isoformat(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 question="Would you mind explaining the technical details?",
                 answer="Of course!",
                 sources=[],
@@ -382,7 +382,7 @@ class TestMemoryProcessor:
             ConversationTurn(
                 turn_id="1",
                 conversation_id="conv1",
-                timestamp=datetime.utcnow().isoformat(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 question="Hey, can you help me with this?",
                 answer="Sure!",
                 sources=[],
@@ -390,7 +390,7 @@ class TestMemoryProcessor:
             ConversationTurn(
                 turn_id="2",
                 conversation_id="conv1",
-                timestamp=datetime.utcnow().isoformat(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 question="Thanks! That's really cool.",
                 answer="Glad to help!",
                 sources=[],
@@ -407,7 +407,7 @@ class TestMemoryProcessor:
             ConversationTurn(
                 turn_id="1",
                 conversation_id="conv1",
-                timestamp=datetime.utcnow().isoformat(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 question="What is Python?",
                 answer="A programming language.",
                 sources=[],
@@ -424,7 +424,7 @@ class TestMemoryProcessor:
             ConversationTurn(
                 turn_id="1",
                 conversation_id="conv1",
-                timestamp=datetime.utcnow().isoformat(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 question="I'm trying to understand the differences between Python and JavaScript for web development, and I'd like to know about their performance characteristics, ecosystem, and learning curve.",
                 answer="Great question! Let me explain...",
                 sources=[],
@@ -502,7 +502,7 @@ class TestMemoryDataStructures:
             concepts=["learning"],
             conversation_id="conv_456",
             turn_id="turn_789",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             feedback_rating=5,
             emotional_context={"emotion": "joy"},
             user_mood="happy",

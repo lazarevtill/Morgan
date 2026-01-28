@@ -430,13 +430,15 @@ class HTTPClient:
         Returns:
             List of search results
         """
-        data = {
+        params = {
             "query": query,
-            "user_id": user_id or self.config.user_id,
             "limit": limit,
         }
-        response = await self.post("/api/memory/search", data)
-        return response.get("results", [])
+        if user_id or self.config.user_id:
+            params["user_id"] = user_id or self.config.user_id
+        response = await self.get("/api/memory/search", params=params)
+        # Server returns list directly, not wrapped in "results"
+        return response if isinstance(response, list) else response.get("results", [])
 
     async def cleanup_memory(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         """

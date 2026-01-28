@@ -6,12 +6,12 @@ including profile building, conversation adaptation, milestone tracking,
 and personalized interactions.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from morgan.companion.relationship_manager import (
     CompanionRelationshipManager,
     Interaction,
 )
-from morgan.emotional.models import EmotionalState, EmotionType, ConversationContext
+from morgan.intelligence.core.models import EmotionalState, EmotionType, ConversationContext
 
 
 def main():
@@ -27,7 +27,7 @@ def main():
         Interaction(
             interaction_id="int_1",
             user_id=user_id,
-            timestamp=datetime.utcnow() - timedelta(days=10),
+            timestamp=datetime.now(timezone.utc) - timedelta(days=10),
             message_content="Hi, I'm new here and interested in learning Python",
             topics_discussed=["python", "learning"],
             user_satisfaction=0.7,
@@ -35,7 +35,7 @@ def main():
         Interaction(
             interaction_id="int_2",
             user_id=user_id,
-            timestamp=datetime.utcnow() - timedelta(days=8),
+            timestamp=datetime.now(timezone.utc) - timedelta(days=8),
             message_content="Could you please help me understand data structures?",
             topics_discussed=["data structures", "programming"],
             user_satisfaction=0.8,
@@ -43,7 +43,7 @@ def main():
         Interaction(
             interaction_id="int_3",
             user_id=user_id,
-            timestamp=datetime.utcnow() - timedelta(days=5),
+            timestamp=datetime.now(timezone.utc) - timedelta(days=5),
             message_content="Thank you for the explanation! Call me Sarah, by the way.",
             topics_discussed=["feedback"],
             user_satisfaction=0.9,
@@ -51,7 +51,7 @@ def main():
         Interaction(
             interaction_id="int_4",
             user_id=user_id,
-            timestamp=datetime.utcnow() - timedelta(days=2),
+            timestamp=datetime.now(timezone.utc) - timedelta(days=2),
             message_content="I'm working on a machine learning project now",
             topics_discussed=["machine learning", "projects"],
             user_satisfaction=0.85,
@@ -157,7 +157,7 @@ def main():
         user_id=user_id,
         conversation_id="demo_conv",
         message_text="I want to learn more about neural networks",
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         previous_messages=["Tell me about machine learning algorithms"],
     )
 

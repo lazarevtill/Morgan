@@ -8,7 +8,7 @@ Create sample documents and memories to test the enhanced search integration.
 import sys
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Add the morgan package to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
@@ -75,7 +75,7 @@ def create_sample_memories():
             "content": "Q: How do I fix Docker permission errors on Linux?\nA: You can fix Docker permission errors by adding your user to the docker group with 'sudo usermod -aG docker $USER', then log out and back in. Alternatively, you can run Docker commands with sudo, but adding to the group is the recommended approach for development.",
             "conversation_id": "conv_001",
             "turn_id": "turn_001",
-            "timestamp": (datetime.utcnow() - timedelta(days=2)).isoformat(),
+            "timestamp": (datetime.now(timezone.utc) - timedelta(days=2)).isoformat(),
             "feedback_rating": 5,
             "user_id": "user123",
             "emotional_context": {
@@ -88,7 +88,7 @@ def create_sample_memories():
             "content": "Q: What's the difference between REST and GraphQL APIs?\nA: REST uses multiple endpoints with standard HTTP methods, while GraphQL uses a single endpoint with a query language. GraphQL allows clients to request exactly the data they need, reducing over-fetching. REST is simpler and more widely adopted, while GraphQL offers more flexibility for complex data requirements.",
             "conversation_id": "conv_002",
             "turn_id": "turn_001",
-            "timestamp": (datetime.utcnow() - timedelta(days=1)).isoformat(),
+            "timestamp": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(),
             "feedback_rating": 4,
             "user_id": "user123",
             "emotional_context": {
@@ -101,7 +101,7 @@ def create_sample_memories():
             "content": "Q: My database keeps timing out, what should I check?\nA: Database timeouts can be caused by several factors: slow queries, insufficient connection pool size, network latency, or database overload. Start by checking your query performance with EXPLAIN, monitor connection pool usage, and review database server resources (CPU, memory, disk I/O). Also check your connection timeout settings.",
             "conversation_id": "conv_003",
             "turn_id": "turn_001",
-            "timestamp": (datetime.utcnow() - timedelta(hours=6)).isoformat(),
+            "timestamp": (datetime.now(timezone.utc) - timedelta(hours=6)).isoformat(),
             "feedback_rating": 5,
             "user_id": "user456",
             "emotional_context": {
@@ -145,7 +145,7 @@ def create_sample_data():
                         "source": doc["source"],
                         "category": doc["category"],
                         "metadata": doc["metadata"],
-                        "indexed_at": datetime.utcnow().isoformat(),
+                        "indexed_at": datetime.now(timezone.utc).isoformat(),
                     },
                 }
                 doc_points.append(point)
@@ -228,7 +228,7 @@ def create_sample_data():
                     "interests": ["python", "docker", "api", "database", "backend"],
                     "interaction_count": 15,
                     "relationship_duration_days": 30,
-                    "last_interaction": datetime.utcnow().isoformat(),
+                    "last_interaction": datetime.now(timezone.utc).isoformat(),
                 },
             )
 

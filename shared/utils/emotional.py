@@ -7,7 +7,7 @@ KISS principle: Simple, effective emotion detection.
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, List, Optional
 
@@ -35,7 +35,7 @@ class EmotionalState:
 
     def __post_init__(self):
         if self.timestamp is None:
-            self.timestamp = datetime.utcnow()
+            self.timestamp = datetime.now(timezone.utc)
 
 
 class SimpleEmotionDetector:

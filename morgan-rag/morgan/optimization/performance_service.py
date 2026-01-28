@@ -17,7 +17,7 @@ import json
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from morgan.config import get_settings
@@ -49,7 +49,7 @@ class CacheEntry:
 
     @property
     def is_expired(self) -> bool:
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
 
 
 @dataclass
@@ -135,8 +135,8 @@ class ResponseCache:
             entry = CacheEntry(
                 key=key,
                 value=value,
-                created_at=datetime.utcnow(),
-                expires_at=datetime.utcnow() + timedelta(seconds=ttl),
+                created_at=datetime.now(timezone.utc),
+                expires_at=datetime.now(timezone.utc) + timedelta(seconds=ttl),
             )
             self._cache[key] = entry
 

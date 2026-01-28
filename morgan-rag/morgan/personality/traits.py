@@ -6,7 +6,7 @@ and adapts assistant behavior to match user personality preferences.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, List, Optional
 
@@ -86,7 +86,7 @@ class PersonalityProfile:
     def update_trait(self, trait_score: TraitScore):
         """Update a trait score."""
         self.trait_scores[trait_score.trait] = trait_score
-        self.last_analysis = datetime.utcnow()
+        self.last_analysis = datetime.now(timezone.utc)
         self.analysis_count += 1
         self._update_overall_confidence()
 

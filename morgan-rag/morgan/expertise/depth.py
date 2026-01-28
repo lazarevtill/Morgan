@@ -9,7 +9,7 @@ content and assistance.
 import json
 import math
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -119,7 +119,7 @@ class DomainDepthProfile:
         """Add a knowledge assessment."""
         self.topic_assessments[assessment.topic] = assessment
         self.total_assessments += 1
-        self.last_updated = datetime.utcnow()
+        self.last_updated = datetime.now(timezone.utc)
 
         # Update overall metrics
         self._update_overall_metrics()
@@ -795,7 +795,7 @@ class KnowledgeDepthAssessor:
 
         # Update metadata
         existing.interaction_count += 1
-        existing.assessed_at = datetime.utcnow()
+        existing.assessed_at = datetime.now(timezone.utc)
 
 
 # Global depth assessor instance

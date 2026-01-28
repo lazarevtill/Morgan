@@ -12,13 +12,13 @@ Demonstrates the core capabilities of the emotional intelligence engine:
 
 import sys
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Add morgan to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from morgan.emotional.intelligence_engine import EmotionalIntelligenceEngine
-from morgan.emotional.models import (
+from morgan.intelligence.core.intelligence_engine import EmotionalIntelligenceEngine
+from morgan.intelligence.core.models import (
     ConversationContext,
     InteractionData,
     EmotionalState,
@@ -53,7 +53,7 @@ def demo_emotion_detection():
             user_id="demo_user",
             conversation_id=f"demo_conv_{i}",
             message_text=text,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         # Analyze emotion
@@ -93,7 +93,7 @@ def demo_mood_patterns():
             primary_emotion=emotion_type,
             intensity=intensity,
             confidence=0.8,
-            timestamp=datetime.utcnow() - timedelta(days=days_ago),
+            timestamp=datetime.now(timezone.utc) - timedelta(days=days_ago),
         )
         engine.mood_patterns[user_id].append(emotional_state)
 
@@ -160,26 +160,26 @@ def demo_relationship_milestones():
             user_id="demo_user",
             conversation_id="conv1",
             message_text="Hi, I'm new here. Can you help me get started?",
-            timestamp=datetime.utcnow() - timedelta(days=10),
+            timestamp=datetime.now(timezone.utc) - timedelta(days=10),
         ),
         ConversationContext(
             user_id="demo_user",
             conversation_id="conv2",
             message_text="Thank you so much! That explanation really helped me understand the concept. I never thought about it that way before.",
-            timestamp=datetime.utcnow() - timedelta(days=8),
+            timestamp=datetime.now(timezone.utc) - timedelta(days=8),
             user_feedback=5,
         ),
         ConversationContext(
             user_id="demo_user",
             conversation_id="conv3",
             message_text="I learned so much from our previous conversations. Now I know how to approach this problem systematically.",
-            timestamp=datetime.utcnow() - timedelta(days=5),
+            timestamp=datetime.now(timezone.utc) - timedelta(days=5),
         ),
         ConversationContext(
             user_id="demo_user",
             conversation_id="conv4",
             message_text="I feel comfortable sharing this with you. I've been struggling with confidence in my technical skills.",
-            timestamp=datetime.utcnow() - timedelta(days=2),
+            timestamp=datetime.now(timezone.utc) - timedelta(days=2),
         ),
     ]
 
@@ -239,7 +239,7 @@ def demo_user_profile_learning():
             user_id=user_id,
             conversation_id=f"conv_{i}",
             message_text=interaction["message"],
-            timestamp=datetime.utcnow() - timedelta(hours=24 - i * 8),
+            timestamp=datetime.now(timezone.utc) - timedelta(hours=24 - i * 8),
             user_feedback=int(interaction["satisfaction"] * 5),
         )
 

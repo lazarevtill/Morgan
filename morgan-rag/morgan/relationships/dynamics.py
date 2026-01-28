@@ -9,7 +9,7 @@ Requirements: 9.4, 9.5, 10.3
 
 import statistics
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List
 
@@ -159,7 +159,7 @@ class RelationshipDynamics:
 
         analysis = {
             "user_id": user_profile.user_id,
-            "analysis_timestamp": datetime.utcnow().isoformat(),
+            "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
             "overall_pattern": overall_pattern.value,
             "interaction_patterns": self._serialize_interaction_patterns(
                 interaction_patterns
@@ -577,7 +577,7 @@ class RelationshipDynamics:
                 user_profile, current_pattern
             ),
             "prediction_horizon_days": prediction_horizon_days,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
         logger.info(

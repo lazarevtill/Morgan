@@ -5,6 +5,8 @@ Self-hosted embedding generation using local Hugging Face models.
 Single responsibility: embedding generation only.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
@@ -20,6 +22,7 @@ try:
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
+    SentenceTransformer = None  # type: ignore[misc]
     logging.warning("sentence-transformers not available - local embeddings disabled")
 
 logger = logging.getLogger(__name__)

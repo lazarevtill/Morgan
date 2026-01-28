@@ -10,7 +10,7 @@ Tests the core functionality of the new relationship intelligence modules:
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 from morgan.relationships import (
@@ -20,7 +20,7 @@ from morgan.relationships import (
     RelationshipDynamics,
     RelationshipAdaptation,
 )
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     CompanionProfile,
     EmotionalState,
     EmotionType,
@@ -52,7 +52,7 @@ class TestRelationshipModules:
             ),
             trust_level=0.6,
             engagement_score=0.7,
-            profile_created=datetime.utcnow() - timedelta(days=10),
+            profile_created=datetime.now(timezone.utc) - timedelta(days=10),
         )
 
         # Create sample interaction data
@@ -61,7 +61,7 @@ class TestRelationshipModules:
                 user_id=self.user_id,
                 conversation_id="conv_123",
                 message_text="I'm really excited about learning AI!",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             ),
             emotional_state=EmotionalState(
                 primary_emotion=EmotionType.JOY, intensity=0.8, confidence=0.9

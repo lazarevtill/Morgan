@@ -8,7 +8,7 @@ and recovery pattern analysis for enhanced emotional support and user well-being
 import statistics
 import threading
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
@@ -53,7 +53,7 @@ class EmotionalRecovery:
         self.recovery_type = recovery_type
         self.support_factors = support_factors
         self.recovery_quality = recovery_quality
-        self.detected_at = datetime.utcnow()
+        self.detected_at = datetime.now(timezone.utc)
         self.intermediate_states = []
         self.recovery_milestones = []
 
@@ -388,7 +388,7 @@ class EmotionalRecoveryTracker:
             "most_effective_recovery_type": most_effective_type,
             "resilience_score": resilience_score,
             "support_effectiveness": support_effectiveness,
-            "analysis_timestamp": datetime.utcnow().isoformat(),
+            "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     def assess_current_recovery_potential(

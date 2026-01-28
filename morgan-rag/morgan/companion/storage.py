@@ -5,7 +5,7 @@ This module provides storage functionality for companion profiles, emotional dat
 relationship milestones, and empathetic responses using Qdrant vector database.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.intelligence.core.models import (
@@ -124,7 +124,7 @@ class CompanionStorage:
                     "shared_memories": profile.shared_memories,
                     "milestone_count": len(profile.relationship_milestones),
                     # Metadata
-                    "updated_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                     "profile_version": "1.0",
                 },
             }
@@ -199,7 +199,7 @@ class CompanionStorage:
                     ],
                     "emotional_indicators": emotional_state.emotional_indicators,
                     "timestamp": emotional_state.timestamp.isoformat(),
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                 },
             }
 
@@ -243,7 +243,7 @@ class CompanionStorage:
                     "related_memories": milestone.related_memories,
                     "user_feedback": milestone.user_feedback,
                     "celebration_acknowledged": milestone.celebration_acknowledged,
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                 },
             }
 
@@ -277,7 +277,7 @@ class CompanionStorage:
             )
 
             # Filter by date and convert to EmotionalState objects
-            cutoff_date = datetime.utcnow() - timedelta(days=days)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
             emotional_states = []
 
             for result in results:
@@ -400,13 +400,13 @@ class CompanionStorage:
             learning_goals=payload.get("learning_goals", []),
             personal_context=payload.get("personal_context", {}),
             last_updated=datetime.fromisoformat(
-                payload.get("updated_at", datetime.utcnow().isoformat())
+                payload.get("updated_at", datetime.now(timezone.utc).isoformat())
             ),
         )
 
         # Calculate relationship duration
         profile_created = datetime.fromisoformat(payload["profile_created"])
-        relationship_duration = datetime.utcnow() - profile_created
+        relationship_duration = datetime.now(timezone.utc) - profile_created
 
         return CompanionProfile(
             user_id=payload["user_id"],

@@ -12,7 +12,7 @@ Provides:
 import asyncio
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
@@ -402,7 +402,7 @@ Respond in JSON format:
         # Update plan status
         if plan.is_complete:
             plan.status = TaskStatus.COMPLETED
-            plan.completed_at = datetime.utcnow()
+            plan.completed_at = datetime.now(timezone.utc)
             logger.info(f"Plan {plan.plan_id} completed successfully")
         elif plan.has_failed:
             plan.status = TaskStatus.FAILED
@@ -420,7 +420,7 @@ Respond in JSON format:
     ):
         """Execute a single task."""
         task.status = TaskStatus.IN_PROGRESS
-        task.started_at = datetime.utcnow()
+        task.started_at = datetime.now(timezone.utc)
 
         logger.info(f"Executing task: {task.name}")
 
@@ -436,7 +436,7 @@ Respond in JSON format:
             task.result = result
             task.status = TaskStatus.COMPLETED
             task.progress = 1.0
-            task.completed_at = datetime.utcnow()
+            task.completed_at = datetime.now(timezone.utc)
 
             logger.info(f"Task completed: {task.name}")
 

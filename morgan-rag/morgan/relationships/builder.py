@@ -8,7 +8,7 @@ Requirements: 9.4, 9.5, 10.3
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -199,7 +199,7 @@ class RelationshipBuilder:
 
         # Consistency bonus
         if profile.interaction_count > 5:
-            days_since_last = (datetime.utcnow() - profile.last_interaction).days
+            days_since_last = (datetime.now(timezone.utc) - profile.last_interaction).days
             if days_since_last <= 7:  # Regular interaction
                 trust_factors.append(0.02)
 
@@ -442,7 +442,7 @@ class RelationshipBuilder:
                 current_stage, next_stage
             ),
             "success_indicators": self._define_success_indicators(next_stage),
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
         logger.info(
@@ -500,7 +500,7 @@ class RelationshipBuilder:
             consistency_base = interactions_per_day * 1.6  # Scale up low frequency
 
         # Recent activity bonus
-        days_since_last = (datetime.utcnow() - profile.last_interaction).days
+        days_since_last = (datetime.now(timezone.utc) - profile.last_interaction).days
         if days_since_last <= 3:
             consistency_base += 0.2
         elif days_since_last <= 7:

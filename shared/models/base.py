@@ -5,7 +5,7 @@ Simple dataclasses for messages and responses used across the system.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 
@@ -15,7 +15,7 @@ class Message:
 
     content: str
     role: str = "user"  # "user", "assistant", "system"
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -36,7 +36,7 @@ class Message:
             timestamp=(
                 datetime.fromisoformat(data["timestamp"])
                 if "timestamp" in data
-                else datetime.utcnow()
+                else datetime.now(timezone.utc)
             ),
             metadata=data.get("metadata", {}),
         )
@@ -49,7 +49,7 @@ class Response:
     content: str
     sources: List[str] = field(default_factory=list)
     confidence: float = 0.0
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Dict[str, Any] = field(default_factory=dict)
     latency_ms: Optional[float] = None
 
@@ -74,7 +74,7 @@ class Response:
             timestamp=(
                 datetime.fromisoformat(data["timestamp"])
                 if "timestamp" in data
-                else datetime.utcnow()
+                else datetime.now(timezone.utc)
             ),
             metadata=data.get("metadata", {}),
             latency_ms=data.get("latency_ms"),

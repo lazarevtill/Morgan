@@ -3,11 +3,18 @@ Crisis detection and support module.
 
 Provides crisis detection capabilities and appropriate support responses for users
 experiencing emotional distress, mental health challenges, or crisis situations.
+
+Semantic-First Architecture:
+- LLM-based semantic analysis is the PRIMARY detection method
+- Pattern matching runs IN PARALLEL as a safety net (never skipped)
+- Returns the HIGHEST risk level from either method
+- Detects implicit despair, hidden meanings, and contextual crisis signals
 """
 
+import json
 import re
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Tuple
 
@@ -18,6 +25,7 @@ from morgan.intelligence.core.models import (
     EmotionType,
 )
 from morgan.services.llm import get_llm_service
+from morgan.utils.llm_parsing import parse_llm_json
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -47,16 +55,26 @@ class CrisisSupport:
     """
     Crisis detection and support system.
 
+    Semantic-First Architecture:
+    - LLM semantic analysis is PRIMARY for understanding implicit meanings
+    - Pattern matching runs IN PARALLEL as SAFETY NET (never skipped for crisis)
+    - Returns HIGHEST risk from either method (conservative approach)
+
     Provides capabilities to:
-    - Detect crisis situations and emotional distress
-    - Assess crisis severity levels
+    - Detect crisis situations using semantic understanding
+    - Identify implicit despair and hidden crisis signals
+    - Assess crisis severity with reasoning
     - Provide appropriate support responses
     - Offer resources and professional help referrals
     - Create safety plans when needed
+
+    SAFETY NOTE: Pattern matching is NEVER disabled for crisis detection.
+    Even when semantic analysis returns low risk, patterns are checked.
     """
 
-    # Crisis detection patterns (high-risk indicators)
-    CRISIS_PATTERNS = {
+    # Safety patterns for PARALLEL crisis detection (never disabled)
+    # These catch explicit crisis language even if semantic analysis misses it
+    SAFETY_PATTERNS = {
         "suicide_risk": [
             r"\b(kill myself|end it all|not worth living|want to die|suicide|take my life)\b",
             r"\b(better off dead|can\'t go on|no point|give up|end the pain)\b",
@@ -177,7 +195,12 @@ class CrisisSupport:
         self, text: str, emotional_state: EmotionalState, context: ConversationContext
     ) -> Tuple[CrisisLevel, List[str]]:
         """
-        Detect crisis situation from text and emotional state.
+        Detect crisis situation using semantic-first approach with parallel safety patterns.
+
+        Architecture:
+        1. LLM semantic analysis - understands implicit meanings and hidden distress
+        2. Pattern safety check - runs IN PARALLEL (never skipped)
+        3. Returns HIGHEST risk from either method (conservative for safety)
 
         Args:
             text: User's message text
@@ -187,13 +210,154 @@ class CrisisSupport:
         Returns:
             Tuple of (crisis_level, detected_crisis_types)
         """
+        # Run BOTH methods - semantic analysis AND pattern check
+        # Pattern check is NEVER skipped for safety reasons
+
+        # 1. SEMANTIC ANALYSIS (PRIMARY) - understands implicit meanings
+        semantic_analysis = self._assess_crisis_semantically(
+            text, emotional_state, context
+        )
+
+        # 2. PATTERN SAFETY CHECK (PARALLEL) - catches explicit crisis language
+        pattern_crisis = self._pattern_safety_check(text)
+
+        # 3. MERGE RESULTS - return highest risk from either method
+        final_result = self._merge_crisis_assessments(
+            semantic_analysis, pattern_crisis, emotional_state
+        )
+
+        crisis_level, detected_crises = final_result
+
+        # Log crisis detection for monitoring
+        if crisis_level != CrisisLevel.NONE:
+            self._log_crisis_detection(
+                context.user_id, crisis_level, detected_crises, text
+            )
+
+        return crisis_level, detected_crises
+
+    def _assess_crisis_semantically(
+        self,
+        text: str,
+        emotional_state: EmotionalState,
+        context: ConversationContext,
+    ) -> Dict[str, Any]:
+        """
+        Semantic crisis assessment using LLM understanding.
+
+        This is the PRIMARY method - it understands:
+        - Implicit statements of harm intent
+        - Hidden despair beneath the surface
+        - Contextual escalation of distress
+        - Masked crisis signals ("I'm just tired of everything")
+        - Cultural/linguistic variations in expressing distress
+
+        Args:
+            text: User's message text
+            emotional_state: User's emotional state
+            context: Conversation context
+
+        Returns:
+            Semantic crisis analysis with reasoning
+        """
+        try:
+            # Build context-aware prompt
+            context_info = ""
+            if context.previous_messages:
+                recent = context.previous_messages[-3:]
+                context_info = f"\nRecent conversation:\n" + "\n".join(
+                    f"- {msg}" for msg in recent
+                )
+
+            emotional_info = (
+                f"\nCurrent emotional state: {emotional_state.primary_emotion.value} "
+                f"(intensity: {emotional_state.intensity:.1f})"
+            )
+
+            prompt = f"""Assess this message for crisis indicators with deep semantic understanding.
+
+Message: "{text}"{context_info}{emotional_info}
+
+Analyze for:
+
+1. EXPLICIT HARM INTENT: Direct statements about self-harm, suicide, or ending life
+2. IMPLICIT DESPAIR: Hidden hopelessness beneath the surface
+   - "I'm just tired" might mean exhausted OR suicidal ideation
+   - "I don't want to do this anymore" might mean a task OR life itself
+   - "What's the point" might be philosophical OR crisis
+3. ESCALATING DISTRESS: Is this worse than recent messages?
+4. GIVING UP SIGNALS: Statements about being a burden, saying goodbye, giving things away
+5. MASKED CRISIS: Using humor or deflection to hide crisis feelings
+6. CONTEXTUAL RISK: Does the context change the meaning significantly?
+
+Respond with JSON ONLY:
+{{
+    "risk_level": "none|low|medium|high|critical",
+    "crisis_types": ["suicide_risk", "self_harm", "severe_depression", "panic_crisis", "substance_crisis", "abuse_situation"],
+    "explicit_indicators": ["direct statements found"],
+    "implicit_indicators": ["inferred signals"],
+    "contextual_factors": ["how context affects assessment"],
+    "reasoning": "explanation of why this risk level was determined",
+    "needs_immediate_attention": true|false,
+    "confidence": 0.0-1.0
+}}
+
+IMPORTANT: When in doubt, err on the side of HIGHER risk. Safety first."""
+
+            response = self.llm_service.generate(
+                prompt=prompt,
+                temperature=0.1,  # Very low temperature for safety-critical
+                max_tokens=600,  # Increased for reasoning models
+            )
+
+            # Parse JSON response using utility that handles reasoning blocks
+            analysis = parse_llm_json(response.content)
+            if analysis is None:
+                logger.warning("Failed to parse semantic crisis analysis response")
+                return {
+                    "risk_level": "none",
+                    "crisis_types": [],
+                    "confidence": 0.0,
+                    "error": "parse_error",
+                }
+
+            logger.debug(
+                f"Semantic crisis analysis: level={analysis.get('risk_level')}, "
+                f"types={analysis.get('crisis_types')}, "
+                f"reasoning={analysis.get('reasoning', '')[:100]}..."
+            )
+
+            return analysis
+
+        except Exception as e:
+            logger.warning(f"Semantic crisis analysis failed: {e}")
+            # Return safe fallback - let pattern check handle it
+            return {
+                "risk_level": "none",
+                "crisis_types": [],
+                "confidence": 0.0,
+                "error": str(e),
+            }
+
+    def _pattern_safety_check(self, text: str) -> Tuple[CrisisLevel, List[str], Dict[str, float]]:
+        """
+        Pattern-based crisis detection as SAFETY NET.
+
+        This runs IN PARALLEL with semantic analysis and is NEVER disabled.
+        It catches explicit crisis language that semantic analysis might miss.
+
+        Args:
+            text: User's message text
+
+        Returns:
+            Tuple of (crisis_level, detected_crisis_types, crisis_scores)
+        """
         detected_crises = []
         crisis_scores = {}
-
         text_lower = text.lower()
 
-        # Check for crisis patterns
-        for crisis_type, patterns in self.CRISIS_PATTERNS.items():
+        # Check for safety patterns
+        for crisis_type, patterns in self.SAFETY_PATTERNS.items():
             score = 0.0
             for pattern in patterns:
                 matches = len(re.findall(pattern, text_lower))
@@ -204,18 +368,99 @@ class CrisisSupport:
                 detected_crises.append(crisis_type)
                 crisis_scores[crisis_type] = score
 
-        # Factor in emotional state
-        crisis_level = self._assess_crisis_level(
-            detected_crises, crisis_scores, emotional_state, text
-        )
+        # Determine crisis level from patterns
+        if not detected_crises:
+            return CrisisLevel.NONE, [], {}
 
-        # Log crisis detection for monitoring
-        if crisis_level != CrisisLevel.NONE:
-            self._log_crisis_detection(
-                context.user_id, crisis_level, detected_crises, text
+        # High-risk crisis types
+        high_risk_types = ["suicide_risk", "self_harm", "abuse_situation"]
+        if any(crisis_type in high_risk_types for crisis_type in detected_crises):
+            max_score = max(crisis_scores.values())
+            if max_score > 0.8:
+                return CrisisLevel.CRITICAL, detected_crises, crisis_scores
+            elif max_score > 0.6:
+                return CrisisLevel.HIGH, detected_crises, crisis_scores
+            else:
+                return CrisisLevel.MEDIUM, detected_crises, crisis_scores
+
+        # Medium-risk crisis types
+        medium_risk_types = ["severe_depression", "panic_crisis", "substance_crisis"]
+        if any(crisis_type in medium_risk_types for crisis_type in detected_crises):
+            max_score = max(crisis_scores.values())
+            if max_score > 0.7:
+                return CrisisLevel.HIGH, detected_crises, crisis_scores
+            elif max_score > 0.5:
+                return CrisisLevel.MEDIUM, detected_crises, crisis_scores
+
+        return CrisisLevel.LOW, detected_crises, crisis_scores
+
+    def _merge_crisis_assessments(
+        self,
+        semantic_analysis: Dict[str, Any],
+        pattern_result: Tuple[CrisisLevel, List[str], Dict[str, float]],
+        emotional_state: EmotionalState,
+    ) -> Tuple[CrisisLevel, List[str]]:
+        """
+        Merge semantic and pattern crisis assessments.
+
+        SAFETY RULE: Always return the HIGHER risk level from either method.
+
+        Args:
+            semantic_analysis: Results from semantic analysis
+            pattern_result: Results from pattern safety check
+            emotional_state: User's emotional state
+
+        Returns:
+            Final (crisis_level, detected_crisis_types)
+        """
+        pattern_level, pattern_crises, pattern_scores = pattern_result
+
+        # Convert semantic risk level to CrisisLevel
+        semantic_level_map = {
+            "none": CrisisLevel.NONE,
+            "low": CrisisLevel.LOW,
+            "medium": CrisisLevel.MEDIUM,
+            "high": CrisisLevel.HIGH,
+            "critical": CrisisLevel.CRITICAL,
+        }
+        semantic_level = semantic_level_map.get(
+            semantic_analysis.get("risk_level", "none"), CrisisLevel.NONE
+        )
+        semantic_crises = semantic_analysis.get("crisis_types", [])
+
+        # Crisis level ordering for comparison
+        level_order = {
+            CrisisLevel.NONE: 0,
+            CrisisLevel.LOW: 1,
+            CrisisLevel.MEDIUM: 2,
+            CrisisLevel.HIGH: 3,
+            CrisisLevel.CRITICAL: 4,
+        }
+
+        # SAFETY: Take the HIGHER risk level
+        if level_order[semantic_level] >= level_order[pattern_level]:
+            final_level = semantic_level
+        else:
+            final_level = pattern_level
+            logger.info(
+                f"Pattern detection elevated risk from {semantic_level.value} "
+                f"to {pattern_level.value} (safety override)"
             )
 
-        return crisis_level, detected_crises
+        # Combine crisis types from both methods
+        all_crises = list(set(semantic_crises + pattern_crises))
+
+        # Additional emotional state consideration
+        if final_level == CrisisLevel.NONE:
+            # Check for high emotional distress without explicit crisis language
+            if (
+                emotional_state.primary_emotion
+                in [EmotionType.SADNESS, EmotionType.FEAR, EmotionType.ANGER]
+                and emotional_state.intensity > 0.8
+            ):
+                final_level = CrisisLevel.LOW
+
+        return final_level, all_crises
 
     def generate_crisis_response(
         self,
@@ -309,7 +554,7 @@ class CrisisSupport:
         recent_crises = [
             crisis
             for crisis in self.crisis_history[user_id]
-            if (datetime.utcnow() - crisis["timestamp"]).days <= timeframe_days
+            if (datetime.now(timezone.utc) - crisis["timestamp"]).days <= timeframe_days
         ]
 
         if not recent_crises:
@@ -536,7 +781,7 @@ class CrisisSupport:
             self.crisis_history[user_id] = []
 
         interaction = {
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.now(timezone.utc),
             "crisis_level": response["crisis_level"],
             "crisis_types": response["crisis_types"],
             "resources_provided": len(response["immediate_resources"])
@@ -547,7 +792,7 @@ class CrisisSupport:
         self.crisis_history[user_id].append(interaction)
 
         # Keep only recent history (last 30 days)
-        cutoff_date = datetime.utcnow() - timedelta(days=30)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
         self.crisis_history[user_id] = [
             interaction
             for interaction in self.crisis_history[user_id]

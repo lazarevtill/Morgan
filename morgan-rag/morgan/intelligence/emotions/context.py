@@ -7,7 +7,7 @@ and contextual emotional intelligence for enhanced user interactions.
 
 import threading
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
@@ -55,7 +55,7 @@ class EmotionalContext:
         self.relevant_memories = relevant_memories
         self.relationship_context = relationship_context
         self.contextual_factors = contextual_factors
-        self.created_at = datetime.utcnow()
+        self.created_at = datetime.now(timezone.utc)
 
         # Calculate derived metrics
         self.emotional_stability = self._calculate_emotional_stability()
@@ -399,7 +399,7 @@ class EmotionalContextBuilder:
                 e.value: intensity for e, intensity in avg_intensities.items()
             },
             "temporal_patterns": temporal_patterns,
-            "analysis_timestamp": datetime.utcnow().isoformat(),
+            "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     def _gather_recent_emotions(
@@ -509,7 +509,7 @@ class EmotionalContextBuilder:
         factors["conversation_length"] = len(conversation_context.previous_messages)
 
         # Temporal factors
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         factors["time_of_day"] = now.hour
         factors["day_of_week"] = now.weekday()
 
@@ -564,7 +564,7 @@ class EmotionalContextBuilder:
         """Get cached emotional context if valid."""
         if cache_key in self._context_cache:
             context, timestamp = self._context_cache[cache_key]
-            if datetime.utcnow() - timestamp < self._cache_ttl:
+            if datetime.now(timezone.utc) - timestamp < self._cache_ttl:
                 return context
             else:
                 # Remove expired cache entry
@@ -574,7 +574,7 @@ class EmotionalContextBuilder:
 
     def _cache_context(self, cache_key: str, context: EmotionalContext):
         """Cache emotional context."""
-        self._context_cache[cache_key] = (context, datetime.utcnow())
+        self._context_cache[cache_key] = (context, datetime.now(timezone.utc))
 
         # Clean up old cache entries
         if len(self._context_cache) > 100:

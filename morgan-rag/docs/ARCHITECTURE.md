@@ -1,6 +1,6 @@
 # Morgan RAG - Architecture Documentation
 
-**Last Updated**: December 26, 2025
+**Last Updated**: January 29, 2026
 
 ## Overview
 
@@ -368,35 +368,46 @@ flowchart TD
 
 ## Intelligence Layer
 
-### Emotion Detection Flow
+### Semantic-First Architecture
+
+The intelligence layer uses a **semantic-first approach** for all emotional understanding:
+
+1. **PRIMARY**: LLM semantic analysis - understands meaning, context, sarcasm, and hidden emotions
+2. **SECONDARY**: Pattern validation - validates results and boosts confidence
+3. **FALLBACK**: Pattern-only detection when semantic analysis fails
+
+This approach correctly handles:
+- Sarcasm: "Great, another meeting" → detected as frustration, not joy
+- Emotional masking: "I'm fine" → detected as hidden sadness
+- Context-dependent meanings: "Oh wonderful, the system crashed" → sarcasm detected
+
+### Emotion Detection Flow (Semantic-First)
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph Input["Input Processing"]
-        T[User Text] --> PP[Preprocessor]
-        PP --> ED[Emotion Detector]
+        T[User Text] --> CTX[Context Builder]
+        CTX --> SEM[Semantic Analysis<br/>LLM-based]
     end
-    
-    subgraph Detection["Emotion Detection"]
-        ED --> Joy[😊 Joy]
-        ED --> Sad[😢 Sadness]
-        ED --> Ang[😠 Anger]
-        ED --> Fear[😨 Fear]
-        ED --> Sur[😮 Surprise]
-        ED --> Neu[😐 Neutral]
+
+    subgraph SemanticAnalysis["Semantic Analysis (PRIMARY)"]
+        SEM --> Surface[Surface Emotion]
+        SEM --> Hidden[Hidden Emotion]
+        SEM --> Sarcasm{Sarcasm?}
+        SEM --> Masking{Masking?}
     end
-    
-    subgraph Analysis["Tone Analysis"]
-        Joy & Sad & Ang & Fear & Sur & Neu --> TA[Tone Analyzer]
-        TA --> Conf[Confidence Score]
-        TA --> Intensity[Intensity Level]
+
+    subgraph PatternValidation["Pattern Validation (SECONDARY)"]
+        Surface & Hidden --> PV[Pattern Validator]
+        PV --> Agree{Patterns Agree?}
+        Agree -->|Yes| Boost[Boost Confidence]
+        Agree -->|No| Keep[Keep Semantic Result]
     end
-    
-    subgraph Validation["Response Validation"]
-        Conf & Intensity --> EV[Emotional Validator]
-        EV --> Appropriate{Appropriate?}
-        Appropriate -->|Yes| Pass[✓ Valid]
-        Appropriate -->|No| Adjust[Adjust Response]
+
+    subgraph Output["Final Result"]
+        Boost & Keep --> Final[True Emotion<br/>+ Confidence]
+        Sarcasm & Masking --> Indicators[Indicators]
+        Final & Indicators --> Result[EmotionalState]
     end
 ```
 

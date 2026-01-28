@@ -5,7 +5,7 @@ Handles WebSocket connections, message processing, and real-time communication
 following KISS principles - focused solely on WebSocket logic.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -40,7 +40,7 @@ class WebSocketManager:
             conversation_id = self.morgan.start_conversation(user_id=user_id)
             self.user_sessions[user_id] = {
                 "conversation_id": conversation_id,
-                "connected_at": datetime.utcnow(),
+                "connected_at": datetime.now(timezone.utc),
             }
 
         logger.info(f"WebSocket connected for user {user_id}")

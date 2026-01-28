@@ -853,7 +853,6 @@ async def connect_with_retry(client, max_retries=5):
 - [Configuration Guide](./CONFIGURATION.md) - Server configuration
 - [Deployment Guide](./DEPLOYMENT.md) - Deployment options
 - [Client Documentation](../../morgan-cli/README.md) - Python client library
-- [Migration Guide](../../MIGRATION.md) - Migrating from old system
 
 ## Support
 

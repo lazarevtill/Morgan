@@ -6,10 +6,10 @@ emotional intelligence and relationship management in Morgan RAG.
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from morgan.companion.storage import CompanionStorage
 from morgan.companion.schema import CompanionDatabaseSchema
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     CompanionProfile,
     EmotionalState,
     UserPreferences,
@@ -135,7 +135,7 @@ async def main():
         milestone_id="milestone_breakthrough_001",
         milestone_type=MilestoneType.BREAKTHROUGH_MOMENT,
         description="User successfully implemented their first neural network from scratch",
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         emotional_significance=0.95,
         related_memories=["memory_089", "memory_090", "memory_091"],
         user_feedback="This was amazing! I finally understand how neural networks work.",

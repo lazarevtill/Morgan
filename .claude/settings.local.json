@@ -41,7 +41,11 @@
       "Bash(mkdir:*)",
       "Bash(pip show:*)",
       "Bash(ruff check:*)",
-      "Bash(setup.bat --help)"
+      "Bash(setup.bat --help)",
+      "Bash(LLM_BASE_URL=\"https://ai.ishosting.com/api\" LLM_API_KEY=\"sk-4d2d3bc6f7f342bea8da9b51e194dfe9\" LLM_MODEL=\"qwen3:latest\" python3 -m pytest:*)",
+      "Bash(git -C /home/lazarev/Morgan status --porcelain)",
+      "Bash(sort:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

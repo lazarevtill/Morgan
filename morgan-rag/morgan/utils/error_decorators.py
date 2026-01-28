@@ -6,6 +6,7 @@ to existing methods and functions with minimal code changes.
 """
 
 import functools
+from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
 from morgan.utils.error_handling import (
@@ -14,6 +15,8 @@ from morgan.utils.error_handling import (
     EmbeddingError,
     EmotionalProcessingError,
     ErrorCategory,
+    ErrorContext,
+    ErrorSeverity,
     MemoryProcessingError,
     NetworkError,
     RetryConfig,
@@ -345,7 +348,19 @@ def handle_companion_errors(
                     )
 
                     # Apply graceful degradation
-                    degradation_manager.assess_and_apply_degradation(e.get_context())
+                    if hasattr(e, 'get_context'):
+                        degradation_manager.assess_and_apply_degradation(e.get_context())
+                    else:
+                        # Base exception without ErrorHandlingMixin
+                        ctx = ErrorContext(
+                            error_id=f"companion_{id(e)}",
+                            timestamp=datetime.now(timezone.utc),
+                            operation=operation,
+                            component=component,
+                            category=ErrorCategory.COMPANION,
+                            severity=ErrorSeverity.MEDIUM,
+                        )
+                        degradation_manager.assess_and_apply_degradation(ctx)
 
                 if skip_on_failure:
                     logger.info(

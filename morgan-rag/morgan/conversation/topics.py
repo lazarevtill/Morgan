@@ -8,7 +8,7 @@ and behavioral pattern recognition to improve conversation relevance and persona
 import threading
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from morgan.config import get_settings
@@ -304,7 +304,7 @@ class TopicPreferenceLearner:
             return {"error": "No learning history available"}
 
         # Filter by timeframe
-        cutoff_date = datetime.utcnow() - timedelta(days=timeframe_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=timeframe_days)
         recent_learning = [
             result
             for result in learning_history
@@ -443,7 +443,7 @@ class TopicPreferenceLearner:
         context: ConversationContext,
     ) -> None:
         """Update user's topic engagements."""
-        current_time = datetime.utcnow()
+        current_time = datetime.now(timezone.utc)
 
         for topic in topics:
             engagement_score = engagement_scores.get(topic, 0.5)
@@ -1037,7 +1037,7 @@ class TopicPreferenceLearner:
         if not user_engagements:
             return {}
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         recent_cutoff = now - timedelta(days=7)
         very_recent_cutoff = now - timedelta(days=1)
 

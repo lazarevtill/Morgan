@@ -10,7 +10,7 @@ import statistics
 import uuid
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -298,7 +298,7 @@ class PatternConsolidator:
         )
 
         consolidated_pattern = ConsolidatedPattern(
-            pattern_id=f"consolidated_comm_{user_id}_{datetime.utcnow().timestamp()}",
+            pattern_id=f"consolidated_comm_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             pattern_type="communication",
             pattern_data={
@@ -379,7 +379,7 @@ class PatternConsolidator:
         ]
 
         consolidated_pattern = ConsolidatedPattern(
-            pattern_id=f"consolidated_topic_{user_id}_{datetime.utcnow().timestamp()}",
+            pattern_id=f"consolidated_topic_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             pattern_type="topic",
             pattern_data={
@@ -448,7 +448,7 @@ class PatternConsolidator:
         )
 
         consolidated_pattern = ConsolidatedPattern(
-            pattern_id=f"consolidated_timing_{user_id}_{datetime.utcnow().timestamp()}",
+            pattern_id=f"consolidated_timing_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             pattern_type="timing",
             pattern_data={
@@ -508,7 +508,7 @@ class PatternConsolidator:
         )
 
         consolidated_pattern = ConsolidatedPattern(
-            pattern_id=f"consolidated_behavior_{user_id}_{datetime.utcnow().timestamp()}",
+            pattern_id=f"consolidated_behavior_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             pattern_type="behavioral",
             pattern_data={
@@ -740,7 +740,7 @@ class KnowledgeSynthesizer:
         )
 
         return ConsolidatedKnowledge(
-            knowledge_id=f"knowledge_comm_{user_id}_{datetime.utcnow().timestamp()}",
+            knowledge_id=f"knowledge_comm_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             knowledge_domain="communication_style",
             knowledge_items=knowledge_items,
@@ -797,7 +797,7 @@ class KnowledgeSynthesizer:
         )
 
         return ConsolidatedKnowledge(
-            knowledge_id=f"knowledge_topic_{user_id}_{datetime.utcnow().timestamp()}",
+            knowledge_id=f"knowledge_topic_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             knowledge_domain="topic_interests",
             knowledge_items=knowledge_items,
@@ -858,7 +858,7 @@ class KnowledgeSynthesizer:
         )
 
         return ConsolidatedKnowledge(
-            knowledge_id=f"knowledge_behavior_{user_id}_{datetime.utcnow().timestamp()}",
+            knowledge_id=f"knowledge_behavior_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             knowledge_domain="behavioral_characteristics",
             knowledge_items=knowledge_items,
@@ -915,7 +915,7 @@ class KnowledgeSynthesizer:
             return None
 
         return ConsolidatedKnowledge(
-            knowledge_id=f"knowledge_learning_{user_id}_{datetime.utcnow().timestamp()}",
+            knowledge_id=f"knowledge_learning_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             knowledge_domain="learning_style",
             knowledge_items=knowledge_items,
@@ -1032,7 +1032,7 @@ class MetaPatternExtractor:
             predictive_insights.append("Provide more advanced content in focused areas")
 
         return MetaPattern(
-            meta_pattern_id=f"meta_learning_{user_id}_{datetime.utcnow().timestamp()}",
+            meta_pattern_id=f"meta_learning_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             pattern_category="learning_trajectory",
             description=description,
@@ -1090,7 +1090,7 @@ class MetaPatternExtractor:
             )
 
         return MetaPattern(
-            meta_pattern_id=f"meta_behavior_{user_id}_{datetime.utcnow().timestamp()}",
+            meta_pattern_id=f"meta_behavior_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             pattern_category="behavior_evolution",
             description=description,
@@ -1140,7 +1140,7 @@ class MetaPatternExtractor:
         )
 
         return MetaPattern(
-            meta_pattern_id=f"meta_interest_{user_id}_{datetime.utcnow().timestamp()}",
+            meta_pattern_id=f"meta_interest_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             pattern_category="interest_evolution",
             description=description,
@@ -1187,7 +1187,7 @@ class MetaPatternExtractor:
         description = f"User communication style is shifting {'more formal' if trend_direction > 0 else 'more casual'}"
 
         return MetaPattern(
-            meta_pattern_id=f"meta_comm_{user_id}_{datetime.utcnow().timestamp()}",
+            meta_pattern_id=f"meta_comm_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             pattern_category="communication_drift",
             description=description,
@@ -1245,7 +1245,7 @@ class ConsolidationScheduler:
             bool: True if consolidation should occur
         """
         if current_time is None:
-            current_time = datetime.utcnow()
+            current_time = datetime.now(timezone.utc)
 
         # Get user's consolidation period
         period = self.consolidation_periods.get(user_id, ConsolidationPeriod.WEEKLY)
@@ -1284,7 +1284,7 @@ class ConsolidationScheduler:
             completion_time: Completion time (defaults to now)
         """
         if completion_time is None:
-            completion_time = datetime.utcnow()
+            completion_time = datetime.now(timezone.utc)
 
         self.last_consolidation[user_id] = completion_time
         logger.debug(f"Marked consolidation complete for user {user_id}")
@@ -1301,7 +1301,7 @@ class ConsolidationScheduler:
         """
         last_time = self.last_consolidation.get(user_id)
         if last_time is None:
-            return datetime.utcnow()  # Now if never consolidated
+            return datetime.now(timezone.utc)  # Now if never consolidated
 
         period = self.consolidation_periods.get(user_id, ConsolidationPeriod.WEEKLY)
         interval = self.DEFAULT_INTERVALS[period]
@@ -1356,7 +1356,7 @@ class ConsolidationEngine:
         """
         logger.info(f"Starting consolidation for user {user_id}")
 
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         strategies_applied = []
 
         # 1. Consolidate patterns
@@ -1442,7 +1442,7 @@ class ConsolidationEngine:
             self.consolidation_history[user_id] = []
         self.consolidation_history[user_id].append(result)
 
-        duration = datetime.utcnow() - start_time
+        duration = datetime.now(timezone.utc) - start_time
         logger.info(
             f"Consolidation complete for user {user_id} in {duration.total_seconds():.2f}s: "
             f"{items_consolidated} items consolidated, quality score {consolidation_quality:.2f}"
@@ -1650,11 +1650,11 @@ class ConsolidationEngine:
             )
             metrics.knowledge_stability_ratio = stable_count / len(all_knowledge)
 
-        metrics.last_consolidation = datetime.utcnow()
+        metrics.last_consolidation = datetime.now(timezone.utc)
         metrics.next_scheduled_consolidation = (
             self.scheduler.get_next_consolidation_time(user_id)
         )
-        metrics.timestamp = datetime.utcnow()
+        metrics.timestamp = datetime.now(timezone.utc)
 
 
 # Global consolidation engine instance

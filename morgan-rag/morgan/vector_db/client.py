@@ -11,7 +11,7 @@ Provides comprehensive vector storage with support for:
 
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from qdrant_client import QdrantClient
@@ -1502,7 +1502,7 @@ class VectorDBClient:
                     from datetime import datetime
 
                     doc_time = datetime.fromisoformat(indexed_at.replace("Z", "+00:00"))
-                    current_time = datetime.utcnow()
+                    current_time = datetime.now(timezone.utc)
                     days_ago = (current_time - doc_time).days
 
                     # Boost recent content (within last 90 days)

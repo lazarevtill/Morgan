@@ -6,11 +6,11 @@ and comprehensive emotional reflection capabilities.
 """
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
-from morgan.empathy.mirror import EmotionalMirror
-from morgan.emotional.models import EmotionalState, EmotionType, ConversationContext
+from morgan.intelligence.empathy.mirror import EmotionalMirror
+from morgan.intelligence.core.models import EmotionalState, EmotionType, ConversationContext
 
 
 class TestEmotionalMirror:
@@ -19,8 +19,12 @@ class TestEmotionalMirror:
     @pytest.fixture
     def mirror(self):
         """Create emotional mirror for testing."""
-        with patch("morgan.empathy.mirror.get_llm_service"):
-            with patch("morgan.empathy.mirror.get_settings"):
+        with patch("morgan.intelligence.empathy.mirror.get_llm_service") as mock_llm:
+            # Configure mock to return proper response with .content attribute
+            mock_response = Mock()
+            mock_response.content = "I can really feel the emotion you're expressing and I'm here with you."
+            mock_llm.return_value.generate.return_value = mock_response
+            with patch("morgan.intelligence.empathy.mirror.get_settings"):
                 return EmotionalMirror()
 
     @pytest.fixture
@@ -30,7 +34,7 @@ class TestEmotionalMirror:
             primary_emotion=EmotionType.JOY,
             intensity=0.8,
             confidence=0.9,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     @pytest.fixture
@@ -40,7 +44,7 @@ class TestEmotionalMirror:
             primary_emotion=EmotionType.ANGER,
             intensity=0.75,
             confidence=0.8,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     @pytest.fixture
@@ -50,7 +54,7 @@ class TestEmotionalMirror:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="I'm so frustrated with this situation!",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     def test_mirror_emotion_high_intensity(
@@ -71,7 +75,7 @@ class TestEmotionalMirror:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.3,
             confidence=0.6,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         response = mirror.mirror_emotion(
@@ -87,7 +91,7 @@ class TestEmotionalMirror:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.7,
             confidence=0.85,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         prompt = mirror.create_reflection_prompt(sadness_state, conversation_context)
@@ -163,7 +167,7 @@ class TestEmotionalMirror:
             primary_emotion=EmotionType.FEAR,
             intensity=0.85,
             confidence=0.9,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         patterns = mirror._identify_emotional_patterns(
@@ -179,7 +183,7 @@ class TestEmotionalMirror:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.7,
             confidence=0.8,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         opportunities = mirror._identify_growth_opportunities(sadness_state)
@@ -220,7 +224,7 @@ class TestEmotionalMirror:
             primary_emotion=EmotionType.FEAR,
             intensity=0.7,
             confidence=0.8,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         needs = mirror._identify_emotional_needs(fear_state)

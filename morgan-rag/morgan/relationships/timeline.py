@@ -8,7 +8,7 @@ Requirements: 9.4, 9.5, 10.3
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -325,14 +325,14 @@ class RelationshipTimeline:
 
             # Predict next milestone timing
             last_milestone = milestone_events[-1]
-            days_since_last = (datetime.utcnow() - last_milestone.timestamp).days
+            days_since_last = (datetime.now(timezone.utc) - last_milestone.timestamp).days
 
             if days_since_last >= avg_milestone_interval * 0.8:
                 # Milestone is due soon
                 predictions.append(
                     {
                         "type": "milestone_due",
-                        "predicted_date": datetime.utcnow()
+                        "predicted_date": datetime.now(timezone.utc)
                         + timedelta(days=avg_milestone_interval - days_since_last),
                         "confidence": 0.7,
                         "description": "Next milestone expected based on historical pattern",
@@ -353,7 +353,7 @@ class RelationshipTimeline:
         predictions = [
             p
             for p in predictions
-            if (p["predicted_date"] - datetime.utcnow()).days <= prediction_horizon_days
+            if (p["predicted_date"] - datetime.now(timezone.utc)).days <= prediction_horizon_days
         ]
         predictions.sort(key=lambda p: p["confidence"], reverse=True)
 
@@ -381,7 +381,7 @@ class RelationshipTimeline:
                     "start": timeline[0].timestamp.isoformat() if timeline else None,
                     "end": timeline[-1].timestamp.isoformat() if timeline else None,
                 },
-                "exported_at": datetime.utcnow().isoformat(),
+                "exported_at": datetime.now(timezone.utc).isoformat(),
             }
 
         elif format_type == "summary":
@@ -705,7 +705,7 @@ class RelationshipTimeline:
             progression.append((milestone.timestamp, trust_level))
 
         # Add current trust level
-        progression.append((datetime.utcnow(), current_trust))
+        progression.append((datetime.now(timezone.utc), current_trust))
 
         return progression
 
@@ -728,7 +728,7 @@ class RelationshipTimeline:
             progression.append((interaction.timestamp, engagement_level))
 
         # Add current engagement level
-        progression.append((datetime.utcnow(), current_engagement))
+        progression.append((datetime.now(timezone.utc), current_engagement))
 
         return progression
 
@@ -795,7 +795,7 @@ class RelationshipTimeline:
                 predictions.append(
                     {
                         "type": "stage_progression",
-                        "predicted_date": datetime.utcnow()
+                        "predicted_date": datetime.now(timezone.utc)
                         + timedelta(days=days_to_stage),
                         "confidence": min(interaction_progress, trust_progress),
                         "description": f"Progression to {req['next']} stage",
@@ -813,7 +813,7 @@ class RelationshipTimeline:
 
         # Analyze recent activity trends
         recent_events = [
-            e for e in timeline if (datetime.utcnow() - e.timestamp).days <= 14
+            e for e in timeline if (datetime.now(timezone.utc) - e.timestamp).days <= 14
         ]
 
         if len(recent_events) >= 3:
@@ -825,7 +825,7 @@ class RelationshipTimeline:
                 predictions.append(
                     {
                         "type": "high_engagement_milestone",
-                        "predicted_date": datetime.utcnow() + timedelta(days=7),
+                        "predicted_date": datetime.now(timezone.utc) + timedelta(days=7),
                         "confidence": avg_significance,
                         "description": "High engagement trend suggests upcoming milestone",
                         "suggested_focus": "Maintain current engagement level",
@@ -874,5 +874,5 @@ class RelationshipTimeline:
                 }
                 for period in self.analyze_timeline_periods(timeline)
             ],
-            "exported_at": datetime.utcnow().isoformat(),
+            "exported_at": datetime.now(timezone.utc).isoformat(),
         }

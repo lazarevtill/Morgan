@@ -8,7 +8,7 @@ and guidance to optimize learning outcomes.
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -91,7 +91,7 @@ class TeachingApproach:
     def update_effectiveness(self, success: bool, satisfaction: float):
         """Update effectiveness metrics."""
         self.usage_count += 1
-        self.last_used = datetime.utcnow()
+        self.last_used = datetime.now(timezone.utc)
 
         # Update success rate (weighted average)
         weight = 0.2
@@ -147,7 +147,7 @@ class LearningProfile:
             self.domain_approaches[approach.domain] = {}
 
         self.domain_approaches[approach.domain][approach.topic] = approach
-        self.last_updated = datetime.utcnow()
+        self.last_updated = datetime.now(timezone.utc)
 
     def get_approach(self, domain: str, topic: str) -> Optional[TeachingApproach]:
         """Get teaching approach for a domain/topic."""
@@ -331,7 +331,7 @@ class AdaptiveTeachingEngine:
 
             # Create teaching approach
             approach = TeachingApproach(
-                approach_id=f"{user_id}_{domain}_{topic}_{datetime.utcnow().isoformat()}",
+                approach_id=f"{user_id}_{domain}_{topic}_{datetime.now(timezone.utc).isoformat()}",
                 user_id=user_id,
                 domain=domain,
                 topic=topic,

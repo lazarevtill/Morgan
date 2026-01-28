@@ -6,7 +6,7 @@ relationship milestones, and empathetic responses.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -63,7 +63,7 @@ class EmotionalState:
     emotional_indicators: List[str] = field(
         default_factory=list
     )  # text patterns that indicated emotion
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __post_init__(self):
         """Validate emotional state values."""
@@ -84,7 +84,7 @@ class MoodPattern:
     mood_stability: float  # 0.0 (very unstable) to 1.0 (very stable)
     emotional_trends: Dict[str, Any]  # trends like "improving", "declining"
     pattern_confidence: float
-    analysis_timestamp: datetime = field(default_factory=datetime.utcnow)
+    analysis_timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -97,7 +97,7 @@ class UserPreferences:
     learning_goals: List[str] = field(default_factory=list)
     personal_context: Dict[str, Any] = field(default_factory=dict)
     interaction_preferences: Dict[str, Any] = field(default_factory=dict)
-    last_updated: datetime = field(default_factory=datetime.utcnow)
+    last_updated: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -124,7 +124,7 @@ class EmpatheticResponse:
     relationship_context: str
     confidence_score: float
     personalization_elements: List[str] = field(default_factory=list)
-    generation_timestamp: datetime = field(default_factory=datetime.utcnow)
+    generation_timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -164,10 +164,10 @@ class CompanionProfile:
     emotional_patterns: Dict[str, Any] = field(default_factory=dict)
     shared_memories: List[str] = field(default_factory=list)  # memory IDs
     relationship_milestones: List[RelationshipMilestone] = field(default_factory=list)
-    last_interaction: datetime = field(default_factory=datetime.utcnow)
+    last_interaction: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     trust_level: float = 0.0  # 0.0 to 1.0
     engagement_score: float = 0.0  # 0.0 to 1.0
-    profile_created: datetime = field(default_factory=datetime.utcnow)
+    profile_created: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def get_relationship_age_days(self) -> int:
         """Get relationship age in days."""

@@ -22,6 +22,11 @@ class TestHierarchicalEmbeddingIntegration:
         self.mock_embedding_service = Mock()
         self.service.embedding_service = self.mock_embedding_service
 
+        # Mock clustering engine to return embeddings unchanged (avoid contrastive bias transformation)
+        self.mock_clustering_engine = Mock()
+        self.mock_clustering_engine.apply_contrastive_bias = Mock(side_effect=lambda emb, cat, scale: emb)
+        self.service.clustering_engine = self.mock_clustering_engine
+
         # Mock different embeddings for each scale to verify they're different
         self.mock_embedding_service.encode_batch.return_value = [
             [0.1, 0.2, 0.3, 0.4],  # coarse embedding

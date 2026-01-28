@@ -7,7 +7,7 @@ across different cultural contexts, communication styles, and social norms.
 
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -1202,7 +1202,7 @@ class CulturalEmotionalAwareness:
     def _is_profile_recent(self, profile: CulturalProfile) -> bool:
         """Check if cultural profile is recent enough to use."""
         # Consider profile recent if updated within last 30 days
-        age = datetime.utcnow() - profile.last_updated
+        age = datetime.now(timezone.utc) - profile.last_updated
         return age.days < 30
 
 

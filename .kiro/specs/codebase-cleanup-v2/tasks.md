@@ -475,7 +475,7 @@ This document contains detailed implementation tasks for the Morgan codebase cle
 - [ ] 11.2.1 Run `pytest morgan-rag/tests/`
 - [ ] 11.2.2 Run `pytest morgan-cli/tests/`
 - [ ] 11.2.3 Run `pytest morgan-server/tests/`
-- [ ] 11.2.4 Fix any broken tests
+- [x] 11.2.4 Fix any broken tests
 
 **Requirements**: All
 

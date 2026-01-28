@@ -1,13 +1,10 @@
 # Morgan Error Handling Guide
 
-> **⚠️ DEPRECATED:** This document is for the old Morgan system. For the new client-server architecture, see:
-> - [Server Documentation](../morgan-server/README.md)
-> - [Deployment Guide](../morgan-server/docs/DEPLOYMENT.md)
-> - [Migration Guide](../MIGRATION.md)
+> **Note:** For current error handling patterns, see the shared utilities in `shared/utils/`.
 
 ## Overview
 
-This document describes the production-grade error handling system for Morgan AI Assistant (deprecated).
+This document describes the error handling system for Morgan AI Assistant.
 
 ## Table of Contents
 

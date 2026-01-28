@@ -3,7 +3,7 @@ Infrastructure repositories for Morgan Core.
 Handles persistence using VectorDBClient.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from morgan.core.domain.entities import KnowledgeChunk, ConversationTurn
@@ -69,7 +69,7 @@ class KnowledgeRepository:
                     ingested_at=(
                         datetime.fromisoformat(payload.get("ingested_at"))
                         if payload.get("ingested_at")
-                        else datetime.utcnow()
+                        else datetime.now(timezone.utc)
                     ),
                     embedding_type=payload.get("embedding_type", "legacy"),
                 )

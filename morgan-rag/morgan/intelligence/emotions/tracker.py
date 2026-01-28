@@ -9,7 +9,7 @@ import json
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -106,7 +106,7 @@ class EmotionalStateTracker:
                     json.dumps(emotional_state.emotional_indicators),
                     json.dumps(context_data),
                     emotional_state.timestamp.isoformat(),
-                    datetime.utcnow().isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
                 ),
             )
 
@@ -148,7 +148,7 @@ class EmotionalStateTracker:
             # Add time filtering
             if timeframe:
                 days = int(timeframe.rstrip("d"))
-                cutoff_date = datetime.utcnow() - timedelta(days=days)
+                cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
                 query += " AND timestamp >= ?"
                 params.append(cutoff_date.isoformat())
 
@@ -534,7 +534,7 @@ class EmotionalStateTracker:
         """Generate unique tracking ID."""
         import hashlib
 
-        id_input = f"{user_id}:{timestamp.isoformat()}:{datetime.utcnow().microsecond}"
+        id_input = f"{user_id}:{timestamp.isoformat()}:{datetime.now(timezone.utc).microsecond}"
         return hashlib.sha256(id_input.encode()).hexdigest()[:16]
 
     def _row_to_emotional_state(self, row: sqlite3.Row) -> EmotionalState:

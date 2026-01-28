@@ -8,7 +8,7 @@ Requirements: 9.4, 9.5, 10.3
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -385,7 +385,7 @@ class RelationshipAdaptation:
                 "effectiveness_summary": {},
             }
 
-        cutoff_date = datetime.utcnow() - timedelta(days=days_back)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
         recent_adaptations = [
             adaptation
             for adaptation in self.adaptation_history[user_id]
@@ -505,7 +505,7 @@ class RelationshipAdaptation:
         """Check if adaptation rule should be applied."""
         # Check cooldown period
         if rule.last_applied:
-            if datetime.utcnow() - rule.last_applied < rule.cooldown_period:
+            if datetime.now(timezone.utc) - rule.last_applied < rule.cooldown_period:
                 return False
 
         # Check trigger conditions
@@ -786,7 +786,7 @@ class RelationshipAdaptation:
             previous_value="unknown",
             new_value="adapted",
             adaptation_strength=adaptation.get("adaptation_strength", 0.3),
-            applied_at=datetime.utcnow(),
+            applied_at=datetime.now(timezone.utc),
             expected_duration=timedelta(days=7),
             success_indicators=["improved_user_satisfaction"],
         )
@@ -903,7 +903,7 @@ class RelationshipAdaptation:
             previous_value=previous_empathy,
             new_value=new_empathy,
             adaptation_strength=strength,
-            applied_at=datetime.utcnow(),
+            applied_at=datetime.now(timezone.utc),
             expected_duration=timedelta(days=5),
             success_indicators=[
                 "improved_emotional_response",
@@ -926,7 +926,7 @@ class RelationshipAdaptation:
             previous_value=previous_formality,
             new_value=new_formality,
             adaptation_strength=strength,
-            applied_at=datetime.utcnow(),
+            applied_at=datetime.now(timezone.utc),
             expected_duration=timedelta(days=10),
             success_indicators=["more_natural_conversation", "increased_comfort"],
         )
@@ -940,7 +940,7 @@ class RelationshipAdaptation:
             previous_value="current_style",
             new_value=adaptation.get("adaptation_target", "adapted_style"),
             adaptation_strength=adaptation.get("adaptation_strength", 0.3),
-            applied_at=datetime.utcnow(),
+            applied_at=datetime.now(timezone.utc),
             expected_duration=timedelta(days=7),
             success_indicators=["improved_engagement", "better_user_response"],
         )
@@ -952,7 +952,7 @@ class RelationshipAdaptation:
             previous_value="current_length",
             new_value=adaptation.get("adaptation_target", "adapted_length"),
             adaptation_strength=adaptation.get("adaptation_strength", 0.3),
-            applied_at=datetime.utcnow(),
+            applied_at=datetime.now(timezone.utc),
             expected_duration=timedelta(days=5),
             success_indicators=["better_response_matching", "improved_satisfaction"],
         )
@@ -964,7 +964,7 @@ class RelationshipAdaptation:
             previous_value="current_depth",
             new_value=adaptation.get("adaptation_target", "adapted_depth"),
             adaptation_strength=adaptation.get("adaptation_strength", 0.3),
-            applied_at=datetime.utcnow(),
+            applied_at=datetime.now(timezone.utc),
             expected_duration=timedelta(days=7),
             success_indicators=[
                 "appropriate_technical_level",

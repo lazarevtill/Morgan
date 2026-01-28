@@ -11,7 +11,7 @@ This module implements the requirements for task 6.2:
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.companion.relationship_manager import CompanionRelationshipManager
@@ -226,7 +226,7 @@ class CompanionMemorySearchEngine:
                 results = [r for r in results if r.memory_type in memory_types]
 
             # Filter by time range
-            cutoff_date = datetime.utcnow() - timedelta(days=days_back)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
             results = [r for r in results if r.timestamp >= cutoff_date]
 
             return results
@@ -336,7 +336,7 @@ class CompanionMemorySearchEngine:
                 user_id=user_id,
                 conversation_id="search_context",
                 message_text=query,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
             return self.emotional_engine.analyze_emotion(query, context)
@@ -416,7 +416,7 @@ class CompanionMemorySearchEngine:
             try:
                 timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
             except (ValueError, TypeError):
-                timestamp = datetime.utcnow()
+                timestamp = datetime.now(timezone.utc)
 
             # Calculate enhanced score with companion factors
             enhanced_score = self._calculate_enhanced_score(
@@ -702,7 +702,7 @@ class CompanionMemorySearchEngine:
             results.sort(key=lambda r: r.score, reverse=True)
 
             # Apply temporal relevance adjustment
-            current_time = datetime.utcnow()
+            current_time = datetime.now(timezone.utc)
             for result in results:
                 days_ago = (current_time - result.timestamp).days
 
@@ -1152,7 +1152,7 @@ class CompanionMemorySearchEngine:
     def _calculate_temporal_relevance_boost(self, timestamp: datetime) -> float:
         """Calculate temporal relevance boost for recent conversations."""
         try:
-            current_time = datetime.utcnow()
+            current_time = datetime.now(timezone.utc)
             time_diff = current_time - timestamp
             days_ago = time_diff.days
 
@@ -1252,7 +1252,7 @@ class CompanionMemorySearchEngine:
 
             # Add context indicators to personalization factors
             if result.timestamp:
-                days_ago = (datetime.utcnow() - result.timestamp).days
+                days_ago = (datetime.now(timezone.utc) - result.timestamp).days
                 if days_ago <= 1:
                     result.personalization_factors.append("very_recent")
                 elif days_ago <= 7:

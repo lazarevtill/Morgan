@@ -7,7 +7,7 @@ behavioral adaptation, and feedback processing to continuously improve personali
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from ..intelligence.core.models import CompanionProfile, ConversationContext, InteractionData
@@ -182,7 +182,7 @@ class LearningEngine:
             return LearningUpdate(
                 update_id=str(uuid.uuid4()),
                 user_id=user_id,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 preference_updates=[],
                 adaptation_changes=[],
                 confidence_score=0.0,
@@ -289,7 +289,7 @@ class LearningEngine:
                 user_id=user_id,
                 preferences={},
                 confidence_scores={},
-                last_updated=datetime.utcnow(),
+                last_updated=datetime.now(timezone.utc),
             )
 
     def start_learning_session(self, user_id: str) -> str:
@@ -303,7 +303,7 @@ class LearningEngine:
             str: Session ID
         """
         session = LearningSession(
-            session_id=str(uuid.uuid4()), user_id=user_id, start_time=datetime.utcnow()
+            session_id=str(uuid.uuid4()), user_id=user_id, start_time=datetime.now(timezone.utc)
         )
 
         self.active_sessions[session.session_id] = session
@@ -377,7 +377,7 @@ class LearningEngine:
                 + (1 - alpha) * metrics.user_satisfaction_trend
             )
 
-        metrics.last_updated = datetime.utcnow()
+        metrics.last_updated = datetime.now(timezone.utc)
 
     def _apply_preference_updates(
         self, user_id: str, preference_updates: List[Dict[str, Any]]

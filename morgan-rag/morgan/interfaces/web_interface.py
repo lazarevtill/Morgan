@@ -7,7 +7,7 @@ timeline visualization, preference management, and companion feedback systems.
 KISS: Clean web interface that uses modular components.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -215,7 +215,7 @@ class MorganWebInterface:
                 if preferences.preferred_name:
                     profile.preferred_name = preferences.preferred_name
 
-                profile.communication_preferences.last_updated = datetime.utcnow()
+                profile.communication_preferences.last_updated = datetime.now(timezone.utc)
 
                 return {
                     "status": "success",

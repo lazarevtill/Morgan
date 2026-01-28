@@ -4,6 +4,14 @@ Emotional Intelligence Engine for Morgan RAG.
 Provides real-time emotion detection, mood pattern analysis, empathetic response
 generation, and personal preference learning to create meaningful companion
 relationships with users.
+
+Semantic-First Architecture:
+============================
+This engine now uses semantic-first processing throughout:
+1. Emotion detection uses LLM semantic analysis as PRIMARY method
+2. Pattern matching validates and boosts confidence (SECONDARY)
+3. Response generation considers hidden emotions and emotional masking
+4. All components understand meaning, not just keywords
 """
 
 import hashlib
@@ -11,7 +19,7 @@ import json
 import re
 import threading
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from morgan.config import get_settings
@@ -35,6 +43,7 @@ from morgan.intelligence.core.models import (
 )
 from morgan.services.llm import get_llm_service
 from morgan.utils.cache import FileCache
+from morgan.utils.llm_parsing import parse_llm_json
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -44,15 +53,23 @@ class EmotionalIntelligenceEngine:
     """
     Emotional Intelligence Engine for companion AI.
 
+    Semantic-First Architecture:
+    ============================
+    - Emotion detection uses LLM semantic analysis as PRIMARY method
+    - Understands hidden emotions, sarcasm, and emotional masking
+    - Pattern matching validates and boosts confidence (SECONDARY)
+    - Empathetic responses consider actual emotional needs
+
     Features:
-    - Real-time emotion detection from text analysis
+    - Real-time semantic emotion detection from text analysis
+    - Detection of hidden emotions and emotional masking
     - Mood pattern analysis and tracking over time
-    - Empathetic response generation with emotional awareness
+    - Empathetic response generation with context awareness
     - Personal preference learning and adaptation
     - Relationship milestone detection and tracking
 
     Note: Emotion patterns and modifiers are imported from
-    morgan.intelligence.constants for centralized management.
+    morgan.intelligence.constants for validation purposes.
     """
 
     def __init__(self):
@@ -64,24 +81,34 @@ class EmotionalIntelligenceEngine:
         cache_dir = self.settings.morgan_data_dir / "cache" / "emotional"
         self.cache = FileCache(cache_dir)
 
+        # Setup cache for semantic analysis (longer TTL)
+        semantic_cache_dir = self.settings.morgan_data_dir / "cache" / "semantic"
+        self.semantic_cache = FileCache(semantic_cache_dir)
+
         # In-memory storage for user profiles and patterns
         self.user_profiles: Dict[str, CompanionProfile] = {}
         self.mood_patterns: Dict[str, List[EmotionalState]] = defaultdict(list)
 
-        logger.info("Emotional Intelligence Engine initialized")
+        logger.info("Emotional Intelligence Engine initialized (semantic-first mode)")
 
     def analyze_emotion(
-        self, text: str, context: ConversationContext
+        self, text: str, context: ConversationContext, use_semantic: bool = True
     ) -> EmotionalState:
         """
-        Analyze emotion from text using hybrid rule-based + LLM approach.
+        Analyze emotion from text using semantic-first approach.
+
+        Semantic-First Architecture:
+        1. PRIMARY: LLM semantic analysis for deep understanding
+        2. SECONDARY: Pattern validation for confidence calibration
+        3. Result: Combined understanding with calibrated confidence
 
         Args:
             text: Text to analyze for emotion
             context: Conversation context for better analysis
+            use_semantic: Whether to use semantic analysis (default True)
 
         Returns:
-            Detected emotional state
+            Detected emotional state with hidden emotion awareness
         """
         # Check cache first
         cache_key = self._get_emotion_cache_key(text, context.user_id)
@@ -90,16 +117,27 @@ class EmotionalIntelligenceEngine:
             logger.debug(f"Emotion cache hit for user {context.user_id}")
             return EmotionalState(**cached_emotion)
 
-        # Rule-based emotion detection
-        rule_emotions = self._detect_emotions_rule_based(text)
+        if use_semantic:
+            # SEMANTIC-FIRST APPROACH
+            # Primary: LLM semantic analysis
+            semantic_result = self._analyze_emotion_semantically(text, context)
 
-        # LLM-enhanced emotion analysis for complex cases
-        llm_emotion = None
-        if not rule_emotions or max(score for _, score in rule_emotions) < 0.6:
-            llm_emotion = self._detect_emotions_llm(text, context)
+            # Secondary: Pattern validation
+            pattern_validation = self._validate_emotion_with_patterns(
+                text, semantic_result
+            )
 
-        # Combine results
-        final_emotion = self._combine_emotion_results(rule_emotions, llm_emotion, text)
+            # Combine results
+            final_emotion = self._finalize_emotion_result(
+                semantic_result, pattern_validation
+            )
+        else:
+            # LEGACY APPROACH (backwards compatibility)
+            rule_emotions = self._detect_emotions_rule_based(text)
+            llm_emotion = None
+            if not rule_emotions or max(score for _, score in rule_emotions) < 0.6:
+                llm_emotion = self._detect_emotions_llm(text, context)
+            final_emotion = self._combine_emotion_results(rule_emotions, llm_emotion, text)
 
         # Store in cache
         timestamp_str = (
@@ -129,6 +167,193 @@ class EmotionalIntelligenceEngine:
 
         return final_emotion
 
+    def _analyze_emotion_semantically(
+        self, text: str, context: ConversationContext
+    ) -> Optional[EmotionalState]:
+        """
+        Semantic emotion analysis using LLM.
+
+        Understands:
+        - Surface emotions (explicit)
+        - Hidden emotions (implicit)
+        - Sarcasm and irony
+        - Emotional masking
+
+        Args:
+            text: Text to analyze
+            context: Conversation context
+
+        Returns:
+            Semantic emotional understanding
+        """
+        # Check semantic cache
+        cache_key = f"semantic_{self._get_emotion_cache_key(text, context.user_id)}"
+        cached = self.semantic_cache.get(cache_key)
+        if cached:
+            return EmotionalState(**cached)
+
+        try:
+            context_info = ""
+            if context.previous_messages:
+                recent = context.previous_messages[-3:]
+                context_info = f"\nRecent context:\n" + "\n".join(f"- {m}" for m in recent)
+
+            prompt = f"""Analyze the emotional content with deep semantic understanding.
+
+Message: "{text}"{context_info}
+
+Consider:
+1. SURFACE EMOTION: What's explicitly expressed?
+2. HIDDEN EMOTION: What might be underneath?
+3. SARCASM/IRONY: Is the meaning opposite to literal words?
+4. EMOTIONAL MASKING: Is the person hiding their true feelings?
+
+Respond with JSON ONLY:
+{{
+    "surface_emotion": "joy|sadness|anger|fear|surprise|disgust|neutral",
+    "hidden_emotion": "joy|sadness|anger|fear|surprise|disgust|neutral|none",
+    "is_sarcastic": true|false,
+    "is_masking": true|false,
+    "primary_emotion": "the TRUE emotion (hidden if masking, real if sarcastic)",
+    "intensity": 0.0-1.0,
+    "confidence": 0.0-1.0,
+    "secondary_emotions": ["emotion1"],
+    "indicators": ["evidence"]
+}}"""
+
+            response = self.llm_service.generate(
+                prompt=prompt, temperature=0.2, max_tokens=500
+            )
+
+            # Parse JSON using utility that handles reasoning blocks
+            data = parse_llm_json(response.content)
+            if data is None:
+                logger.warning("Failed to parse semantic emotion response")
+                return None
+
+            indicators = data.get("indicators", [])
+            if data.get("is_sarcastic"):
+                indicators.append("sarcasm_detected")
+            if data.get("is_masking"):
+                indicators.append("emotional_masking_detected")
+            if data.get("hidden_emotion") != "none":
+                indicators.append(f"hidden_emotion:{data['hidden_emotion']}")
+
+            result = EmotionalState(
+                primary_emotion=EmotionType(data["primary_emotion"]),
+                intensity=float(data["intensity"]),
+                confidence=float(data["confidence"]),
+                secondary_emotions=[
+                    EmotionType(e) for e in data.get("secondary_emotions", [])
+                    if e in [et.value for et in EmotionType]
+                ],
+                emotional_indicators=indicators,
+            )
+
+            # Cache result
+            timestamp_str = result.timestamp.isoformat() if isinstance(result.timestamp, datetime) else result.timestamp
+            self.semantic_cache.set(cache_key, {
+                "primary_emotion": result.primary_emotion,
+                "intensity": result.intensity,
+                "confidence": result.confidence,
+                "secondary_emotions": result.secondary_emotions,
+                "emotional_indicators": result.emotional_indicators,
+                "timestamp": timestamp_str,
+            })
+
+            return result
+
+        except Exception as e:
+            logger.warning(f"Semantic emotion analysis failed: {e}")
+            return None
+
+    def _validate_emotion_with_patterns(
+        self, text: str, semantic_result: Optional[EmotionalState]
+    ) -> Dict[str, Any]:
+        """Validate semantic result using pattern matching."""
+        text_lower = text.lower()
+        pattern_emotions = {}
+
+        for emotion_type, patterns in EMOTION_PATTERNS.items():
+            score = 0.0
+            for pattern in patterns:
+                matches = re.findall(pattern, text_lower)
+                if matches:
+                    score += len(matches) * 0.3
+
+            if score > 0:
+                for modifier, multiplier in INTENSITY_MODIFIERS.items():
+                    if modifier in text_lower:
+                        score *= multiplier
+                        break
+                score = min(1.0, score)
+                if score > 0.1:
+                    pattern_emotions[emotion_type] = score
+
+        validation = {
+            "pattern_emotions": pattern_emotions,
+            "agrees_with_semantic": False,
+            "confidence_adjustment": 0.0,
+            "fallback_emotion": None,
+        }
+
+        if pattern_emotions:
+            strongest = max(pattern_emotions.items(), key=lambda x: x[1])
+            validation["fallback_emotion"] = strongest[0]
+            validation["fallback_score"] = strongest[1]
+
+            if semantic_result:
+                if semantic_result.primary_emotion == strongest[0]:
+                    validation["agrees_with_semantic"] = True
+                    validation["confidence_adjustment"] = 0.15
+                elif semantic_result.primary_emotion in pattern_emotions:
+                    validation["agrees_with_semantic"] = True
+                    validation["confidence_adjustment"] = 0.1
+
+        return validation
+
+    def _finalize_emotion_result(
+        self,
+        semantic_result: Optional[EmotionalState],
+        pattern_validation: Dict[str, Any],
+    ) -> EmotionalState:
+        """Finalize emotion result from semantic and pattern analysis."""
+        if semantic_result:
+            final_confidence = min(
+                1.0,
+                semantic_result.confidence + pattern_validation["confidence_adjustment"],
+            )
+
+            indicators = list(semantic_result.emotional_indicators)
+            if pattern_validation["agrees_with_semantic"]:
+                indicators.append("pattern_validated")
+            else:
+                indicators.append("semantic_only")
+
+            return EmotionalState(
+                primary_emotion=semantic_result.primary_emotion,
+                intensity=semantic_result.intensity,
+                confidence=final_confidence,
+                secondary_emotions=semantic_result.secondary_emotions,
+                emotional_indicators=indicators,
+            )
+
+        if pattern_validation.get("fallback_emotion"):
+            return EmotionalState(
+                primary_emotion=pattern_validation["fallback_emotion"],
+                intensity=pattern_validation.get("fallback_score", 0.5),
+                confidence=0.6,
+                secondary_emotions=[],
+                emotional_indicators=["pattern_fallback"],
+            )
+
+        return EmotionalState(
+            primary_emotion=EmotionType.NEUTRAL,
+            intensity=0.5,
+            confidence=0.3,
+            emotional_indicators=["no_clear_indicators"],
+        )
+
     def track_mood_patterns(self, user_id: str, timeframe: str = "30d") -> MoodPattern:
         """
         Analyze user's mood patterns over time.
@@ -142,7 +367,7 @@ class EmotionalIntelligenceEngine:
         """
         # Parse timeframe
         days = int(timeframe.rstrip("d"))
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
         # Get recent emotional states
         recent_emotions = [
@@ -369,11 +594,14 @@ class EmotionalIntelligenceEngine:
             """
 
             response = self.llm_service.generate(
-                prompt=prompt, temperature=0.3, max_tokens=200
+                prompt=prompt, temperature=0.3, max_tokens=400
             )
 
-            # Parse JSON response
-            emotion_data = json.loads(response.content)
+            # Parse JSON response using utility that handles reasoning blocks
+            emotion_data = parse_llm_json(response.content)
+            if emotion_data is None:
+                logger.warning("Failed to parse LLM emotion detection response")
+                return None
 
             return EmotionalState(
                 primary_emotion=EmotionType(emotion_data["primary_emotion"]),

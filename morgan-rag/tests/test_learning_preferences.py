@@ -7,7 +7,7 @@ preference profile management, and preference confidence tracking.
 
 import pytest
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
@@ -19,7 +19,7 @@ from morgan.learning.preferences import (
     PreferenceSource,
     PreferenceUpdate,
 )
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     InteractionData,
     ConversationContext,
     EmotionalState,
@@ -52,19 +52,16 @@ class TestPreferenceExtractor:
                 user_id="test_user",
                 conversation_id="test_conv",
                 message_text=msg,
-                timestamp=datetime.utcnow() - timedelta(hours=i),
+                timestamp=datetime.now(timezone.utc) - timedelta(hours=i),
             )
             interaction = InteractionData(
-                interaction_id=f"test_{i}",
-                user_id="test_user",
                 conversation_context=context,
                 emotional_state=EmotionalState(
                     primary_emotion=EmotionType.NEUTRAL,
                     intensity=0.5,
                     confidence=0.7,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                 ),
-                timestamp=datetime.utcnow() - timedelta(hours=i),
             )
             interactions.append(interaction)
 
@@ -85,14 +82,16 @@ class TestPreferenceExtractor:
                 user_id="test_user",
                 conversation_id="test_conv",
                 message_text="Please kindly assist me with this matter. Thank you.",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
             interaction = InteractionData(
-                interaction_id=f"test_{i}",
-                user_id="test_user",
                 conversation_context=context,
-                emotional_state=None,
-                timestamp=datetime.utcnow(),
+                emotional_state=EmotionalState(
+                    primary_emotion=EmotionType.NEUTRAL,
+                    intensity=0.5,
+                    confidence=0.7,
+                    timestamp=datetime.now(timezone.utc),
+                ),
             )
             formal_interactions.append(interaction)
 
@@ -110,14 +109,16 @@ class TestPreferenceExtractor:
                 user_id="test_user",
                 conversation_id="test_conv",
                 message_text="Hey! Yeah, that's awesome! Cool!",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
             interaction = InteractionData(
-                interaction_id=f"test_{i}",
-                user_id="test_user",
                 conversation_context=context,
-                emotional_state=None,
-                timestamp=datetime.utcnow(),
+                emotional_state=EmotionalState(
+                    primary_emotion=EmotionType.NEUTRAL,
+                    intensity=0.5,
+                    confidence=0.7,
+                    timestamp=datetime.now(timezone.utc),
+                ),
             )
             casual_interactions.append(interaction)
 
@@ -165,19 +166,16 @@ class TestPreferenceExtractor:
                 user_id="test_user",
                 conversation_id="test_conv",
                 message_text="Test message",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
             interaction = InteractionData(
-                interaction_id=f"test_{i}",
-                user_id="test_user",
                 conversation_context=context,
                 emotional_state=EmotionalState(
                     primary_emotion=EmotionType.JOY,
                     intensity=0.7,
                     confidence=0.8,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                 ),
-                timestamp=datetime.utcnow(),
             )
             interactions.append(interaction)
 
@@ -317,7 +315,13 @@ class TestUserPreferenceProfile:
                 "communication": {"formality_level": 0.8, "technical_depth": 0.75},
                 "content": {"response_length": 0.7},
             },
-            preference_sources={},
+            preference_sources={
+                "communication": {
+                    "formality_level": PreferenceSource.CONVERSATION_ANALYSIS,
+                    "technical_depth": PreferenceSource.CONVERSATION_ANALYSIS,
+                },
+                "content": {"response_length": PreferenceSource.CONVERSATION_ANALYSIS},
+            },
         )
 
     def test_get_preference_existing(self, profile):

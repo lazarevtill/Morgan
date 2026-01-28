@@ -7,7 +7,7 @@ conversational coherence for natural and engaging interactions.
 
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -175,7 +175,7 @@ class ConversationFlowManager:
 
         # Store updated flow
         self.active_flows[conversation_id] = flow
-        flow.last_activity = datetime.utcnow()
+        flow.last_activity = datetime.now(timezone.utc)
 
         logger.debug(
             f"Managed conversation flow for {conversation_id}: "
@@ -215,7 +215,7 @@ class ConversationFlowManager:
             from_topic=flow.current_topic or "unknown",
             to_topic=new_topic,
             transition_type=transition_type,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         # Update flow
@@ -247,7 +247,7 @@ class ConversationFlowManager:
             return False
 
         flow.state = ConversationState.ACTIVE
-        flow.last_activity = datetime.utcnow()
+        flow.last_activity = datetime.now(timezone.utc)
         logger.debug(f"Resumed conversation {conversation_id}")
         return True
 
@@ -286,7 +286,7 @@ class ConversationFlowManager:
             user_flows.extend([f for f in flows if f.user_id == user_id])
 
         # Filter by timeframe
-        cutoff_date = datetime.utcnow() - timedelta(days=timeframe_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=timeframe_days)
         recent_flows = [f for f in user_flows if f.started_at >= cutoff_date]
 
         if not recent_flows:
@@ -347,7 +347,7 @@ class ConversationFlowManager:
         return ConversationTurn(
             speaker=speaker,
             content=content,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             emotional_state=emotional_state,
             topic=topic,
             turn_type=turn_type,
@@ -403,7 +403,7 @@ class ConversationFlowManager:
                 from_topic=previous_topic,
                 to_topic=current_topic,
                 transition_type=transition_type,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
         return None
@@ -499,7 +499,7 @@ class ConversationFlowManager:
         planned_turn = ConversationTurn(
             speaker="assistant",
             content="",  # Will be filled by response generator
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             turn_type=result.suggested_response_type,
         )
 

@@ -8,7 +8,7 @@ and adaptive regulation learning for emotional well-being support.
 import statistics
 import threading
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from morgan.config import get_settings
@@ -61,7 +61,7 @@ class RegulationSession:
         self.user_id = user_id
         self.emotional_state = emotional_state
         self.strategy = strategy
-        self.timestamp = timestamp or datetime.utcnow()
+        self.timestamp = timestamp or datetime.now(timezone.utc)
         self.completed = False
         self.effectiveness_score: Optional[float] = None
         self.user_feedback: Optional[str] = None
@@ -436,7 +436,7 @@ class EmotionRegulator:
         Returns:
             Regulation pattern analysis
         """
-        cutoff_date = datetime.utcnow() - timedelta(days=timeframe_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=timeframe_days)
 
         # Get recent sessions
         recent_sessions = [

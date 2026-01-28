@@ -7,7 +7,7 @@ and patterns to provide more personalized and contextually appropriate assistanc
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Any, Tuple
 
@@ -257,8 +257,8 @@ class HabitBasedAdaptation:
         # Update rule statistics
         for rule in applicable_rules:
             rule.application_count += 1
-            rule.last_applied = datetime.utcnow()
-            rule.updated_at = datetime.utcnow()
+            rule.last_applied = datetime.now(timezone.utc)
+            rule.updated_at = datetime.now(timezone.utc)
         
         logger.debug(f"Applied {len(result.applied_strategies)} adaptation strategies")
         return result
@@ -503,7 +503,7 @@ class HabitBasedAdaptation:
                     if user_satisfaction is not None:
                         rule.user_satisfaction = (rule.user_satisfaction + user_satisfaction) / 2
                     
-                    rule.updated_at = datetime.utcnow()
+                    rule.updated_at = datetime.now(timezone.utc)
                     return
     
     def get_adaptation_statistics(self, user_id: str) -> Dict[str, Any]:

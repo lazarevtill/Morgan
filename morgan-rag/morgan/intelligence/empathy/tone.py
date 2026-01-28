@@ -3,8 +3,15 @@ Emotional tone matching module.
 
 Provides emotional tone matching capabilities that adapt response tone and style
 to match and complement the user's emotional state and communication preferences.
+
+Semantic-First Architecture:
+- LLM analysis determines appropriate tone with context awareness
+- Considers HIDDEN emotions, not just surface emotions
+- Responds to IMPLIED needs, not just explicit requests
+- Detects emotional masking and responds appropriately
 """
 
+import json
 import threading
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -17,6 +24,7 @@ from morgan.intelligence.core.models import (
     EmotionType,
 )
 from morgan.services.llm import get_llm_service
+from morgan.utils.llm_parsing import parse_llm_json
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -48,14 +56,22 @@ class EmotionalToneManager:
     """
     Emotional tone matching and management system.
 
+    Semantic-First Architecture:
+    - Context-aware tone selection using LLM analysis
+    - Considers HIDDEN emotions beneath the surface
+    - Responds to IMPLIED needs, not just explicit requests
+    - Detects when surface emotion differs from actual need
+    - Adapts tone based on emotional masking detection
+
     Provides capabilities to:
-    - Match response tone to user's emotional state
-    - Adapt communication style based on user preferences
+    - Match response tone to user's ACTUAL emotional need
+    - Consider hidden emotions when selecting tone
+    - Adapt communication style based on context
     - Modulate tone intensity appropriately
     - Create emotionally resonant responses
     """
 
-    # Tone mapping for different emotional states
+    # Base tone mapping (used as starting point, LLM can override)
     EMOTION_TONE_MAP = {
         EmotionType.JOY: {
             "primary": ToneType.ENERGETIC_ENTHUSIASTIC,
@@ -310,18 +326,190 @@ class EmotionalToneManager:
         emotional_state: EmotionalState,
         context: ConversationContext,
         user_communication_style: Optional[CommunicationStyle] = None,
+        hidden_emotions: Optional[List[EmotionType]] = None,
     ) -> Dict[str, Any]:
         """
-        Match emotional tone to user's state and preferences.
+        Match emotional tone to user's ACTUAL emotional need using context awareness.
+
+        Semantic-First Architecture:
+        1. Analyze if surface emotion matches actual need
+        2. Consider hidden emotions and emotional masking
+        3. Determine appropriate tone for the REAL emotional state
+        4. Use rule-based mapping as fallback
 
         Args:
-            emotional_state: User's current emotional state
+            emotional_state: User's detected emotional state
             context: Conversation context
             user_communication_style: User's preferred communication style
+            hidden_emotions: Detected hidden emotions (from semantic analysis)
 
         Returns:
             Tone matching configuration
         """
+        # Check for emotional masking or hidden emotions
+        has_hidden_emotions = bool(hidden_emotions) or self._detect_emotional_masking(
+            emotional_state, context
+        )
+
+        # Use context-aware tone selection when complexity warrants it
+        if has_hidden_emotions or emotional_state.intensity > 0.7:
+            tone_config = self._determine_tone_context_aware(
+                emotional_state, context, hidden_emotions
+            )
+            if tone_config:
+                return tone_config
+
+        # Fallback to rule-based tone mapping
+        return self._match_tone_rule_based(
+            emotional_state, context, user_communication_style
+        )
+
+    def _determine_tone_context_aware(
+        self,
+        emotional_state: EmotionalState,
+        context: ConversationContext,
+        hidden_emotions: Optional[List[EmotionType]],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Context-aware tone selection using LLM analysis.
+
+        This considers:
+        - Hidden emotions beneath the surface
+        - Emotional masking (saying "I'm fine" when not)
+        - What the user actually NEEDS vs what they're showing
+        - Context-dependent tone appropriateness
+
+        Args:
+            emotional_state: Detected emotional state
+            context: Conversation context
+            hidden_emotions: Detected hidden emotions
+
+        Returns:
+            Context-aware tone configuration, or None to use rule-based
+        """
+        try:
+            # Build context for analysis
+            hidden_info = ""
+            if hidden_emotions:
+                hidden_info = f"\nHidden emotions detected: {[e.value for e in hidden_emotions]}"
+
+            emotional_indicators = emotional_state.emotional_indicators or []
+            masking_detected = any(
+                "masking" in ind.lower() for ind in emotional_indicators
+            )
+
+            prompt = f"""Determine the appropriate emotional tone for responding to this user.
+
+Surface Emotion: {emotional_state.primary_emotion.value} (intensity: {emotional_state.intensity:.1f})
+Emotional Indicators: {emotional_indicators}{hidden_info}
+Masking Detected: {masking_detected}
+
+Message: "{context.message_text[:200]}"
+
+Consider:
+1. Is the user showing one emotion but actually feeling another?
+2. What does the user actually NEED emotionally right now?
+3. Would matching their surface emotion help or hurt?
+4. If they're masking, should we gently acknowledge the hidden feeling?
+
+Available tones:
+- warm_supportive: For comfort and connection
+- gentle_calming: For distress and overwhelm
+- energetic_enthusiastic: For joy and excitement
+- calm_reassuring: For fear and anxiety
+- understanding_validating: For feeling unheard or dismissed
+- encouraging_uplifting: For low mood or self-doubt
+- respectful_neutral: For preference for distance
+- compassionate_caring: For deep emotional pain
+
+Respond with JSON ONLY:
+{{
+    "recommended_tone": "tone_name",
+    "secondary_tone": "tone_name",
+    "intensity": "subtle|moderate|strong|very_strong",
+    "reasoning": "why this tone matches their actual need",
+    "acknowledge_hidden": true|false,
+    "hidden_emotion_to_acknowledge": "emotion_name or null",
+    "confidence": 0.0-1.0
+}}"""
+
+            response = self.llm_service.generate(
+                prompt=prompt,
+                temperature=0.3,
+                max_tokens=400,  # Increased for reasoning models
+            )
+
+            # Parse JSON using utility that handles reasoning blocks
+            analysis = parse_llm_json(response.content)
+            if analysis is None:
+                logger.warning("Failed to parse context-aware tone response")
+                return None
+
+            # Map response to ToneType
+            tone_map = {
+                "warm_supportive": ToneType.WARM_SUPPORTIVE,
+                "gentle_calming": ToneType.GENTLE_CALMING,
+                "energetic_enthusiastic": ToneType.ENERGETIC_ENTHUSIASTIC,
+                "calm_reassuring": ToneType.CALM_REASSURING,
+                "understanding_validating": ToneType.UNDERSTANDING_VALIDATING,
+                "encouraging_uplifting": ToneType.ENCOURAGING_UPLIFTING,
+                "respectful_neutral": ToneType.RESPECTFUL_NEUTRAL,
+                "compassionate_caring": ToneType.COMPASSIONATE_CARING,
+            }
+
+            intensity_map = {
+                "subtle": ToneIntensity.SUBTLE,
+                "moderate": ToneIntensity.MODERATE,
+                "strong": ToneIntensity.STRONG,
+                "very_strong": ToneIntensity.VERY_STRONG,
+            }
+
+            primary_tone = tone_map.get(
+                analysis.get("recommended_tone", "warm_supportive"),
+                ToneType.WARM_SUPPORTIVE,
+            )
+            secondary_tone = tone_map.get(
+                analysis.get("secondary_tone", "understanding_validating"),
+                ToneType.UNDERSTANDING_VALIDATING,
+            )
+            tone_intensity = intensity_map.get(
+                analysis.get("intensity", "moderate"), ToneIntensity.MODERATE
+            )
+
+            tone_config = {
+                "primary_tone": primary_tone,
+                "secondary_tone": secondary_tone,
+                "tone_intensity": tone_intensity,
+                "emotional_resonance": self._calculate_emotional_resonance(
+                    emotional_state
+                ),
+                "adaptation_confidence": float(analysis.get("confidence", 0.7)),
+                "tone_characteristics": self._get_combined_tone_characteristics(
+                    primary_tone, secondary_tone, tone_intensity
+                ),
+                "context_aware": True,
+                "reasoning": analysis.get("reasoning", ""),
+                "acknowledge_hidden": analysis.get("acknowledge_hidden", False),
+                "hidden_emotion": analysis.get("hidden_emotion_to_acknowledge"),
+            }
+
+            logger.debug(
+                f"Context-aware tone: {primary_tone.value} (reason: {analysis.get('reasoning', '')[:50]}...)"
+            )
+
+            return tone_config
+
+        except Exception as e:
+            logger.warning(f"Context-aware tone selection failed: {e}")
+            return None
+
+    def _match_tone_rule_based(
+        self,
+        emotional_state: EmotionalState,
+        context: ConversationContext,
+        user_communication_style: Optional[CommunicationStyle],
+    ) -> Dict[str, Any]:
+        """Rule-based tone matching (fallback method)."""
         # Get base tone for emotion
         emotion_tone_config = self.EMOTION_TONE_MAP.get(
             emotional_state.primary_emotion, self.EMOTION_TONE_MAP[EmotionType.NEUTRAL]
@@ -354,9 +542,37 @@ class EmotionalToneManager:
             "tone_characteristics": self._get_combined_tone_characteristics(
                 primary_tone, secondary_tone, tone_intensity
             ),
+            "context_aware": False,
         }
 
         return tone_config
+
+    def _detect_emotional_masking(
+        self, emotional_state: EmotionalState, context: ConversationContext
+    ) -> bool:
+        """Detect if user might be masking their true emotions."""
+        # Check for masking indicators in emotional state
+        indicators = emotional_state.emotional_indicators or []
+        if any("mask" in ind.lower() or "hidden" in ind.lower() for ind in indicators):
+            return True
+
+        # Check for common masking patterns in text
+        text_lower = context.message_text.lower()
+        masking_phrases = [
+            "i'm fine",
+            "it's fine",
+            "don't worry",
+            "no big deal",
+            "whatever",
+            "doesn't matter",
+        ]
+
+        # If neutral/positive words but indicators suggest otherwise
+        if any(phrase in text_lower for phrase in masking_phrases):
+            if emotional_state.intensity > 0.5:
+                return True
+
+        return False
 
     def adapt_response_tone(
         self,

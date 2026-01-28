@@ -8,7 +8,7 @@ and providing domain-aware context for better assistance.
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -67,7 +67,7 @@ class ContextElement:
     def update_access(self):
         """Update access statistics."""
         self.usage_frequency += 1
-        self.last_accessed = datetime.utcnow()
+        self.last_accessed = datetime.now(timezone.utc)
 
         # Increase confidence with usage
         self.confidence_score = min(self.confidence_score + 0.05, 1.0)
@@ -101,7 +101,7 @@ class DomainContext:
         """Add a context element."""
         self.elements[element.element_id] = element
         self.total_elements = len(self.elements)
-        self.last_updated = datetime.utcnow()
+        self.last_updated = datetime.now(timezone.utc)
 
     def get_element(self, element_id: str) -> Optional[ContextElement]:
         """Get a context element by ID."""

@@ -10,7 +10,7 @@ Monitors user context and activity to enable proactive suggestions:
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
@@ -159,7 +159,7 @@ class ContextMonitor:
             query: User's query
             goal: Active goal
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Get or create context
         if user_id not in self._contexts:
@@ -239,7 +239,7 @@ class ContextMonitor:
 
     async def get_all_active_users(self) -> List[str]:
         """Get all users with active contexts."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         active = []
         for user_id, context in self._contexts.items():
             if context.last_activity:
@@ -286,7 +286,7 @@ class ContextMonitor:
         event = ContextEvent(
             event_id=str(uuid.uuid4()),
             event_type=event_type,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             user_id=user_id,
             data=data,
         )
@@ -300,7 +300,7 @@ class ContextMonitor:
             try:
                 await asyncio.sleep(60)  # Check every minute
 
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
 
                 for user_id, context in self._contexts.items():
                     if not context.last_activity:
@@ -354,7 +354,7 @@ class ContextMonitor:
 
     async def _check_time_triggers(self, user_id: str, context: UserContext):
         """Check for time-based trigger conditions."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Morning check-in (9 AM local time approximation)
         if now.hour == 9 and now.minute == 0:

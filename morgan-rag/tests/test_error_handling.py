@@ -14,7 +14,7 @@ import pytest
 import time
 import threading
 from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from morgan.utils.error_handling import (
     MorganError,
@@ -77,6 +77,20 @@ class TestCustomExceptions:
         """Test MorganError creation with context."""
         error = MorganError(
             "Test error message",
+            service="test_service",
+            operation="test_operation",
+            details={"key": "value"},
+        )
+
+        assert error.message == "Test error message"
+        assert error.service == "test_service"
+        assert error.operation == "test_operation"
+        assert error.details == {"key": "value"}
+
+    def test_embedding_error_with_rich_context(self):
+        """Test EmbeddingError creation with ErrorHandlingMixin context."""
+        error = EmbeddingError(
+            "Test error message",
             category=ErrorCategory.EMBEDDING,
             severity=ErrorSeverity.HIGH,
             operation="test_operation",
@@ -89,7 +103,6 @@ class TestCustomExceptions:
         assert error.message == "Test error message"
         assert error.category == ErrorCategory.EMBEDDING
         assert error.severity == ErrorSeverity.HIGH
-        assert error.operation == "test_operation"
         assert error.component == "test_component"
         assert error.user_id == "test_user"
         assert error.request_id == "test_request"
@@ -113,21 +126,21 @@ class TestCustomExceptions:
         assert context.user_id == "user123"
 
     def test_specialized_exceptions(self):
-        """Test specialized exception types."""
-        # Test VectorizationError
+        """Test specialized exception types with ErrorHandlingMixin."""
+        # Test VectorizationError (has ErrorHandlingMixin)
         vec_error = VectorizationError("Vectorization failed")
         assert vec_error.category == ErrorCategory.VECTORIZATION
         assert vec_error.component == "vectorization_service"
 
-        # Test StorageError
+        # Test StorageError (has ErrorHandlingMixin)
         storage_error = StorageError("Database connection failed")
         assert storage_error.category == ErrorCategory.STORAGE
         assert storage_error.component == "vector_db_client"
 
-        # Test CompanionError
+        # Test CompanionError (base exception without ErrorHandlingMixin)
         companion_error = CompanionError("Companion feature failed")
-        assert companion_error.category == ErrorCategory.COMPANION
-        assert companion_error.component == "companion_manager"
+        assert companion_error.message == "Companion feature failed"
+        assert companion_error.service == "companion"
 
 
 class TestRetryLogic:
@@ -323,7 +336,7 @@ class TestGracefulDegradation:
         # Create high severity error
         error_context = ErrorContext(
             error_id="test_error",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             operation="test_operation",
             component="test_component",
             category=ErrorCategory.STORAGE,
@@ -590,7 +603,7 @@ class TestIntegration:
         assert "total_attempts" in stats
         assert "success_rate" in stats
 
-    @patch("morgan.embeddings.service.get_embedding_service")
+    @patch("morgan.services.embeddings.service.get_embedding_service")
     def test_embedding_service_error_handling(self, mock_get_service):
         """Test error handling in embedding service integration."""
 

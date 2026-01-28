@@ -6,11 +6,11 @@ and user tone preference analysis.
 """
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
-from morgan.empathy.tone import EmotionalToneManager, ToneType, ToneIntensity
-from morgan.emotional.models import (
+from morgan.intelligence.empathy.tone import EmotionalToneManager, ToneType, ToneIntensity
+from morgan.intelligence.core.models import (
     EmotionalState,
     EmotionType,
     ConversationContext,
@@ -24,8 +24,12 @@ class TestEmotionalToneManager:
     @pytest.fixture
     def tone_manager(self):
         """Create emotional tone manager for testing."""
-        with patch("morgan.empathy.tone.get_llm_service"):
-            with patch("morgan.empathy.tone.get_settings"):
+        with patch("morgan.intelligence.empathy.tone.get_llm_service") as mock_llm:
+            # Configure mock to return proper response with .content attribute
+            mock_response = Mock()
+            mock_response.content = "This is a wonderfully tone-matched response that shows warmth and support."
+            mock_llm.return_value.generate.return_value = mock_response
+            with patch("morgan.intelligence.empathy.tone.get_settings"):
                 return EmotionalToneManager()
 
     @pytest.fixture
@@ -35,7 +39,7 @@ class TestEmotionalToneManager:
             primary_emotion=EmotionType.JOY,
             intensity=0.8,
             confidence=0.9,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     @pytest.fixture
@@ -45,7 +49,7 @@ class TestEmotionalToneManager:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.7,
             confidence=0.85,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     @pytest.fixture
@@ -55,7 +59,7 @@ class TestEmotionalToneManager:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="I'm having a great day!",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     def test_match_emotional_tone_joy(

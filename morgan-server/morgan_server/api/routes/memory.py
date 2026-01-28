@@ -8,7 +8,7 @@ This module implements the memory endpoints for Morgan server:
 """
 
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, status, Query
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
@@ -98,7 +98,7 @@ async def search_memory(
                     timestamp=(
                         datetime.fromisoformat(res["timestamp"])
                         if res.get("timestamp")
-                        else datetime.utcnow()
+                        else datetime.now(timezone.utc)
                     ),
                     message=res.get("question", ""),
                     response=res.get("answer", ""),

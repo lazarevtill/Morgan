@@ -13,7 +13,7 @@ This showcases the implementation of task 6.2:
 
 import sys
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Add the morgan package to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -105,7 +105,7 @@ def demo_companion_memory_search():
         print(f"Found {len(personalized_results)} personalized memories:")
         for i, result in enumerate(personalized_results, 1):
             print(f"  {i}. Score: {result.score:.3f} | Type: {result.memory_type}")
-            print(f"     Age: {(datetime.utcnow() - result.timestamp).days} days")
+            print(f"     Age: {(datetime.now(timezone.utc) - result.timestamp).days} days")
             print(f"     Factors: {', '.join(result.personalization_factors)}")
             print(f"     Summary: {result.get_summary(80)}")
             print()
@@ -158,7 +158,7 @@ def demo_companion_memory_search():
         print("-" * 30)
 
         # Test performance with multiple searches
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         test_queries = [
             "Python programming help",
@@ -173,7 +173,7 @@ def demo_companion_memory_search():
             )
             total_results += len(results)
 
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         duration = (end_time - start_time).total_seconds()
 
         print(f"Processed {len(test_queries)} queries in {duration:.3f}s")
