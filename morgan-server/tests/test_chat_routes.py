@@ -22,7 +22,7 @@ from morgan_server.assistant import AssistantResponse, MorganAssistant
 def mock_assistant():
     """Create a mock MorganAssistant for testing."""
     assistant = MagicMock(spec=MorganAssistant)
-    
+
     # Mock the chat method to return a proper AssistantResponse
     async def mock_chat(*args, **kwargs):
         return AssistantResponse(
@@ -44,7 +44,7 @@ def mock_assistant():
             ],
             metadata={"test": "metadata"},
         )
-    
+
     assistant.chat = AsyncMock(side_effect=mock_chat)
     return assistant
 
@@ -54,10 +54,10 @@ def app(mock_assistant):
     """Create a FastAPI app with the chat router for testing."""
     app = FastAPI()
     app.include_router(router)
-    
+
     # Set the mock assistant
     set_assistant(mock_assistant)
-    
+
     return app
 
 
@@ -78,12 +78,12 @@ class TestChatEndpoint:
             "conversation_id": "test_conv_123",
             "metadata": {"test": "data"},
         }
-        
+
         response = client.post("/api/chat", json=request_data)
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Verify response structure
         assert "answer" in data
         assert "conversation_id" in data
@@ -94,7 +94,7 @@ class TestChatEndpoint:
         assert len(data["personalization_elements"]) == 2
         assert data["confidence"] == 0.95
         assert len(data["sources"]) == 1
-        
+
         # Verify assistant was called correctly
         mock_assistant.chat.assert_called_once()
         call_kwargs = mock_assistant.chat.call_args[1]
@@ -107,11 +107,11 @@ class TestChatEndpoint:
         request_data = {
             "message": "Hello!",
         }
-        
+
         response = client.post("/api/chat", json=request_data)
-        
+
         assert response.status_code == 200
-        
+
         # Verify assistant was called with a generated user_id
         mock_assistant.chat.assert_called_once()
         call_kwargs = mock_assistant.chat.call_args[1]
@@ -123,9 +123,9 @@ class TestChatEndpoint:
         request_data = {
             "message": "",
         }
-        
+
         response = client.post("/api/chat", json=request_data)
-        
+
         # Should fail validation
         assert response.status_code == 422
 
@@ -134,9 +134,9 @@ class TestChatEndpoint:
         request_data = {
             "message": "   ",
         }
-        
+
         response = client.post("/api/chat", json=request_data)
-        
+
         # Should fail validation
         assert response.status_code == 422
 
@@ -145,9 +145,9 @@ class TestChatEndpoint:
         request_data = {
             "user_id": "test_user",
         }
-        
+
         response = client.post("/api/chat", json=request_data)
-        
+
         # Should fail validation
         assert response.status_code == 422
 
@@ -155,19 +155,20 @@ class TestChatEndpoint:
         """Test chat request when assistant raises an error."""
         # Make assistant raise an error
         mock_assistant.chat.side_effect = Exception("Test error")
-        
+
         request_data = {
             "message": "Hello!",
         }
-        
+
         response = client.post("/api/chat", json=request_data)
-        
+
         # Should return 500 error
         assert response.status_code == 500
         assert "Failed to process message" in response.json()["detail"]
 
     def test_chat_with_milestone_celebration(self, client, mock_assistant):
         """Test chat response with milestone celebration."""
+
         # Mock response with milestone
         async def mock_chat_with_milestone(*args, **kwargs):
             return AssistantResponse(
@@ -176,15 +177,15 @@ class TestChatEndpoint:
                 milestone_celebration="You've reached 100 conversations!",
                 confidence=1.0,
             )
-        
+
         mock_assistant.chat = AsyncMock(side_effect=mock_chat_with_milestone)
-        
+
         request_data = {
             "message": "Hello!",
         }
-        
+
         response = client.post("/api/chat", json=request_data)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["milestone_celebration"] is not None
@@ -204,19 +205,21 @@ class TestWebSocketEndpoint:
         """Test sending and receiving messages via WebSocket."""
         with client.websocket_connect("/api/ws/test_user") as websocket:
             # Send a message
-            websocket.send_json({
-                "message": "Hello via WebSocket!",
-                "conversation_id": "ws_conv_123",
-            })
-            
+            websocket.send_json(
+                {
+                    "message": "Hello via WebSocket!",
+                    "conversation_id": "ws_conv_123",
+                }
+            )
+
             # Receive response
             response = websocket.receive_json()
-            
+
             assert response["type"] == "response"
             assert "answer" in response
             assert response["answer"] == "This is a test response"
             assert response["conversation_id"] == "test_conv_123"
-            
+
             # Verify assistant was called
             mock_assistant.chat.assert_called_once()
 
@@ -224,13 +227,15 @@ class TestWebSocketEndpoint:
         """Test WebSocket with empty message."""
         with client.websocket_connect("/api/ws/test_user") as websocket:
             # Send empty message
-            websocket.send_json({
-                "message": "",
-            })
-            
+            websocket.send_json(
+                {
+                    "message": "",
+                }
+            )
+
             # Should receive error response
             response = websocket.receive_json()
-            
+
             assert response["type"] == "error"
             assert response["error"] == "INVALID_REQUEST"
             assert "empty" in response["message"].lower()
@@ -239,13 +244,15 @@ class TestWebSocketEndpoint:
         """Test WebSocket without message field."""
         with client.websocket_connect("/api/ws/test_user") as websocket:
             # Send without message field
-            websocket.send_json({
-                "conversation_id": "test_conv",
-            })
-            
+            websocket.send_json(
+                {
+                    "conversation_id": "test_conv",
+                }
+            )
+
             # Should receive error response
             response = websocket.receive_json()
-            
+
             assert response["type"] == "error"
             assert response["error"] == "INVALID_REQUEST"
             assert "required" in response["message"].lower()
@@ -254,16 +261,18 @@ class TestWebSocketEndpoint:
         """Test WebSocket when assistant raises an error."""
         # Make assistant raise an error
         mock_assistant.chat.side_effect = Exception("Test error")
-        
+
         with client.websocket_connect("/api/ws/test_user") as websocket:
             # Send a message
-            websocket.send_json({
-                "message": "Hello!",
-            })
-            
+            websocket.send_json(
+                {
+                    "message": "Hello!",
+                }
+            )
+
             # Should receive error response
             response = websocket.receive_json()
-            
+
             assert response["type"] == "error"
             assert response["error"] == "PROCESSING_ERROR"
 
@@ -274,12 +283,12 @@ class TestWebSocketEndpoint:
             websocket.send_json({"message": "First message"})
             response1 = websocket.receive_json()
             assert response1["type"] == "response"
-            
+
             # Send second message
             websocket.send_json({"message": "Second message"})
             response2 = websocket.receive_json()
             assert response2["type"] == "response"
-            
+
             # Verify assistant was called twice
             assert mock_assistant.chat.call_count == 2
 
@@ -305,7 +314,7 @@ class TestConnectionManager:
     async def test_connect(self, manager, mock_websocket):
         """Test connecting a WebSocket."""
         await manager.connect("user_1", mock_websocket)
-        
+
         assert "user_1" in manager.active_connections
         assert manager.active_connections["user_1"] == mock_websocket
         mock_websocket.accept.assert_called_once()
@@ -313,9 +322,9 @@ class TestConnectionManager:
     def test_disconnect(self, manager, mock_websocket):
         """Test disconnecting a WebSocket."""
         manager.active_connections["user_1"] = mock_websocket
-        
+
         manager.disconnect("user_1")
-        
+
         assert "user_1" not in manager.active_connections
 
     def test_disconnect_nonexistent(self, manager):
@@ -327,19 +336,19 @@ class TestConnectionManager:
     async def test_send_message(self, manager, mock_websocket):
         """Test sending a text message."""
         manager.active_connections["user_1"] = mock_websocket
-        
+
         await manager.send_message("user_1", "Test message")
-        
+
         mock_websocket.send_text.assert_called_once_with("Test message")
 
     @pytest.mark.asyncio
     async def test_send_json(self, manager, mock_websocket):
         """Test sending JSON data."""
         manager.active_connections["user_1"] = mock_websocket
-        
+
         test_data = {"key": "value"}
         await manager.send_json("user_1", test_data)
-        
+
         mock_websocket.send_json.assert_called_once_with(test_data)
 
     @pytest.mark.asyncio
@@ -374,9 +383,9 @@ class TestHelperFunctions:
             ],
             metadata={"meta": "data"},
         )
-        
+
         chat_response = _convert_assistant_response(assistant_response)
-        
+
         assert isinstance(chat_response, ChatResponse)
         assert chat_response.answer == "Test answer"
         assert chat_response.conversation_id == "conv_123"
@@ -397,26 +406,29 @@ class TestHelperFunctions:
             milestone_celebration=None,
             confidence=1.0,
         )
-        
+
         chat_response = _convert_assistant_response(assistant_response)
-        
+
         assert chat_response.milestone_celebration is None
 
     def test_get_assistant_not_initialized(self):
         """Test get_assistant when not initialized."""
         # Clear the global assistant
         set_assistant(None)
-        
+
         with pytest.raises(Exception) as exc_info:
             get_assistant()
-        
+
         # Should raise HTTPException with 503 status
-        assert "503" in str(exc_info.value) or "not initialized" in str(exc_info.value).lower()
+        assert (
+            "503" in str(exc_info.value)
+            or "not initialized" in str(exc_info.value).lower()
+        )
 
     def test_set_and_get_assistant(self, mock_assistant):
         """Test setting and getting assistant."""
         set_assistant(mock_assistant)
-        
+
         retrieved = get_assistant()
-        
+
         assert retrieved == mock_assistant

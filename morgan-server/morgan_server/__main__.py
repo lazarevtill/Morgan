@@ -49,73 +49,58 @@ Environment Variables:
   MORGAN_LOG_FORMAT        Log format: json or text (default: json)
 
 For more information, visit: http://localhost:8080/docs
-        """
+        """,
     )
-    
+
     parser.add_argument(
-        "--host",
-        type=str,
-        help="Server host address (default: from config or 0.0.0.0)"
+        "--host", type=str, help="Server host address (default: from config or 0.0.0.0)"
     )
-    
+
     parser.add_argument(
-        "--port",
-        type=int,
-        help="Server port (default: from config or 8080)"
+        "--port", type=int, help="Server port (default: from config or 8080)"
     )
-    
+
     parser.add_argument(
-        "--config",
-        type=str,
-        help="Path to configuration file (YAML, JSON, or .env)"
+        "--config", type=str, help="Path to configuration file (YAML, JSON, or .env)"
     )
-    
+
     parser.add_argument(
         "--log-level",
         type=str,
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help="Logging level"
+        help="Logging level",
     )
-    
+
     parser.add_argument(
-        "--log-format",
-        type=str,
-        choices=["json", "text"],
-        help="Log output format"
+        "--log-format", type=str, choices=["json", "text"], help="Log output format"
     )
-    
+
     parser.add_argument(
-        "--workers",
-        type=int,
-        help="Number of worker processes (default: 4)"
+        "--workers", type=int, help="Number of worker processes (default: 4)"
     )
-    
+
     parser.add_argument(
-        "--reload",
-        action="store_true",
-        help="Enable auto-reload for development"
+        "--reload", action="store_true", help="Enable auto-reload for development"
     )
-    
+
     return parser.parse_args()
 
 
 def setup_signal_handlers():
     """
     Setup signal handlers for graceful shutdown.
-    
+
     Handles SIGTERM and SIGINT signals to ensure proper cleanup.
-    
+
     **Validates: Requirements 1.5**
     """
+
     def signal_handler(signum, _frame):
         """Handle shutdown signals gracefully."""
         signal_name = signal.Signals(signum).name
-        print(
-            f"\n{signal_name} received. "
-            "Shutting down Morgan Server gracefully..."
-        )
+        print(f"\n{signal_name} received. " "Shutting down Morgan Server gracefully...")
         sys.exit(0)
-    
+
     # Register signal handlers
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
@@ -124,50 +109,47 @@ def setup_signal_handlers():
 def main():
     """
     Main entry point for the server.
-    
+
     This function:
     1. Parses command-line arguments
     2. Loads configuration from multiple sources
     3. Creates the FastAPI application
     4. Sets up signal handlers for graceful shutdown
     5. Starts the Uvicorn server
-    
+
     **Validates: Requirements 1.2, 1.5**
     """
     args = parse_args()
-    
+
     # Setup signal handlers for graceful shutdown
     setup_signal_handlers()
-    
+
     try:
         # Build configuration overrides from command-line args
         config_overrides = {}
-        
+
         if args.host:
             config_overrides["host"] = args.host
-        
+
         if args.port:
             config_overrides["port"] = args.port
-        
+
         if args.log_level:
             config_overrides["log_level"] = args.log_level
-        
+
         if args.log_format:
             config_overrides["log_format"] = args.log_format
-        
+
         if args.workers:
             config_overrides["workers"] = args.workers
-        
+
         # Create application
         config_file = Path(args.config) if args.config else None
-        app = create_app(
-            config_file=config_file,
-            **config_overrides
-        )
-        
+        app = create_app(config_file=config_file, **config_overrides)
+
         # Get final configuration
         config = app.state.config
-        
+
         print(f"Starting Morgan Server v{app.version}")
         print(f"  Host: {config.host}")
         print(f"  Port: {config.port}")
@@ -176,14 +158,10 @@ def main():
         print(f"  LLM Endpoint: {config.llm_endpoint}")
         print(f"  Vector DB: {config.vector_db_url}")
         print()
-        print(
-            f"Documentation: http://{config.host}:{config.port}/docs"
-        )
-        print(
-            f"Health Check: http://{config.host}:{config.port}/health"
-        )
+        print(f"Documentation: http://{config.host}:{config.port}/docs")
+        print(f"Health Check: http://{config.host}:{config.port}/health")
         print()
-        
+
         # Run server with graceful shutdown support
         # Uvicorn will handle SIGTERM/SIGINT and trigger the lifespan shutdown
         uvicorn.run(
@@ -193,23 +171,17 @@ def main():
             log_level=config.log_level.lower(),
             reload=args.reload,
         )
-    
+
     except ConfigurationError as e:
         print(f"Configuration Error: {e}", file=sys.stderr)
-        print(
-            "\nPlease check your configuration and try again.",
-            file=sys.stderr
-        )
-        print(
-            "For help, run: python -m morgan_server --help",
-            file=sys.stderr
-        )
+        print("\nPlease check your configuration and try again.", file=sys.stderr)
+        print("For help, run: python -m morgan_server --help", file=sys.stderr)
         sys.exit(1)
-    
+
     except KeyboardInterrupt:
         print("\nShutting down Morgan Server...")
         sys.exit(0)
-    
+
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

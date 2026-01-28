@@ -12,7 +12,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from ..emotional.models import CompanionProfile, RelationshipMilestone
+from ..intelligence.core.models import CompanionProfile, RelationshipMilestone
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)

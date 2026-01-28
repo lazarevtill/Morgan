@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Dict, List, Optional
 
-from ..emotional.models import CommunicationStyle, InteractionData, ResponseLength
+from ..intelligence.core.models import CommunicationStyle, InteractionData, ResponseLength
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -425,7 +425,6 @@ class InteractionPatternAnalyzer:
         """Calculate formality level from messages."""
         formal_count = 0
         casual_count = 0
-        len(messages)
 
         for message in messages:
             message_lower = message.lower()

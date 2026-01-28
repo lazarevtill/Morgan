@@ -24,7 +24,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, AsyncContextManager, Callable, Dict, Optional
 
-import aiohttp
+try:
+    import aiohttp
+
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    AIOHTTP_AVAILABLE = False
 
 from morgan.utils.error_handling import ErrorSeverity, NetworkError
 from morgan.utils.logger import get_logger
@@ -122,6 +127,134 @@ class PooledConnection:
     def idle_time(self) -> float:
         """Get idle time in seconds."""
         return (datetime.now() - self.last_used).total_seconds()
+
+    async def close(self):
+        """Close the connection."""
+        if hasattr(self.connection, "close"):
+            if asyncio.iscoroutinefunction(self.connection.close):
+                await self.connection.close()
+            else:
+                self.connection.close()
+
+
+@dataclass
+class QdrantPooledConnection:
+    """Specialized pooled connection for Qdrant."""
+
+    client: Any  # QdrantClient or AsyncQdrantClient
+    host: str
+    port: int
+    url: Optional[str]
+    is_async: bool
+    created_at: datetime
+    is_healthy: bool = True
+    connection_id: str = ""
+
+    def __post_init__(self):
+        if not self.connection_id:
+            self.connection_id = f"qdrant_{int(time.time() * 1000000)}"
+
+    @property
+    def age(self) -> float:
+        """Get connection age in seconds."""
+        return (datetime.now() - self.created_at).total_seconds()
+
+    async def close(self):
+        """Close the Qdrant client."""
+        if self.client:
+            try:
+                if self.is_async and hasattr(self.client, "close"):
+                    await self.client.close()
+                elif hasattr(self.client, "close"):
+                    self.client.close()
+            except Exception as e:
+                logger.warning(f"Error closing Qdrant connection: {e}")
+
+    async def health_check(self) -> bool:
+        """Check if the connection is healthy."""
+        try:
+            if self.is_async:
+                await self.client.get_collections()
+            else:
+                self.client.get_collections()
+            return True
+        except Exception:
+            return False
+
+
+@dataclass
+class RedisPooledConnection:
+    """Specialized pooled connection for Redis."""
+
+    client: Any  # redis.asyncio.Redis
+    host: str
+    port: int
+    url: Optional[str]
+    created_at: datetime
+    is_healthy: bool = True
+    connection_id: str = ""
+
+    def __post_init__(self):
+        if not self.connection_id:
+            self.connection_id = f"redis_{int(time.time() * 1000000)}"
+
+    @property
+    def age(self) -> float:
+        """Get connection age in seconds."""
+        return (datetime.now() - self.created_at).total_seconds()
+
+    async def close(self):
+        """Close the Redis client."""
+        if self.client:
+            try:
+                await self.client.close()
+            except Exception as e:
+                logger.warning(f"Error closing Redis connection: {e}")
+
+    async def health_check(self) -> bool:
+        """Check if the connection is healthy."""
+        try:
+            await self.client.ping()
+            return True
+        except Exception:
+            return False
+
+
+@dataclass
+class HTTPPooledConnection:
+    """Specialized pooled connection for HTTP (aiohttp)."""
+
+    session: Any  # aiohttp.ClientSession
+    base_url: str
+    created_at: datetime
+    is_healthy: bool = True
+    connection_id: str = ""
+
+    def __post_init__(self):
+        if not self.connection_id:
+            self.connection_id = f"http_{int(time.time() * 1000000)}"
+
+    @property
+    def age(self) -> float:
+        """Get connection age in seconds."""
+        return (datetime.now() - self.created_at).total_seconds()
+
+    async def close(self):
+        """Close the HTTP session."""
+        if self.session and not self.session.closed:
+            try:
+                await self.session.close()
+            except Exception as e:
+                logger.warning(f"Error closing HTTP session: {e}")
+
+    async def health_check(self) -> bool:
+        """Check if the session is healthy."""
+        try:
+            if self.session and not self.session.closed:
+                return True
+            return False
+        except Exception:
+            return False
 
 
 class ConnectionPool:
@@ -578,7 +711,7 @@ class ConnectionPoolManager:
         self, name: str, base_url: str, config: Optional[ConnectionConfig] = None
     ) -> ConnectionPool:
         """
-        Create HTTP connection pool for Jina AI services.
+        Create HTTP connection pool for services.
 
         Args:
             name: Pool name
@@ -588,9 +721,13 @@ class ConnectionPoolManager:
         Returns:
             HTTP connection pool
         """
+        if not AIOHTTP_AVAILABLE:
+            raise RuntimeError(
+                "aiohttp package not installed. " "Install with: pip install aiohttp"
+            )
 
         async def http_connection_factory():
-            """Factory for HTTP connections."""
+            """Factory for HTTP connections using aiohttp."""
             connector = aiohttp.TCPConnector(
                 limit=config.max_connections if config else 20,
                 limit_per_host=config.max_connections if config else 20,
@@ -603,10 +740,25 @@ class ConnectionPoolManager:
             )
 
             session = aiohttp.ClientSession(
-                connector=connector, timeout=timeout, base_url=base_url
+                connector=connector,
+                timeout=timeout,
+                base_url=base_url,
             )
 
-            return session
+            # Verify connection works by making a test request
+            try:
+                async with session.get("/") as response:
+                    pass  # Just check we can connect
+            except Exception:
+                pass  # Base URL might not have a root endpoint
+
+            logger.info(f"Created HTTP session for: {base_url}")
+
+            return HTTPPooledConnection(
+                session=session,
+                base_url=base_url,
+                created_at=datetime.now(),
+            )
 
         return self.create_pool(name, http_connection_factory, config)
 
@@ -621,7 +773,7 @@ class ConnectionPoolManager:
 
         Args:
             name: Pool name
-            db_config: Database configuration
+            db_config: Database configuration (host, port, api_key, url)
             config: Pool configuration
 
         Returns:
@@ -629,17 +781,163 @@ class ConnectionPoolManager:
         """
 
         async def vector_db_connection_factory():
-            """Factory for vector database connections."""
-            # This would create actual Qdrant client connections
-            # For now, return a mock connection
-            return {
-                "client": "mock_qdrant_client",
-                "host": db_config.get("host", "localhost"),
-                "port": db_config.get("port", 6333),
-                "created_at": datetime.now(),
-            }
+            """Factory for Qdrant vector database connections."""
+            try:
+                from qdrant_client import QdrantClient, AsyncQdrantClient
+            except ImportError:
+                raise RuntimeError(
+                    "qdrant-client package not installed. "
+                    "Install with: pip install qdrant-client"
+                )
+
+            host = db_config.get("host", "localhost")
+            port = db_config.get("port", 6333)
+            url = db_config.get("url")
+            api_key = db_config.get("api_key")
+            prefer_grpc = db_config.get("prefer_grpc", False)
+            timeout = db_config.get("timeout", 30)
+            use_async = db_config.get("async", True)
+
+            try:
+                if use_async:
+                    # Create async Qdrant client
+                    if url:
+                        client = AsyncQdrantClient(
+                            url=url,
+                            api_key=api_key,
+                            timeout=timeout,
+                            prefer_grpc=prefer_grpc,
+                        )
+                    else:
+                        client = AsyncQdrantClient(
+                            host=host,
+                            port=port,
+                            api_key=api_key,
+                            timeout=timeout,
+                            prefer_grpc=prefer_grpc,
+                        )
+                else:
+                    # Create sync Qdrant client
+                    if url:
+                        client = QdrantClient(
+                            url=url,
+                            api_key=api_key,
+                            timeout=timeout,
+                            prefer_grpc=prefer_grpc,
+                        )
+                    else:
+                        client = QdrantClient(
+                            host=host,
+                            port=port,
+                            api_key=api_key,
+                            timeout=timeout,
+                            prefer_grpc=prefer_grpc,
+                        )
+
+                # Verify connection works
+                if use_async:
+                    await client.get_collections()
+                else:
+                    client.get_collections()
+
+                logger.info(
+                    f"Created Qdrant connection: "
+                    f"{'async' if use_async else 'sync'}, "
+                    f"{url or f'{host}:{port}'}"
+                )
+
+                return QdrantPooledConnection(
+                    client=client,
+                    host=host,
+                    port=port,
+                    url=url,
+                    is_async=use_async,
+                    created_at=datetime.now(),
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to create Qdrant connection: {e}")
+                raise NetworkError(
+                    f"Failed to connect to Qdrant: {e}",
+                    operation="create_connection",
+                    component="qdrant",
+                    severity=ErrorSeverity.HIGH,
+                ) from e
 
         return self.create_pool(name, vector_db_connection_factory, config)
+
+    async def create_redis_pool(
+        self,
+        name: str,
+        redis_config: Dict[str, Any],
+        config: Optional[ConnectionConfig] = None,
+    ) -> ConnectionPool:
+        """
+        Create Redis connection pool for caching.
+
+        Args:
+            name: Pool name
+            redis_config: Redis configuration (url, host, port, password, db)
+            config: Pool configuration
+
+        Returns:
+            Redis connection pool
+        """
+
+        async def redis_connection_factory():
+            """Factory for Redis connections."""
+            try:
+                import redis.asyncio as redis
+            except ImportError:
+                raise RuntimeError(
+                    "redis package not installed. " "Install with: pip install redis"
+                )
+
+            url = redis_config.get("url")
+            host = redis_config.get("host", "localhost")
+            port = redis_config.get("port", 6379)
+            password = redis_config.get("password")
+            db = redis_config.get("db", 0)
+            decode_responses = redis_config.get("decode_responses", True)
+
+            try:
+                if url:
+                    client = redis.from_url(
+                        url,
+                        decode_responses=decode_responses,
+                    )
+                else:
+                    client = redis.Redis(
+                        host=host,
+                        port=port,
+                        password=password,
+                        db=db,
+                        decode_responses=decode_responses,
+                    )
+
+                # Verify connection works
+                await client.ping()
+
+                logger.info(f"Created Redis connection: {url or f'{host}:{port}'}")
+
+                return RedisPooledConnection(
+                    client=client,
+                    host=host,
+                    port=port,
+                    url=url,
+                    created_at=datetime.now(),
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to create Redis connection: {e}")
+                raise NetworkError(
+                    f"Failed to connect to Redis: {e}",
+                    operation="create_connection",
+                    component="redis",
+                    severity=ErrorSeverity.MEDIUM,
+                ) from e
+
+        return self.create_pool(name, redis_connection_factory, config)
 
 
 # Singleton instance

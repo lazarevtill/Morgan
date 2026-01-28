@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from ..emotional.models import ConversationContext
+from ..intelligence.core.models import ConversationContext
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)

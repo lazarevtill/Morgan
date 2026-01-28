@@ -340,7 +340,9 @@ class MultimodalContentProcessor:
 
     def _extract_text_from_image(self, image_content: ImageContent) -> str:
         """
-        Extract text from an image using OCR.
+        Extract text from an image using DeepSeek-OCR via Ollama.
+
+        Falls back to Tesseract if DeepSeek-OCR is unavailable.
 
         Args:
             image_content: ImageContent object
@@ -351,27 +353,57 @@ class MultimodalContentProcessor:
         if not self.ocr_enabled:
             return ""
 
+        # Try DeepSeek-OCR first (better quality)
         try:
-            # Convert bytes to PIL Image
-            pil_image = Image.open(io.BytesIO(image_content.image_data))
+            from morgan.services.ocr_service import get_ocr_service
+            import asyncio
 
-            # Enhance image for better OCR
-            enhanced_image = self._enhance_image_for_ocr(pil_image)
+            ocr_service = get_ocr_service()
 
-            # Extract text using Tesseract
-            extracted_text = pytesseract.image_to_string(
-                enhanced_image, config="--psm 6"
-            )
+            async def run_ocr():
+                result = await ocr_service.extract_text(image_content.image_data)
+                return result.text if result.success else ""
 
-            # Clean up extracted text
-            cleaned_text = self._clean_ocr_text(extracted_text)
+            # Run async in sync context
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
 
-            logger.debug(f"Extracted {len(cleaned_text)} characters from image")
-            return cleaned_text
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        future = pool.submit(asyncio.run, run_ocr())
+                        extracted_text = future.result(timeout=60)
+                else:
+                    extracted_text = loop.run_until_complete(run_ocr())
+            except RuntimeError:
+                extracted_text = asyncio.run(run_ocr())
+
+            if extracted_text:
+                cleaned_text = self._clean_ocr_text(extracted_text)
+                logger.debug("DeepSeek-OCR extracted %d characters", len(cleaned_text))
+                return cleaned_text
 
         except Exception as e:
-            logger.warning(f"OCR extraction failed: {str(e)}")
-            return ""
+            logger.debug("DeepSeek-OCR unavailable: %s, trying Tesseract", e)
+
+        # Fallback to Tesseract
+        if TESSERACT_AVAILABLE:
+            try:
+                pil_image = Image.open(io.BytesIO(image_content.image_data))
+                enhanced_image = self._enhance_image_for_ocr(pil_image)
+
+                extracted_text = pytesseract.image_to_string(
+                    enhanced_image, config="--psm 6"
+                )
+                cleaned_text = self._clean_ocr_text(extracted_text)
+
+                logger.debug("Tesseract extracted %d characters", len(cleaned_text))
+                return cleaned_text
+
+            except Exception as e:
+                logger.warning("Tesseract OCR failed: %s", e)
+
+        return ""
 
     def _enhance_image_for_ocr(self, pil_image: Image.Image) -> Image.Image:
         """

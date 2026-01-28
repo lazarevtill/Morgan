@@ -15,10 +15,13 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from morgan.companion.relationship_manager import CompanionRelationshipManager
-from morgan.emotional.intelligence_engine import get_emotional_intelligence_engine
-from morgan.emotional.models import EmotionalState
+from morgan.intelligence.core.intelligence_engine import (
+    get_emotional_intelligence_engine,
+)
+from morgan.intelligence.core.models import EmotionalState
 from morgan.memory.memory_processor import get_memory_processor
 from morgan.search.multi_stage_search import SearchResult, get_multi_stage_search_engine
+from morgan.utils.deduplication import ResultDeduplicator
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -327,7 +330,7 @@ class CompanionMemorySearchEngine:
     def _analyze_query_emotion(self, query: str, user_id: str) -> EmotionalState:
         """Analyze emotional context of the query."""
         try:
-            from morgan.emotional.models import ConversationContext
+            from morgan.intelligence.core.models import ConversationContext
 
             context = ConversationContext(
                 user_id=user_id,
@@ -341,7 +344,7 @@ class CompanionMemorySearchEngine:
         except Exception as e:
             logger.warning(f"Failed to analyze query emotion: {e}")
             # Return neutral emotional state as fallback
-            from morgan.emotional.models import EmotionalState, EmotionType
+            from morgan.intelligence.core.models import EmotionalState, EmotionType
 
             return EmotionalState(
                 primary_emotion=EmotionType.NEUTRAL,
@@ -1055,19 +1058,17 @@ class CompanionMemorySearchEngine:
     def _deduplicate_search_results(
         self, results: List[SearchResult]
     ) -> List[SearchResult]:
-        """Remove duplicate search results."""
+        """Remove duplicate search results using unified ResultDeduplicator."""
         try:
-            seen_content = set()
-            unique_results = []
-
-            for result in results:
-                content_key = result.content[:100].lower().strip()
-                if content_key not in seen_content:
-                    seen_content.add(content_key)
-                    unique_results.append(result)
-
-            return unique_results
-
+            deduplicator = ResultDeduplicator(
+                strategy="content_hash",
+                similarity_threshold=0.85
+            )
+            return deduplicator.deduplicate(
+                items=results,
+                key_fn=lambda r: r.content[:100],
+                keep_first=True
+            )
         except Exception as e:
             logger.warning(f"Failed to deduplicate search results: {e}")
             return results

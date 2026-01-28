@@ -13,7 +13,7 @@ from morgan.companion.relationship_manager import (
     CompanionRelationshipManager,
     Interaction,
 )
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     EmotionalState,
     EmotionType,
     ConversationContext,

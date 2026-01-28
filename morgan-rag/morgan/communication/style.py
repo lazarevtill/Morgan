@@ -11,14 +11,14 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     CommunicationStyle,
     CompanionProfile,
     ConversationContext,
     EmotionalState,
     ResponseLength,
 )
-from morgan.services.llm_service import get_llm_service
+from morgan.services.llm import get_llm_service
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)

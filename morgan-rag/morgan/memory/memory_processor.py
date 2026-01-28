@@ -14,14 +14,17 @@ from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
 from morgan.core.memory import ConversationTurn
-from morgan.emotional.intelligence_engine import get_emotional_intelligence_engine
-from morgan.emotional.models import (
+from morgan.intelligence.core.intelligence_engine import (
+    get_emotional_intelligence_engine,
+)
+from morgan.intelligence.core.models import (
     ConversationContext,
     EmotionalState,
     EmotionType,
     UserPreferences,
 )
-from morgan.services.embedding_service import get_embedding_service
+from morgan.services.embeddings import get_embedding_service
+from morgan.utils.deduplication import ResultDeduplicator
 from morgan.utils.logger import get_logger
 from morgan.vector_db.client import VectorDBClient
 
@@ -604,21 +607,23 @@ class MemoryProcessor:
         return min(1.0, significance)
 
     def _deduplicate_memories(self, memories: List[Memory]) -> List[Memory]:
-        """Remove duplicate memories based on content similarity."""
+        """Remove duplicate memories using unified ResultDeduplicator."""
         if not memories:
             return memories
 
-        unique_memories = []
-        seen_content = set()
-
-        for memory in memories:
-            # Simple deduplication based on content similarity
-            content_key = memory.content.lower().strip()
-            if content_key not in seen_content:
-                seen_content.add(content_key)
-                unique_memories.append(memory)
-
-        return unique_memories
+        try:
+            deduplicator = ResultDeduplicator(
+                strategy="content_hash",
+                similarity_threshold=0.85
+            )
+            return deduplicator.deduplicate(
+                items=memories,
+                key_fn=lambda m: m.content,
+                keep_first=True
+            )
+        except Exception as e:
+            logger.warning(f"Memory deduplication failed, returning original: {e}")
+            return memories
 
     def _extract_emotional_insights(
         self, conversation_turn: ConversationTurn, emotional_context: EmotionalState
@@ -779,7 +784,7 @@ class MemoryProcessor:
         """Ensure required collections exist."""
         try:
             # Get embedding dimension
-            embedding_dim = self.embedding_service.get_embedding_dimension()
+            embedding_dim = self.embedding_service.get_dimension()
 
             # Create memory collection
             if not self.vector_db.collection_exists(self.memory_collection):

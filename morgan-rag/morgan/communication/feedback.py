@@ -14,8 +14,8 @@ from enum import Enum
 from typing import Any, Dict, List
 
 from morgan.config import get_settings
-from morgan.emotional.models import ConversationContext, EmotionalState
-from morgan.services.llm_service import get_llm_service
+from morgan.intelligence.core.models import ConversationContext, EmotionalState
+from morgan.services.llm import get_llm_service
 from morgan.utils.cache import FileCache
 from morgan.utils.logger import get_logger
 

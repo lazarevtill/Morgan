@@ -12,14 +12,14 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from morgan.config import get_settings
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     CommunicationStyle,
     ConversationContext,
     EmotionalState,
     ResponseLength,
     UserPreferences,
 )
-from morgan.services.llm_service import get_llm_service
+from morgan.services.llm import get_llm_service
 from morgan.utils.cache import FileCache
 from morgan.utils.logger import get_logger
 

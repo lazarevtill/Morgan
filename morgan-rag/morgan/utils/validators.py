@@ -6,11 +6,7 @@ Simple, secure validation functions.
 
 from urllib.parse import urlparse
 
-
-class ValidationError(Exception):
-    """Custom validation error."""
-
-    pass
+from morgan.exceptions import ValidationError
 
 
 def validate_url(url: str, field_name: str = "URL") -> bool:

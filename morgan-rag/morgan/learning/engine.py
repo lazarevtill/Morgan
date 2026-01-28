@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from ..emotional.models import CompanionProfile, ConversationContext, InteractionData
+from ..intelligence.core.models import CompanionProfile, ConversationContext, InteractionData
 from ..utils.logger import get_logger
 from .adaptation import AdaptationResult, BehavioralAdaptationEngine
 from .feedback import FeedbackProcessor, LearningUpdate, UserFeedback

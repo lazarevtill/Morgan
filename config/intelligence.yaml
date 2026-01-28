@@ -1,0 +1,86 @@
+# Morgan Intelligence Configuration
+# Emotional intelligence and reasoning settings
+#
+# This file configures the intelligence layer.
+# Environment variables can override these values with MORGAN_INTEL_ prefix.
+
+# Emotion detection settings
+emotions:
+  # Enable emotion detection
+  enabled: true
+  # Detection method: rule_based, llm, hybrid
+  method: "hybrid"
+  # Confidence threshold for detection
+  confidence_threshold: 0.6
+  # Track emotion history
+  track_history: true
+  # History length to maintain
+  history_length: 10
+
+# Empathy generation settings
+empathy:
+  # Enable empathic responses
+  enabled: true
+  # Empathy level: low, medium, high
+  level: "high"
+  # Mirror detected emotions
+  mirror_emotions: true
+  # Provide emotional support
+  provide_support: true
+  # Validate user feelings
+  validate_feelings: true
+
+# Reasoning settings
+reasoning:
+  # Enable multi-step reasoning
+  enabled: true
+  # Maximum reasoning steps
+  max_steps: 10
+  # Enable chain-of-thought
+  chain_of_thought: true
+  # Show reasoning process to user
+  show_reasoning: false
+  # Reasoning depth: shallow, medium, deep
+  depth: "medium"
+
+# Proactive assistance settings
+proactive:
+  # Enable proactive suggestions
+  enabled: true
+  # Maximum suggestions per interaction
+  max_suggestions: 5
+  # Suggestion confidence threshold
+  confidence_threshold: 0.7
+  # Types of proactive assistance
+  types:
+    - reminders
+    - suggestions
+    - follow_ups
+    - clarifications
+
+# Communication style settings
+communication:
+  # Adapt to user's style
+  adapt_style: true
+  # Formality level: casual, neutral, formal
+  formality: "neutral"
+  # Response length: concise, balanced, detailed
+  length: "balanced"
+  # Include explanations
+  include_explanations: true
+
+# Tone analysis settings
+tone:
+  # Enable tone analysis
+  enabled: true
+  # Detect user's tone
+  detect_tone: true
+  # Match user's tone
+  match_tone: true
+  # Tones to track
+  tones:
+    - positive
+    - negative
+    - neutral
+    - questioning
+    - assertive

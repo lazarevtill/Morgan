@@ -11,6 +11,7 @@ from pathlib import Path
 
 QDRANT_URL = "http://localhost:6333"
 
+
 def restore_snapshots(backup_dir: Path):
     """Restore all snapshots from a backup directory"""
     if not backup_dir.exists():
@@ -40,11 +41,11 @@ def restore_snapshots(backup_dir: Path):
             # 1. Upload snapshot
             upload_url = f"{QDRANT_URL}/collections/{collection}/snapshots/upload"
 
-            with open(snapshot_file, 'rb') as f:
+            with open(snapshot_file, "rb") as f:
                 upload_resp = requests.put(
                     upload_url,
                     data=f,
-                    headers={"Content-Type": "application/octet-stream"}
+                    headers={"Content-Type": "application/octet-stream"},
                 )
 
             if upload_resp.status_code not in [200, 201]:
@@ -62,8 +63,7 @@ def restore_snapshots(backup_dir: Path):
                 # 3. Recover from snapshot
                 recover_url = f"{QDRANT_URL}/collections/{collection}/snapshots/recover"
                 recover_resp = requests.put(
-                    recover_url,
-                    json={"location": snapshot_name}
+                    recover_url, json={"location": snapshot_name}
                 )
 
                 if recover_resp.status_code in [200, 201]:

@@ -7,6 +7,7 @@ KISS Principle: Simple commands that do exactly what humans expect.
 """
 
 import argparse
+import asyncio
 import sys
 
 from rich.console import Console
@@ -312,7 +313,7 @@ For more help on a specific command, use: morgan <command> --help
     return parser
 
 
-def cmd_chat(args, morgan):
+async def cmd_chat(args, morgan):
     """Handle the chat command."""
     console.print(
         Panel.fit(
@@ -345,12 +346,12 @@ def cmd_chat(args, morgan):
             try:
                 if args.stream if hasattr(args, "stream") else True:
                     # Stream response for natural conversation feel
-                    for chunk in morgan.ask_stream(question, conversation_id):
+                    async for chunk in morgan.ask_stream(question, conversation_id):
                         console.print(chunk, end="", highlight=False)
                     console.print()  # New line after response
                 else:
                     # Get complete response
-                    response = morgan.ask(question, conversation_id)
+                    response = await morgan.ask(question, conversation_id)
                     console.print(response.answer)
 
                     if response.sources and len(response.sources) > 0:
@@ -369,18 +370,18 @@ def cmd_chat(args, morgan):
     )
 
 
-def cmd_ask(args, morgan):
+async def cmd_ask(args, morgan):
     """Handle the ask command."""
     try:
         if args.stream:
             # Stream response
             console.print("[bold blue]Morgan:[/bold blue] ", end="")
-            for chunk in morgan.ask_stream(args.question):
+            async for chunk in morgan.ask_stream(args.question):
                 console.print(chunk, end="", highlight=False)
             console.print()
         else:
             # Get complete response
-            response = morgan.ask(args.question, include_sources=args.sources)
+            response = await morgan.ask(args.question, include_sources=args.sources)
 
             console.print(f"[bold blue]Morgan:[/bold blue] {response.answer}")
 
@@ -1180,8 +1181,8 @@ def cmd_init(args):
         sys.exit(1)
 
 
-def main():
-    """Main CLI entry point."""
+async def main_async():
+    """Main CLI entry point (async)."""
     parser = create_parser()
     args = parser.parse_args()
 
@@ -1212,9 +1213,9 @@ def main():
     # Route to appropriate command handler
     try:
         if args.command == "chat":
-            cmd_chat(args, morgan)
+            await cmd_chat(args, morgan)
         elif args.command == "ask":
-            cmd_ask(args, morgan)
+            await cmd_ask(args, morgan)
         elif args.command == "learn":
             cmd_learn(args, morgan)
         elif args.command == "serve":
@@ -1243,6 +1244,11 @@ def main():
 
             console.print(traceback.format_exc())
         sys.exit(1)
+
+
+def main():
+    """Main CLI entry point."""
+    asyncio.run(main_async())
 
 
 if __name__ == "__main__":
