@@ -1,0 +1,64 @@
+# Dockerfile for Reranking Service
+# Deployed on Host 6 (RTX 2060)
+
+# =============================================================================
+# Stage 1: Build stage - Install dependencies
+# =============================================================================
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment (accessible to all users, unlike /root/.local)
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Upgrade pip
+RUN pip install --upgrade pip setuptools wheel
+
+# Install Python dependencies into virtual environment
+COPY requirements-reranking.txt .
+RUN pip install --no-cache-dir -r requirements-reranking.txt
+
+# =============================================================================
+# Stage 2: Production stage - Minimal runtime image
+# =============================================================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN useradd -m -u 1000 -s /bin/bash reranker && \
+    chown -R reranker:reranker /app
+
+# Copy virtual environment from builder (accessible to all users)
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy application
+COPY --chown=reranker:reranker services/reranking/ /app/
+
+# Switch to non-root user
+USER reranker
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    RERANKING_HOST=0.0.0.0 \
+    RERANKING_PORT=8080
+
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

@@ -1,479 +1,261 @@
-# ⚠️ DEPRECATED - Morgan RAG (Old System)
+# Morgan RAG - Core Intelligence Engine
 
-> **This directory contains the old monolithic Morgan implementation and is DEPRECATED as of December 8, 2025.**
->
-> **Please use the new client-server architecture:**
-> - **Server:** `../morgan-server/`
-> - **Client:** `../morgan-cli/`
-> - **Migration Guide:** `../MIGRATION.md`
->
-> See [DEPRECATED.md](./DEPRECATED.md) for details.
+**Last Updated:** December 26, 2025
 
----
+Morgan RAG is the core intelligence engine of the Morgan AI Assistant. It provides unified services for LLM, embeddings, and reranking, along with emotional intelligence, memory management, and multi-stage search.
 
-## Overview (Historical)
+## Overview
 
-Morgan RAG was a **human-first** AI assistant built with KISS principles (Keep It Simple, Stupid). Unlike complex RAG systems that focus on technical features, Morgan was designed to be genuinely helpful, easy to use, and simple to maintain.
+Morgan RAG is a **human-first** AI assistant built with KISS principles (Keep It Simple, Stupid). It provides:
 
-Built on proven patterns from InspecTor but redesigned for human interaction, Morgan provided intelligent conversation, learning from documents, and continuous improvement through feedback.
+- **Unified Services Layer** - Clean access to LLM, embeddings, and reranking
+- **Emotional Intelligence** - Emotion detection, empathy, and relationship management
+- **Memory System** - Conversation memory with emotional context
+- **Search Pipeline** - Multi-stage semantic search with reranking
+- **Distributed Infrastructure** - Scale across multiple hosts
 
-**This implementation has been replaced by a new client-server architecture with enhanced features and better deployment options.**
+## Quick Start
 
-## Philosophy: Human-First, Not Code-First
+### Installation
 
-🤝 **Conversational**: Talk to Morgan naturally, like you would with a knowledgeable colleague  
-🧠 **Learning**: Morgan learns from your documents and remembers your conversations  
-🎯 **Helpful**: Focused on actually helping humans, not just being technically impressive  
-🔧 **Simple**: Easy to set up, use, and maintain - no PhD in AI required  
-⚡ **Fast**: Quick responses without sacrificing quality  
-🔒 **Private**: Your data stays on your servers, period  
-🐳 **Ready**: Works out of the box with Docker 
+```bash
+cd morgan-rag
+pip install -e .
+```
+
+### Basic Usage
+
+```python
+from morgan.services import (
+    get_llm_service,
+    get_embedding_service,
+    get_reranking_service,
+)
+
+# Get service instances (singletons)
+llm = get_llm_service()
+embeddings = get_embedding_service()
+reranking = get_reranking_service()
+
+# LLM Generation
+response = llm.generate("What is Python?")
+print(response.content)
+
+# Async LLM Generation
+response = await llm.agenerate("Explain Docker")
+
+# Embeddings
+embedding = embeddings.encode("Document text")
+embeddings_batch = embeddings.encode_batch(["Doc 1", "Doc 2"])
+
+# Reranking
+results = await reranking.rerank(
+    query="Python programming",
+    documents=["Doc 1", "Doc 2", "Doc 3"],
+    top_k=10
+)
+```
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        USER QUERY                               │
-│              "How do I deploy a Docker container?"              │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   QUERY PROCESSING                              │
-│  ├─ Intent Classification                                       │
-│  ├─ Query Enhancement                                           │
-│  └─ Domain Routing                                              │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                  KNOWLEDGE RETRIEVAL                            │
-│  ├─ Hierarchical Search (coarse→medium→fine)                   │
-│  ├─ Multi-Domain Fusion                                        │
-│  ├─ Conversation Memory Search                                 │
-│  └─ Context Assembly                                           │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    RESPONSE GENERATION                          │
-│  ├─ LLM Generation (OpenAI Compatible)                         │
-│  ├─ Source Attribution                                         │
-│  └─ Response Enhancement                                       │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   LEARNING & MEMORY                             │
-│  ├─ Conversation Storage                                       │
-│  ├─ Feedback Learning                                          │
-│  └─ Knowledge Graph Updates                                    │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-                         ▼
-                  INTELLIGENT RESPONSE
+morgan-rag/morgan/
+├── services/                    # Unified Services Layer
+│   ├── llm/                     # LLM service (single + distributed)
+│   ├── embeddings/              # Embedding service (remote + local)
+│   ├── reranking/               # Reranking service (4-level fallback)
+│   └── external_knowledge/      # External knowledge sources
+│
+├── intelligence/                # Emotional Intelligence
+│   ├── emotions/                # Emotion detection
+│   ├── empathy/                 # Empathic responses
+│   └── core/                    # Intelligence engine
+│
+├── memory/                      # Memory System
+├── search/                      # Search Pipeline
+├── learning/                    # Pattern Learning
+├── companion/                   # Relationship Management
+├── reasoning/                   # Multi-step Reasoning
+├── proactive/                   # Proactive Assistance
+│
+├── infrastructure/              # Distributed Infrastructure
+│   ├── distributed_llm.py       # Load balancing
+│   ├── distributed_gpu_manager.py
+│   └── factory.py               # Infrastructure factory
+│
+├── config/                      # Configuration
+│   ├── defaults.py              # Default values
+│   ├── settings.py              # Application settings
+│   └── distributed_config.py    # Distributed deployment
+│
+├── utils/                       # Utilities
+│   ├── singleton.py             # Singleton factory
+│   ├── model_cache.py           # Model caching
+│   ├── deduplication.py         # Result deduplication
+│   └── logger.py                # Logging
+│
+└── exceptions.py                # Exception hierarchy
 ```
 
-## Quick Start (5 Minutes to Your First Chat)
+## Services
 
-### 1. Get Morgan Running
+### LLM Service
 
-```bash
-# Clone and setup
-git clone <your-repo> morgan-rag
-cd morgan-rag
+```python
+from morgan.services import get_llm_service
 
-# Copy configuration template
-cp .env.example .env
+# Single mode (default)
+llm = get_llm_service()
+response = llm.generate("Hello!")
 
-# Edit .env file - just set your LLM endpoint
-nano .env  # Set LLM_BASE_URL and LLM_API_KEY
+# Distributed mode
+llm = get_llm_service(
+    mode="distributed",
+    endpoints=["http://host1:11434/v1", "http://host2:11434/v1"]
+)
 
-# Start with Docker (easiest)
-docker-compose up -d
+# With fast model for simple queries
+response = llm.generate("Hi!", use_fast_model=True)
 
-# Or install locally
-pip install -r requirements.txt
-python -m morgan init
+# Streaming
+async for chunk in llm.astream("Tell me a story"):
+    print(chunk, end="")
 ```
 
-### 2. Teach Morgan Something
+### Embedding Service
 
-```bash
-# Learn from your documents
-morgan learn ./docs
+```python
+from morgan.services import get_embedding_service
 
-# Learn from a website
-morgan learn --url https://docs.docker.com
+embeddings = get_embedding_service()
 
-# Learn from code
-morgan learn ./my-project --type code
+# Single embedding
+vector = embeddings.encode("Text to embed")
+
+# Batch embeddings
+vectors = embeddings.encode_batch(["Doc 1", "Doc 2", "Doc 3"])
+
+# Async
+vector = await embeddings.aencode("Async text")
 ```
 
-### 3. Start Chatting
+### Reranking Service
 
-```bash
-# Interactive chat (recommended)
-morgan chat
+```python
+from morgan.services import get_reranking_service
 
-# Quick question
-morgan ask "How do I deploy Docker containers?"
+reranking = get_reranking_service()
 
-# Web interface
-morgan serve
-# Then open http://localhost:8080
+# Rerank documents
+results = await reranking.rerank(
+    query="Python programming",
+    documents=["Doc 1", "Doc 2", "Doc 3"],
+    top_k=10
+)
+
+for result in results:
+    print(f"{result.score:.3f}: {result.text[:50]}...")
 ```
-
-That's it! Morgan is now ready to help you with anything in your documents.
 
 ## Configuration
 
-### Environment Variables (.env)
+### Environment Variables
 
 ```bash
-# LLM Configuration
-LLM_BASE_URL=https://gpt.lazarev.cloud/ollama/v1
-LLM_API_KEY=your-api-key
-LLM_MODEL=llama3.1:8b
+# LLM
+MORGAN_LLM_ENDPOINT=http://localhost:11434/v1
+MORGAN_LLM_MODEL=qwen2.5:32b-instruct-q4_K_M
+MORGAN_LLM_FAST_MODEL=qwen2.5:7b-instruct-q5_K_M
+
+# Embeddings
+MORGAN_EMBEDDING_ENDPOINT=http://localhost:11434/v1
+MORGAN_EMBEDDING_MODEL=qwen3-embedding:4b
+MORGAN_EMBEDDING_DIMENSIONS=2048
+
+# Reranking
+MORGAN_RERANKING_ENDPOINT=http://localhost:8080/rerank
+MORGAN_RERANKING_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
 
 # Vector Database
-QDRANT_URL=http://localhost:6333
-QDRANT_API_KEY=optional-api-key
+MORGAN_QDRANT_URL=http://localhost:6333
 
-# Embedding Service
-EMBEDDING_MODEL=all-MiniLM-L6-v2
-EMBEDDING_BATCH_SIZE=100
-
-# System Settings
-MORGAN_DATA_DIR=./data
-MORGAN_LOG_LEVEL=INFO
-MORGAN_MAX_CONTEXT=8192
+# Cache
+MORGAN_REDIS_URL=redis://localhost:6379
+MORGAN_MODEL_CACHE=~/.morgan/models
 ```
 
-## Core Components
-
-### 1. Document Ingestion (`morgan/ingestion/`)
-- **Universal Parsers**: PDF, DOCX, MD, HTML, TXT, Code files
-- **Intelligent Chunking**: Semantic-aware text splitting
-- **Metadata Extraction**: Automatic metadata detection
-- **Batch Processing**: Efficient bulk ingestion
-
-### 2. Vector Database (`morgan/vector_db/`)
-- **Hierarchical Embeddings**: Coarse/medium/fine scale search
-- **Collection Management**: Domain-specific collections
-- **Caching System**: Git hash tracking for incremental updates
-- **Performance Optimization**: Batch operations and indexing
-
-### 3. Search Engine (`morgan/search/`)
-- **Multi-Stage Retrieval**: 6 search strategies with fusion
-- **Query Enhancement**: Automatic query expansion
-- **Relevance Scoring**: Advanced ranking algorithms
-- **Context Assembly**: Intelligent context building
-
-### 4. Memory System (`morgan/memory/`)
-- **Conversation History**: Persistent chat storage
-- **Semantic Memory**: Vector-based conversation search
-- **Learning Feedback**: User feedback integration
-- **Knowledge Graph**: Entity and relationship tracking
-
-### 5. LLM Integration (`morgan/llm/`)
-- **OpenAI Compatible**: Works with any OpenAI-compatible API
-- **Streaming Support**: Real-time response streaming
-- **Context Management**: Intelligent context window management
-- **Response Enhancement**: Source attribution and formatting
-
-## Real Examples (What Morgan Actually Does)
-
-### Natural Conversation
-
-```bash
-$ morgan chat
-
-🤖 Morgan: Hello! I'm your AI assistant. How can I help you today?
-
-👤 You: I need to deploy a web app with Docker but I'm new to this
-
-🤖 Morgan: I'd be happy to help you deploy a web app with Docker! Let me break this down into simple steps:
-
-1. **Create a Dockerfile** - This tells Docker how to build your app
-2. **Build the image** - Package your app into a container
-3. **Run the container** - Start your app
-
-What type of web app are you working with? (Node.js, Python, PHP, etc.)
-
-👤 You: It's a Python Flask app
-
-🤖 Morgan: Perfect! Here's a simple Dockerfile for a Flask app:
-
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-EXPOSE 5000
-CMD ["python", "app.py"]
-```
-
-Then run these commands:
-```bash
-docker build -t my-flask-app .
-docker run -p 5000:5000 my-flask-app
-```
-
-Would you like me to explain any of these steps in more detail?
-
-[Sources: docker-flask-tutorial.md, dockerfile-best-practices.md]
-```
-
-### Quick Questions
-
-```bash
-$ morgan ask "What's the difference between Docker and VM?"
-
-🤖 Morgan: Great question! Here are the key differences:
-
-**Docker (Containers):**
-- Shares the host OS kernel
-- Lightweight (MBs)
-- Starts in seconds
-- Better resource efficiency
-
-**Virtual Machines:**
-- Each VM has its own OS
-- Heavier (GBs)
-- Takes minutes to start
-- More isolated but resource-intensive
-
-Think of containers like apartments in a building (shared infrastructure) vs VMs like separate houses (complete isolation).
-
-[Sources: docker-vs-vm-comparison.md]
-```
-
-### Learning from Your Docs
-
-```bash
-$ morgan learn ./company-docs
-
-📚 Teaching Morgan from: ./company-docs
-⠋ Processing documents... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100%
-
-✅ Learning Complete!
-📚 Documents processed: 47
-🧩 Knowledge chunks: 312
-⏱️  Processing time: 23.4s
-🎯 Knowledge areas: DevOps, API Guidelines, Security Policies, Deployment Procedures
-
-$ morgan ask "What's our API versioning policy?"
-
-🤖 Morgan: According to your company's API guidelines, here's the versioning policy:
-
-1. **Semantic Versioning**: Use MAJOR.MINOR.PATCH format
-2. **URL Versioning**: Include version in URL path (/api/v1/)
-3. **Backward Compatibility**: Maintain for at least 2 major versions
-4. **Deprecation Notice**: 6 months minimum before removing endpoints
-
-[Source: api-guidelines.md, section 3.2]
-```
-
-### Python API (Simple Integration)
+### Defaults Module
 
 ```python
-from morgan import create_assistant
+from morgan.config.defaults import Defaults
 
-# Create Morgan
-morgan = create_assistant()
-
-# Teach Morgan about your project
-morgan.learn_from_documents("./docs")
-
-# Ask questions
-response = morgan.ask("How do I set up authentication?")
-print(response.answer)
-
-# Start a conversation
-conv_id = morgan.start_conversation("API Development")
-response = morgan.ask("What's our auth flow?", conversation_id=conv_id)
-
-# Provide feedback to help Morgan learn
-morgan.provide_feedback(conv_id, rating=5, comment="Very helpful!")
+# Access defaults
+port = Defaults.MORGAN_PORT  # 8080
+model = Defaults.LLM_MODEL   # "qwen2.5:32b-instruct-q4_K_M"
 ```
 
-## Performance Characteristics
-
-### Ingestion Performance
-- **Documents**: ~100 docs/minute
-- **Code Files**: ~500 files/minute  
-- **Web Pages**: ~50 pages/minute
-- **Batch Processing**: 10x faster than individual
-
-### Search Performance
-- **Query Response**: <200ms (cached)
-- **First Search**: <500ms (cold)
-- **Hierarchical Filtering**: 90% reduction in candidates
-- **Memory Usage**: ~2GB for 100K documents
-
-### LLM Integration
-- **Context Assembly**: <100ms
-- **Response Generation**: Depends on LLM (typically 1-5s)
-- **Streaming**: Real-time token delivery
-- **Concurrent Users**: 50+ (with proper LLM backend)
-
-## Advanced Features
-
-### 1. Domain-Specific Collections
-
-```bash
-# Create specialized collections
-morgan collection create "python-docs" --domain programming
-morgan collection create "company-policies" --domain business
-morgan collection create "research-papers" --domain academic
-
-# Query specific domains
-morgan ask "How to handle exceptions?" --domain programming
-```
-
-### 2. Learning from Feedback
-
-```bash
-# Provide feedback on responses
-morgan feedback --conversation-id abc123 --rating 5 --comment "Very helpful"
-
-# View learning analytics
-morgan analytics --period 30d
-```
-
-### 3. Knowledge Graph
-
-```bash
-# View entity relationships
-morgan graph --entity "Docker" --depth 2
-
-# Export knowledge graph
-morgan graph export --format graphml
-```
-
-### 4. Custom Embeddings
+## Exception Handling
 
 ```python
-# Use custom embedding models
-from morgan.embeddings import CustomEmbedding
-
-embedding = CustomEmbedding(
-    model_path="./my-embedding-model",
-    device="cuda"
+from morgan.exceptions import (
+    MorganError,           # Base exception
+    LLMServiceError,       # LLM failures
+    EmbeddingServiceError, # Embedding failures
+    RerankingServiceError, # Reranking failures
 )
 
-morgan = MorganRAG(embedding_service=embedding)
+try:
+    response = llm.generate("Hello")
+except LLMServiceError as e:
+    print(f"LLM failed: {e.message}")
+    print(f"Operation: {e.operation}")
+except MorganError as e:
+    print(f"Morgan error: {e}")
 ```
 
-## Deployment
-
-### Docker Compose (Recommended)
-
-```yaml
-version: '3.8'
-
-services:
-  morgan:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      - LLM_BASE_URL=https://gpt.lazarev.cloud/ollama/v1
-      - LLM_API_KEY=${LLM_API_KEY}
-    volumes:
-      - ./data:/app/data
-    depends_on:
-      - qdrant
-
-  qdrant:
-    image: qdrant/qdrant:latest
-    ports:
-      - "6333:6333"
-    volumes:
-      - qdrant_data:/qdrant/storage
-
-volumes:
-  qdrant_data:
-```
-
-### Kubernetes
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: morgan-rag
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: morgan-rag
-  template:
-    metadata:
-      labels:
-        app: morgan-rag
-    spec:
-      containers:
-      - name: morgan
-        image: morgan-rag:latest
-        ports:
-        - containerPort: 8080
-        env:
-        - name: LLM_BASE_URL
-          value: "https://gpt.lazarev.cloud/ollama/v1"
-        - name: QDRANT_URL
-          value: "http://qdrant-service:6333"
-```
-
-## Monitoring & Analytics
-
-### Health Checks
+## Testing
 
 ```bash
-# System health
-morgan health
+# Run all tests
+pytest tests/
 
-# Component status
-morgan status --detailed
+# Run with coverage
+pytest --cov=morgan tests/
 
-# Performance metrics
-morgan metrics --component search --period 1h
+# Run specific tests
+pytest tests/test_llm_service.py
 ```
 
-### Logging
+## Documentation
 
-```bash
-# View logs
-morgan logs --level INFO --follow
+- [Architecture](./docs/ARCHITECTURE.md) - Detailed architecture documentation
+- [Quick Start](./QUICK_START.md) - Quick start guide
+- [Migration Guide](./docs/MIGRATION_GUIDE.md) - Migration guide
 
-# Search logs
-morgan logs --query "error" --since 1h
+## Related Components
 
-# Export logs
-morgan logs --export --format json --output logs.json
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push to branch: `git push origin feature/amazing-feature`
-5. Open Pull Request
+- **morgan-server** - FastAPI server with REST/WebSocket API
+- **morgan-cli** - Terminal client
+- **docker** - Docker deployment configurations
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+```
+Copyright 2025 Morgan AI Assistant Contributors
 
-## Support
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-- 📖 Documentation: [docs/](docs/)
-- 🐛 Issues: [GitHub Issues](issues)
-- 💬 Discussions: [GitHub Discussions](discussions)
-- 📧 Email: support@morgan-rag.com
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
 
 ---
 
-**Morgan RAG** - Intelligent Knowledge for Intelligent Assistants
+**Morgan RAG** - The intelligent core of Morgan AI Assistant.

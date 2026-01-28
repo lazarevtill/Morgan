@@ -1,0 +1,81 @@
+# Morgan Server Configuration
+# Web server and API settings
+#
+# This file configures the Morgan server.
+# Environment variables can override these values with MORGAN_ prefix.
+
+# Server binding settings
+server:
+  # Host to bind to (0.0.0.0 for all interfaces, 127.0.0.1 for localhost only)
+  host: "0.0.0.0"
+  # Main server port (web interface)
+  port: 8080
+  # API port (REST API)
+  api_port: 8000
+  # Number of worker processes
+  workers: 4
+  # Enable web interface
+  web_enabled: true
+
+# CORS settings
+cors:
+  # Allowed origins (comma-separated, or * for all)
+  origins: "*"
+  # Allow credentials
+  allow_credentials: true
+  # Allowed methods
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  # Allowed headers
+  headers: ["*"]
+
+# Security settings
+security:
+  # API key for authentication (optional)
+  api_key: ""
+  # Session secret (MUST be changed in production)
+  session_secret: "CHANGE_ME_IN_PRODUCTION_REQUIRED"
+  # Session timeout in minutes
+  session_timeout: 60
+  # Enable HTTPS
+  https_enabled: false
+  # SSL certificate path
+  ssl_cert: ""
+  # SSL key path
+  ssl_key: ""
+
+# Request limits
+limits:
+  # Maximum concurrent requests
+  max_concurrent: 100
+  # Request timeout in seconds
+  timeout: 60
+  # Maximum request body size (MB)
+  max_body_size: 100
+  # Rate limiting (requests per minute, 0 = disabled)
+  rate_limit: 0
+
+# Logging settings
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+  # Log format: json, text
+  format: "json"
+  # Log to file
+  file: ""
+  # Maximum log file size (MB)
+  max_size: 100
+  # Number of backup files to keep
+  backup_count: 5
+
+# Performance settings
+performance:
+  # Enable request caching
+  cache_enabled: true
+  # Cache size (number of items)
+  cache_size: 1000
+  # Cache TTL in seconds
+  cache_ttl: 3600
+  # Enable gzip compression
+  compression: true
+  # Keep-alive timeout
+  keepalive_timeout: 65

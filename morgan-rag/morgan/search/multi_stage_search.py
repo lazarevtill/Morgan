@@ -24,7 +24,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from morgan.services.embedding_service import get_embedding_service
+from morgan.services.embeddings import get_embedding_service
+from morgan.utils.deduplication import ResultDeduplicator
 from morgan.utils.logger import get_logger
 from morgan.utils.request_context import get_request_id, set_request_id
 from morgan.vector_db.client import VectorDBClient
@@ -173,7 +174,7 @@ class MultiStageSearchEngine:
 
         # Collection names
         self.knowledge_collection = "morgan_knowledge"
-        self.memory_collection = "morgan_turns"
+        self.memory_collection = "morgan_memories"  # Must match memory_processor.py
 
         # Search configuration
         self.coarse_filter_ratio = (
@@ -182,6 +183,12 @@ class MultiStageSearchEngine:
         self.medium_filter_ratio = 0.3  # Keep 30% after medium filtering
         self.similarity_threshold = 0.95  # For deduplication
         self.rrf_k = 60  # RRF parameter
+
+        # Unified deduplicator
+        self.deduplicator = ResultDeduplicator(
+            strategy="content_hash",
+            similarity_threshold=self.similarity_threshold,
+        )
 
         # Performance tracking
         self.search_stats = {
@@ -1036,7 +1043,7 @@ class MultiStageSearchEngine:
             from morgan.companion.relationship_manager import (
                 CompanionRelationshipManager,
             )
-            from morgan.emotional.intelligence_engine import (
+            from morgan.intelligence.core.intelligence_engine import (
                 get_emotional_intelligence_engine,
             )
             from morgan.memory.memory_processor import get_memory_processor
@@ -1055,7 +1062,7 @@ class MultiStageSearchEngine:
             )
 
             # Analyze query for emotional context
-            from morgan.emotional.models import (
+            from morgan.intelligence.core.models import (
                 ConversationContext,
                 EmotionalState,
                 EmotionType,
@@ -1248,7 +1255,7 @@ class MultiStageSearchEngine:
             from morgan.companion.relationship_manager import (
                 CompanionRelationshipManager,
             )
-            from morgan.emotional.intelligence_engine import (
+            from morgan.intelligence.core.intelligence_engine import (
                 get_emotional_intelligence_engine,
             )
 
@@ -1350,7 +1357,7 @@ class MultiStageSearchEngine:
 
             # Add emotional context if detectable from query
             try:
-                from morgan.emotional.models import ConversationContext
+                from morgan.intelligence.core.models import ConversationContext
 
                 conv_context = ConversationContext(
                     user_id=user_id,
@@ -1728,51 +1735,57 @@ class MultiStageSearchEngine:
 
     def _deduplicate_results(self, results: List[SearchResult]) -> List[SearchResult]:
         """
-        Remove duplicate results using cosine similarity threshold.
+        Remove duplicate results using unified ResultDeduplicator.
 
-        Removes results with >95% similarity to higher-ranked results.
+        Uses content hash deduplication for fast exact matching.
+        For semantic deduplication, use _deduplicate_results_semantic().
         """
         if len(results) <= 1:
             return results
 
-        deduplicated = []
-        seen_embeddings = []
-
-        for result in results:
-            is_duplicate = False
-
-            # Get embedding for this result's content
-            try:
-                result_embedding = self.embedding_service.encode(
-                    text=result.content[:500],  # Use first 500 chars for efficiency
-                    instruction="document",
-                )
-
-                # Check similarity with previously seen results
-                for seen_embedding in seen_embeddings:
-                    similarity = self._calculate_similarity(
-                        result_embedding, seen_embedding
-                    )
-                    if similarity > self.similarity_threshold:
-                        is_duplicate = True
-                        break
-
-                if not is_duplicate:
-                    deduplicated.append(result)
-                    seen_embeddings.append(result_embedding)
-
-            except Exception as e:
-                logger.warning(f"Failed to check duplicate for result: {e}")
-                # Include result if we can't check for duplicates
-                deduplicated.append(result)
-
-        if len(deduplicated) != len(results):
-            logger.debug(
-                f"Deduplication: {len(results)} → {len(deduplicated)} "
-                f"({len(results) - len(deduplicated)} duplicates removed)"
-            )
+        # Use unified deduplicator with content hash strategy
+        deduplicated = self.deduplicator.deduplicate(
+            items=results,
+            key_fn=lambda r: r.content[:500],  # Use first 500 chars for efficiency
+            keep_first=True,
+        )
 
         return deduplicated
+
+    def _deduplicate_results_semantic(
+        self, results: List[SearchResult]
+    ) -> List[SearchResult]:
+        """
+        Remove duplicate results using semantic similarity.
+
+        Removes results with >95% cosine similarity to higher-ranked results.
+        More thorough but slower than hash-based deduplication.
+        """
+        if len(results) <= 1:
+            return results
+
+        try:
+            # Get embeddings for all results
+            embeddings = []
+            for result in results:
+                emb = self.embedding_service.encode(
+                    text=result.content[:500],
+                    instruction="document",
+                )
+                embeddings.append(emb)
+
+            # Use unified deduplicator with semantic strategy
+            deduplicated = self.deduplicator.deduplicate_semantic(
+                items=results,
+                embeddings=embeddings,
+                key_fn=lambda r: r.content,
+            )
+
+            return deduplicated
+
+        except Exception as e:
+            logger.warning(f"Semantic deduplication failed, falling back to hash: {e}")
+            return self._deduplicate_results(results)
 
     def _final_ranking(
         self, results: List[SearchResult], max_results: int, min_score: float
@@ -2300,38 +2313,48 @@ class MultiStageSearchEngine:
     def _deduplicate_memory_results(
         self, results: List[SearchResult]
     ) -> List[SearchResult]:
-        """Deduplicate memory results based on content and conversation context."""
+        """
+        Deduplicate memory results based on content and conversation context.
+
+        Uses unified ResultDeduplicator with conversation-aware key generation.
+        """
         if len(results) <= 1:
             return results
 
-        deduplicated = []
-        seen_conversations = set()
-        seen_content_hashes = set()
-
-        for result in results:
-            # Create deduplication keys
+        # Create composite key for deduplication: conversation_id + content
+        def memory_key(result: SearchResult) -> str:
             conversation_id = result.metadata.get("conversation_id", "")
-            content_hash = hash(result.content[:200].lower().strip())
+            content_snippet = result.content[:200].lower().strip()
+            return f"{conversation_id}_{content_snippet}"
 
-            # Skip if we've seen very similar content from the same conversation
-            conversation_content_key = f"{conversation_id}_{content_hash}"
+        # Use unified deduplicator
+        deduplicated = self.deduplicator.deduplicate(
+            items=results,
+            key_fn=memory_key,
+            keep_first=True,
+        )
 
-            if conversation_content_key not in seen_content_hashes:
-                seen_content_hashes.add(conversation_content_key)
-                seen_conversations.add(conversation_id)
-                deduplicated.append(result)
-            elif result.result_type == "enhanced_memory":
-                # Prefer enhanced memories over basic conversation turns
-                # Replace if current result is enhanced and previous wasn't
-                for i, existing in enumerate(deduplicated):
-                    if (
-                        existing.metadata.get("conversation_id") == conversation_id
-                        and existing.result_type == "memory"
-                    ):
-                        deduplicated[i] = result
-                        break
+        # Post-process: prefer enhanced memories over basic memories
+        enhanced_indices = {}
+        for i, result in enumerate(deduplicated):
+            if result.result_type == "enhanced_memory":
+                conv_id = result.metadata.get("conversation_id", "")
+                enhanced_indices[conv_id] = i
 
-        return deduplicated
+        # Replace basic memories with enhanced ones for same conversation
+        final_results = []
+        seen_conv_ids = set()
+        for result in deduplicated:
+            conv_id = result.metadata.get("conversation_id", "")
+            if conv_id in enhanced_indices and conv_id not in seen_conv_ids:
+                # Use enhanced memory for this conversation
+                final_results.append(deduplicated[enhanced_indices[conv_id]])
+                seen_conv_ids.add(conv_id)
+            elif conv_id not in seen_conv_ids:
+                final_results.append(result)
+                seen_conv_ids.add(conv_id)
+
+        return final_results if final_results else deduplicated
 
     def _update_search_stats(self, search_time: float, candidates: int, filtered: int):
         """Update performance statistics."""

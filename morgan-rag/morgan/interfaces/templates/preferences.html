@@ -358,10 +358,12 @@
                 const container = document.getElementById('topicsContainer');
                 const topicTag = document.createElement('div');
                 topicTag.className = 'topic-tag';
-                topicTag.innerHTML = `
-                    ${topic}
-                    <span class="remove" onclick="removeTopic(this)">×</span>
-                `;
+                topicTag.textContent = topic;
+                const removeSpan = document.createElement('span');
+                removeSpan.className = 'remove';
+                removeSpan.textContent = '×';
+                removeSpan.onclick = function() { removeTopic(this); };
+                topicTag.appendChild(removeSpan);
                 container.appendChild(topicTag);
                 input.value = '';
             }

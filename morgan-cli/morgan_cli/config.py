@@ -23,33 +23,31 @@ class Config(BaseModel):
     model_config = {"frozen": True}
 
     server_url: str = Field(
-        default_factory=lambda: os.getenv(
-            "MORGAN_SERVER_URL", "http://localhost:8080"
-        ),
-        description="Morgan server URL"
+        default_factory=lambda: os.getenv("MORGAN_SERVER_URL", "http://localhost:8080"),
+        description="Morgan server URL",
     )
     api_key: Optional[str] = Field(
         default_factory=lambda: os.getenv("MORGAN_API_KEY"),
-        description="API key for authentication"
+        description="API key for authentication",
     )
     user_id: Optional[str] = Field(
         default_factory=lambda: os.getenv("MORGAN_USER_ID"),
-        description="User identifier"
+        description="User identifier",
     )
     timeout_seconds: int = Field(
         default_factory=lambda: int(os.getenv("MORGAN_TIMEOUT", "60")),
         ge=1,
-        description="Request timeout in seconds"
+        description="Request timeout in seconds",
     )
     retry_attempts: int = Field(
         default_factory=lambda: int(os.getenv("MORGAN_RETRY_ATTEMPTS", "3")),
         ge=0,
-        description="Number of retry attempts"
+        description="Number of retry attempts",
     )
     retry_delay_seconds: int = Field(
         default_factory=lambda: int(os.getenv("MORGAN_RETRY_DELAY", "2")),
         ge=0,
-        description="Delay between retries in seconds"
+        description="Delay between retries in seconds",
     )
 
     @classmethod
@@ -69,7 +67,7 @@ class Config(BaseModel):
         user_id: Optional[str] = None,
         timeout_seconds: Optional[int] = None,
         retry_attempts: Optional[int] = None,
-        retry_delay_seconds: Optional[int] = None
+        retry_delay_seconds: Optional[int] = None,
     ) -> "Config":
         """
         Create a new config with overridden values.
@@ -106,7 +104,7 @@ class Config(BaseModel):
 def get_config(
     server_url: Optional[str] = None,
     api_key: Optional[str] = None,
-    user_id: Optional[str] = None
+    user_id: Optional[str] = None,
 ) -> Config:
     """
     Get configuration with optional overrides.
@@ -123,9 +121,7 @@ def get_config(
 
     if server_url or api_key or user_id:
         config = config.with_overrides(
-            server_url=server_url,
-            api_key=api_key,
-            user_id=user_id
+            server_url=server_url, api_key=api_key, user_id=user_id
         )
 
     return config

@@ -1,0 +1,153 @@
+# Morgan 6-Host Distributed Architecture Configuration
+# 100% Self-Hosted - No API Keys Required
+#
+# This configuration is for the full 6-host distributed setup.
+# 
+# REQUIRED: Set these environment variables before deploying:
+#   MORGAN_HOST_CORE=192.168.1.10       # Host 1: Morgan Core + Qdrant + Redis
+#   MORGAN_HOST_BACKGROUND=192.168.1.11 # Host 2: Background Services + Monitoring
+#   MORGAN_HOST_LLM_1=192.168.1.20      # Host 3: Main LLM #1 (RTX 3090)
+#   MORGAN_HOST_LLM_2=192.168.1.21      # Host 4: Main LLM #2 (RTX 3090)
+#   MORGAN_HOST_EMBEDDINGS=192.168.1.22 # Host 5: Embeddings + Fast LLM (RTX 4070)
+#   MORGAN_HOST_RERANKING=192.168.1.23  # Host 6: Reranking (RTX 2060)
+#
+# Copy and customize for your network:
+#   cp distributed.6host.yaml distributed.local.yaml
+
+# Global settings
+settings:
+  health_check_interval: 60
+  default_timeout: 30.0
+  load_balancing_strategy: round_robin
+  enable_failover: true
+  max_retries: 3
+
+# Model cache configuration
+# Models are downloaded once to this location and reused on subsequent starts
+# This avoids re-downloading weights on each container restart
+model_cache:
+  # Base directory for all cached model weights (inside container)
+  base_dir: "/app/models"
+  # sentence-transformers cache (embeddings, rerankers)
+  sentence_transformers_home: "/app/models/sentence-transformers"
+  # Hugging Face cache
+  hf_home: "/app/models/huggingface"
+  # Ollama models directory (mounted from host)
+  ollama_models: "/root/.ollama/models"
+  # Pre-download models on startup (first run may take a few minutes)
+  preload_on_startup: true
+
+# LLM Configuration (Ollama)
+llm:
+  main_model: "qwen2.5:32b-instruct-q4_K_M"
+  fast_model: "qwen2.5:7b-instruct-q5_K_M"
+  temperature: 0.7
+  max_tokens: 2048
+
+# Embedding Configuration (Self-Hosted via Ollama)
+embeddings:
+  # Qwen3-Embedding via Ollama
+  # Variants: qwen3-embedding:0.6b (896 dims), :4b (2048 dims), :8b (4096 dims)
+  model: "qwen3-embedding:4b"
+  dimensions: 2048
+  local_fallback_model: "all-MiniLM-L6-v2"
+  batch_size: 100
+
+# Reranking Configuration (Self-Hosted)
+reranking:
+  # CrossEncoder via sentence-transformers
+  model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+  rerank_weight: 0.6
+  original_weight: 0.4
+  top_k: 20
+
+# Host definitions for 6-host architecture
+# NOTE: Replace ${VAR} with actual values or use envsubst before deploying
+hosts:
+# CPU Host 1 - Morgan Core Orchestrator
+- host_id: "cpu-orchestrator-1"
+  address: "${MORGAN_HOST_CORE:-192.168.1.10}"
+  port: 8080
+  role: "orchestrator"
+  description: "Primary Morgan core with Qdrant and Redis"
+  models: []
+
+# CPU Host 2 - Background Services
+- host_id: "cpu-orchestrator-2"
+  address: "${MORGAN_HOST_BACKGROUND:-192.168.1.11}"
+  port: 8080
+  role: "orchestrator"
+  description: "Background services and monitoring"
+  models: []
+
+# GPU Host 3 - Main LLM Primary (RTX 3090)
+- host_id: "llm-primary"
+  address: "${MORGAN_HOST_LLM_1:-192.168.1.20}"
+  port: 11434
+  role: "main_llm"
+  gpu_model: "RTX 3090"
+  gpu_vram_gb: 24.0
+  api_path: "/v1"
+  description: "Primary LLM inference via Ollama"
+  models:
+  - "qwen2.5:32b-instruct-q4_K_M"
+
+# GPU Host 4 - Main LLM Secondary (RTX 3090)
+- host_id: "llm-secondary"
+  address: "${MORGAN_HOST_LLM_2:-192.168.1.21}"
+  port: 11434
+  role: "main_llm"
+  gpu_model: "RTX 3090"
+  gpu_vram_gb: 24.0
+  api_path: "/v1"
+  description: "Secondary LLM inference via Ollama"
+  models:
+  - "qwen2.5:32b-instruct-q4_K_M"
+
+# GPU Host 5 - Embeddings + Fast LLM (RTX 4070)
+- host_id: "embeddings-host"
+  address: "${MORGAN_HOST_EMBEDDINGS:-192.168.1.22}"
+  port: 11434
+  role: "embeddings"
+  gpu_model: "RTX 4070"
+  gpu_vram_gb: 12.0
+  api_path: "/v1"
+  description: "Embedding generation via Ollama (Qwen3-Embedding)"
+  models:
+  - "qwen3-embedding:4b"
+  - "qwen2.5:7b-instruct-q5_K_M"
+
+# GPU Host 6 - Reranking (RTX 2060)
+- host_id: "reranking-host"
+  address: "${MORGAN_HOST_RERANKING:-192.168.1.23}"
+  port: 8080
+  role: "reranking"
+  gpu_model: "RTX 2060"
+  gpu_vram_gb: 6.0
+  api_path: "/rerank"
+  description: "Document reranking via sentence-transformers"
+  models:
+  - "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+# Redis Configuration (on Host 1)
+redis:
+  host: "${MORGAN_HOST_CORE:-192.168.1.10}"
+  port: 6379
+  db: 0
+  password: "${MORGAN_REDIS_PASSWORD:-}"
+  prefix: "morgan:"
+
+# Vector Database (Qdrant on Host 1)
+qdrant:
+  host: "${MORGAN_HOST_CORE:-192.168.1.10}"
+  port: 6333
+  grpc_port: 6334
+
+# Monitoring Configuration (on Host 2)
+monitoring:
+  prometheus:
+    host: "${MORGAN_HOST_BACKGROUND:-192.168.1.11}"
+    port: 9090
+  grafana:
+    host: "${MORGAN_HOST_BACKGROUND:-192.168.1.11}"
+    port: 3000

@@ -100,7 +100,9 @@ def import_conversations(path: Path):
 
         # Progress indicator
         if idx % 10 == 0:
-            print(f"Processing conversation {idx}/{len(conversations)}... ({imported} imported, {turns_total} turns)")
+            print(
+                f"Processing conversation {idx}/{len(conversations)}... ({imported} imported, {turns_total} turns)"
+            )
 
         conv_id = memory.create_conversation(topic=title)
         topic_vector = memory.embedding_service.encode(
@@ -166,10 +168,14 @@ def import_conversations(path: Path):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python scripts/import_conversations_windows.py <conversations.json>")
+        print(
+            "Usage: python scripts/import_conversations_windows.py <conversations.json>"
+        )
         print("\nExample:")
         print("  python scripts/import_conversations_windows.py conversations.json")
-        print("  python scripts/import_conversations_windows.py C:\\path\\to\\conversations.json")
+        print(
+            "  python scripts/import_conversations_windows.py C:\\path\\to\\conversations.json"
+        )
         sys.exit(1)
 
     import_conversations(Path(sys.argv[1]))

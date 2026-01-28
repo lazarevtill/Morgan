@@ -2,8 +2,8 @@
 Communication system for emotional AI assistant.
 
 Provides communication style adaptation, user preference learning,
-emotional feedback processing, non-verbal cue detection, and cultural
-emotional awareness for enhanced human-AI interaction.
+emotional feedback processing, non-verbal cue detection, and
+cultural emotional awareness for enhanced human-AI interaction.
 """
 
 from .cultural import CulturalEmotionalAwareness

@@ -14,10 +14,15 @@ from typing import Any, Callable, Dict, List, Optional
 
 import structlog
 
+from morgan.exceptions import (
+    MorganError,
+    EmotionalProcessingError,
+    MemoryProcessingError,
+    RelationshipTrackingError,
+    EmpathyGenerationError,
+)
 from morgan.utils.error_handling import (
     DegradationLevel,
-    ErrorCategory,
-    MorganError,
     get_degradation_manager,
     get_recovery_manager,
 )
@@ -36,56 +41,7 @@ class CompanionFeatureType(Enum):
     MILESTONE_DETECTION = "milestone_detection"
 
 
-class EmotionalProcessingError(MorganError):
-    """Errors specific to emotional processing operations."""
-
-    def __init__(self, message: str, emotion_type: Optional[str] = None, **kwargs):
-        super().__init__(
-            message,
-            category=ErrorCategory.EMOTIONAL,
-            component="emotional_intelligence_engine",
-            **kwargs,
-        )
-        self.emotion_type = emotion_type
-
-
-class RelationshipTrackingError(MorganError):
-    """Errors specific to relationship tracking operations."""
-
-    def __init__(self, message: str, user_id: Optional[str] = None, **kwargs):
-        super().__init__(
-            message,
-            category=ErrorCategory.COMPANION,
-            component="relationship_manager",
-            **kwargs,
-        )
-        self.user_id = user_id
-
-
-class MemoryProcessingError(MorganError):
-    """Errors specific to memory processing operations."""
-
-    def __init__(self, message: str, memory_type: Optional[str] = None, **kwargs):
-        super().__init__(
-            message,
-            category=ErrorCategory.MEMORY,
-            component="memory_processor",
-            **kwargs,
-        )
-        self.memory_type = memory_type
-
-
-class EmpathyGenerationError(MorganError):
-    """Errors specific to empathy generation operations."""
-
-    def __init__(self, message: str, context_type: Optional[str] = None, **kwargs):
-        super().__init__(
-            message,
-            category=ErrorCategory.COMPANION,
-            component="empathy_generator",
-            **kwargs,
-        )
-        self.context_type = context_type
+# RelationshipTrackingError and EmpathyGenerationError are imported from morgan.exceptions
 
 
 @dataclass

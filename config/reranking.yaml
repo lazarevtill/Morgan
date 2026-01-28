@@ -1,0 +1,50 @@
+# Morgan Reranking Configuration
+# Self-hosted reranking service settings
+#
+# This file configures the reranking service layer.
+# Environment variables can override these values with MORGAN_RERANKING_ prefix.
+
+# Remote reranking endpoint (optional FastAPI service)
+remote:
+  # Reranking endpoint URL (leave empty to use local only)
+  endpoint: ""
+  # Request timeout in seconds
+  timeout: 30.0
+
+# Local CrossEncoder model (primary local reranking)
+cross_encoder:
+  # Model name from Hugging Face
+  # Options:
+  #   - cross-encoder/ms-marco-MiniLM-L-6-v2 (fast, English, recommended)
+  #   - cross-encoder/ms-marco-MiniLM-L-12-v2 (better quality, English)
+  #   - BAAI/bge-reranker-base (multilingual)
+  model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+  # Device: cpu, cuda, mps
+  device: "cpu"
+
+# Embedding-based reranking fallback
+embedding_fallback:
+  # Model for embedding similarity fallback
+  model: "all-MiniLM-L6-v2"
+  # Device: cpu, cuda, mps
+  device: "cpu"
+
+# Processing settings
+processing:
+  # Batch size for reranking operations
+  batch_size: 100
+  # Default top K results to return
+  top_k: 20
+
+# Score weighting (for hybrid reranking)
+weighting:
+  # Weight for reranking scores
+  rerank_weight: 0.6
+  # Weight for original scores
+  original_weight: 0.4
+
+# Fallback hierarchy (used in order if previous fails)
+# 1. remote (if endpoint configured)
+# 2. cross_encoder (local)
+# 3. embedding (cosine similarity)
+# 4. bm25 (lexical, always available)

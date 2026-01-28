@@ -45,6 +45,7 @@ dependencies = [
     "requests>=2.31.0",
     "html2text>=2020.1.16",
     "markdown>=3.5.0",
+    "morgan-rag", # Local workspace dependency
 ]
 
 [project.optional-dependencies]

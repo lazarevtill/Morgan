@@ -20,9 +20,9 @@ Architecture:
 import asyncio
 import json
 import os
+import sys
 import time
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -33,32 +33,16 @@ try:
 except ImportError:
     ASYNCSSH_AVAILABLE = False
 
+# Add shared package to path if not already there
+_shared_path = Path(__file__).parent.parent.parent.parent / "shared"
+if _shared_path.exists() and str(_shared_path) not in sys.path:
+    sys.path.insert(0, str(_shared_path.parent))
+
+from shared.models.enums import HostRole, ServiceType
+
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-class HostRole(str, Enum):
-    """Host roles in distributed architecture."""
-
-    MANAGER = "manager"  # Host 1 - Central orchestrator
-    BACKGROUND = "background"  # Host 2 - Background services
-    MAIN_LLM_1 = "main_llm_1"  # Host 3 - RTX 3090 #1
-    MAIN_LLM_2 = "main_llm_2"  # Host 4 - RTX 3090 #2
-    EMBEDDINGS = "embeddings"  # Host 5 - RTX 4070
-    RERANKING = "reranking"  # Host 6 - RTX 2060
-
-
-class ServiceType(str, Enum):
-    """Service types per host."""
-
-    MORGAN_CORE = "morgan_core"
-    OLLAMA = "ollama"
-    QDRANT = "qdrant"
-    REDIS = "redis"
-    RERANKING_API = "reranking_api"
-    PROMETHEUS = "prometheus"
-    GRAFANA = "grafana"
 
 
 @dataclass

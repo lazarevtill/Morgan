@@ -18,7 +18,7 @@ from morgan_cli.client import (
     ClientConfig,
     ConnectionError as MorganConnectionError,
     RequestError,
-    TimeoutError as MorganTimeoutError
+    TimeoutError as MorganTimeoutError,
 )
 from morgan_cli.config import get_config
 from morgan_cli import ui
@@ -30,6 +30,7 @@ console = Console()
 # ============================================================================
 # Command History Support
 # ============================================================================
+
 
 class CommandHistory:
     """Simple command history manager."""
@@ -53,7 +54,11 @@ class CommandHistory:
             command: Command to add
         """
         # Only add non-empty commands (after stripping whitespace)
-        if command and command.strip() and (not self.history or self.history[-1] != command):
+        if (
+            command
+            and command.strip()
+            and (not self.history or self.history[-1] != command)
+        ):
             self.history.append(command)
             if len(self.history) > self.max_size:
                 self.history.pop(0)
@@ -114,6 +119,7 @@ def get_command_history() -> CommandHistory:
 # Helper Functions
 # ============================================================================
 
+
 def handle_error(error: Exception, server_url: str) -> None:
     """
     Handle and display errors appropriately.
@@ -127,22 +133,13 @@ def handle_error(error: Exception, server_url: str) -> None:
     elif isinstance(error, MorganTimeoutError):
         ui.render_timeout_error(60)
     elif isinstance(error, RequestError):
-        ui.render_server_error(
-            error.status_code or 500,
-            str(error),
-            error.details
-        )
+        ui.render_server_error(error.status_code or 500, str(error), error.details)
     else:
-        ui.render_error(
-            error_message=str(error),
-            error_type=type(error).__name__
-        )
+        ui.render_error(error_message=str(error), error_type=type(error).__name__)
 
 
 async def create_client(
-    server_url: Optional[str],
-    api_key: Optional[str],
-    user_id: Optional[str]
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
 ) -> MorganClient:
     """
     Create and connect a Morgan client.
@@ -162,7 +159,7 @@ async def create_client(
         user_id=config.user_id,
         timeout_seconds=config.timeout_seconds,
         retry_attempts=config.retry_attempts,
-        retry_delay_seconds=config.retry_delay_seconds
+        retry_delay_seconds=config.retry_delay_seconds,
     )
 
     client = MorganClient(client_config)
@@ -174,29 +171,18 @@ async def create_client(
 # CLI Group
 # ============================================================================
 
+
 @click.group()
 @click.version_option(version="0.1.0", prog_name="morgan")
-@click.option(
-    "--server-url",
-    envvar="MORGAN_SERVER_URL",
-    help="Morgan server URL"
-)
-@click.option(
-    "--api-key",
-    envvar="MORGAN_API_KEY",
-    help="API key for authentication"
-)
-@click.option(
-    "--user-id",
-    envvar="MORGAN_USER_ID",
-    help="User identifier"
-)
+@click.option("--server-url", envvar="MORGAN_SERVER_URL", help="Morgan server URL")
+@click.option("--api-key", envvar="MORGAN_API_KEY", help="API key for authentication")
+@click.option("--user-id", envvar="MORGAN_USER_ID", help="User identifier")
 @click.pass_context
 def cli(
     ctx: click.Context,
     server_url: Optional[str],
     api_key: Optional[str],
-    user_id: Optional[str]
+    user_id: Optional[str],
 ):
     """
     Morgan CLI - Your personal AI assistant.
@@ -215,6 +201,7 @@ def cli(
 # Chat Command
 # ============================================================================
 
+
 @cli.command()
 @click.pass_context
 def chat(ctx: click.Context):
@@ -225,17 +212,15 @@ def chat(ctx: click.Context):
     have a conversation with Morgan. Type your messages and press Enter
     to send them. Use /help for available commands during the chat.
     """
-    asyncio.run(_chat_interactive(
-        ctx.obj.get("server_url"),
-        ctx.obj.get("api_key"),
-        ctx.obj.get("user_id")
-    ))
+    asyncio.run(
+        _chat_interactive(
+            ctx.obj.get("server_url"), ctx.obj.get("api_key"), ctx.obj.get("user_id")
+        )
+    )
 
 
 async def _chat_interactive(
-    server_url: Optional[str],
-    api_key: Optional[str],
-    user_id: Optional[str]
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
 ):
     """Interactive chat implementation."""
     ui.render_welcome()
@@ -277,7 +262,7 @@ async def _chat_interactive(
                         status = await client.http.get_status()
                         ui.render_message(
                             f"**Status:** {status.get('status', 'unknown')}",
-                            sender="System"
+                            sender="System",
                         )
                         continue
                     elif command == "profile":
@@ -286,7 +271,7 @@ async def _chat_interactive(
                             f"**User:** {profile.get('user_id', 'unknown')}\n"
                             f"**Trust Level:** {profile.get('trust_level', 0):.2f}\n"
                             f"**Interactions:** {profile.get('interaction_count', 0)}",
-                            sender="System"
+                            sender="System",
                         )
                         continue
                     elif command == "memory":
@@ -294,22 +279,21 @@ async def _chat_interactive(
                         ui.render_message(
                             f"**Total Conversations:** {stats.get('total_conversations', 0)}\n"
                             f"**Total Messages:** {stats.get('total_messages', 0)}",
-                            sender="System"
+                            sender="System",
                         )
                         continue
                     else:
                         ui.render_error(
                             f"Unknown command: /{command}",
                             error_type="Command Error",
-                            suggestions=["Type /help for available commands"]
+                            suggestions=["Type /help for available commands"],
                         )
                         continue
 
                 # Send message to Morgan
                 with ui.show_progress("Morgan is thinking..."):
                     response = await client.http.chat(
-                        message=user_message,
-                        conversation_id=conversation_id
+                        message=user_message, conversation_id=conversation_id
                     )
 
                 # Update conversation ID
@@ -322,8 +306,8 @@ async def _chat_interactive(
                     metadata={
                         "emotional_tone": response.get("emotional_tone"),
                         "confidence": response.get("confidence"),
-                        "sources": response.get("sources", [])
-                    }
+                        "sources": response.get("sources", []),
+                    },
                 )
 
             except KeyboardInterrupt:
@@ -341,6 +325,7 @@ async def _chat_interactive(
 # Ask Command
 # ============================================================================
 
+
 @cli.command()
 @click.argument("question", nargs=-1, required=True)
 @click.pass_context
@@ -355,19 +340,21 @@ def ask(ctx: click.Context, question: tuple[str, ...]):
         morgan ask "What is the weather like today?"
     """
     question_text = " ".join(question)
-    asyncio.run(_ask_question(
-        question_text,
-        ctx.obj.get("server_url"),
-        ctx.obj.get("api_key"),
-        ctx.obj.get("user_id")
-    ))
+    asyncio.run(
+        _ask_question(
+            question_text,
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
 
 
 async def _ask_question(
     question: str,
     server_url: Optional[str],
     api_key: Optional[str],
-    user_id: Optional[str]
+    user_id: Optional[str],
 ):
     """Ask a single question implementation."""
     try:
@@ -381,8 +368,8 @@ async def _ask_question(
             sender="Morgan",
             metadata={
                 "emotional_tone": response.get("emotional_tone"),
-                "confidence": response.get("confidence")
-            }
+                "confidence": response.get("confidence"),
+            },
         )
 
         await client.close()
@@ -396,30 +383,23 @@ async def _ask_question(
 # Learn Command
 # ============================================================================
 
+
 @cli.command()
 @click.option(
     "--file",
     "-f",
     "file_path",
     type=click.Path(exists=True),
-    help="Path to file to learn from"
+    help="Path to file to learn from",
 )
-@click.option(
-    "--url",
-    "-u",
-    help="URL to fetch and learn from"
-)
-@click.option(
-    "--content",
-    "-c",
-    help="Direct content to learn"
-)
+@click.option("--url", "-u", help="URL to fetch and learn from")
+@click.option("--content", "-c", help="Direct content to learn")
 @click.option(
     "--type",
     "-t",
     "doc_type",
     default="auto",
-    help="Document type (auto, pdf, markdown, text, html)"
+    help="Document type (auto, pdf, markdown, text, html)",
 )
 @click.pass_context
 def learn(
@@ -427,7 +407,7 @@ def learn(
     file_path: Optional[str],
     url: Optional[str],
     content: Optional[str],
-    doc_type: str
+    doc_type: str,
 ):
     """
     Add documents to Morgan's knowledge base.
@@ -445,15 +425,17 @@ def learn(
         click.echo("Error: Must provide --file, --url, or --content")
         sys.exit(1)
 
-    asyncio.run(_learn_content(
-        file_path,
-        url,
-        content,
-        doc_type,
-        ctx.obj.get("server_url"),
-        ctx.obj.get("api_key"),
-        ctx.obj.get("user_id")
-    ))
+    asyncio.run(
+        _learn_content(
+            file_path,
+            url,
+            content,
+            doc_type,
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
 
 
 async def _learn_content(
@@ -463,7 +445,7 @@ async def _learn_content(
     doc_type: str,
     server_url: Optional[str],
     api_key: Optional[str],
-    user_id: Optional[str]
+    user_id: Optional[str],
 ):
     """Learn content implementation."""
     try:
@@ -478,10 +460,7 @@ async def _learn_content(
 
         with ui.show_progress("Processing document..."):
             response = await client.http.learn(
-                source=source,
-                url=url,
-                content=content,
-                doc_type=doc_type
+                source=source, url=url, content=content, doc_type=doc_type
             )
 
         ui.render_status("success", "Document learned successfully!")
@@ -489,7 +468,7 @@ async def _learn_content(
             f"**Documents Processed:** {response.get('documents_processed', 0)}\n"
             f"**Chunks Created:** {response.get('chunks_created', 0)}\n"
             f"**Processing Time:** {response.get('processing_time_seconds', 0):.2f}s",
-            sender="System"
+            sender="System",
         )
 
         await client.close()
@@ -503,29 +482,13 @@ async def _learn_content(
 # Memory Command
 # ============================================================================
 
+
 @cli.command()
-@click.option(
-    "--stats",
-    is_flag=True,
-    help="Show memory statistics"
-)
-@click.option(
-    "--search",
-    "-s",
-    help="Search conversation history"
-)
-@click.option(
-    "--cleanup",
-    is_flag=True,
-    help="Clean up old conversations"
-)
+@click.option("--stats", is_flag=True, help="Show memory statistics")
+@click.option("--search", "-s", help="Search conversation history")
+@click.option("--cleanup", is_flag=True, help="Clean up old conversations")
 @click.pass_context
-def memory(
-    ctx: click.Context,
-    stats: bool,
-    search: Optional[str],
-    cleanup: bool
-):
+def memory(ctx: click.Context, stats: bool, search: Optional[str], cleanup: bool):
     """
     Manage Morgan's conversation memory.
 
@@ -541,14 +504,16 @@ def memory(
         click.echo("Error: Must provide --stats, --search, or --cleanup")
         sys.exit(1)
 
-    asyncio.run(_manage_memory(
-        stats,
-        search,
-        cleanup,
-        ctx.obj.get("server_url"),
-        ctx.obj.get("api_key"),
-        ctx.obj.get("user_id")
-    ))
+    asyncio.run(
+        _manage_memory(
+            stats,
+            search,
+            cleanup,
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
 
 
 async def _manage_memory(
@@ -557,7 +522,7 @@ async def _manage_memory(
     do_cleanup: bool,
     server_url: Optional[str],
     api_key: Optional[str],
-    user_id: Optional[str]
+    user_id: Optional[str],
 ):
     """Memory management implementation."""
     try:
@@ -569,7 +534,7 @@ async def _manage_memory(
                 f"**Total Conversations:** {stats.get('total_conversations', 0)}\n"
                 f"**Active Conversations:** {stats.get('active_conversations', 0)}\n"
                 f"**Total Messages:** {stats.get('total_messages', 0)}",
-                sender="Memory Stats"
+                sender="Memory Stats",
             )
 
         if search_query:
@@ -583,9 +548,7 @@ async def _manage_memory(
                         f"**Q:** {result.get('message', '')}\n\n"
                         f"**A:** {result.get('response', '')}",
                         sender="Memory",
-                        metadata={
-                            "relevance": result.get("relevance_score", 0)
-                        }
+                        metadata={"relevance": result.get("relevance_score", 0)},
                     )
             else:
                 ui.render_status("info", "No results found")
@@ -597,7 +560,7 @@ async def _manage_memory(
                 ui.render_status("success", "Cleanup complete!")
                 ui.render_message(
                     f"**Conversations Removed:** {result.get('removed', 0)}",
-                    sender="System"
+                    sender="System",
                 )
 
         await client.close()
@@ -611,23 +574,12 @@ async def _manage_memory(
 # Knowledge Command
 # ============================================================================
 
+
 @cli.command()
-@click.option(
-    "--stats",
-    is_flag=True,
-    help="Show knowledge base statistics"
-)
-@click.option(
-    "--search",
-    "-s",
-    help="Search knowledge base"
-)
+@click.option("--stats", is_flag=True, help="Show knowledge base statistics")
+@click.option("--search", "-s", help="Search knowledge base")
 @click.pass_context
-def knowledge(
-    ctx: click.Context,
-    stats: bool,
-    search: Optional[str]
-):
+def knowledge(ctx: click.Context, stats: bool, search: Optional[str]):
     """
     Manage Morgan's knowledge base.
 
@@ -642,13 +594,15 @@ def knowledge(
         click.echo("Error: Must provide --stats or --search")
         sys.exit(1)
 
-    asyncio.run(_manage_knowledge(
-        stats,
-        search,
-        ctx.obj.get("server_url"),
-        ctx.obj.get("api_key"),
-        ctx.obj.get("user_id")
-    ))
+    asyncio.run(
+        _manage_knowledge(
+            stats,
+            search,
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
 
 
 async def _manage_knowledge(
@@ -656,7 +610,7 @@ async def _manage_knowledge(
     search_query: Optional[str],
     server_url: Optional[str],
     api_key: Optional[str],
-    user_id: Optional[str]
+    user_id: Optional[str],
 ):
     """Knowledge management implementation."""
     try:
@@ -668,7 +622,7 @@ async def _manage_knowledge(
                 f"**Total Documents:** {stats.get('total_documents', 0)}\n"
                 f"**Total Chunks:** {stats.get('total_chunks', 0)}\n"
                 f"**Collections:** {', '.join(stats.get('collections', []))}",
-                sender="Knowledge Stats"
+                sender="Knowledge Stats",
             )
 
         if search_query:
@@ -683,8 +637,8 @@ async def _manage_knowledge(
                         sender="Knowledge",
                         metadata={
                             "source": result.get("source"),
-                            "score": result.get("score", 0)
-                        }
+                            "score": result.get("score", 0),
+                        },
                     )
             else:
                 ui.render_status("info", "No results found")
@@ -700,13 +654,9 @@ async def _manage_knowledge(
 # Health Command
 # ============================================================================
 
+
 @cli.command()
-@click.option(
-    "--detailed",
-    "-d",
-    is_flag=True,
-    help="Show detailed status information"
-)
+@click.option("--detailed", "-d", is_flag=True, help="Show detailed status information")
 @click.pass_context
 def health(ctx: click.Context, detailed: bool):
     """
@@ -719,19 +669,21 @@ def health(ctx: click.Context, detailed: bool):
         morgan health
         morgan health --detailed
     """
-    asyncio.run(_check_health(
-        detailed,
-        ctx.obj.get("server_url"),
-        ctx.obj.get("api_key"),
-        ctx.obj.get("user_id")
-    ))
+    asyncio.run(
+        _check_health(
+            detailed,
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
 
 
 async def _check_health(
     detailed: bool,
     server_url: Optional[str],
     api_key: Optional[str],
-    user_id: Optional[str]
+    user_id: Optional[str],
 ):
     """Health check implementation."""
     try:
@@ -746,7 +698,7 @@ async def _check_health(
                 f"**Status:** {status.get('status', 'unknown')}\n"
                 f"**Version:** {status.get('version', 'unknown')}\n"
                 f"**Uptime:** {status.get('uptime_seconds', 0):.0f}s",
-                sender="Server Status"
+                sender="Server Status",
             )
 
             # Show component status
@@ -779,6 +731,7 @@ async def _check_health(
 # ============================================================================
 # Main Entry Point
 # ============================================================================
+
 
 def main():
     """Main entry point for the CLI."""

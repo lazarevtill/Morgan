@@ -590,7 +590,7 @@ class TestIntegration:
         assert "total_attempts" in stats
         assert "success_rate" in stats
 
-    @patch("morgan.services.embedding_service.get_embedding_service")
+    @patch("morgan.embeddings.service.get_embedding_service")
     def test_embedding_service_error_handling(self, mock_get_service):
         """Test error handling in embedding service integration."""
 

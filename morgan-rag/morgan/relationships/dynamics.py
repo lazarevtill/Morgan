@@ -13,7 +13,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List
 
-from ..emotional.models import CompanionProfile, EmotionalState, InteractionData
+from ..intelligence.core.models import CompanionProfile, EmotionalState, InteractionData
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -39,6 +39,7 @@ class CommunicationStyle(Enum):
     SURFACE_LEVEL = "surface_level"
     TECHNICAL_FOCUS = "technical_focus"
     EMOTIONAL_FOCUS = "emotional_focus"
+    STABLE = "stable"
 
 
 @dataclass
@@ -1020,65 +1021,782 @@ class RelationshipDynamics:
 
         return recommendations
 
-    # Placeholder implementations for remaining helper methods
     def _assess_emotional_responsiveness(
-        self, emotional_history, interaction_history
+        self,
+        emotional_history: List[EmotionalState],
+        interaction_history: List[InteractionData],
     ) -> float:
-        return 0.7  # Simplified implementation
+        """
+        Assess how well Morgan responds to user's emotional states.
 
-    def _calculate_mood_correlation(self, emotional_history) -> float:
-        return 0.6  # Simplified implementation
+        Calculates based on:
+        - Correlation between detected emotions and response appropriateness
+        - Time to emotional acknowledgment
+        - Emotional alignment scores
+        """
+        if len(emotional_history) < 3 or len(interaction_history) < 3:
+            return 0.5  # Neutral default for insufficient data
 
-    def _determine_emotional_growth(self, emotional_history) -> str:
-        return "stable"  # Simplified implementation
+        responsiveness_scores = []
 
-    def _determine_trust_trajectory(self, user_profile, interaction_history) -> str:
-        return "building" if user_profile.trust_level > 0.5 else "stable"
+        for i, interaction in enumerate(interaction_history):
+            # Find matching emotional state
+            matching_emotions = [
+                e
+                for e in emotional_history
+                if abs(
+                    (
+                        e.timestamp - interaction.conversation_context.timestamp
+                    ).total_seconds()
+                )
+                < 60
+            ]
 
-    def _calculate_trust_velocity(self, user_profile, interaction_history) -> float:
-        return 0.1  # Simplified implementation
+            if matching_emotions:
+                emotion = matching_emotions[0]
 
-    def _identify_trust_milestones(self, user_profile) -> List[str]:
-        return [
-            m.milestone_type.value
-            for m in user_profile.relationship_milestones
-            if "trust" in m.milestone_type.value
+                # Score based on user satisfaction relative to emotional intensity
+                satisfaction = interaction.user_satisfaction or 0.5
+
+                # Higher score if satisfaction is good during negative emotions
+                # (indicating empathetic response)
+                if emotion.primary_emotion.value in ["sadness", "fear", "anger"]:
+                    if satisfaction > 0.6:
+                        responsiveness_scores.append(1.0)  # Good empathetic response
+                    elif satisfaction > 0.4:
+                        responsiveness_scores.append(0.6)
+                    else:
+                        responsiveness_scores.append(0.3)
+                else:
+                    # For positive/neutral emotions, satisfaction directly indicates responsiveness
+                    responsiveness_scores.append(satisfaction)
+
+        if responsiveness_scores:
+            return min(1.0, statistics.mean(responsiveness_scores))
+
+        return 0.5
+
+    def _calculate_mood_correlation(
+        self, emotional_history: List[EmotionalState]
+    ) -> float:
+        """
+        Calculate correlation between consecutive emotional states.
+
+        High correlation indicates stable emotional patterns,
+        low correlation indicates volatility.
+        """
+        if len(emotional_history) < 4:
+            return 0.0
+
+        # Calculate intensity changes between consecutive emotions
+        intensity_changes = []
+        for i in range(1, len(emotional_history)):
+            prev_intensity = emotional_history[i - 1].intensity
+            curr_intensity = emotional_history[i].intensity
+            change = abs(curr_intensity - prev_intensity)
+            intensity_changes.append(change)
+
+        # Also consider emotion type changes
+        emotion_consistency = []
+        for i in range(1, len(emotional_history)):
+            prev_emotion = emotional_history[i - 1].primary_emotion.value
+            curr_emotion = emotional_history[i].primary_emotion.value
+            # Same emotion = 1.0, different = 0.0
+            emotion_consistency.append(1.0 if prev_emotion == curr_emotion else 0.0)
+
+        # Correlation is inverse of average change
+        avg_change = statistics.mean(intensity_changes) if intensity_changes else 0
+        stability_score = 1.0 - min(avg_change, 1.0)
+
+        # Combine with emotion consistency
+        consistency_score = (
+            statistics.mean(emotion_consistency) if emotion_consistency else 0.5
+        )
+
+        return stability_score * 0.6 + consistency_score * 0.4
+
+    def _determine_emotional_growth(
+        self, emotional_history: List[EmotionalState]
+    ) -> str:
+        """
+        Determine the trend in emotional patterns over time.
+
+        Returns: "improving", "stable", "concerning"
+        """
+        if len(emotional_history) < 6:
+            return "stable"
+
+        # Split into early and recent periods
+        mid_point = len(emotional_history) // 2
+        early_period = emotional_history[:mid_point]
+        recent_period = emotional_history[mid_point:]
+
+        # Calculate positive emotion ratios
+        positive_emotions = ["joy", "surprise", "trust", "anticipation"]
+
+        early_positive = sum(
+            1 for e in early_period if e.primary_emotion.value in positive_emotions
+        ) / len(early_period)
+
+        recent_positive = sum(
+            1 for e in recent_period if e.primary_emotion.value in positive_emotions
+        ) / len(recent_period)
+
+        # Calculate intensity trends
+        early_avg_intensity = statistics.mean([e.intensity for e in early_period])
+        recent_avg_intensity = statistics.mean([e.intensity for e in recent_period])
+
+        # Determine growth direction
+        positive_change = recent_positive - early_positive
+
+        if positive_change > 0.1:
+            return "improving"
+        elif positive_change < -0.1:
+            return "concerning"
+        else:
+            return "stable"
+
+    def _determine_trust_trajectory(
+        self, user_profile: CompanionProfile, interaction_history: List[InteractionData]
+    ) -> str:
+        """
+        Determine trust trajectory based on multiple factors.
+
+        Returns: "building", "stable", "declining"
+        """
+        current_trust = user_profile.trust_level
+
+        if len(interaction_history) < 5:
+            return "stable"
+
+        # Analyze trust indicators over time
+        # Trust increases with: positive interactions, vulnerability sharing, consistency
+
+        # Check recent satisfaction trend
+        recent_interactions = interaction_history[-10:]
+        satisfactions = [
+            i.user_satisfaction
+            for i in recent_interactions
+            if i.user_satisfaction is not None
         ]
 
-    def _count_vulnerability_indicators(self, interaction_history) -> int:
-        return 2  # Simplified implementation
+        if len(satisfactions) >= 3:
+            # Split into halves and compare
+            mid = len(satisfactions) // 2
+            early_avg = statistics.mean(satisfactions[:mid])
+            recent_avg = statistics.mean(satisfactions[mid:])
 
-    def _assess_consistency_impact(self, user_profile, interaction_history) -> float:
-        return 0.6  # Simplified implementation
+            if recent_avg > early_avg + 0.1:
+                return "building"
+            elif recent_avg < early_avg - 0.1:
+                return "declining"
 
-    def _assess_trust_recovery_ability(self, user_profile) -> float:
-        return 0.7  # Simplified implementation
+        # Check milestone achievements
+        trust_milestones = [
+            m
+            for m in user_profile.relationship_milestones
+            if "trust" in m.milestone_type.value.lower()
+        ]
 
-    def _analyze_style_evolution(self, interaction_history) -> CommunicationStyle:
-        return CommunicationStyle.DEEPENING  # Simplified implementation
+        if len(trust_milestones) >= 2:
+            return "building"
 
-    def _analyze_depth_progression(self, interaction_history) -> str:
-        return "deepening"  # Simplified implementation
+        # Use current trust level as indicator
+        if current_trust > 0.7:
+            return "stable"  # High trust tends to stabilize
+        elif current_trust > 0.4:
+            return "building"
+        else:
+            return "stable"
 
-    def _analyze_topic_evolution(self, interaction_history) -> Dict[str, float]:
-        return {}  # Simplified implementation
+    def _calculate_trust_velocity(
+        self, user_profile: CompanionProfile, interaction_history: List[InteractionData]
+    ) -> float:
+        """
+        Calculate rate of trust change over time.
 
-    def _analyze_response_quality_trend(self, interaction_history) -> str:
-        return "improving"  # Simplified implementation
+        Returns: value between -1.0 and 1.0
+        Positive = trust increasing, Negative = trust decreasing
+        """
+        if len(interaction_history) < 5:
+            return 0.0
 
-    def _assess_mutual_understanding(self, interaction_history) -> float:
-        return 0.7  # Simplified implementation
+        # Estimate trust change based on interaction quality
+        recent_interactions = interaction_history[-20:]
+
+        # Calculate weighted satisfaction scores (more recent = higher weight)
+        weighted_scores = []
+        for i, interaction in enumerate(recent_interactions):
+            if interaction.user_satisfaction is not None:
+                weight = (i + 1) / len(recent_interactions)  # Increasing weight
+                weighted_scores.append((interaction.user_satisfaction, weight))
+
+        if len(weighted_scores) < 3:
+            return 0.0
+
+        # Calculate trend
+        total_weight = sum(w for _, w in weighted_scores)
+        early_weighted = (
+            sum(s * w for s, w in weighted_scores[: len(weighted_scores) // 2])
+            / (total_weight / 2)
+            if total_weight > 0
+            else 0
+        )
+
+        late_weighted = (
+            sum(s * w for s, w in weighted_scores[len(weighted_scores) // 2 :])
+            / (total_weight / 2)
+            if total_weight > 0
+            else 0
+        )
+
+        velocity = late_weighted - early_weighted
+
+        # Normalize to -1 to 1 range
+        return max(-1.0, min(1.0, velocity * 2))
+
+    def _identify_trust_milestones(self, user_profile: CompanionProfile) -> List[str]:
+        """Identify trust-related milestones achieved."""
+        trust_keywords = [
+            "trust",
+            "confidence",
+            "reliable",
+            "vulnerable",
+            "share",
+            "open",
+        ]
+
+        trust_milestones = []
+        for milestone in user_profile.relationship_milestones:
+            milestone_name = milestone.milestone_type.value.lower()
+            if any(keyword in milestone_name for keyword in trust_keywords):
+                trust_milestones.append(milestone.milestone_type.value)
+
+        return trust_milestones
+
+    def _count_vulnerability_indicators(
+        self, interaction_history: List[InteractionData]
+    ) -> int:
+        """
+        Count interactions where user showed vulnerability.
+
+        Vulnerability indicators:
+        - Personal/emotional topics
+        - Questions about difficult topics
+        - Expressions of uncertainty or need for support
+        """
+        vulnerability_keywords = [
+            "feel",
+            "worried",
+            "scared",
+            "anxious",
+            "lonely",
+            "sad",
+            "help me",
+            "advice",
+            "confused",
+            "struggling",
+            "difficult",
+            "personal",
+            "private",
+            "trust",
+            "secret",
+            "vulnerable",
+        ]
+
+        vulnerability_count = 0
+
+        for interaction in interaction_history:
+            message_text = interaction.conversation_context.message_text.lower()
+
+            # Check for vulnerability keywords
+            if any(keyword in message_text for keyword in vulnerability_keywords):
+                vulnerability_count += 1
+
+            # Check for emotional intensity in detected emotions
+            # (would need emotion data attached to interaction)
+            if hasattr(interaction, "detected_emotions"):
+                for emotion in getattr(interaction, "detected_emotions", []):
+                    if emotion.get("intensity", 0) > 0.7:
+                        vulnerability_count += 1
+                        break
+
+        return vulnerability_count
+
+    def _assess_consistency_impact(
+        self, user_profile: CompanionProfile, interaction_history: List[InteractionData]
+    ) -> float:
+        """
+        Assess how consistency affects the relationship.
+
+        High consistency correlates with trust building.
+        """
+        if len(interaction_history) < 5:
+            return 0.5
+
+        # Calculate interaction consistency
+        consistency_score = self._calculate_consistency_score(interaction_history)
+
+        # Calculate satisfaction consistency
+        satisfactions = [
+            i.user_satisfaction
+            for i in interaction_history
+            if i.user_satisfaction is not None
+        ]
+
+        if len(satisfactions) >= 3:
+            try:
+                satisfaction_variance = statistics.variance(satisfactions)
+                satisfaction_consistency = 1.0 / (1.0 + satisfaction_variance * 5)
+            except statistics.StatisticsError:
+                satisfaction_consistency = 0.5
+        else:
+            satisfaction_consistency = 0.5
+
+        # Combine consistency measures
+        overall_consistency = (consistency_score + satisfaction_consistency) / 2
+
+        # Impact is the correlation between consistency and current trust
+        trust = user_profile.trust_level
+
+        # If high consistency and high trust, consistency has positive impact
+        if overall_consistency > 0.6 and trust > 0.6:
+            return 0.8
+        elif overall_consistency < 0.4 and trust < 0.4:
+            return 0.3  # Low consistency, low trust - negative impact
+        else:
+            return 0.5  # Neutral
+
+    def _assess_trust_recovery_ability(self, user_profile: CompanionProfile) -> float:
+        """
+        Assess ability to recover from trust issues.
+
+        Based on:
+        - Relationship resilience (milestone count, duration)
+        - Past recovery patterns
+        - Current trust buffer
+        """
+        # Milestone diversity indicates relationship resilience
+        milestone_count = len(user_profile.relationship_milestones)
+        milestone_factor = min(milestone_count / 5, 1.0)
+
+        # Relationship age provides stability
+        relationship_days = user_profile.get_relationship_age_days()
+        age_factor = min(relationship_days / 90, 1.0)  # Cap at 90 days
+
+        # Current trust level provides buffer
+        trust_buffer = user_profile.trust_level
+
+        # Engagement indicates investment in relationship
+        engagement_factor = user_profile.engagement_score
+
+        # Combine factors
+        recovery_ability = (
+            milestone_factor * 0.25
+            + age_factor * 0.25
+            + trust_buffer * 0.25
+            + engagement_factor * 0.25
+        )
+
+        return min(1.0, recovery_ability)
+
+    def _analyze_style_evolution(
+        self, interaction_history: List[InteractionData]
+    ) -> CommunicationStyle:
+        """
+        Analyze how communication style has evolved.
+        """
+        if len(interaction_history) < 6:
+            return CommunicationStyle.STABLE
+
+        # Split into early and recent
+        mid_point = len(interaction_history) // 2
+        early_interactions = interaction_history[:mid_point]
+        recent_interactions = interaction_history[mid_point:]
+
+        # Analyze message characteristics
+        def analyze_formality(interactions):
+            formal_indicators = 0
+            casual_indicators = 0
+
+            for interaction in interactions:
+                text = interaction.conversation_context.message_text.lower()
+
+                # Formal indicators
+                if any(
+                    word in text
+                    for word in ["please", "thank you", "would you", "could you"]
+                ):
+                    formal_indicators += 1
+
+                # Casual indicators
+                if any(word in text for word in ["hey", "cool", "lol", "haha", "yeah"]):
+                    casual_indicators += 1
+
+            return formal_indicators, casual_indicators
+
+        early_formal, early_casual = analyze_formality(early_interactions)
+        recent_formal, recent_casual = analyze_formality(recent_interactions)
+
+        early_ratio = early_formal / max(early_casual, 1)
+        recent_ratio = recent_formal / max(recent_casual, 1)
+
+        if recent_ratio < early_ratio * 0.7:
+            return CommunicationStyle.FORMAL_TO_CASUAL
+        elif recent_ratio > early_ratio * 1.3:
+            return CommunicationStyle.CASUAL_TO_FORMAL
+
+        # Check for deepening
+        early_msg_lengths = [
+            len(i.conversation_context.message_text) for i in early_interactions
+        ]
+        recent_msg_lengths = [
+            len(i.conversation_context.message_text) for i in recent_interactions
+        ]
+
+        if (
+            statistics.mean(recent_msg_lengths)
+            > statistics.mean(early_msg_lengths) * 1.3
+        ):
+            return CommunicationStyle.DEEPENING
+
+        # Check topic patterns
+        technical_topics = ["code", "programming", "technical", "algorithm", "data"]
+        emotional_topics = ["feel", "emotion", "happy", "sad", "worried"]
+
+        recent_text = " ".join(
+            [i.conversation_context.message_text.lower() for i in recent_interactions]
+        )
+
+        technical_count = sum(1 for word in technical_topics if word in recent_text)
+        emotional_count = sum(1 for word in emotional_topics if word in recent_text)
+
+        if technical_count > emotional_count * 2:
+            return CommunicationStyle.TECHNICAL_FOCUS
+        elif emotional_count > technical_count * 2:
+            return CommunicationStyle.EMOTIONAL_FOCUS
+
+        return (
+            CommunicationStyle.DEEPENING
+        )  # Default to deepening for positive trajectory
+
+    def _analyze_depth_progression(
+        self, interaction_history: List[InteractionData]
+    ) -> str:
+        """
+        Analyze whether conversation depth is increasing.
+
+        Returns: "deepening", "stable", "superficial"
+        """
+        if len(interaction_history) < 6:
+            return "stable"
+
+        # Metrics for depth:
+        # 1. Message length (longer = deeper)
+        # 2. Topic diversity
+        # 3. Emotional content
+        # 4. Question complexity
+
+        mid_point = len(interaction_history) // 2
+        early = interaction_history[:mid_point]
+        recent = interaction_history[mid_point:]
+
+        # Message length analysis
+        early_avg_length = statistics.mean(
+            [len(i.conversation_context.message_text) for i in early]
+        )
+        recent_avg_length = statistics.mean(
+            [len(i.conversation_context.message_text) for i in recent]
+        )
+
+        length_change = (recent_avg_length - early_avg_length) / max(
+            early_avg_length, 1
+        )
+
+        # Topic diversity
+        early_topics = set()
+        recent_topics = set()
+        for i in early:
+            early_topics.update(i.topics_discussed)
+        for i in recent:
+            recent_topics.update(i.topics_discussed)
+
+        topic_growth = len(recent_topics) - len(early_topics)
+
+        # Combine metrics
+        if length_change > 0.2 and topic_growth > 0:
+            return "deepening"
+        elif length_change < -0.2:
+            return "superficial"
+        else:
+            return "stable"
+
+    def _analyze_topic_evolution(
+        self, interaction_history: List[InteractionData]
+    ) -> Dict[str, float]:
+        """
+        Analyze how topic preferences have changed over time.
+
+        Returns: Dict mapping topic categories to change scores (-1 to 1)
+        """
+        if len(interaction_history) < 6:
+            return {}
+
+        mid_point = len(interaction_history) // 2
+        early = interaction_history[:mid_point]
+        recent = interaction_history[mid_point:]
+
+        # Categorize topics
+        topic_categories = {
+            "technical": ["code", "programming", "software", "algorithm", "debug"],
+            "emotional": ["feel", "emotion", "happy", "sad", "worried"],
+            "personal": ["life", "family", "friend", "work", "hobby"],
+            "learning": ["learn", "study", "understand", "explain", "teach"],
+            "creative": ["create", "design", "art", "write", "idea"],
+        }
+
+        def count_category_mentions(interactions):
+            counts = {cat: 0 for cat in topic_categories}
+            for interaction in interactions:
+                text = interaction.conversation_context.message_text.lower()
+                topics = " ".join(interaction.topics_discussed).lower()
+                combined = text + " " + topics
+
+                for category, keywords in topic_categories.items():
+                    if any(kw in combined for kw in keywords):
+                        counts[category] += 1
+
+            return counts
+
+        early_counts = count_category_mentions(early)
+        recent_counts = count_category_mentions(recent)
+
+        # Calculate change for each category
+        evolution = {}
+        for category in topic_categories:
+            early_rate = early_counts[category] / max(len(early), 1)
+            recent_rate = recent_counts[category] / max(len(recent), 1)
+
+            # Normalize to -1 to 1 range
+            change = recent_rate - early_rate
+            evolution[category] = max(-1.0, min(1.0, change * 5))
+
+        return evolution
+
+    def _analyze_response_quality_trend(
+        self, interaction_history: List[InteractionData]
+    ) -> str:
+        """
+        Analyze trend in response quality based on user satisfaction.
+
+        Returns: "improving", "stable", "declining"
+        """
+        if len(interaction_history) < 6:
+            return "stable"
+
+        # Get satisfaction scores
+        satisfactions = [
+            (i, i.user_satisfaction)
+            for i in range(len(interaction_history))
+            if interaction_history[i].user_satisfaction is not None
+        ]
+
+        if len(satisfactions) < 4:
+            return "stable"
+
+        # Linear regression approximation
+        n = len(satisfactions)
+        x_mean = sum(i for i, _ in satisfactions) / n
+        y_mean = sum(s for _, s in satisfactions) / n
+
+        numerator = sum((i - x_mean) * (s - y_mean) for i, s in satisfactions)
+        denominator = sum((i - x_mean) ** 2 for i, _ in satisfactions)
+
+        if denominator == 0:
+            return "stable"
+
+        slope = numerator / denominator
+
+        # Interpret slope
+        if slope > 0.01:
+            return "improving"
+        elif slope < -0.01:
+            return "declining"
+        else:
+            return "stable"
+
+    def _assess_mutual_understanding(
+        self, interaction_history: List[InteractionData]
+    ) -> float:
+        """
+        Assess level of mutual understanding based on interaction patterns.
+        """
+        if len(interaction_history) < 5:
+            return 0.5
+
+        understanding_indicators = []
+
+        for interaction in interaction_history:
+            indicators = 0.5  # Base score
+
+            # High satisfaction indicates good understanding
+            if interaction.user_satisfaction:
+                indicators = interaction.user_satisfaction
+
+            # Topic follow-through indicates understanding
+            if len(interaction.topics_discussed) > 0:
+                indicators += 0.1
+
+            # Longer sessions might indicate engagement
+            if interaction.conversation_context.session_duration:
+                duration_mins = (
+                    interaction.conversation_context.session_duration.total_seconds()
+                    / 60
+                )
+                if duration_mins > 5:
+                    indicators += 0.1
+
+            understanding_indicators.append(min(1.0, indicators))
+
+        return statistics.mean(understanding_indicators)
 
     def _calculate_communication_efficiency(
-        self, interaction_history, user_profile
+        self, interaction_history: List[InteractionData], user_profile: CompanionProfile
     ) -> float:
-        return 0.6  # Simplified implementation
+        """
+        Calculate communication efficiency score.
 
-    def _identify_trajectory_factors(self, dynamics_analysis) -> List[str]:
-        return ["trust_level", "engagement_score"]  # Simplified implementation
+        Efficiency = achieving goals with minimal friction/confusion
+        """
+        if len(interaction_history) < 5:
+            return 0.5
 
-    def _identify_intervention_opportunities(self, dynamics_analysis) -> List[str]:
-        return ["increase_interaction_frequency"]  # Simplified implementation
+        # Factors:
+        # 1. Satisfaction per message length ratio
+        # 2. Topic resolution (staying on topic)
+        # 3. Clarification requests (fewer = more efficient)
 
-    def _predict_milestone_opportunities(self, user_profile, pattern) -> List[str]:
-        return ["trust_building", "learning_milestone"]  # Simplified implementation
+        efficiency_scores = []
+
+        for interaction in interaction_history:
+            score = 0.5
+
+            if interaction.user_satisfaction:
+                # High satisfaction with shorter messages = efficient
+                msg_length = len(interaction.conversation_context.message_text)
+                satisfaction = interaction.user_satisfaction
+
+                if satisfaction > 0.7 and msg_length < 500:
+                    score = 0.9
+                elif satisfaction > 0.5:
+                    score = 0.7
+                elif satisfaction < 0.3:
+                    score = 0.3
+
+            efficiency_scores.append(score)
+
+        # Factor in relationship maturity
+        interaction_count = user_profile.interaction_count
+        maturity_bonus = min(interaction_count / 50, 0.1)  # Max 0.1 bonus
+
+        return min(1.0, statistics.mean(efficiency_scores) + maturity_bonus)
+
+    def _identify_trajectory_factors(
+        self, dynamics_analysis: Dict[str, Any]
+    ) -> List[str]:
+        """Identify key factors affecting relationship trajectory."""
+        factors = []
+
+        # Check health metrics
+        health = dynamics_analysis.get("relationship_health", {})
+
+        if health.get("health_score", 0) > 0.7:
+            factors.append("strong_overall_health")
+        elif health.get("health_score", 0) < 0.4:
+            factors.append("health_needs_attention")
+
+        # Check emotional dynamics
+        emotional = dynamics_analysis.get("emotional_dynamics", {})
+        if emotional.get("positive_ratio", 0.5) > 0.7:
+            factors.append("positive_emotional_trend")
+        elif emotional.get("positive_ratio", 0.5) < 0.3:
+            factors.append("negative_emotional_trend")
+
+        # Check interaction patterns
+        patterns = dynamics_analysis.get("interaction_patterns", {})
+        if patterns.get("frequency_trend") == "increasing":
+            factors.append("increasing_engagement")
+        elif patterns.get("frequency_trend") == "decreasing":
+            factors.append("decreasing_engagement")
+
+        # Check trust
+        trust = dynamics_analysis.get("trust_dynamics", {})
+        if trust.get("trust_trajectory") == "building":
+            factors.append("trust_building")
+        elif trust.get("trust_trajectory") == "declining":
+            factors.append("trust_declining")
+
+        return factors if factors else ["stable_baseline"]
+
+    def _identify_intervention_opportunities(
+        self, dynamics_analysis: Dict[str, Any]
+    ) -> List[str]:
+        """Identify opportunities for positive intervention."""
+        opportunities = []
+
+        health = dynamics_analysis.get("relationship_health", {})
+        growth_areas = health.get("growth_areas", [])
+
+        for area in growth_areas:
+            if "trust" in area.lower():
+                opportunities.append("build_trust_through_consistency")
+            if "engagement" in area.lower():
+                opportunities.append("increase_interaction_frequency")
+            if "emotional" in area.lower():
+                opportunities.append("provide_more_emotional_support")
+            if "communication" in area.lower():
+                opportunities.append("improve_clarity_and_understanding")
+
+        # Check for stagnation
+        if dynamics_analysis.get("overall_pattern") == "stagnant":
+            opportunities.append("introduce_new_topics")
+            opportunities.append("set_collaborative_goals")
+
+        return opportunities if opportunities else ["maintain_current_approach"]
+
+    def _predict_milestone_opportunities(
+        self, user_profile: CompanionProfile, pattern: DynamicsPattern
+    ) -> List[str]:
+        """Predict upcoming milestone opportunities based on pattern."""
+        opportunities = []
+
+        achieved_types = {
+            m.milestone_type.value for m in user_profile.relationship_milestones
+        }
+
+        # Based on current pattern, suggest likely milestones
+        if pattern == DynamicsPattern.GROWING:
+            if "first_deep_conversation" not in achieved_types:
+                opportunities.append("first_deep_conversation")
+            if "trust_milestone" not in achieved_types:
+                opportunities.append("trust_milestone")
+            if user_profile.interaction_count > 20:
+                opportunities.append("regular_user_milestone")
+
+        elif pattern == DynamicsPattern.STABLE:
+            if "consistent_engagement" not in achieved_types:
+                opportunities.append("consistent_engagement")
+            opportunities.append("knowledge_sharing_milestone")
+
+        elif pattern == DynamicsPattern.RECOVERING:
+            opportunities.append("relationship_recovery_milestone")
+            opportunities.append("renewed_trust_milestone")
+
+        # Time-based milestones
+        relationship_days = user_profile.get_relationship_age_days()
+        if relationship_days > 30 and "month_anniversary" not in achieved_types:
+            opportunities.append("month_anniversary")
+        if relationship_days > 90 and "quarter_anniversary" not in achieved_types:
+            opportunities.append("quarter_anniversary")
+
+        return opportunities if opportunities else ["continue_building_relationship"]

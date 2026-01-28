@@ -25,6 +25,8 @@ from morgan_server.api.routes import (
     memory_router,
     knowledge_router,
     health_router,
+    profile_router,
+    features_router,
 )
 
 
@@ -35,20 +37,21 @@ logger = logging.getLogger(__name__)
 # Application Lifecycle Management
 # ============================================================================
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Manage application lifecycle (startup and shutdown).
-    
+
     This context manager handles:
     - Component initialization on startup
     - Graceful shutdown on termination
-    
+
     **Validates: Requirements 1.1, 1.5**
-    
+
     Args:
         app: FastAPI application instance
-        
+
     Yields:
         None during application runtime
     """
@@ -56,21 +59,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # STARTUP
     # ========================================================================
     logger.info("Starting Morgan Server...")
-    
+
     try:
         # Get configuration from app state
         config: ServerConfig = app.state.config
         health_system = get_health_system()
-        
+
         # Set health system in routes so they can access it
         from morgan_server.api.routes.health import set_health_system
+
         set_health_system(health_system)
-        
+
         # Initialize and start session manager
         session_manager = get_session_manager()
         await session_manager.start()
         app.state.session_manager = session_manager
-        
+
         logger.info(
             "Server configuration loaded",
             extra={
@@ -81,130 +85,91 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 "vector_db_url": config.vector_db_url,
                 "embedding_provider": config.embedding_provider,
                 "session_timeout_minutes": config.session_timeout_minutes,
-            }
+            },
         )
-        
+
         # Initialize core components
         # Note: Actual component initialization will be done here
         # For now, we're setting up the structure
-        
-        # Initialize vector database client
-        logger.info("Initializing vector database client...")
-        # TODO: Initialize vector DB client and register with health system
-        # vector_db = VectorDBClient(config)
-        # await vector_db.connect()
-        # health_system.register_component("vector_db", vector_db)
-        # app.state.vector_db = vector_db
-        
-        # Initialize LLM client
-        logger.info("Initializing LLM client...")
-        from morgan_server.llm import create_llm_client
-        llm_client = create_llm_client(config)
-        app.state.llm_client = llm_client
-        logger.info(f"LLM client initialized: {config.llm_provider}")
-        
-        # Initialize assistant with basic components
-        logger.info("Initializing Morgan assistant...")
+
+        # Initialize assistant using Core
+        logger.info("Initializing Morgan assistant (Core)...")
         from morgan_server.assistant import MorganAssistant
         from morgan_server.api.routes.chat import set_assistant
-        
-        assistant = MorganAssistant(
-            llm_client=llm_client,
-        )
+        from morgan_server.api.routes.features import set_assistant as set_features_assistant
+
+        # We can pass config_path if config object has it, otherwise default
+        config_path = getattr(config, "config_file", None)
+
+        assistant = MorganAssistant(config_path=config_path)
         app.state.assistant = assistant
-        
-        # Set assistant in chat routes
+
+        # Set assistant in chat routes and feature routes
         set_assistant(assistant)
+        set_features_assistant(assistant)
+
+        # Register components with health system
+        health_system.register_component("assistant", assistant)
         logger.info("Morgan assistant initialized successfully")
-        
+
         logger.info(
             "Morgan Server started successfully",
             extra={
                 "version": health_system.version,
                 "components_initialized": len(health_system.component_checkers),
-            }
+            },
         )
-        
+
         # Application is now running
         yield
-    
+
     except Exception as e:
-        logger.error(
-            f"Failed to start Morgan Server: {e}",
-            exc_info=True
-        )
+        logger.error(f"Failed to start Morgan Server: {e}", exc_info=True)
         raise
-    
+
     # ========================================================================
     # SHUTDOWN
     # ========================================================================
     finally:
         logger.info("Shutting down Morgan Server...")
-        
+
         try:
             # Close all component connections gracefully
             shutdown_tasks = []
-            
+
             # Shutdown session manager
             if hasattr(app.state, "session_manager"):
                 logger.info("Shutting down session manager...")
                 shutdown_tasks.append(app.state.session_manager.stop())
-            
+
             # Shutdown assistant
             if hasattr(app.state, "assistant"):
                 logger.info("Shutting down assistant...")
-                # TODO: Implement assistant shutdown
-                # shutdown_tasks.append(app.state.assistant.shutdown())
-            
-            # Shutdown memory system
-            if hasattr(app.state, "memory_system"):
-                logger.info("Shutting down memory system...")
-                # TODO: Implement memory system shutdown
-                # shutdown_tasks.append(app.state.memory_system.shutdown())
-            
-            # Shutdown embedding service
-            if hasattr(app.state, "embedding_service"):
-                logger.info("Shutting down embedding service...")
-                # TODO: Implement embedding service shutdown
-                # shutdown_tasks.append(app.state.embedding_service.shutdown())
-            
-            # Shutdown LLM client
-            if hasattr(app.state, "llm_client"):
-                logger.info("Shutting down LLM client...")
-                # TODO: Implement LLM client shutdown
-                # shutdown_tasks.append(app.state.llm_client.close())
-            
-            # Shutdown vector database
-            if hasattr(app.state, "vector_db"):
-                logger.info("Shutting down vector database client...")
-                # TODO: Implement vector DB shutdown
-                # shutdown_tasks.append(app.state.vector_db.close())
-            
+                await app.state.assistant.shutdown()
+
             # Wait for all shutdowns to complete
             if shutdown_tasks:
                 await asyncio.gather(*shutdown_tasks, return_exceptions=True)
-            
+
             logger.info("Morgan Server shut down successfully")
-        
+
         except Exception as e:
-            logger.error(
-                f"Error during shutdown: {e}",
-                exc_info=True
-            )
+            logger.error(f"Error during shutdown: {e}", exc_info=True)
 
 
 # ============================================================================
 # Application Factory
 # ============================================================================
 
+
 def create_app(
     config: Optional[ServerConfig] = None,
     config_file: Optional[str] = None,
-    **config_overrides
+    **config_overrides,
 ) -> FastAPI:
     """
     Create and configure the Morgan Server FastAPI application.
-    
+
     This is the main application factory that:
     1. Loads configuration from multiple sources
     2. Configures logging
@@ -212,20 +177,20 @@ def create_app(
     4. Sets up middleware
     5. Registers API routes
     6. Configures lifecycle management
-    
+
     **Validates: Requirements 1.1, 1.2, 1.3, 1.5**
-    
+
     Args:
         config: Optional pre-configured ServerConfig instance
         config_file: Optional path to configuration file
         **config_overrides: Additional configuration overrides
-        
+
     Returns:
         Configured FastAPI application instance
-        
+
     Raises:
         ConfigurationError: If configuration is invalid
-        
+
     Example:
         >>> app = create_app()
         >>> # Or with custom config
@@ -237,48 +202,44 @@ def create_app(
     if config is None:
         try:
             from pathlib import Path
+
             config_path = Path(config_file) if config_file else None
             config = get_config(
-                config_file=config_path,
-                validate=True,
-                **config_overrides
+                config_file=config_path, validate=True, **config_overrides
             )
         except ConfigurationError as e:
             # Log error and re-raise
             print(f"Configuration error: {e}")
             raise
-    
+
     # ========================================================================
     # Step 2: Configure Logging
     # ========================================================================
-    configure_logging(
-        log_level=config.log_level,
-        log_format=config.log_format
-    )
-    
+    configure_logging(log_level=config.log_level, log_format=config.log_format)
+
     logger.info(
         "Configuring Morgan Server",
         extra={
             "version": "0.1.0",
             "log_level": config.log_level,
             "log_format": config.log_format,
-        }
+        },
     )
-    
+
     # ========================================================================
     # Step 3: Initialize Health Check System
     # ========================================================================
     health_system = initialize_health_system(version="0.1.0")
-    
+
     # ========================================================================
     # Step 3.5: Initialize Session Manager
     # ========================================================================
     session_manager = initialize_session_manager(
         session_timeout_minutes=config.session_timeout_minutes,
         cleanup_interval_seconds=300,  # 5 minutes
-        max_concurrent_requests=config.max_concurrent_requests
+        max_concurrent_requests=config.max_concurrent_requests,
     )
-    
+
     # ========================================================================
     # Step 4: Create FastAPI Application
     # ========================================================================
@@ -291,11 +252,11 @@ def create_app(
         openapi_url="/openapi.json",
         lifespan=lifespan,
     )
-    
+
     # Store configuration and health system in app state
     app.state.config = config
     app.state.health_system = health_system
-    
+
     # ========================================================================
     # Step 5: Setup Middleware
     # ========================================================================
@@ -308,30 +269,33 @@ def create_app(
         max_request_size=10 * 1024 * 1024,  # 10 MB
         cors_origins=["*"],  # Allow all origins for single-user deployment
     )
-    
+
     logger.info("Middleware configured")
-    
+
     # ========================================================================
     # Step 6: Register API Routes
     # ========================================================================
-    
+
     # Health check routes (no prefix)
     app.include_router(health_router, tags=["Health"])
-    
+
     # API routes (routers already have /api prefix)
     app.include_router(chat_router, tags=["Chat"])
     app.include_router(memory_router, tags=["Memory"])
     app.include_router(knowledge_router, tags=["Knowledge"])
-    
-    # Note: Profile router will be added when implemented
-    # app.include_router(profile_router, tags=["Profile"])
-    
+
+    # Profile router
+    app.include_router(profile_router, tags=["Profile"])
+
+    # Feature module routes (suggestions, wellness, habits, quality)
+    app.include_router(features_router, tags=["Features"])
+
     logger.info("API routes registered")
-    
+
     # ========================================================================
     # Step 7: Add Root Endpoint
     # ========================================================================
-    
+
     @app.get("/", tags=["Root"])
     async def root():
         """Root endpoint with server information."""
@@ -345,9 +309,9 @@ def create_app(
                 "status": "/api/status",
             }
         )
-    
+
     logger.info("Morgan Server application created successfully")
-    
+
     return app
 
 
@@ -355,13 +319,14 @@ def create_app(
 # Convenience Functions
 # ============================================================================
 
+
 def create_app_from_env() -> FastAPI:
     """
     Create application using only environment variables.
-    
+
     This is useful for containerized deployments where all configuration
     comes from environment variables.
-    
+
     Returns:
         Configured FastAPI application
     """
@@ -371,10 +336,10 @@ def create_app_from_env() -> FastAPI:
 def create_app_from_file(config_file: str) -> FastAPI:
     """
     Create application from a configuration file.
-    
+
     Args:
         config_file: Path to configuration file (YAML, JSON, or .env)
-        
+
     Returns:
         Configured FastAPI application
     """

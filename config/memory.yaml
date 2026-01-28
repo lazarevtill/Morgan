@@ -1,0 +1,85 @@
+# Morgan Memory Configuration
+# Conversation memory and learning settings
+#
+# This file configures the memory and learning systems.
+# Environment variables can override these values with MORGAN_MEMORY_ prefix.
+
+# Memory system settings
+memory:
+  # Enable conversation memory
+  enabled: true
+  # Maximum conversations to keep
+  max_conversations: 1000
+  # Maximum turns per conversation
+  max_turns: 100
+  # Memory decay factor (older memories weighted less)
+  decay_factor: 0.95
+  # Minimum relevance score to include memory
+  min_relevance: 0.5
+
+# Learning system settings
+learning:
+  # Enable learning from interactions
+  enabled: true
+  # Learn user preferences
+  learn_preferences: true
+  # Learn topic patterns
+  learn_topics: true
+  # Learn communication style
+  learn_style: true
+  # Minimum interactions before learning patterns
+  min_interactions: 5
+  # Pattern confidence threshold
+  pattern_confidence: 0.7
+
+# Context retrieval settings
+retrieval:
+  # Maximum memories to retrieve per query
+  max_memories: 10
+  # Time weight for recent memories (1.0 = prefer recent)
+  time_weight: 0.3
+  # Emotion weight for emotional memories
+  emotion_weight: 0.2
+  # Relevance weight for semantic similarity
+  relevance_weight: 0.5
+
+# Emotional memory settings
+emotional:
+  # Track emotional context
+  enabled: true
+  # Weight emotional memories higher
+  boost_factor: 1.2
+  # Emotions to track
+  emotions:
+    - joy
+    - sadness
+    - anger
+    - fear
+    - surprise
+    - neutral
+
+# Companion memory settings
+companion:
+  # Enable companion relationship tracking
+  enabled: true
+  # Track user preferences
+  track_preferences: true
+  # Track conversation topics
+  track_topics: true
+  # Track emotional patterns
+  track_emotions: true
+  # Build user profile
+  build_profile: true
+
+# Cleanup settings
+cleanup:
+  # Enable automatic cleanup of old memories
+  enabled: true
+  # Delete memories older than (days, 0 = never)
+  max_age_days: 365
+  # Cleanup interval (hours)
+  interval_hours: 24
+  # Keep important memories regardless of age
+  preserve_important: true
+  # Importance threshold to preserve
+  importance_threshold: 0.8

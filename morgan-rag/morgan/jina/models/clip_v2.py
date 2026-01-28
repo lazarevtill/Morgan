@@ -241,17 +241,46 @@ class JinaClipV2:
 
     def extract_text_from_images(self, images: List[Any]) -> List[str]:
         """
-        Extract text from images using OCR (placeholder implementation).
+        Extract text from images using DeepSeek-OCR via Ollama.
 
         Args:
-            images: List of image objects
+            images: List of image objects (PIL Images, bytes, or file paths)
 
         Returns:
             List of extracted text strings
         """
-        # This is a placeholder - in practice, you'd use OCR libraries like pytesseract
-        logger.warning("OCR text extraction not implemented - returning empty strings")
-        return ["" for _ in images]
+        import asyncio
+
+        try:
+            from morgan.services.ocr_service import get_ocr_service, OCRMode
+
+            service = get_ocr_service()
+
+            async def extract_all():
+                results = await service.extract_text_batch(images, OCRMode.FREE)
+                return [r.text if r.success else "" for r in results]
+
+            # Run async in sync context
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Already in async context
+                    import concurrent.futures
+
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        future = pool.submit(asyncio.run, extract_all())
+                        return future.result(timeout=120)
+                else:
+                    return loop.run_until_complete(extract_all())
+            except RuntimeError:
+                return asyncio.run(extract_all())
+
+        except ImportError as e:
+            logger.warning("OCR service not available: %s", e)
+            return ["" for _ in images]
+        except Exception as e:
+            logger.error("OCR extraction failed: %s", e)
+            return ["" for _ in images]
 
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the model."""

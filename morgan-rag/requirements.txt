@@ -66,6 +66,7 @@ pathlib2>=2.3.7; python_version < "3.4"
 typing-extensions>=4.8.0
 python-dateutil>=2.8.0
 pytz>=2023.3
+python-dotenv>=1.0.0  # Load .env files for API keys (HF_TOKEN, etc.)
 
 # ============================================================================
 # Logging & Monitoring
@@ -109,6 +110,11 @@ pytesseract>=0.3.10  # OCR text extraction
 
 # For advanced web scraping
 # playwright>=1.40.0
+
+# For MCP (Model Context Protocol) integration
+mcp>=1.0.0  # Official MCP Python SDK
+anyio>=4.0.0  # Async primitives required by MCP
+httpx>=0.27.0  # HTTP client for MCP transports
 
 # For database storage (alternative to vector-only)
 # sqlalchemy>=2.0.0

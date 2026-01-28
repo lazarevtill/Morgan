@@ -26,9 +26,8 @@ __author__ = "Morgan RAG Team"
 
 # Core components - simple imports
 from morgan.core.assistant import MorganAssistant
-from morgan.core.knowledge import KnowledgeBase
-from morgan.core.memory import ConversationMemory
-from morgan.core.search import SmartSearch
+from morgan.core.knowledge import KnowledgeService
+from morgan.core.memory import MemoryService
 
 
 def create_assistant(config_path: str = None) -> MorganAssistant:
@@ -40,11 +39,6 @@ def create_assistant(config_path: str = None) -> MorganAssistant:
 
     Returns:
         Ready-to-use Morgan assistant
-
-    Example:
-        >>> morgan = create_assistant()
-        >>> response = morgan.ask("How do I deploy Docker?")
-        >>> print(response.answer)
     """
     return MorganAssistant(config_path=config_path)
 
@@ -52,8 +46,7 @@ def create_assistant(config_path: str = None) -> MorganAssistant:
 # Simple exports for easy usage
 __all__ = [
     "MorganAssistant",
-    "KnowledgeBase",
-    "ConversationMemory",
-    "SmartSearch",
+    "KnowledgeService",
+    "MemoryService",
     "create_assistant",
 ]
