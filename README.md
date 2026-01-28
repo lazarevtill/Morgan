@@ -321,13 +321,11 @@ flowchart TD
     end
 ```
 
-## 📚 Documentation
+## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [claude.md](./claude.md) | Complete project context with diagrams |
-| [DOCUMENTATION.md](./DOCUMENTATION.md) | Documentation index |
-| [MIGRATION.md](./MIGRATION.md) | Migration guide |
+| [CLAUDE.md](./CLAUDE.md) | Project context and development guide |
 | [docker/README.md](./docker/README.md) | Docker deployment guide |
 | [morgan-server/README.md](./morgan-server/README.md) | Server documentation |
 | [morgan-cli/README.md](./morgan-cli/README.md) | CLI documentation |
@@ -399,7 +397,7 @@ Contributions are welcome! Please read the contributing guidelines.
 ## 📄 License
 
 ```
-Copyright 2025 Morgan AI Assistant Contributors
+Copyright 2025-2026 Morgan AI Assistant Contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

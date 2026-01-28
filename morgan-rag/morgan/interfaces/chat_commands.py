@@ -5,7 +5,7 @@ Handles special commands like preferences, profile, timeline, etc.
 following KISS principles - focused on command processing only.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict
 
 from ..core.assistant import MorganAssistant
@@ -286,7 +286,7 @@ class ChatCommandHandler:
                     f"Added new topics: {', '.join(new_topics)}"
                 )
 
-        user_profile.communication_preferences.last_updated = datetime.utcnow()
+        user_profile.communication_preferences.last_updated = datetime.now(timezone.utc)
         self.display.display_success("\n✅ Preferences updated successfully!")
 
     def get_available_commands(self) -> Dict[str, str]:

@@ -8,7 +8,7 @@ stability assessment over time periods.
 import statistics
 import threading
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
@@ -77,7 +77,7 @@ class MoodAnalyzer:
             raise ValueError(f"Unsupported timeframe: {timeframe}")
 
         config = self.TIMEFRAME_CONFIGS[timeframe]
-        cutoff_date = datetime.utcnow() - timedelta(days=config["days"])
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=config["days"])
 
         # Filter emotions within timeframe
         recent_emotions = [
@@ -194,7 +194,7 @@ class MoodAnalyzer:
         sorted_emotions = sorted(emotional_states, key=lambda e: e.timestamp)
 
         # Calculate baseline statistics
-        baseline_cutoff = datetime.utcnow() - timedelta(days=baseline_days)
+        baseline_cutoff = datetime.now(timezone.utc) - timedelta(days=baseline_days)
         baseline_emotions = [
             e for e in sorted_emotions if e.timestamp >= baseline_cutoff
         ]

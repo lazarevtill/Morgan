@@ -333,7 +333,7 @@ morgan_server/
 ## License
 
 ```
-Copyright 2025 Morgan AI Assistant Contributors
+Copyright 2025-2026 Morgan AI Assistant Contributors
 Licensed under the Apache License, Version 2.0
 ```
 

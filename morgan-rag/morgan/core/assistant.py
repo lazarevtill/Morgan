@@ -10,7 +10,7 @@ KISS Principle: Clean interface that orchestrates specialized modules.
 
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from ..companion.relationship_manager import CompanionRelationshipManager
@@ -145,7 +145,7 @@ class MorganAssistant:
             user_id=uid,
             conversation_id=conv_id,
             message_text=question,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             previous_messages=[m.get("question", "") for m in memory_history],
         )
 
@@ -277,7 +277,7 @@ class MorganAssistant:
         if orch._habit_detector:
             try:
                 orch._habit_detector.record_interaction(
-                    user_id=uid, message=question, timestamp=datetime.utcnow(),
+                    user_id=uid, message=question, timestamp=datetime.now(timezone.utc),
                 )
             except Exception:
                 pass

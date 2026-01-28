@@ -16,7 +16,7 @@ Features:
 
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from morgan.config import get_settings
@@ -312,7 +312,7 @@ class ConversationOrchestrator:
                 user_id=uid,
                 conversation_id=conv_id,
                 message_text=question,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 previous_messages=[m.get("question", "") for m in memory_history],
             )
 
@@ -566,7 +566,7 @@ class ConversationOrchestrator:
                     self._habit_detector.record_interaction(
                         user_id=uid,
                         message=question,
-                        timestamp=datetime.utcnow(),
+                        timestamp=datetime.now(timezone.utc),
                     )
                 except Exception as e:
                     logger.debug(f"Habit recording skipped: {e}")

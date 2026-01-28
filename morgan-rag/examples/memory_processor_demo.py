@@ -9,7 +9,7 @@ preference detection.
 
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Add the project root to the Python path
@@ -18,7 +18,7 @@ sys.path.insert(0, str(project_root))
 
 from morgan.memory.memory_processor import get_memory_processor
 from morgan.core.memory import ConversationTurn
-from morgan.emotional.models import EmotionalState, EmotionType, ConversationContext
+from morgan.intelligence.core.models import EmotionalState, EmotionType, ConversationContext
 
 
 def create_sample_conversation_turns():
@@ -27,7 +27,7 @@ def create_sample_conversation_turns():
         ConversationTurn(
             turn_id="turn_1",
             conversation_id="demo_conversation",
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             question="I'm really excited about learning Python! It's been my personal goal for months and I finally have time to focus on it.",
             answer="That's wonderful to hear! Your enthusiasm is contagious. Python is an excellent choice for beginners and has a fantastic community. What specific area of Python interests you most?",
             sources=["python-tutorial.md"],
@@ -37,7 +37,7 @@ def create_sample_conversation_turns():
         ConversationTurn(
             turn_id="turn_2",
             conversation_id="demo_conversation",
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             question="I'm particularly interested in machine learning and data science. I work at a tech company and want to transition into an AI role.",
             answer="Machine learning is a fantastic field! Given your tech background, you're already ahead. I'd recommend starting with pandas and numpy for data manipulation, then moving to scikit-learn for ML basics.",
             sources=["ml-guide.md", "career-transition.md"],
@@ -47,7 +47,7 @@ def create_sample_conversation_turns():
         ConversationTurn(
             turn_id="turn_3",
             conversation_id="demo_conversation",
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             question="I'm feeling a bit overwhelmed by all the options. There's so much to learn - pandas, numpy, scikit-learn, TensorFlow, PyTorch. Where should I really start?",
             answer="I completely understand that feeling! It's natural to feel overwhelmed when starting something new. Let's break it down into manageable steps. Start with just pandas for data manipulation - master that first before moving on.",
             sources=["learning-path.md"],
@@ -57,7 +57,7 @@ def create_sample_conversation_turns():
         ConversationTurn(
             turn_id="turn_4",
             conversation_id="demo_conversation",
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             question="Thank you so much! I really appreciate how you understand my situation. I feel like I can trust your guidance. Can you recommend some specific pandas tutorials?",
             answer="I'm so glad I could help ease your concerns! Trust is important in learning. Here are some excellent pandas resources: the official pandas documentation has great tutorials, and Kaggle Learn has hands-on exercises.",
             sources=["pandas-resources.md"],

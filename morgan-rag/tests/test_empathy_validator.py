@@ -6,11 +6,11 @@ comprehensive emotional validation, and validation confidence.
 """
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
-from morgan.empathy.validator import EmotionalValidator
-from morgan.emotional.models import EmotionalState, EmotionType, ConversationContext
+from morgan.intelligence.empathy.validator import EmotionalValidator
+from morgan.intelligence.core.models import EmotionalState, EmotionType, ConversationContext
 
 
 class TestEmotionalValidator:
@@ -19,8 +19,12 @@ class TestEmotionalValidator:
     @pytest.fixture
     def validator(self):
         """Create emotional validator for testing."""
-        with patch("morgan.empathy.validator.get_llm_service"):
-            with patch("morgan.empathy.validator.get_settings"):
+        with patch("morgan.intelligence.empathy.validator.get_llm_service") as mock_llm:
+            # Configure mock to return proper response with .content attribute
+            mock_response = Mock()
+            mock_response.content = "Your feelings are completely valid and understandable."
+            mock_llm.return_value.generate.return_value = mock_response
+            with patch("morgan.intelligence.empathy.validator.get_settings"):
                 return EmotionalValidator()
 
     @pytest.fixture
@@ -30,7 +34,7 @@ class TestEmotionalValidator:
             primary_emotion=EmotionType.JOY,
             intensity=0.8,
             confidence=0.9,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     @pytest.fixture
@@ -40,7 +44,7 @@ class TestEmotionalValidator:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.7,
             confidence=0.85,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     @pytest.fixture
@@ -50,7 +54,7 @@ class TestEmotionalValidator:
             primary_emotion=EmotionType.ANGER,
             intensity=0.75,
             confidence=0.8,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     @pytest.fixture
@@ -60,7 +64,7 @@ class TestEmotionalValidator:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="I'm feeling really happy about this achievement",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     def test_generate_validation_response_joy(
@@ -83,7 +87,7 @@ class TestEmotionalValidator:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="I'm feeling really down today",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         response = validator.generate_validation_response(
@@ -161,7 +165,7 @@ class TestEmotionalValidator:
             primary_emotion=EmotionType.JOY,
             intensity=0.8,
             confidence=0.95,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         validation = validator._get_base_validation(high_conf_state)
@@ -175,7 +179,7 @@ class TestEmotionalValidator:
             primary_emotion=EmotionType.NEUTRAL,
             intensity=0.4,
             confidence=0.45,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         validation = validator._get_base_validation(low_conf_state)
@@ -219,7 +223,7 @@ class TestEmotionalValidator:
             primary_emotion=EmotionType.ANGER,
             intensity=0.9,
             confidence=0.85,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         validation = validator._validate_emotion_intensity(high_intensity_state)
@@ -232,7 +236,7 @@ class TestEmotionalValidator:
             primary_emotion=EmotionType.SADNESS,
             intensity=0.3,
             confidence=0.7,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         validation = validator._validate_emotion_intensity(low_intensity_state)
@@ -276,7 +280,7 @@ class TestEmotionalValidator:
             primary_emotion=EmotionType.NEUTRAL,
             intensity=0.3,
             confidence=0.6,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         confidence = validator._calculate_validation_confidence(neutral_state)

@@ -6,11 +6,13 @@ Test script for the enhanced Morgan assistant with emotional intelligence.
 import sys
 import os
 import asyncio
+import pytest
 
 # Add the parent directory (morgan-rag) to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
+@pytest.mark.asyncio
 async def test_enhanced_assistant():
     """Test the enhanced Morgan assistant functionality."""
     try:

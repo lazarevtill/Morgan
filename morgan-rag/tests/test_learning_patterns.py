@@ -6,7 +6,7 @@ timing pattern analysis, and behavioral pattern detection.
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 from morgan.learning.patterns import (
@@ -17,7 +17,7 @@ from morgan.learning.patterns import (
     TimingPattern,
     BehavioralPattern,
 )
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     InteractionData,
     ConversationContext,
     EmotionalState,
@@ -51,19 +51,16 @@ class TestInteractionPatternAnalyzer:
                 user_id="test_user",
                 conversation_id="test_conv",
                 message_text=msg,
-                timestamp=datetime.utcnow() - timedelta(hours=i),
+                timestamp=datetime.now(timezone.utc) - timedelta(hours=i),
             )
             interaction = InteractionData(
-                interaction_id=f"test_{i}",
-                user_id="test_user",
                 conversation_context=context,
                 emotional_state=EmotionalState(
                     primary_emotion=EmotionType.NEUTRAL,
                     intensity=0.5,
                     confidence=0.7,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                 ),
-                timestamp=datetime.utcnow() - timedelta(hours=i),
             )
             interactions.append(interaction)
 
@@ -81,16 +78,18 @@ class TestInteractionPatternAnalyzer:
         """Test analyzing patterns with insufficient interactions."""
         few_interactions = [
             InteractionData(
-                interaction_id="test_1",
-                user_id="test_user",
                 conversation_context=ConversationContext(
                     user_id="test_user",
                     conversation_id="test_conv",
                     message_text="Test",
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                 ),
-                emotional_state=None,
-                timestamp=datetime.utcnow(),
+                emotional_state=EmotionalState(
+                    primary_emotion=EmotionType.NEUTRAL,
+                    intensity=0.5,
+                    confidence=0.7,
+                    timestamp=datetime.now(timezone.utc),
+                ),
             )
         ]
 
@@ -277,7 +276,7 @@ class TestInteractionPatternAnalyzer:
 
     def test_determine_interaction_frequency_daily(self, analyzer):
         """Test determining interaction frequency - daily."""
-        timestamps = [datetime.utcnow() - timedelta(hours=i * 12) for i in range(5)]
+        timestamps = [datetime.now(timezone.utc) - timedelta(hours=i * 12) for i in range(5)]
 
         frequency = analyzer._determine_interaction_frequency(timestamps)
 
@@ -285,7 +284,7 @@ class TestInteractionPatternAnalyzer:
 
     def test_determine_interaction_frequency_weekly(self, analyzer):
         """Test determining interaction frequency - weekly."""
-        timestamps = [datetime.utcnow() - timedelta(days=i * 3) for i in range(5)]
+        timestamps = [datetime.now(timezone.utc) - timedelta(days=i * 3) for i in range(5)]
 
         frequency = analyzer._determine_interaction_frequency(timestamps)
 

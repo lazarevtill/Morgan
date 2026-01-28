@@ -16,7 +16,7 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Type
 
@@ -140,7 +140,7 @@ class ErrorHandlingMixin:
         self.metadata = metadata or {}
         self.cause = cause
         self.error_id = f"morgan_{category.value}_{uuid.uuid4().hex[:8]}"
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(timezone.utc)
     
     def get_context(self) -> ErrorContext:
         """Get structured error context."""
@@ -557,7 +557,7 @@ class CircuitBreaker:
             return True
 
         return (
-            datetime.utcnow() - self.last_failure_time
+            datetime.now(timezone.utc) - self.last_failure_time
         ).total_seconds() >= self.config.recovery_timeout
 
     def _on_success(self):
@@ -576,7 +576,7 @@ class CircuitBreaker:
         """Handle failed call."""
         with self._lock:
             self.failure_count += 1
-            self.last_failure_time = datetime.utcnow()
+            self.last_failure_time = datetime.now(timezone.utc)
 
             if (
                 self.state == CircuitState.CLOSED
@@ -745,7 +745,7 @@ class GracefulDegradationManager:
 
         # Record degradation event
         degradation_event = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "old_level": old_level.value,
             "new_level": level.value,
             "trigger_error": error_context.error_id,
@@ -877,9 +877,9 @@ class ErrorRecoveryManager:
             try:
                 logger.info(f"Attempting recovery with procedure: {procedure.name}")
 
-                recovery_start = datetime.utcnow()
+                recovery_start = datetime.now(timezone.utc)
                 success = self._execute_recovery_procedure(procedure, error, context)
-                recovery_duration = (datetime.utcnow() - recovery_start).total_seconds()
+                recovery_duration = (datetime.now(timezone.utc) - recovery_start).total_seconds()
 
                 # Record recovery attempt
                 recovery_record = {
@@ -1142,7 +1142,7 @@ def error_context(
         with error_context("encode_batch", "embedding_service", ErrorCategory.EMBEDDING):
             embeddings = service.encode_batch(texts)
     """
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
 
     try:
         yield
@@ -1185,7 +1185,7 @@ def error_context(
 
     finally:
         # Log operation completion time
-        duration = (datetime.utcnow() - start_time).total_seconds()
+        duration = (datetime.now(timezone.utc) - start_time).total_seconds()
         logger.debug(f"Operation {operation} completed in {duration:.3f}s")
 
 
@@ -1256,7 +1256,7 @@ class SystemHealthMonitor:
         """Register a health check function for a component."""
         try:
             # Execute health check with timeout
-            start_time = datetime.utcnow()
+            start_time = datetime.now(timezone.utc)
 
             try:
                 is_healthy = check_function()
@@ -1273,7 +1273,7 @@ class SystemHealthMonitor:
                 status=status,
                 message=message,
                 timestamp=start_time,
-                metadata={"duration": (datetime.utcnow() - start_time).total_seconds()},
+                metadata={"duration": (datetime.now(timezone.utc) - start_time).total_seconds()},
             )
 
             with self._lock:
@@ -1292,7 +1292,7 @@ class SystemHealthMonitor:
                     "overall_status": HealthStatus.UNKNOWN.value,
                     "message": "No health checks registered",
                     "components": {},
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
 
             # Determine overall status
@@ -1329,7 +1329,7 @@ class SystemHealthMonitor:
                 },
                 "degradation": degradation_status,
                 "recovery": recovery_stats,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def record_error(self, component: str, error: MorganError):

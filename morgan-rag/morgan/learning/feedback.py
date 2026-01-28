@@ -7,7 +7,7 @@ implicit behavioral signals, and conversation quality indicators.
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -525,7 +525,7 @@ class FeedbackProcessor:
         Returns:
             Dict[str, float]: Satisfaction metrics
         """
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         recent_feedback = [
             f
             for f in self.feedback_history.get(user_id, [])

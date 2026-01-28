@@ -12,7 +12,7 @@ Provides:
 import logging
 import uuid
 from typing import Dict, Any, Optional, Union
-from datetime import datetime
+from datetime import datetime, timezone
 from http import HTTPStatus
 
 from shared.utils.exceptions import (
@@ -43,7 +43,7 @@ class ErrorContext:
     def __init__(self, correlation_id: Optional[str] = None, **metadata):
         self.correlation_id = correlation_id or str(uuid.uuid4())
         self.metadata = metadata
-        self.start_time = datetime.utcnow()
+        self.start_time = datetime.now(timezone.utc)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert context to dictionary"""
@@ -110,7 +110,7 @@ class ErrorResponse:
 
         # Add timestamp if not present
         if "timestamp" not in error_dict["error"]:
-            error_dict["error"]["timestamp"] = datetime.utcnow().isoformat()
+            error_dict["error"]["timestamp"] = datetime.now(timezone.utc).isoformat()
 
         return error_dict
 
@@ -132,7 +132,7 @@ class ErrorResponse:
                 "correlation_id": correlation_id or str(uuid.uuid4()),
                 "is_transient": False,
                 "is_retryable": False,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "http_status": HTTPStatus.INTERNAL_SERVER_ERROR.value,
                 "recovery_suggestions": ["Contact support if the issue persists"],
             }
@@ -206,7 +206,7 @@ class ErrorResponse:
         Returns:
             Structured success response
         """
-        response = {"success": True, "timestamp": datetime.utcnow().isoformat()}
+        response = {"success": True, "timestamp": datetime.now(timezone.utc).isoformat()}
 
         if data is not None:
             response["data"] = data

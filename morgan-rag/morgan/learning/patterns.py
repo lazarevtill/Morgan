@@ -8,7 +8,7 @@ topic interests, timing patterns, and behavioral tendencies for personalization.
 import re
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional
 
@@ -262,7 +262,7 @@ class InteractionPatternAnalyzer:
         confidence = self._calculate_confidence(len(interactions))
 
         pattern = CommunicationPattern(
-            pattern_id=f"comm_{user_id}_{datetime.utcnow().timestamp()}",
+            pattern_id=f"comm_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             preferred_style=preferred_style,
             formality_level=formality_level,
@@ -315,7 +315,7 @@ class InteractionPatternAnalyzer:
         confidence = self._calculate_confidence(len(all_topics))
 
         pattern = TopicPattern(
-            pattern_id=f"topic_{user_id}_{datetime.utcnow().timestamp()}",
+            pattern_id=f"topic_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             primary_topics=primary_topics,
             topic_frequencies=dict(topic_counter),
@@ -364,7 +364,7 @@ class InteractionPatternAnalyzer:
         confidence = self._calculate_confidence(len(timestamps))
 
         pattern = TimingPattern(
-            pattern_id=f"timing_{user_id}_{datetime.utcnow().timestamp()}",
+            pattern_id=f"timing_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             active_hours=active_hours,
             session_durations=session_durations,
@@ -407,7 +407,7 @@ class InteractionPatternAnalyzer:
         confidence = self._calculate_confidence(len(interactions))
 
         pattern = BehavioralPattern(
-            pattern_id=f"behavior_{user_id}_{datetime.utcnow().timestamp()}",
+            pattern_id=f"behavior_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             interaction_style=interaction_style,
             feedback_frequency=feedback_frequency,

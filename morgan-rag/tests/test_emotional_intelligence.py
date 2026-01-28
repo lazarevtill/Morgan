@@ -6,11 +6,11 @@ empathetic response generation, and user profile management.
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
-from morgan.emotional.intelligence_engine import EmotionalIntelligenceEngine
-from morgan.emotional.models import (
+from morgan.intelligence.core.intelligence_engine import EmotionalIntelligenceEngine
+from morgan.intelligence.core.models import (
     EmotionalState,
     EmotionType,
     ConversationContext,
@@ -27,7 +27,7 @@ class TestEmotionalIntelligenceEngine:
     @pytest.fixture
     def engine(self):
         """Create emotional intelligence engine for testing."""
-        with patch("morgan.emotional.intelligence_engine.get_llm_service"):
+        with patch("morgan.intelligence.core.intelligence_engine.get_llm_service"):
             return EmotionalIntelligenceEngine()
 
     @pytest.fixture
@@ -37,7 +37,7 @@ class TestEmotionalIntelligenceEngine:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="I'm feeling great today!",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     def test_emotion_detection_joy(self, engine, sample_context):
@@ -84,19 +84,19 @@ class TestEmotionalIntelligenceEngine:
                 primary_emotion=EmotionType.JOY,
                 intensity=0.8,
                 confidence=0.9,
-                timestamp=datetime.utcnow() - timedelta(days=1),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=1),
             ),
             EmotionalState(
                 primary_emotion=EmotionType.JOY,
                 intensity=0.7,
                 confidence=0.8,
-                timestamp=datetime.utcnow() - timedelta(hours=12),
+                timestamp=datetime.now(timezone.utc) - timedelta(hours=12),
             ),
             EmotionalState(
                 primary_emotion=EmotionType.NEUTRAL,
                 intensity=0.5,
                 confidence=0.7,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             ),
         ]
 
@@ -117,20 +117,20 @@ class TestEmotionalIntelligenceEngine:
                 user_id="test_user",
                 conversation_id="conv1",
                 message_text="Hello, this is my first time using this system",
-                timestamp=datetime.utcnow() - timedelta(days=5),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=5),
             ),
             ConversationContext(
                 user_id="test_user",
                 conversation_id="conv2",
                 message_text="Thank you so much! This really helped me understand the concept. I never thought about it that way before.",
-                timestamp=datetime.utcnow() - timedelta(days=3),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=3),
                 user_feedback=5,
             ),
             ConversationContext(
                 user_id="test_user",
                 conversation_id="conv3",
                 message_text="I learned so much from our previous conversations. Now I know how to approach this problem.",
-                timestamp=datetime.utcnow() - timedelta(days=1),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=1),
             ),
         ]
 
@@ -176,7 +176,7 @@ class TestEmotionalIntelligenceEngine:
             user_id=user_id,
             conversation_id="test_conv",
             message_text="I really enjoy learning about machine learning and AI. This is fascinating!",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             user_feedback=4,
         )
 
@@ -264,7 +264,7 @@ class TestEmotionalIntelligenceEngine:
             user_id=user_id,
             conversation_id="test_conv",
             message_text=long_message,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         emotional_state = EmotionalState(

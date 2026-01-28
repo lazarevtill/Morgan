@@ -2,19 +2,27 @@
 Preference Extraction and Storage for Morgan RAG.
 
 Extracts user preferences from interactions and stores them for personalization.
-Handles preference categories, confidence scoring, and preference evolution over time.
+Uses LLM-based semantic analysis to understand ACTUAL preferences, not just keyword frequency.
+
+Semantic-First Architecture:
+- LLM analysis understands communication intent and style
+- Detects sarcasm, irony, and context-dependent meanings
+- Learns preferences from behavior patterns, not just keywords
+- Handles preference categories, confidence scoring, and evolution over time
 """
 
 import json
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from ..config import get_settings
 from ..intelligence.core.models import InteractionData
+from ..services.llm import get_llm_service
+from ..utils.llm_parsing import parse_llm_json
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -106,18 +114,25 @@ class UserPreferenceProfile:
         self.preferences[cat_str][key] = value
         self.confidence_scores[cat_str][key] = confidence
         self.preference_sources[cat_str][key] = source
-        self.last_updated = datetime.utcnow()
+        self.last_updated = datetime.now(timezone.utc)
 
 
 class PreferenceExtractor:
     """
-    Extracts user preferences from interaction data.
+    Extracts user preferences from interaction data using semantic analysis.
+
+    Semantic-First Architecture:
+    - LLM analysis is PRIMARY for understanding actual communication intent
+    - Detects sarcasm (formal language used sarcastically isn't formal preference)
+    - Understands context-dependent style choices
+    - Learns from behavior patterns, not keyword counting
 
     Analyzes conversations, feedback, and behavior patterns to identify
     user preferences across different categories.
     """
 
-    # Preference extraction patterns
+    # Legacy patterns kept for fallback when LLM is unavailable
+    # Semantic analysis is PRIMARY, these are FALLBACK only
     COMMUNICATION_PATTERNS = {
         "formal_language": [
             r"\b(please|thank you|would you|could you|may I)\b",
@@ -164,15 +179,24 @@ class PreferenceExtractor:
         ],
     }
 
+    # Alias for validation patterns (semantic-first architecture)
+    _VALIDATION_PATTERNS = COMMUNICATION_PATTERNS
+
     def __init__(self):
-        """Initialize the preference extractor."""
-        logger.info("Preference extractor initialized")
+        """Initialize the preference extractor with LLM service."""
+        self.llm_service = get_llm_service()
+        logger.info("Preference extractor initialized (semantic mode)")
 
     def extract_preferences(
         self, user_id: str, interactions: List[InteractionData]
     ) -> List[PreferenceUpdate]:
         """
-        Extract preferences from user interactions.
+        Extract preferences from user interactions using semantic analysis.
+
+        Semantic-First Architecture:
+        1. PRIMARY: LLM semantic analysis of communication style and intent
+        2. SECONDARY: Behavioral analysis (message lengths, response patterns)
+        3. VALIDATION: Pattern checks for confidence calibration
 
         Args:
             user_id: User identifier
@@ -187,29 +211,33 @@ class PreferenceExtractor:
 
         preference_updates = []
 
-        # Extract communication preferences
-        comm_updates = self._extract_communication_preferences(user_id, interactions)
+        # PRIMARY: Semantic communication style analysis
+        comm_updates = self._analyze_communication_style_semantically(
+            user_id, interactions
+        )
         preference_updates.extend(comm_updates)
 
-        # Extract content preferences
+        # Extract content preferences (behavioral + semantic)
         content_updates = self._extract_content_preferences(user_id, interactions)
         preference_updates.extend(content_updates)
 
-        # Extract topic preferences
-        topic_updates = self._extract_topic_preferences(user_id, interactions)
+        # Extract topic preferences (semantic analysis)
+        topic_updates = self._extract_topic_preferences_semantically(
+            user_id, interactions
+        )
         preference_updates.extend(topic_updates)
 
-        # Extract learning preferences
+        # Extract learning preferences (behavioral)
         learning_updates = self._extract_learning_preferences(user_id, interactions)
         preference_updates.extend(learning_updates)
 
-        # Extract interaction preferences
+        # Extract interaction preferences (behavioral)
         interaction_updates = self._extract_interaction_preferences(
             user_id, interactions
         )
         preference_updates.extend(interaction_updates)
 
-        # Extract emotional preferences
+        # Extract emotional preferences (behavioral)
         emotional_updates = self._extract_emotional_preferences(user_id, interactions)
         preference_updates.extend(emotional_updates)
 
@@ -217,6 +245,306 @@ class PreferenceExtractor:
             f"Extracted {len(preference_updates)} preference updates for user {user_id}"
         )
         return preference_updates
+
+    def _analyze_communication_style_semantically(
+        self, user_id: str, interactions: List[InteractionData]
+    ) -> List[PreferenceUpdate]:
+        """
+        Analyze communication style using LLM semantic understanding.
+
+        This is the PRIMARY method - it understands:
+        - Actual formality intent (not just keyword presence)
+        - Sarcastic vs genuine formal language
+        - Technical depth based on questions asked and vocabulary
+        - Emotional openness patterns
+        - Context-dependent style shifts
+
+        Args:
+            user_id: User identifier
+            interactions: Interactions to analyze
+
+        Returns:
+            List of preference updates from semantic analysis
+        """
+        updates = []
+
+        # Collect sample messages (limit for LLM context)
+        messages = []
+        for interaction in interactions[-20:]:  # Last 20 interactions
+            if hasattr(interaction.conversation_context, "message_text"):
+                messages.append(interaction.conversation_context.message_text)
+
+        if len(messages) < 3:
+            return updates
+
+        # Sample messages for analysis (don't send all to LLM)
+        sample_size = min(10, len(messages))
+        sample_messages = messages[-sample_size:]
+
+        try:
+            prompt = f"""Analyze this user's communication style from their messages.
+
+Messages (most recent):
+{chr(10).join(f'- "{msg[:200]}"' for msg in sample_messages)}
+
+Analyze their ACTUAL communication preferences (not just word frequency):
+
+1. FORMALITY:
+   - Is formal language genuine or ironic/sarcastic?
+   - Do they shift formality based on context?
+   - What's their default comfort level?
+
+2. TECHNICAL DEPTH:
+   - Do they ask technical questions or prefer high-level overviews?
+   - Do they use domain-specific vocabulary naturally?
+   - Do they want explanations or just answers?
+
+3. EMOTIONAL OPENNESS:
+   - Do they share feelings directly or indirectly?
+   - Are they comfortable with emotional topics?
+   - Do they deflect with humor?
+
+4. RESPONSE PREFERENCE:
+   - Do they ask for detail or seem impatient with long answers?
+   - Do they engage deeply or skim responses?
+   - Do they prefer examples or theory?
+
+5. COMMUNICATION QUIRKS:
+   - Any consistent patterns (emoji usage, punctuation style)?
+   - Do they match the assistant's style or have their own?
+
+Respond with JSON ONLY:
+{{
+    "formality_level": "formal|casual|mixed",
+    "formality_genuine": true|false,
+    "technical_depth": "high|medium|low",
+    "wants_explanations": true|false,
+    "emotional_openness": "high|medium|low",
+    "response_length_preference": "brief|moderate|detailed",
+    "prefers_examples": true|false,
+    "communication_notes": ["notable patterns"],
+    "confidence": 0.0-1.0
+}}"""
+
+            response = self.llm_service.generate(
+                prompt=prompt,
+                temperature=0.3,
+                max_tokens=600,  # Increased for reasoning models
+            )
+
+            # Parse JSON using utility that handles reasoning blocks
+            analysis = parse_llm_json(response.content)
+            if analysis is None:
+                logger.warning("Failed to parse semantic communication analysis")
+                return self._extract_communication_preferences_legacy(user_id, interactions)
+
+            confidence = float(analysis.get("confidence", 0.6))
+
+            # Create preference updates from semantic analysis
+            if analysis.get("formality_level"):
+                formality = analysis["formality_level"]
+                # Only count as formal preference if genuine
+                if formality == "formal" and analysis.get("formality_genuine", True):
+                    updates.append(
+                        PreferenceUpdate(
+                            update_id=str(uuid.uuid4()),
+                            user_id=user_id,
+                            category=PreferenceCategory.COMMUNICATION,
+                            preference_key="formality_level",
+                            preference_value="formal",
+                            confidence_score=confidence,
+                            source=PreferenceSource.CONVERSATION_ANALYSIS,
+                            evidence=["Semantic analysis: genuine formal style"],
+                        )
+                    )
+                elif formality == "casual" or (
+                    formality == "formal" and not analysis.get("formality_genuine", True)
+                ):
+                    updates.append(
+                        PreferenceUpdate(
+                            update_id=str(uuid.uuid4()),
+                            user_id=user_id,
+                            category=PreferenceCategory.COMMUNICATION,
+                            preference_key="formality_level",
+                            preference_value="casual",
+                            confidence_score=confidence,
+                            source=PreferenceSource.CONVERSATION_ANALYSIS,
+                            evidence=[
+                                "Semantic analysis: casual style (or sarcastic formality)"
+                            ],
+                        )
+                    )
+
+            if analysis.get("technical_depth"):
+                updates.append(
+                    PreferenceUpdate(
+                        update_id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        category=PreferenceCategory.COMMUNICATION,
+                        preference_key="technical_depth",
+                        preference_value=analysis["technical_depth"],
+                        confidence_score=confidence,
+                        source=PreferenceSource.CONVERSATION_ANALYSIS,
+                        evidence=["Semantic analysis: technical depth preference"],
+                    )
+                )
+
+            if analysis.get("emotional_openness"):
+                updates.append(
+                    PreferenceUpdate(
+                        update_id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        category=PreferenceCategory.EMOTIONAL,
+                        preference_key="emotional_openness",
+                        preference_value=analysis["emotional_openness"],
+                        confidence_score=confidence,
+                        source=PreferenceSource.CONVERSATION_ANALYSIS,
+                        evidence=["Semantic analysis: emotional openness level"],
+                    )
+                )
+
+            if analysis.get("response_length_preference"):
+                updates.append(
+                    PreferenceUpdate(
+                        update_id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        category=PreferenceCategory.CONTENT,
+                        preference_key="response_length",
+                        preference_value=analysis["response_length_preference"],
+                        confidence_score=confidence,
+                        source=PreferenceSource.CONVERSATION_ANALYSIS,
+                        evidence=["Semantic analysis: response length preference"],
+                    )
+                )
+
+            if analysis.get("prefers_examples"):
+                updates.append(
+                    PreferenceUpdate(
+                        update_id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        category=PreferenceCategory.CONTENT,
+                        preference_key="examples_preferred",
+                        preference_value=analysis["prefers_examples"],
+                        confidence_score=confidence,
+                        source=PreferenceSource.CONVERSATION_ANALYSIS,
+                        evidence=["Semantic analysis: example preference"],
+                    )
+                )
+
+            logger.debug(
+                f"Semantic communication analysis: formality={analysis.get('formality_level')}, "
+                f"technical={analysis.get('technical_depth')}, "
+                f"genuine_formal={analysis.get('formality_genuine')}"
+            )
+
+        except Exception as e:
+            logger.warning(f"Semantic communication analysis failed: {e}")
+            # Fall back to legacy pattern analysis
+            return self._extract_communication_preferences_legacy(user_id, interactions)
+
+        return updates
+
+    def _extract_communication_preferences_legacy(
+        self, user_id: str, interactions: List[InteractionData]
+    ) -> List[PreferenceUpdate]:
+        """Legacy pattern-based extraction (fallback only)."""
+        return self._extract_communication_preferences(user_id, interactions)
+
+    def _extract_topic_preferences_semantically(
+        self, user_id: str, interactions: List[InteractionData]
+    ) -> List[PreferenceUpdate]:
+        """Extract topic preferences using semantic analysis."""
+        updates = []
+
+        # Collect topics from interactions first
+        all_topics = []
+        messages = []
+        for interaction in interactions:
+            topics = getattr(interaction, "topics_discussed", [])
+            all_topics.extend(topics)
+            if hasattr(interaction.conversation_context, "message_text"):
+                messages.append(interaction.conversation_context.message_text)
+
+        # If we have explicit topics, use those
+        if all_topics:
+            from collections import Counter
+
+            topic_counter = Counter(all_topics)
+            for topic, count in topic_counter.most_common(5):
+                confidence = min(count / len(interactions), 1.0)
+                if confidence > 0.2:
+                    updates.append(
+                        PreferenceUpdate(
+                            update_id=str(uuid.uuid4()),
+                            user_id=user_id,
+                            category=PreferenceCategory.TOPICS,
+                            preference_key=f"interest_{topic}",
+                            preference_value=confidence,
+                            confidence_score=confidence,
+                            source=PreferenceSource.IMPLICIT_BEHAVIOR,
+                            evidence=[f"Topic '{topic}' discussed {count} times"],
+                        )
+                    )
+
+        # Semantic analysis of topic interests from messages
+        if len(messages) >= 5:
+            try:
+                sample_messages = messages[-10:]
+                prompt = f"""Analyze what topics this user is most interested in based on their messages.
+
+Messages:
+{chr(10).join(f'- "{msg[:150]}"' for msg in sample_messages)}
+
+Identify their primary areas of interest and engagement level.
+
+Respond with JSON ONLY:
+{{
+    "primary_interests": ["topic1", "topic2"],
+    "learning_focus": true|false,
+    "work_focus": true|false,
+    "personal_focus": true|false,
+    "technical_focus": true|false,
+    "creative_focus": true|false,
+    "confidence": 0.0-1.0
+}}"""
+
+                response = self.llm_service.generate(
+                    prompt=prompt, temperature=0.3, max_tokens=400
+                )
+
+                # Parse JSON using utility that handles reasoning blocks
+                analysis = parse_llm_json(response.content)
+                if analysis is None:
+                    logger.warning("Failed to parse semantic topic analysis")
+                    return updates
+
+                confidence = float(analysis.get("confidence", 0.6))
+
+                for focus_type in [
+                    "learning_focus",
+                    "work_focus",
+                    "personal_focus",
+                    "technical_focus",
+                    "creative_focus",
+                ]:
+                    if analysis.get(focus_type):
+                        updates.append(
+                            PreferenceUpdate(
+                                update_id=str(uuid.uuid4()),
+                                user_id=user_id,
+                                category=PreferenceCategory.TOPICS,
+                                preference_key=focus_type,
+                                preference_value=True,
+                                confidence_score=confidence,
+                                source=PreferenceSource.CONVERSATION_ANALYSIS,
+                                evidence=[f"Semantic analysis: {focus_type} detected"],
+                            )
+                        )
+
+            except Exception as e:
+                logger.warning(f"Semantic topic analysis failed: {e}")
+
+        return updates
 
     def _extract_communication_preferences(
         self, user_id: str, interactions: List[InteractionData]

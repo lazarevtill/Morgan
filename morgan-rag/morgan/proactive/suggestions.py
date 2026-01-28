@@ -10,7 +10,7 @@ Generates contextual suggestions based on:
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -217,7 +217,7 @@ Respond in JSON format:
 
         # Return visit suggestion
         if context.last_activity:
-            gap = datetime.utcnow() - context.last_activity
+            gap = datetime.now(timezone.utc) - context.last_activity
             if gap.total_seconds() > 3600:  # More than 1 hour
                 suggestions.append(
                     Suggestion(
@@ -291,7 +291,7 @@ Respond in JSON format:
             # Calculate session duration
             session_duration = "Unknown"
             if context.session_start:
-                duration = datetime.utcnow() - context.session_start
+                duration = datetime.now(timezone.utc) - context.session_start
                 session_duration = f"{duration.total_seconds() / 60:.0f} minutes"
 
             prompt = self.SUGGESTION_PROMPT.format(

@@ -6,7 +6,7 @@ and emotional context processing following KISS principles.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.intelligence.core.models import (
@@ -46,7 +46,7 @@ class EmotionalProcessor:
         initial_interaction = Interaction(
             interaction_id=str(uuid.uuid4()),
             user_id=user_id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             message_content="Initial interaction",
         )
 
@@ -59,12 +59,12 @@ class EmotionalProcessor:
         # Generate greeting if it's been more than 1 hour since last interaction
         from datetime import timedelta
 
-        time_since_last = datetime.utcnow() - user_profile.last_interaction
+        time_since_last = datetime.now(timezone.utc) - user_profile.last_interaction
         return time_since_last > timedelta(hours=1)
 
     def generate_personalized_greeting(self, user_profile: CompanionProfile):
         """Generate personalized greeting for user."""
-        time_since_last = datetime.utcnow() - user_profile.last_interaction
+        time_since_last = datetime.now(timezone.utc) - user_profile.last_interaction
         return self.relationship_manager.generate_personalized_greeting(
             user_profile, time_since_last
         )
@@ -237,7 +237,7 @@ class EmotionalProcessor:
                 user_id=user_id,
                 conversation_id="",
                 message_text="",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
             topics = self.relationship_manager.suggest_conversation_topics(

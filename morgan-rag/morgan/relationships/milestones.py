@@ -8,7 +8,7 @@ Requirements: 9.4, 9.5, 10.3
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -138,7 +138,7 @@ class MilestoneDetector:
         Returns:
             Dictionary with milestone trend analysis
         """
-        cutoff_date = datetime.utcnow() - timedelta(days=timeframe_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=timeframe_days)
         recent_milestones = [
             m
             for m in user_profile.relationship_milestones
@@ -201,7 +201,7 @@ class MilestoneDetector:
             / len(recent_milestones),
             "next_predicted": next_predicted,
             "analysis_period": f"{timeframe_days} days",
-            "analyzed_at": datetime.utcnow().isoformat(),
+            "analyzed_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def suggest_milestone_opportunities(
@@ -646,12 +646,12 @@ class MilestoneDetector:
 
         # Create milestone
         milestone = RelationshipMilestone(
-            milestone_id=f"{context.user_profile.user_id}_{pattern.milestone_type.value}_{datetime.utcnow().timestamp()}",
+            milestone_id=f"{context.user_profile.user_id}_{pattern.milestone_type.value}_{datetime.now(timezone.utc).timestamp()}",
             milestone_type=pattern.milestone_type,
             description=self._generate_milestone_description(
                 pattern, context, match_reasons
             ),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             emotional_significance=significance,
             celebration_acknowledged=False,
         )

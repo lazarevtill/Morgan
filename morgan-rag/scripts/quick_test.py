@@ -49,7 +49,7 @@ for c in collections[:5]:
 # 5. Emotion Detection
 print("\n5. Testing Emotion Detection...")
 try:
-    from morgan.emotional.intelligence_engine import EmotionalIntelligenceEngine
+    from morgan.intelligence.core.intelligence_engine import EmotionalIntelligenceEngine
 
     emotion_engine = EmotionalIntelligenceEngine()
     print(f"   ✅ Emotion engine initialized")

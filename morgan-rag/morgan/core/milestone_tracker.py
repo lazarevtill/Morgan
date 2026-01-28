@@ -5,7 +5,7 @@ Handles relationship milestone detection, tracking, and celebration
 following KISS principles - focused solely on milestone management.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -230,10 +230,10 @@ class MilestoneTracker:
         )
 
         milestone = RelationshipMilestone(
-            milestone_id=f"{user_profile.user_id}_{milestone_type.value}_{datetime.utcnow().timestamp()}",
+            milestone_id=f"{user_profile.user_id}_{milestone_type.value}_{datetime.now(timezone.utc).timestamp()}",
             milestone_type=model_milestone_type,
             description=description,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             emotional_significance=significance,
             celebration_acknowledged=False,
         )

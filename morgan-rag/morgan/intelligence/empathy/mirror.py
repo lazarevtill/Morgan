@@ -6,7 +6,7 @@ in a supportive way, helping users feel understood and creating emotional connec
 """
 
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
@@ -303,7 +303,7 @@ class EmotionalMirror:
                         user_id="",
                         conversation_id="",
                         message_text=user_words,
-                        timestamp=datetime.utcnow(),
+                        timestamp=datetime.now(timezone.utc),
                     ),
                 )
 

@@ -8,7 +8,7 @@ to improve understanding and communication within specialized fields.
 import json
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -65,7 +65,7 @@ class VocabularyTerm:
     def update_usage(self, context: str):
         """Update usage statistics for the term."""
         self.usage_count += 1
-        self.last_used = datetime.utcnow()
+        self.last_used = datetime.now(timezone.utc)
 
         # Keep only recent contexts (last 10)
         self.contexts.append(context)
@@ -97,7 +97,7 @@ class DomainVocabulary:
         """Add a new term to the vocabulary."""
         self.terms[term.term.lower()] = term
         self.total_terms = len(self.terms)
-        self.last_updated = datetime.utcnow()
+        self.last_updated = datetime.now(timezone.utc)
 
     def get_term(self, term: str) -> Optional[VocabularyTerm]:
         """Get a term from the vocabulary."""
@@ -108,16 +108,16 @@ class DomainVocabulary:
         vocab_term = self.get_term(term)
         if vocab_term:
             vocab_term.update_usage(context)
-            self.last_updated = datetime.utcnow()
+            self.last_updated = datetime.now(timezone.utc)
 
     def get_active_terms(self, days: int = 30) -> List[VocabularyTerm]:
         """Get terms used within the specified number of days."""
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         return [term for term in self.terms.values() if term.last_used >= cutoff_date]
 
     def get_learning_velocity(self, weeks: int = 4) -> float:
         """Calculate learning velocity (new terms per week)."""
-        cutoff_date = datetime.utcnow() - timedelta(weeks=weeks)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(weeks=weeks)
         new_terms = [
             term for term in self.terms.values() if term.first_seen >= cutoff_date
         ]

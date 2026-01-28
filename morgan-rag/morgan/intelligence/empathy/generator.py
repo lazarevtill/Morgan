@@ -6,7 +6,7 @@ provide appropriate support, and maintain relationship context.
 """
 
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from morgan.config import get_settings
@@ -232,7 +232,7 @@ class EmpatheticResponseGenerator:
             recent_milestones = [
                 m
                 for m in companion_profile.relationship_milestones
-                if (datetime.utcnow() - m.timestamp).days <= 7
+                if (datetime.now(timezone.utc) - m.timestamp).days <= 7
             ]
             if recent_milestones:
                 relationship_elements.append("recent_milestones:true")

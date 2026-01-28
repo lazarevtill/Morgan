@@ -6,7 +6,7 @@ schema for emotional intelligence and relationship management.
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 from morgan.companion.storage import CompanionStorage
@@ -15,7 +15,7 @@ from morgan.companion.schema import (
     validate_companion_payload,
     validate_emotion_payload,
 )
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     CompanionProfile,
     EmotionalState,
     UserPreferences,
@@ -98,7 +98,7 @@ class TestCompanionStorage:
             milestone_id="milestone_123",
             milestone_type=MilestoneType.BREAKTHROUGH_MOMENT,
             description="User successfully completed first AI project",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             emotional_significance=0.9,
             related_memories=["memory_1", "memory_2"],
         )

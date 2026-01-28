@@ -6,17 +6,18 @@ preference extraction, and learning metrics tracking.
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 from morgan.learning.engine import LearningEngine, LearningSession, LearningMetrics
 from morgan.learning.feedback import UserFeedback, FeedbackType, FeedbackSentiment
-from morgan.emotional.models import (
+from morgan.intelligence.core.models import (
     InteractionData,
     ConversationContext,
     CompanionProfile,
     EmotionalState,
     EmotionType,
+    UserPreferences,
 )
 
 
@@ -34,21 +35,18 @@ class TestLearningEngine:
         interactions = []
         for i in range(10):
             interaction = InteractionData(
-                interaction_id=f"test_{i}",
-                user_id="test_user",
                 conversation_context=ConversationContext(
                     user_id="test_user",
                     conversation_id="test_conv",
                     message_text=f"Test message {i}",
-                    timestamp=datetime.utcnow() - timedelta(days=i),
+                    timestamp=datetime.now(timezone.utc) - timedelta(days=i),
                 ),
                 emotional_state=EmotionalState(
                     primary_emotion=EmotionType.NEUTRAL,
                     intensity=0.5,
                     confidence=0.7,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                 ),
-                timestamp=datetime.utcnow() - timedelta(days=i),
             )
             interactions.append(interaction)
         return interactions
@@ -61,6 +59,7 @@ class TestLearningEngine:
             preferred_name="friend",
             relationship_duration=timedelta(days=30),
             interaction_count=15,
+            communication_preferences=UserPreferences(),
             trust_level=0.7,
             engagement_score=0.75,
         )
@@ -72,7 +71,7 @@ class TestLearningEngine:
             user_id="test_user",
             conversation_id="test_conv",
             message_text="This is a test message",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     @pytest.fixture
@@ -99,16 +98,18 @@ class TestLearningEngine:
         """Test analyzing patterns with insufficient interactions."""
         few_interactions = [
             InteractionData(
-                interaction_id="test_1",
-                user_id="test_user",
                 conversation_context=ConversationContext(
                     user_id="test_user",
                     conversation_id="test_conv",
                     message_text="Test",
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                 ),
-                emotional_state=None,
-                timestamp=datetime.utcnow(),
+                emotional_state=EmotionalState(
+                    primary_emotion=EmotionType.NEUTRAL,
+                    intensity=0.5,
+                    confidence=0.7,
+                    timestamp=datetime.now(timezone.utc),
+                ),
             )
         ]
 
@@ -197,7 +198,7 @@ class TestLearningEngine:
         session = LearningSession(
             session_id="test_session",
             user_id="test_user",
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc),
             interactions_processed=10,
             patterns_identified=8,
             preferences_updated=5,
@@ -215,7 +216,7 @@ class TestLearningEngine:
         session = LearningSession(
             session_id="test_session",
             user_id="test_user",
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc),
             interactions_processed=0,
         )
 
@@ -249,7 +250,7 @@ class TestLearningSession:
     def test_learning_session_creation(self):
         """Test creating learning session."""
         session = LearningSession(
-            session_id="test_session", user_id="test_user", start_time=datetime.utcnow()
+            session_id="test_session", user_id="test_user", start_time=datetime.now(timezone.utc)
         )
 
         assert session.session_id == "test_session"
@@ -259,7 +260,7 @@ class TestLearningSession:
     def test_learning_session_auto_id(self):
         """Test learning session with auto-generated ID."""
         session = LearningSession(
-            session_id="", user_id="test_user", start_time=datetime.utcnow()
+            session_id="", user_id="test_user", start_time=datetime.now(timezone.utc)
         )
 
         assert session.session_id is not None

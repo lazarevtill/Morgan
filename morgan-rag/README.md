@@ -1,6 +1,6 @@
 # Morgan RAG - Core Intelligence Engine
 
-**Last Updated:** December 26, 2025
+**Last Updated:** January 29, 2026
 
 Morgan RAG is the core intelligence engine of the Morgan AI Assistant. It provides unified services for LLM, embeddings, and reranking, along with emotional intelligence, memory management, and multi-stage search.
 
@@ -230,7 +230,6 @@ pytest tests/test_llm_service.py
 
 - [Architecture](./docs/ARCHITECTURE.md) - Detailed architecture documentation
 - [Quick Start](./QUICK_START.md) - Quick start guide
-- [Migration Guide](./docs/MIGRATION_GUIDE.md) - Migration guide
 
 ## Related Components
 
@@ -241,7 +240,7 @@ pytest tests/test_llm_service.py
 ## License
 
 ```
-Copyright 2025 Morgan AI Assistant Contributors
+Copyright 2025-2026 Morgan AI Assistant Contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

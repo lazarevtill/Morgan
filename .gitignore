@@ -68,3 +68,7 @@ conversations.json
 
 # Archive (deprecated code)
 /archive/
+
+# Test artifacts (MagicMock directories from mocked settings)
+MagicMock/
+**/MagicMock/

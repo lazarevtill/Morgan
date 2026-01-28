@@ -8,7 +8,7 @@ based on user patterns, availability, and contextual factors.
 import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -132,7 +132,7 @@ class OptimalTimingDetector:
             Timing recommendation
         """
         if current_time is None:
-            current_time = datetime.utcnow()
+            current_time = datetime.now(timezone.utc)
 
         # Get user's timing patterns
         timing_patterns = self.user_timing_patterns.get(user_id, {})
@@ -272,7 +272,7 @@ class OptimalTimingDetector:
             Availability forecast by hour
         """
         forecast = {}
-        current_time = datetime.utcnow()
+        current_time = datetime.now(timezone.utc)
 
         # Get user's availability patterns
         timing_patterns = self.user_timing_patterns.get(user_id, {})
@@ -311,7 +311,7 @@ class OptimalTimingDetector:
         if conversation_duration.total_seconds() / 60 > avg_length * 1.5:
             return TimingRecommendation(
                 recommended_action="suggest_break",
-                optimal_timing=datetime.utcnow() + timedelta(minutes=2),
+                optimal_timing=datetime.now(timezone.utc) + timedelta(minutes=2),
                 confidence=0.8,
                 reasoning=f"Conversation duration ({conversation_duration.total_seconds()/60:.1f} min) "
                          f"exceeds typical length ({avg_length:.1f} min)",

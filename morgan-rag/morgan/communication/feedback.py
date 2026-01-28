@@ -9,7 +9,7 @@ adaptive response refinement.
 import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List
 
@@ -180,7 +180,7 @@ class EmotionalFeedbackProcessor:
         if user_id not in self.user_feedback_history:
             return {"error": "No feedback history available"}
 
-        cutoff_date = datetime.utcnow() - timedelta(days=timeframe_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=timeframe_days)
         recent_feedback = [
             analysis
             for analysis in self.user_feedback_history[user_id]

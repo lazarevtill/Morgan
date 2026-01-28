@@ -8,7 +8,7 @@ required by the integration workflows.
 
 from ...background import BackgroundProcessingService
 from ...companion.relationship_manager import CompanionRelationshipManager
-from ...emotional.intelligence_engine import EmotionalIntelligenceEngine
+from ...intelligence.core.intelligence_engine import EmotionalIntelligenceEngine
 from ...jina.embeddings.code_service import (
     CodeIntelligenceService as CodeIntelligenceEngine,
 )

@@ -7,7 +7,7 @@ wellness support and recommendations based on detected patterns.
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, time
+from datetime import datetime, time, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Any, Tuple
 
@@ -74,7 +74,7 @@ class WellnessMetric:
     
     # Timing
     recorded_at: datetime = field(default_factory=datetime.utcnow)
-    date: datetime = field(default_factory=lambda: datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0))
+    date: datetime = field(default_factory=lambda: datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0))
     
     # Source
     source: str = "user_input"  # user_input, habit_detection, automatic
@@ -270,7 +270,7 @@ class WellnessHabitTracker:
         context: Optional[Dict[str, Any]] = None
     ) -> WellnessMetric:
         """Track a wellness metric for a user."""
-        metric_id = f"{user_id}_{category.value}_{metric_name}_{datetime.utcnow().timestamp()}"
+        metric_id = f"{user_id}_{category.value}_{metric_name}_{datetime.now(timezone.utc).timestamp()}"
         
         metric = WellnessMetric(
             metric_id=metric_id,
@@ -293,7 +293,7 @@ class WellnessHabitTracker:
             if category not in profile.current_metrics:
                 profile.current_metrics[category] = []
             profile.current_metrics[category].append(metric)
-            profile.last_updated = datetime.utcnow()
+            profile.last_updated = datetime.now(timezone.utc)
             
             # Update category score
             self._update_category_score(profile, category)
@@ -312,7 +312,7 @@ class WellnessHabitTracker:
         frequency: str = "daily"
     ) -> WellnessGoal:
         """Create a wellness goal for a user."""
-        goal_id = f"{user_id}_{category.value}_{title.replace(' ', '_').lower()}_{datetime.utcnow().timestamp()}"
+        goal_id = f"{user_id}_{category.value}_{title.replace(' ', '_').lower()}_{datetime.now(timezone.utc).timestamp()}"
         
         goal = WellnessGoal(
             goal_id=goal_id,
@@ -333,7 +333,7 @@ class WellnessHabitTracker:
         profile = self.user_profiles.get(user_id)
         if profile:
             profile.active_goals.append(goal)
-            profile.last_updated = datetime.utcnow()
+            profile.last_updated = datetime.now(timezone.utc)
         
         logger.info(f"Created wellness goal: {title} for user {user_id}")
         return goal
@@ -344,7 +344,7 @@ class WellnessHabitTracker:
             for goal in goals:
                 if goal.goal_id == goal_id:
                     goal.current_value = current_value
-                    goal.updated_at = datetime.utcnow()
+                    goal.updated_at = datetime.now(timezone.utc)
                     
                     # Calculate progress percentage
                     if isinstance(goal.target_value, (int, float)) and isinstance(current_value, (int, float)):
@@ -353,7 +353,7 @@ class WellnessHabitTracker:
                     # Check if goal is achieved
                     if self._is_goal_achieved(goal):
                         goal.status = WellnessGoalStatus.ACHIEVED
-                        goal.achieved_at = datetime.utcnow()
+                        goal.achieved_at = datetime.now(timezone.utc)
                         
                         # Move to achieved goals in profile
                         profile = self.user_profiles.get(goal.user_id)
@@ -395,7 +395,7 @@ class WellnessHabitTracker:
         
         # Store insights in profile
         profile.recent_insights = insights
-        profile.last_updated = datetime.utcnow()
+        profile.last_updated = datetime.now(timezone.utc)
         
         logger.info(f"Generated {len(insights)} wellness insights for user {user_id}")
         return insights
@@ -427,7 +427,7 @@ class WellnessHabitTracker:
             "goal_progress": goal_progress,
             "trends": trends,
             "recent_insights_count": len(profile.recent_insights),
-            "tracking_duration": (datetime.utcnow() - profile.tracking_since).days,
+            "tracking_duration": (datetime.now(timezone.utc) - profile.tracking_since).days,
             "last_updated": profile.last_updated
         }
         
@@ -516,7 +516,7 @@ class WellnessHabitTracker:
             return
         
         # Calculate score based on recent metrics
-        recent_metrics = [m for m in metrics if (datetime.utcnow() - m.recorded_at).days <= 7]
+        recent_metrics = [m for m in metrics if (datetime.now(timezone.utc) - m.recorded_at).days <= 7]
         
         if not recent_metrics:
             return
@@ -561,7 +561,7 @@ class WellnessHabitTracker:
                 
                 if trend > 0.1:  # Improving trend
                     insight = WellnessInsight(
-                        insight_id=f"trend_positive_{user_id}_{category.value}_{datetime.utcnow().timestamp()}",
+                        insight_id=f"trend_positive_{user_id}_{category.value}_{datetime.now(timezone.utc).timestamp()}",
                         user_id=user_id,
                         category=category,
                         title=f"Improving {category.value.replace('_', ' ').title()}",
@@ -575,7 +575,7 @@ class WellnessHabitTracker:
                 
                 elif trend < -0.1:  # Declining trend
                     insight = WellnessInsight(
-                        insight_id=f"trend_negative_{user_id}_{category.value}_{datetime.utcnow().timestamp()}",
+                        insight_id=f"trend_negative_{user_id}_{category.value}_{datetime.now(timezone.utc).timestamp()}",
                         user_id=user_id,
                         category=category,
                         title=f"Declining {category.value.replace('_', ' ').title()}",
@@ -608,7 +608,7 @@ class WellnessHabitTracker:
                 )
                 insights.append(insight)
             
-            elif goal.progress_percentage < 30 and (datetime.utcnow() - goal.created_at).days > 7:
+            elif goal.progress_percentage < 30 and (datetime.now(timezone.utc) - goal.created_at).days > 7:
                 insight = WellnessInsight(
                     insight_id=f"goal_behind_{goal.goal_id}",
                     user_id=user_id,
@@ -635,7 +635,7 @@ class WellnessHabitTracker:
                 if templates:
                     template = templates[0]  # Use first template
                     insight = WellnessInsight(
-                        insight_id=f"recommend_goal_{user_id}_{category.value}_{datetime.utcnow().timestamp()}",
+                        insight_id=f"recommend_goal_{user_id}_{category.value}_{datetime.now(timezone.utc).timestamp()}",
                         user_id=user_id,
                         category=category,
                         title=f"Improve Your {category.value.replace('_', ' ').title()}",
@@ -656,7 +656,7 @@ class WellnessHabitTracker:
         # Alert for very low wellness scores
         if profile.overall_wellness_score < 0.3:
             insight = WellnessInsight(
-                insight_id=f"wellness_alert_{user_id}_{datetime.utcnow().timestamp()}",
+                insight_id=f"wellness_alert_{user_id}_{datetime.now(timezone.utc).timestamp()}",
                 user_id=user_id,
                 category=WellnessCategory.MENTAL_HEALTH,  # Default to mental health
                 title="Wellness Needs Attention",
@@ -672,7 +672,7 @@ class WellnessHabitTracker:
     
     def _get_recent_metrics(self, user_id: str, days: int = 7) -> List[WellnessMetric]:
         """Get recent wellness metrics for a user."""
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         return [
             metric for metric in self.wellness_metrics[user_id]
             if metric.recorded_at >= cutoff_date
@@ -685,7 +685,7 @@ class WellnessHabitTracker:
         for category in WellnessCategory:
             category_metrics = [
                 m for m in self.wellness_metrics[user_id]
-                if m.category == category and (datetime.utcnow() - m.recorded_at).days <= 14
+                if m.category == category and (datetime.now(timezone.utc) - m.recorded_at).days <= 14
             ]
             
             if len(category_metrics) >= 3:
@@ -743,7 +743,7 @@ class WellnessHabitTracker:
             for indicator in indicators:
                 if indicator in text_content:
                     metric = WellnessMetric(
-                        metric_id=f"detected_{user_id}_{category.value}_{datetime.utcnow().timestamp()}",
+                        metric_id=f"detected_{user_id}_{category.value}_{datetime.now(timezone.utc).timestamp()}",
                         user_id=user_id,
                         category=category,
                         metric_type=WellnessMetricType.BINARY,

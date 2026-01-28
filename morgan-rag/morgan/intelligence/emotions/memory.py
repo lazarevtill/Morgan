@@ -7,7 +7,7 @@ emotional context preservation and relationship significance tracking.
 
 import threading
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
@@ -56,8 +56,8 @@ class EmotionalMemory:
         self.relationship_significance = relationship_significance
         self.memory_type = memory_type
         self.tags = tags or []
-        self.created_at = datetime.utcnow()
-        self.last_accessed = datetime.utcnow()
+        self.created_at = datetime.now(timezone.utc)
+        self.last_accessed = datetime.now(timezone.utc)
         self.access_count = 0
         self.decay_factor = 1.0
 
@@ -69,7 +69,7 @@ class EmotionalMemory:
             Current importance score with decay applied
         """
         # Calculate time-based decay
-        days_old = (datetime.utcnow() - self.created_at).days
+        days_old = (datetime.now(timezone.utc) - self.created_at).days
 
         # Emotional memories decay slower than regular memories
         emotional_weight = self.emotional_state.intensity
@@ -92,7 +92,7 @@ class EmotionalMemory:
 
     def mark_accessed(self):
         """Mark memory as accessed for decay calculation."""
-        self.last_accessed = datetime.utcnow()
+        self.last_accessed = datetime.now(timezone.utc)
         self.access_count += 1
 
     def to_dict(self) -> Dict[str, Any]:
@@ -288,7 +288,7 @@ class EmotionalMemoryStorage:
             filter_conditions["emotional_state.primary_emotion"] = emotion_filter.value
 
         if max_age_days:
-            cutoff_date = datetime.utcnow() - timedelta(days=max_age_days)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=max_age_days)
             filter_conditions["created_at"] = {"$gte": cutoff_date.isoformat()}
 
         # Search memories

@@ -15,7 +15,7 @@ import asyncio
 import hashlib
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
@@ -537,7 +537,7 @@ class WebSearchService:
         with self._lock:
             if cache_key in self._cache:
                 results, timestamp = self._cache[cache_key]
-                if datetime.utcnow() - timestamp < self._cache_ttl:
+                if datetime.now(timezone.utc) - timestamp < self._cache_ttl:
                     return results
                 else:
                     # Expired, remove from cache
@@ -551,11 +551,11 @@ class WebSearchService:
             if len(self._cache) >= self._max_cache_size:
                 self._clean_cache()
 
-            self._cache[cache_key] = (results, datetime.utcnow())
+            self._cache[cache_key] = (results, datetime.now(timezone.utc))
 
     def _clean_cache(self) -> None:
         """Remove expired entries from cache."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expired_keys = [
             key
             for key, (_, timestamp) in self._cache.items()
@@ -573,7 +573,7 @@ class WebSearchService:
 
     def _check_rate_limit(self) -> bool:
         """Check if we're within rate limits."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cutoff = now - timedelta(minutes=1)
 
         with self._lock:

@@ -8,7 +8,7 @@ analysis, feedback processing, and behavioral pattern recognition.
 import threading
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from morgan.config import get_settings
@@ -216,7 +216,7 @@ class UserPreferenceLearner:
         if user_id not in self.learning_history:
             return {"error": "No learning history available"}
 
-        cutoff_date = datetime.utcnow() - timedelta(days=timeframe_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=timeframe_days)
         recent_learning = [
             result
             for result in self.learning_history[user_id]

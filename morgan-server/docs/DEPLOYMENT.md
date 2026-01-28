@@ -811,7 +811,6 @@ curl http://localhost:6333/collections/morgan
 - [Configuration Guide](./CONFIGURATION.md) - Detailed configuration options
 - [Embedding Configuration](./EMBEDDING_CONFIGURATION.md) - Embedding setup
 - [API Documentation](./API.md) - API reference
-- [Migration Guide](../../MIGRATION.md) - Migrating from old system
 
 ## Support
 

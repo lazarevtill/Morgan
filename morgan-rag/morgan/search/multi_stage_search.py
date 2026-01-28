@@ -20,7 +20,7 @@ import re
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -988,7 +988,7 @@ class MultiStageSearchEngine:
 
             # Apply temporal scoring
             results = []
-            current_time = datetime.utcnow()
+            current_time = datetime.now(timezone.utc)
 
             for result in search_results:
                 search_result = self._convert_to_search_result(result, "temporal")
@@ -1073,7 +1073,7 @@ class MultiStageSearchEngine:
                     user_id="default_user",  # Will be enhanced with actual user ID
                     conversation_id=f"search_{request_id}",
                     message_text=query,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                 )
                 query_emotion = emotional_engine.analyze_emotion(query, query_context)
             except Exception as e:
@@ -1363,7 +1363,7 @@ class MultiStageSearchEngine:
                     user_id=user_id,
                     conversation_id="search_context",
                     message_text=query,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                 )
 
                 emotional_state = emotional_engine.analyze_emotion(query, conv_context)
@@ -2019,7 +2019,7 @@ class MultiStageSearchEngine:
                     from datetime import datetime
 
                     turn_time = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-                    current_time = datetime.utcnow()
+                    current_time = datetime.now(timezone.utc)
                     days_ago = (current_time - turn_time).days
 
                     # Boost recent conversations (within last 30 days)
@@ -2090,7 +2090,7 @@ class MultiStageSearchEngine:
             Boost factor (0.0 to 0.3)
         """
         try:
-            current_time = datetime.utcnow()
+            current_time = datetime.now(timezone.utc)
             time_diff = current_time - timestamp
             days_ago = time_diff.days
 

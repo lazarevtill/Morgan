@@ -97,7 +97,7 @@ class TestMultiStageSearchEngine:
         """Test search engine initializes correctly."""
         assert search_engine is not None
         assert search_engine.knowledge_collection == "morgan_knowledge"
-        assert search_engine.memory_collection == "morgan_turns"
+        assert search_engine.memory_collection == "morgan_memories"
         assert search_engine.coarse_filter_ratio == 0.1
         assert search_engine.rrf_k == 60
 
@@ -447,7 +447,7 @@ class TestMultiStageSearchEngine:
             result = results[0]
             assert "Q:" in result.content
             assert "A:" in result.content
-            assert result.result_type == "memory"
+            assert result.result_type in ("memory", "similar_memory")
             assert "Conversation" in result.source
 
 

@@ -7,13 +7,23 @@ Centralized Intelligence Constants for Morgan AI Assistant.
 Single source of truth for emotion patterns, intensity modifiers,
 and other intelligence-related constants.
 
-This module consolidates patterns from:
-- intelligence/emotions/detector.py
-- intelligence/core/intelligence_engine.py
+SEMANTIC-FIRST ARCHITECTURE NOTE:
+=================================
+As of the semantic refactor, these patterns are used for VALIDATION only,
+not as the primary detection method. The primary detection is now LLM-based
+semantic analysis that understands meaning, context, and hidden emotions.
+
+These patterns serve to:
+1. VALIDATE semantic analysis results
+2. BOOST CONFIDENCE when patterns agree with semantic results
+3. Provide FALLBACK detection if semantic analysis fails
+4. Catch EXPLICIT emotional language that helps verify semantic understanding
+
+The patterns do NOT drive primary detection - they support it.
 
 Usage:
     from morgan.intelligence.constants import (
-        EMOTION_PATTERNS,
+        EMOTION_PATTERNS,  # For validation, not primary detection
         INTENSITY_MODIFIERS,
         NEGATION_PATTERNS,
         FORMALITY_INDICATORS,
@@ -26,8 +36,10 @@ from .core.models import EmotionType
 
 
 # =============================================================================
-# Emotion Detection Patterns
+# Emotion Validation Patterns
 # =============================================================================
+# NOTE: These are used for VALIDATION of semantic analysis, not primary detection.
+# The semantic-first approach uses LLM analysis as the primary method.
 
 EMOTION_PATTERNS = {
     EmotionType.JOY: [
@@ -193,3 +205,16 @@ EMOTION_THRESHOLDS = {
     "intensity_high": 0.8,          # High intensity threshold
     "intensity_low": 0.3,           # Low intensity threshold
 }
+
+
+# =============================================================================
+# Semantic-First Architecture Aliases
+# =============================================================================
+# These aliases clarify the purpose of patterns in the semantic-first architecture.
+# Use these names when the validation purpose is important to emphasize.
+
+# Alias for EMOTION_PATTERNS - emphasizes validation role
+VALIDATION_PATTERNS = EMOTION_PATTERNS
+
+# Alias for FORMALITY_INDICATORS - used for style validation
+STYLE_VALIDATION_PATTERNS = FORMALITY_INDICATORS

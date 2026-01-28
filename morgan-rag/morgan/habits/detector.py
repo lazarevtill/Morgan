@@ -8,7 +8,7 @@ for personalized assistance and proactive support.
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, time
+from datetime import datetime, time, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -181,7 +181,7 @@ class HabitDetector:
             return self._create_empty_analysis(user_id, analysis_period)
         
         # Filter interactions to analysis period
-        cutoff_date = datetime.utcnow() - analysis_period
+        cutoff_date = datetime.now(timezone.utc) - analysis_period
         recent_interactions = [
             interaction for interaction in interactions
             if hasattr(interaction, 'timestamp') and interaction.timestamp >= cutoff_date
@@ -386,7 +386,7 @@ class HabitDetector:
         confidence = self._determine_confidence(len(session_times), consistency_score)
         
         return HabitPattern(
-            habit_id=f"comm_timing_{user_id}_{datetime.utcnow().timestamp()}",
+            habit_id=f"comm_timing_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             habit_type=HabitType.COMMUNICATION,
             name="Regular Communication Sessions",
@@ -435,7 +435,7 @@ class HabitDetector:
             return None
         
         return HabitPattern(
-            habit_id=f"question_habit_{user_id}_{datetime.utcnow().timestamp()}",
+            habit_id=f"question_habit_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             habit_type=HabitType.COMMUNICATION,
             name="Frequent Question Asking",
@@ -449,8 +449,8 @@ class HabitDetector:
             context=["information seeking"],
             keywords=["questions", "inquiry", "learning"],
             occurrence_count=question_count,
-            first_observed=interactions[0].timestamp if interactions else datetime.utcnow(),
-            last_observed=interactions[-1].timestamp if interactions else datetime.utcnow(),
+            first_observed=interactions[0].timestamp if interactions else datetime.now(timezone.utc),
+            last_observed=interactions[-1].timestamp if interactions else datetime.now(timezone.utc),
             consistency_score=question_ratio
         )
     
@@ -526,7 +526,7 @@ class HabitDetector:
         confidence = self._determine_confidence(match_count, match_ratio)
         
         return HabitPattern(
-            habit_id=f"{habit_type.value}_{user_id}_{datetime.utcnow().timestamp()}",
+            habit_id=f"{habit_type.value}_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             habit_type=habit_type,
             name=f"{habit_type.value.title()} Interest",
@@ -540,8 +540,8 @@ class HabitDetector:
             context=[habit_type.value],
             keywords=[habit_type.value],
             occurrence_count=match_count,
-            first_observed=timestamps[0] if timestamps else datetime.utcnow(),
-            last_observed=timestamps[-1] if timestamps else datetime.utcnow(),
+            first_observed=timestamps[0] if timestamps else datetime.now(timezone.utc),
+            last_observed=timestamps[-1] if timestamps else datetime.now(timezone.utc),
             consistency_score=match_ratio
         )
     
@@ -567,7 +567,7 @@ class HabitDetector:
             return None
         
         return HabitPattern(
-            habit_id=f"daily_routine_{user_id}_{datetime.utcnow().timestamp()}",
+            habit_id=f"daily_routine_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             habit_type=HabitType.ROUTINE,
             name="Daily Interaction Routine",
@@ -613,7 +613,7 @@ class HabitDetector:
         ]
         
         return HabitPattern(
-            habit_id=f"weekly_routine_{user_id}_{datetime.utcnow().timestamp()}",
+            habit_id=f"weekly_routine_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             habit_type=HabitType.ROUTINE,
             name="Weekly Interaction Pattern",
@@ -669,7 +669,7 @@ class HabitDetector:
             return habits
         
         habit = HabitPattern(
-            habit_id=f"time_pref_{max_period.lower()}_{user_id}_{datetime.utcnow().timestamp()}",
+            habit_id=f"time_pref_{max_period.lower()}_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             habit_type=HabitType.ROUTINE,
             name=f"{max_period} Preference",
@@ -711,7 +711,7 @@ class HabitDetector:
             return None
         
         return HabitPattern(
-            habit_id=f"feedback_habit_{user_id}_{datetime.utcnow().timestamp()}",
+            habit_id=f"feedback_habit_{user_id}_{datetime.now(timezone.utc).timestamp()}",
             user_id=user_id,
             habit_type=HabitType.COMMUNICATION,
             name="Regular Feedback Provider",
@@ -725,8 +725,8 @@ class HabitDetector:
             context=["feedback"],
             keywords=["feedback", "rating", "helpful"],
             occurrence_count=feedback_count,
-            first_observed=interactions[0].timestamp if interactions else datetime.utcnow(),
-            last_observed=interactions[-1].timestamp if interactions else datetime.utcnow(),
+            first_observed=interactions[0].timestamp if interactions else datetime.now(timezone.utc),
+            last_observed=interactions[-1].timestamp if interactions else datetime.now(timezone.utc),
             consistency_score=feedback_ratio
         )
     
@@ -917,7 +917,7 @@ class HabitDetector:
         best_habit = max(timing_habits, key=lambda h: h.consistency_score)
         
         # Predict next occurrence based on typical times
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         today = now.date()
         
         for typical_time in best_habit.typical_times:

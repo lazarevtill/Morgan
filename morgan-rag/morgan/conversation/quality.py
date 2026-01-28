@@ -8,7 +8,7 @@ to ensure engaging, helpful, and satisfying user interactions.
 import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -257,7 +257,7 @@ class ConversationQualityAssessor:
             return []
 
         # Filter by timeframe
-        cutoff_date = datetime.utcnow() - timedelta(days=timeframe_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=timeframe_days)
         recent_assessments = [
             assessment for assessment in user_history
             if assessment.assessment_timestamp >= cutoff_date
@@ -295,7 +295,7 @@ class ConversationQualityAssessor:
             return insights
 
         # Filter by timeframe
-        cutoff_date = datetime.utcnow() - timedelta(days=timeframe_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=timeframe_days)
         recent_assessments = [
             assessment for assessment in user_history
             if assessment.assessment_timestamp >= cutoff_date
@@ -359,7 +359,7 @@ class ConversationQualityAssessor:
             return {"error": "No quality data available"}
 
         # Filter by timeframe
-        cutoff_date = datetime.utcnow() - timedelta(days=timeframe_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=timeframe_days)
         recent_assessments = [
             assessment for assessment in user_history
             if assessment.assessment_timestamp >= cutoff_date

@@ -8,7 +8,7 @@ preferences, and current situation to support user goals and routines.
 import asyncio
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, time
+from datetime import datetime, time, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Any, Callable
 
@@ -416,7 +416,7 @@ class IntelligentReminderSystem:
     
     def get_due_reminders(self, user_id: str) -> List[Reminder]:
         """Get reminders that are due for a user."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         due_reminders = []
         
         for reminder in self.user_reminders[user_id]:
@@ -430,7 +430,7 @@ class IntelligentReminderSystem:
         self, user_id: str, hours_ahead: int = 24
     ) -> List[Reminder]:
         """Get upcoming reminders for a user."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cutoff = now + timedelta(hours=hours_ahead)
         
         upcoming = []
@@ -457,7 +457,7 @@ class IntelligentReminderSystem:
         reminder.scheduled_time += snooze_duration
         reminder.snooze_count += 1
         reminder.status = ReminderStatus.SNOOZED
-        reminder.updated_at = datetime.utcnow()
+        reminder.updated_at = datetime.now(timezone.utc)
         
         logger.info(f"Snoozed reminder {reminder_id} for {snooze_duration}")
         return True
@@ -469,8 +469,8 @@ class IntelligentReminderSystem:
             return False
         
         reminder.status = ReminderStatus.ACKNOWLEDGED
-        reminder.acknowledged_at = datetime.utcnow()
-        reminder.updated_at = datetime.utcnow()
+        reminder.acknowledged_at = datetime.now(timezone.utc)
+        reminder.updated_at = datetime.now(timezone.utc)
         
         logger.info(f"Acknowledged reminder {reminder_id}")
         return True
@@ -482,8 +482,8 @@ class IntelligentReminderSystem:
             return False
         
         reminder.status = ReminderStatus.COMPLETED
-        reminder.completed_at = datetime.utcnow()
-        reminder.updated_at = datetime.utcnow()
+        reminder.completed_at = datetime.now(timezone.utc)
+        reminder.updated_at = datetime.now(timezone.utc)
         
         # Calculate effectiveness
         if reminder.delivered_at and reminder.completed_at:
@@ -510,7 +510,7 @@ class IntelligentReminderSystem:
             return False
         
         reminder.status = ReminderStatus.DISMISSED
-        reminder.updated_at = datetime.utcnow()
+        reminder.updated_at = datetime.now(timezone.utc)
         
         # Lower effectiveness for dismissed reminders
         reminder.effectiveness_score = max(0.0, reminder.effectiveness_score - 0.2)
@@ -559,14 +559,14 @@ class IntelligentReminderSystem:
         # Respect busy periods
         if busy_level and busy_level > 0.7 and preferences.respect_busy_periods:
             # Delay non-urgent reminders during busy periods
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             for reminder in self.user_reminders[user_id]:
                 if (reminder.status == ReminderStatus.SCHEDULED and
                     reminder.priority != ReminderPriority.URGENT and
                     reminder.scheduled_time <= now + timedelta(hours=1)):
                     
                     reminder.scheduled_time += timedelta(hours=2)
-                    reminder.updated_at = datetime.utcnow()
+                    reminder.updated_at = datetime.now(timezone.utc)
     
     def get_reminder_statistics(self, user_id: str) -> Dict[str, Any]:
         """Get reminder statistics for a user."""
@@ -607,7 +607,7 @@ class IntelligentReminderSystem:
     
     def _get_next_occurrence(self, target_time: time) -> datetime:
         """Get next occurrence of a specific time."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         today = now.date()
         
         target_datetime = datetime.combine(today, target_time)
@@ -647,8 +647,8 @@ class IntelligentReminderSystem:
         logger.info(f"Delivering reminder {reminder.reminder_id} to user {reminder.user_id}")
         
         reminder.status = ReminderStatus.ACTIVE
-        reminder.delivered_at = datetime.utcnow()
-        reminder.updated_at = datetime.utcnow()
+        reminder.delivered_at = datetime.now(timezone.utc)
+        reminder.updated_at = datetime.now(timezone.utc)
         
         # Execute delivery callback if registered
         callback_name = f"deliver_{reminder.delivery_method.value}"

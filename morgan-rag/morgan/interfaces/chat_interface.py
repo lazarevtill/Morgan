@@ -9,7 +9,7 @@ KISS: Clean interface that uses modular display and command components.
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -73,7 +73,7 @@ class EmotionalChatInterface:
         session = ChatSession(
             user_id=user_id,
             conversation_id=conversation_id,
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc),
         )
         self.active_sessions[user_id] = session
 

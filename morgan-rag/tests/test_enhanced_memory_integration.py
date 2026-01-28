@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "morgan"))
 from morgan.search.companion_memory_search import get_companion_memory_search_engine
 from morgan.search.multi_stage_search import get_multi_stage_search_engine
 from morgan.memory.memory_processor import get_memory_processor
-from morgan.emotional.models import EmotionalState, EmotionType, ConversationContext
+from morgan.intelligence.core.models import EmotionalState, EmotionType, ConversationContext
 from morgan.core.memory import ConversationTurn
 
 

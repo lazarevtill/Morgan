@@ -329,8 +329,13 @@ This implementation plan outlines all tasks for reorganizing the Morgan codebase
 **Duration**: 1 day
 **Dependencies**: All phases
 
-- [ ] 12.1 Run existing tests
-  - Fix any broken tests from refactoring
+- [x] 12.1 Run existing tests
+  - Fixed 16 test files with broken imports after module reorganization
+  - Deleted test_system_integration.py (imports non-existent morgan.core.system_integration)
+  - Fixed morgan.emotional.models -> morgan.intelligence.core.models (10 files)
+  - Fixed morgan.empathy.* -> morgan.intelligence.empathy.* (5 files)
+  - Fixed morgan.emotions.* -> morgan.intelligence.emotions.* (1 file)
+  - Fixed all patch() target strings to match new module paths
   - _Requirements: All_
 
 - [ ] 12.2 Add integration tests

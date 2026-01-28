@@ -9,7 +9,7 @@ This module implements the profile endpoints for Morgan server:
 
 import logging
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, status, Path
 from fastapi.responses import JSONResponse
 
@@ -63,7 +63,7 @@ async def get_user_profile(
         if hasattr(profile, "get_relationship_age_days"):
             relationship_age = profile.get_relationship_age_days()
         elif hasattr(profile, "profile_created"):
-            delta = datetime.utcnow() - profile.profile_created
+            delta = datetime.now(timezone.utc) - profile.profile_created
             relationship_age = delta.days
 
         # Get preferences safely

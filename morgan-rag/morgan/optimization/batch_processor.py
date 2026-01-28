@@ -591,10 +591,14 @@ class BatchProcessor:
         metrics = {}
 
         # Group metrics by operation type
+        # Keys are formatted as "{op_type}_throughput", "{op_type}_batch_size", "{op_type}_processing_time"
+        known_suffixes = ("_throughput", "_batch_size", "_processing_time")
         operation_types = set()
         for key in self.metrics.keys():
-            operation_type = key.split("_")[0]
-            operation_types.add(operation_type)
+            for suffix in known_suffixes:
+                if key.endswith(suffix):
+                    operation_types.add(key[: -len(suffix)])
+                    break
 
         for op_type in operation_types:
             throughput_key = f"{op_type}_throughput"

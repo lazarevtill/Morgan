@@ -6,7 +6,7 @@ following KISS principles - focused on conversation logic only.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.intelligence.core.models import (
@@ -47,7 +47,7 @@ class ConversationManager:
             user_id=user_id or "anonymous",
             conversation_id=conversation_id or str(uuid.uuid4()),
             message_text=question,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             previous_messages=previous_messages,
         )
 

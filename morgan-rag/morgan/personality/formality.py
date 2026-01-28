@@ -7,7 +7,7 @@ and personality traits to match appropriate professional or casual tone.
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, List, Optional
 
@@ -102,7 +102,7 @@ class FormalityPreference:
     def set_context_preference(self, context_type: ContextType, level: FormalityLevel):
         """Set formality preference for a specific context."""
         self.context_preferences[context_type] = level
-        self.last_updated = datetime.utcnow()
+        self.last_updated = datetime.now(timezone.utc)
 
 
 class FormalityLevelAdjuster:

@@ -3,13 +3,20 @@ Emotional trigger detection module.
 
 Provides focused emotional trigger identification, sensitivity analysis,
 and trigger management for enhanced emotional intelligence and user support.
+
+Semantic-First Architecture:
+- LLM analysis identifies CONCEPTUAL triggers, not just word triggers
+- Understands context-dependent triggering (work stress only with deadlines)
+- Tracks WHY things trigger, not just THAT they trigger
+- Detects trigger patterns from meaning, not keyword matching
 """
 
 import hashlib
+import json
 import re
 import threading
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
@@ -18,6 +25,8 @@ from morgan.intelligence.emotions.memory import (
     EmotionalMemory,
     get_emotional_memory_storage,
 )
+from morgan.services.llm import get_llm_service
+from morgan.utils.llm_parsing import parse_llm_json
 from morgan.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -56,8 +65,8 @@ class EmotionalTrigger:
         self.confidence = confidence
         self.context_factors = context_factors
         self.detection_count = detection_count
-        self.first_detected = datetime.utcnow()
-        self.last_detected = datetime.utcnow()
+        self.first_detected = datetime.now(timezone.utc)
+        self.last_detected = datetime.now(timezone.utc)
         self.response_intensities = []
         self.associated_memories = []
 
@@ -66,7 +75,7 @@ class EmotionalTrigger:
     ):
         """Update trigger with new detection."""
         self.detection_count += 1
-        self.last_detected = datetime.utcnow()
+        self.last_detected = datetime.now(timezone.utc)
         self.response_intensities.append(intensity)
         self.associated_memories.append(memory_id)
 
@@ -114,7 +123,7 @@ class EmotionalTrigger:
         Returns:
             True if trigger is still active
         """
-        age = datetime.utcnow() - self.last_detected
+        age = datetime.now(timezone.utc) - self.last_detected
         return age.days <= max_age_days
 
     def to_dict(self) -> Dict[str, Any]:
@@ -163,42 +172,73 @@ class EmotionalTriggerDetector:
     """
     Detects and analyzes emotional triggers in user interactions.
 
+    Semantic-First Architecture:
+    - LLM analysis is PRIMARY for conceptual trigger detection
+    - Identifies CONCEPTS that trigger, not just WORDS
+    - Understands context-dependent triggering
+    - Tracks WHY things trigger (reasoning), not just THAT they trigger
+    - Pattern matching is SECONDARY for validation
+
     Features:
-    - Pattern-based trigger detection
-    - Contextual trigger analysis
-    - Sensitivity assessment
+    - Semantic conceptual trigger detection
+    - Context-aware trigger analysis
+    - Trigger causality understanding
+    - Sensitivity assessment with reasoning
     - Trigger management and tracking
     """
 
-    # Trigger type definitions
+    # Trigger type definitions (expanded for semantic understanding)
     TRIGGER_TYPES = {
-        "keyword": "Specific words or phrases that trigger emotions",
-        "topic": "Subject matters that consistently evoke responses",
-        "temporal": "Time-based triggers (dates, anniversaries)",
+        "conceptual": "Abstract concepts that trigger emotions (not specific words)",
+        "relational": "Relationship-related triggers (family, work relationships)",
+        "achievement": "Success/failure related triggers",
+        "temporal": "Time-based triggers (dates, anniversaries, time of day)",
         "contextual": "Situational triggers based on conversation context",
-        "semantic": "Conceptual triggers based on meaning",
-        "personal": "Personal references that trigger emotions",
+        "identity": "Self-concept related triggers",
+        "loss": "Loss or grief related triggers",
+        "control": "Autonomy and control related triggers",
+    }
+
+    # Validation patterns (for secondary verification only)
+    _VALIDATION_PATTERNS = {
+        "negative_self_talk": re.compile(
+            r"\b(i am|i\'m)\s+(stupid|worthless|useless|terrible|awful|horrible)\b",
+            re.IGNORECASE,
+        ),
+        "stress_indicators": re.compile(
+            r"\b(stressed|overwhelmed|anxious|worried|panic|pressure)\b",
+            re.IGNORECASE,
+        ),
+        "loss_grief": re.compile(
+            r"\b(lost|death|died|gone|miss|grief|mourning)\b", re.IGNORECASE
+        ),
     }
 
     def __init__(self):
-        """Initialize emotional trigger detector."""
+        """Initialize emotional trigger detector with LLM service."""
         self.settings = get_settings()
         self.memory_storage = get_emotional_memory_storage()
+        self.llm_service = get_llm_service()
 
         # Trigger storage
         self._detected_triggers = {}  # user_id -> List[EmotionalTrigger]
-        self._trigger_patterns = {}  # Compiled regex patterns
+        self._trigger_patterns = {}  # Compiled regex patterns (for validation)
 
-        # Common emotional trigger patterns
+        # Initialize validation patterns
         self._initialize_trigger_patterns()
 
-        logger.info("Emotional Trigger Detector initialized")
+        logger.info("Emotional Trigger Detector initialized (semantic mode)")
 
     def detect_triggers(
         self, user_id: str, analysis_days: int = 60, min_trigger_confidence: float = 0.6
     ) -> List[EmotionalTrigger]:
         """
-        Detect emotional triggers for a user.
+        Detect emotional triggers for a user using semantic-first approach.
+
+        Semantic-First Architecture:
+        1. PRIMARY: LLM semantic analysis for conceptual triggers
+        2. SECONDARY: Pattern analysis for validation and additional triggers
+        3. COMBINED: Merged results with calibrated confidence
 
         Args:
             user_id: User identifier
@@ -221,30 +261,26 @@ class EmotionalTriggerDetector:
 
         detected_triggers = []
 
-        # Detect different types of triggers
-        keyword_triggers = self._detect_keyword_triggers(user_id, memories)
-        topic_triggers = self._detect_topic_triggers(user_id, memories)
+        # PRIMARY: Semantic conceptual trigger detection
+        semantic_triggers = self._analyze_triggers_semantically(user_id, memories)
+        detected_triggers.extend(semantic_triggers)
+
+        # SECONDARY: Pattern-based validation and additional triggers
         temporal_triggers = self._detect_temporal_triggers(user_id, memories)
         contextual_triggers = self._detect_contextual_triggers(user_id, memories)
-        semantic_triggers = self._detect_semantic_triggers(user_id, memories)
-        personal_triggers = self._detect_personal_triggers(user_id, memories)
 
-        # Combine all triggers
-        all_triggers = (
-            keyword_triggers
-            + topic_triggers
-            + temporal_triggers
-            + contextual_triggers
-            + semantic_triggers
-            + personal_triggers
-        )
+        detected_triggers.extend(temporal_triggers)
+        detected_triggers.extend(contextual_triggers)
 
         # Filter by confidence threshold
         detected_triggers = [
             trigger
-            for trigger in all_triggers
+            for trigger in detected_triggers
             if trigger.confidence >= min_trigger_confidence
         ]
+
+        # Deduplicate similar triggers
+        detected_triggers = self._deduplicate_triggers(detected_triggers)
 
         # Store triggers for user
         self._detected_triggers[user_id] = detected_triggers
@@ -253,6 +289,159 @@ class EmotionalTriggerDetector:
             f"Detected {len(detected_triggers)} emotional triggers for user {user_id}"
         )
         return detected_triggers
+
+    def _analyze_triggers_semantically(
+        self, user_id: str, memories: List[EmotionalMemory]
+    ) -> List[EmotionalTrigger]:
+        """
+        Semantic trigger detection using LLM analysis.
+
+        This is the PRIMARY method - it identifies:
+        - CONCEPTUAL triggers (concepts, not just words)
+        - WHY things trigger (reasoning and causality)
+        - Context-dependent triggering patterns
+        - Hidden trigger patterns not obvious from keywords
+
+        Args:
+            user_id: User identifier
+            memories: Emotional memories to analyze
+
+        Returns:
+            List of semantically detected triggers
+        """
+        triggers = []
+
+        # Prepare memory summaries for analysis
+        memory_summaries = []
+        for memory in memories[-30:]:  # Analyze recent memories
+            summary = {
+                "message": memory.conversation_context.message_text[:200],
+                "emotion": memory.emotional_state.primary_emotion.value,
+                "intensity": memory.emotional_state.intensity,
+                "indicators": memory.emotional_state.emotional_indicators[:3],
+            }
+            memory_summaries.append(summary)
+
+        if len(memory_summaries) < 5:
+            return triggers
+
+        try:
+            prompt = f"""Analyze these emotional interactions to identify CONCEPTUAL triggers.
+
+Interactions (message, resulting emotion, intensity):
+{json.dumps(memory_summaries[:15], indent=2)}
+
+A trigger is a CONCEPT, not a word. For example:
+- "Work" might trigger stress, but only when deadlines are mentioned
+- "Family" might trigger joy OR sadness depending on context
+- Criticism of their ideas might trigger anger more than criticism of them directly
+
+Identify patterns where certain CONCEPTS consistently lead to emotional responses.
+
+For each trigger, explain:
+1. The CONCEPT (not just keywords) - what abstract idea triggers them
+2. WHY it likely triggers them - underlying emotional significance
+3. CONTEXT dependence - when does it trigger vs not trigger
+4. Emotional response pattern - what emotions and intensity
+
+Respond with JSON ONLY:
+{{
+    "triggers": [
+        {{
+            "concept": "what the trigger concept is (e.g., 'perceived criticism', 'loss of control')",
+            "trigger_type": "conceptual|relational|achievement|temporal|identity|loss|control",
+            "emotional_response": "joy|sadness|anger|fear|surprise|disgust",
+            "typical_intensity": 0.0-1.0,
+            "why_triggers": "explanation of emotional significance",
+            "context_factors": ["when it triggers", "when it doesn't"],
+            "evidence": ["quotes or patterns that support this"],
+            "confidence": 0.0-1.0
+        }}
+    ],
+    "analysis_notes": "overall patterns observed"
+}}
+
+Focus on finding 3-5 most significant triggers, not every possible one."""
+
+            response = self.llm_service.generate(
+                prompt=prompt,
+                temperature=0.3,
+                max_tokens=1000,  # Increased for reasoning models
+            )
+
+            # Parse JSON using utility that handles reasoning blocks
+            analysis = parse_llm_json(response.content)
+            if analysis is None:
+                logger.warning("Failed to parse semantic trigger analysis")
+                return self._detect_triggers_legacy(user_id, memories)
+
+            for trigger_data in analysis.get("triggers", []):
+                trigger_id = hashlib.sha256(
+                    f"{user_id}_semantic_{trigger_data['concept']}".encode()
+                ).hexdigest()[:16]
+
+                # Map emotional response to EmotionType
+                emotion_response = trigger_data.get("emotional_response", "neutral")
+                try:
+                    emotion_type = EmotionType(emotion_response)
+                except ValueError:
+                    emotion_type = EmotionType.NEUTRAL
+
+                trigger = EmotionalTrigger(
+                    trigger_id=trigger_id,
+                    user_id=user_id,
+                    trigger_pattern=trigger_data["concept"],
+                    trigger_type=trigger_data.get("trigger_type", "conceptual"),
+                    emotional_responses=[emotion_type],
+                    sensitivity_score=float(trigger_data.get("typical_intensity", 0.5)),
+                    confidence=float(trigger_data.get("confidence", 0.6)),
+                    context_factors={
+                        "why_triggers": trigger_data.get("why_triggers", ""),
+                        "context_factors": trigger_data.get("context_factors", []),
+                        "evidence": trigger_data.get("evidence", []),
+                        "semantic_analysis": True,
+                    },
+                )
+
+                triggers.append(trigger)
+
+            logger.debug(
+                f"Semantic trigger analysis found {len(triggers)} conceptual triggers"
+            )
+
+        except Exception as e:
+            logger.warning(f"Semantic trigger analysis failed: {e}")
+            # Fall back to legacy pattern-based detection
+            return self._detect_triggers_legacy(user_id, memories)
+
+        return triggers
+
+    def _detect_triggers_legacy(
+        self, user_id: str, memories: List[EmotionalMemory]
+    ) -> List[EmotionalTrigger]:
+        """Legacy pattern-based trigger detection (fallback)."""
+        triggers = []
+        triggers.extend(self._detect_keyword_triggers(user_id, memories))
+        triggers.extend(self._detect_topic_triggers(user_id, memories))
+        triggers.extend(self._detect_semantic_triggers(user_id, memories))
+        triggers.extend(self._detect_personal_triggers(user_id, memories))
+        return triggers
+
+    def _deduplicate_triggers(
+        self, triggers: List[EmotionalTrigger]
+    ) -> List[EmotionalTrigger]:
+        """Remove duplicate or overlapping triggers, keeping highest confidence."""
+        if not triggers:
+            return []
+
+        # Group by similar concepts
+        seen_concepts = {}
+        for trigger in triggers:
+            key = trigger.trigger_pattern.lower()
+            if key not in seen_concepts or trigger.confidence > seen_concepts[key].confidence:
+                seen_concepts[key] = trigger
+
+        return list(seen_concepts.values())
 
     def get_user_triggers(
         self,

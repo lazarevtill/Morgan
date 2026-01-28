@@ -9,7 +9,7 @@ Human-First: Make conversations feel natural and continuous.
 
 import uuid
 from dataclasses import asdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from morgan.config import get_settings
@@ -73,7 +73,7 @@ class MemoryService:
             >>> print(f"Started conversation: {conv_id}")
         """
         conversation_id = str(uuid.uuid4())
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
 
         conversation = Conversation(
             conversation_id=conversation_id,
@@ -102,7 +102,7 @@ class MemoryService:
         Add a turn to an existing conversation.
         """
         turn_id = str(uuid.uuid4())
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         turn = ConversationTurn(
             turn_id=turn_id,
@@ -401,7 +401,7 @@ class MemoryService:
             Number of conversations cleaned up
         """
         try:
-            cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
             cutoff_iso = cutoff_date.isoformat()
 
             # Find old conversations

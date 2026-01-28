@@ -2,23 +2,17 @@
 
 Welcome to the Morgan RAG documentation. This directory contains comprehensive documentation for the modular AI assistant system.
 
-## 📋 Documentation Index
+## Documentation Index
 
 ### Architecture & Design
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete modular architecture overview and design principles
-- **[MODULE_CLEANUP_SUMMARY.md](MODULE_CLEANUP_SUMMARY.md)** - Task 1.1 implementation summary and clean module structure
-
-### Implementation Summaries
-- **[REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md)** - System refactoring and improvements summary
-- **[TASK_8_2_IMPLEMENTATION_SUMMARY.md](TASK_8_2_IMPLEMENTATION_SUMMARY.md)** - Task 8.2 implementation details
 
 ### System Components
 - **[background_processing.md](background_processing.md)** - Background processing system documentation
 - **[error_handling.md](error_handling.md)** - Error handling and recovery mechanisms
 - **[multimodal_processing.md](multimodal_processing.md)** - Multimodal content processing capabilities
-- **[system_integration_summary.md](system_integration_summary.md)** - System integration overview
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 Morgan RAG follows KISS (Keep It Simple, Stupid) principles with a clean modular architecture:
 
@@ -38,7 +32,7 @@ morgan/
 └── background/      # Background processing
 ```
 
-## 🎯 Key Features
+## Key Features
 
 - **Human-First Design**: Empathetic, personalized AI companion
 - **Local-First Operation**: Complete offline capability (except gpt.lazarev.cloud)
@@ -47,13 +41,12 @@ morgan/
 - **Hierarchical Search**: Multi-stage search with 90% candidate reduction
 - **Intelligent Caching**: Git hash-based caching with 6x-180x speedup
 
-## 📖 Getting Started
+## Getting Started
 
 1. **Architecture**: Start with [ARCHITECTURE.md](ARCHITECTURE.md) for system overview
-2. **Module Structure**: Review [MODULE_CLEANUP_SUMMARY.md](MODULE_CLEANUP_SUMMARY.md) for clean architecture
-3. **Implementation**: Check component-specific documentation for detailed implementation
+2. **Components**: Review component-specific documentation for detailed implementation
 
-## 🔧 Development Guidelines
+## Development Guidelines
 
 ### KISS Principles
 1. **Single Responsibility**: Each module has one clear purpose
@@ -69,13 +62,13 @@ morgan/
 - Follow Python best practices and formatting
 - Write comprehensive tests for each module
 
-## 📚 Additional Resources
+## Additional Resources
 
 - **Main README**: See `../README.md` for project overview and setup
 - **Examples**: Check `../examples/` for usage examples
 - **Tests**: Review `../tests/` for testing examples and patterns
 
-## 🤝 Contributing
+## Contributing
 
 When adding new documentation:
 1. Place it in the appropriate category above

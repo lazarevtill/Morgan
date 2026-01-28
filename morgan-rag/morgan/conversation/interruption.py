@@ -7,7 +7,7 @@ to maintain natural flow and user experience.
 
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -289,7 +289,7 @@ class InterruptionHandler:
             return {"error": "No interruption data available"}
 
         # Filter by timeframe
-        cutoff_date = datetime.utcnow() - timedelta(days=timeframe_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=timeframe_days)
         recent_interruptions = [
             i for i in history if i.timestamp >= cutoff_date
         ]

@@ -10,7 +10,7 @@ This demo showcases task 7.2: Implement enhanced search integration.
 
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
 # Add the morgan package to the path
@@ -33,7 +33,7 @@ def create_sample_emotional_context(
         "confidence": 0.9,
         "secondary_emotions": [],
         "emotional_indicators": ["frustrated", "stuck", "problem"],
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 

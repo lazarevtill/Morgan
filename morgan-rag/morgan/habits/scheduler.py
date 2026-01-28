@@ -8,7 +8,7 @@ to provide timely assistance and maintain engagement.
 import asyncio
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, time
+from datetime import datetime, time, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Callable, Any
 
@@ -541,7 +541,7 @@ class RoutineScheduler:
     
     def _get_next_occurrence(self, target_time: time) -> datetime:
         """Get next occurrence of a specific time."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         today = now.date()
         
         target_datetime = datetime.combine(today, target_time)
@@ -557,7 +557,7 @@ class RoutineScheduler:
         day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         target_weekday = day_names.index(day_name)
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         today = now.date()
         current_weekday = today.weekday()
         
@@ -635,7 +635,7 @@ class RoutineScheduler:
         if not schedule:
             return
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Find events that should be triggered
         events_to_trigger = [
@@ -651,7 +651,7 @@ class RoutineScheduler:
         logger.info(f"Triggering event: {event.title} for user {event.user_id}")
         
         event.status = RoutineStatus.ACTIVE
-        event.updated_at = datetime.utcnow()
+        event.updated_at = datetime.now(timezone.utc)
         
         try:
             # Execute callback if specified
@@ -661,7 +661,7 @@ class RoutineScheduler:
             
             # Mark as completed
             event.status = RoutineStatus.COMPLETED
-            event.last_executed = datetime.utcnow()
+            event.last_executed = datetime.now(timezone.utc)
             event.execution_count += 1
             
             # Schedule next occurrence if recurring
@@ -678,7 +678,7 @@ class RoutineScheduler:
         except Exception as e:
             logger.error(f"Error executing event {event.title}: {e}")
             event.status = RoutineStatus.FAILED
-            event.updated_at = datetime.utcnow()
+            event.updated_at = datetime.now(timezone.utc)
     
     def _schedule_next_occurrence(self, event: RoutineEvent):
         """Schedule the next occurrence of a recurring event."""
@@ -722,7 +722,7 @@ class RoutineScheduler:
         if not schedule:
             return []
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cutoff = now + timedelta(hours=hours_ahead)
         
         upcoming = [
@@ -746,7 +746,7 @@ class RoutineScheduler:
                     else:
                         event.success_rate = max(0.0, event.success_rate - 0.1)
                     
-                    event.updated_at = datetime.utcnow()
+                    event.updated_at = datetime.now(timezone.utc)
                     return
     
     def adapt_schedule(self, user_id: str, new_habit_analysis: HabitAnalysis):

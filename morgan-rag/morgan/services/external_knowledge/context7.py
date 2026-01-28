@@ -16,7 +16,7 @@ import asyncio
 import hashlib
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -711,7 +711,7 @@ class Context7Service:
         with self._lock:
             if cache_key in self._library_cache:
                 info, timestamp = self._library_cache[cache_key]
-                if datetime.utcnow() - timestamp < self._cache_ttl:
+                if datetime.now(timezone.utc) - timestamp < self._cache_ttl:
                     return info
                 else:
                     del self._library_cache[cache_key]
@@ -722,14 +722,14 @@ class Context7Service:
         with self._lock:
             if len(self._library_cache) >= self._max_cache_size:
                 self._clean_library_cache()
-            self._library_cache[cache_key] = (info, datetime.utcnow())
+            self._library_cache[cache_key] = (info, datetime.now(timezone.utc))
 
     def _get_cached_docs(self, cache_key: str) -> Optional[DocumentationResult]:
         """Get cached documentation."""
         with self._lock:
             if cache_key in self._docs_cache:
                 docs, timestamp = self._docs_cache[cache_key]
-                if datetime.utcnow() - timestamp < self._cache_ttl:
+                if datetime.now(timezone.utc) - timestamp < self._cache_ttl:
                     return docs
                 else:
                     del self._docs_cache[cache_key]
@@ -740,11 +740,11 @@ class Context7Service:
         with self._lock:
             if len(self._docs_cache) >= self._max_cache_size:
                 self._clean_docs_cache()
-            self._docs_cache[cache_key] = (docs, datetime.utcnow())
+            self._docs_cache[cache_key] = (docs, datetime.now(timezone.utc))
 
     def _clean_library_cache(self) -> None:
         """Clean expired library cache entries."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expired = [
             key
             for key, (_, ts) in self._library_cache.items()
@@ -755,7 +755,7 @@ class Context7Service:
 
     def _clean_docs_cache(self) -> None:
         """Clean expired docs cache entries."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expired = [
             key
             for key, (_, ts) in self._docs_cache.items()

@@ -8,7 +8,7 @@ interactions.
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from morgan.intelligence.core.models import (
@@ -106,12 +106,12 @@ class CompanionRelationshipManager:
             first_interaction = (
                 min(interactions, key=lambda x: x.timestamp).timestamp
                 if interactions
-                else datetime.utcnow()
+                else datetime.now(timezone.utc)
             )
             last_interaction = (
                 max(interactions, key=lambda x: x.timestamp).timestamp
                 if interactions
-                else datetime.utcnow()
+                else datetime.now(timezone.utc)
             )
 
             profile = CompanionProfile(
@@ -268,7 +268,7 @@ class CompanionRelationshipManager:
             milestone_id=str(uuid.uuid4()),
             milestone_type=milestone_enum,
             description=description,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             emotional_significance=significance,
         )
 
@@ -350,7 +350,7 @@ class CompanionRelationshipManager:
         recent_milestones = [
             m
             for m in user_profile.relationship_milestones
-            if (datetime.utcnow() - m.timestamp).days < 7
+            if (datetime.now(timezone.utc) - m.timestamp).days < 7
         ]
         if recent_milestones and not recent_milestones[-1].celebration_acknowledged:
             milestone = recent_milestones[-1]

@@ -1,11 +1,6 @@
-# Morgan v2-0.0.1 - CI/CD Documentation
+# Morgan CI/CD Documentation
 
-> **⚠️ DEPRECATED:** This document is for the old Morgan system. For the new client-server architecture, see:
-> - [Server Documentation](../morgan-server/README.md)
-> - [Client Documentation](../morgan-cli/README.md)
-> - [Migration Guide](../MIGRATION.md)
-
-This document describes the complete CI/CD pipeline infrastructure for Morgan v2-0.0.1 (deprecated).
+This document describes the CI/CD pipeline infrastructure for Morgan.
 
 ## Table of Contents
 

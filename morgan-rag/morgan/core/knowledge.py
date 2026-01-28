@@ -7,7 +7,7 @@ KISS Principle: One responsibility - store and retrieve knowledge efficiently.
 """
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -509,7 +509,7 @@ class KnowledgeService:
                 "document_types": list(document_types),
                 "sources": list(sources)[:20],  # Top 20 sources
                 "storage_size_mb": collection_info.get("disk_usage", 0) / (1024 * 1024),
-                "last_updated": datetime.utcnow().isoformat(),
+                "last_updated": datetime.now(timezone.utc).isoformat(),
                 "collection_name": self.main_collection,
             }
 
@@ -673,7 +673,7 @@ class KnowledgeService:
                             **hierarchical_emb.metadata,
                             **(chunk.metadata or {}),
                         },
-                        "ingested_at": datetime.utcnow().isoformat(),
+                        "ingested_at": datetime.now(timezone.utc).isoformat(),
                         "document_type": document_type,
                         "hierarchical_texts": hierarchical_emb.texts,
                         "embedding_type": "hierarchical",
@@ -746,7 +746,7 @@ class KnowledgeService:
                         "content": chunk.content,
                         "source": chunk.source,
                         "metadata": chunk.metadata,
-                        "ingested_at": datetime.utcnow().isoformat(),
+                        "ingested_at": datetime.now(timezone.utc).isoformat(),
                         "document_type": document_type,
                         "embedding_type": "legacy",
                     },
