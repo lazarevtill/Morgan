@@ -50,6 +50,14 @@ class AssistantResponse:
     confidence: float = 1.0
     sources: List[Dict[str, Any]] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # Integrated module fields
+    flow_state: Optional[str] = None
+    quality_score: Optional[float] = None
+    proactive_suggestions: List[str] = field(default_factory=list)
+    reasoning_summary: Optional[str] = None
+    cultural_adaptations: List[str] = field(default_factory=list)
+    habit_adaptations: List[str] = field(default_factory=list)
+    nonverbal_cues_detected: List[str] = field(default_factory=list)
 
 
 class MorganAssistant:
@@ -141,6 +149,14 @@ class MorganAssistant:
                 "suggestions": core_response.suggestions,
                 "thinking": core_response.thinking,
             },
+            # Integrated module fields
+            flow_state=getattr(core_response, "flow_state", None),
+            quality_score=getattr(core_response, "quality_score", None),
+            proactive_suggestions=getattr(core_response, "proactive_suggestions", None) or [],
+            reasoning_summary=getattr(core_response, "reasoning_summary", None),
+            cultural_adaptations=getattr(core_response, "cultural_adaptations", None) or [],
+            habit_adaptations=getattr(core_response, "habit_adaptations", None) or [],
+            nonverbal_cues_detected=getattr(core_response, "nonverbal_cues_detected", None) or [],
         )
 
     # Legacy method support - mapped to Core functionality where possible
@@ -286,6 +302,30 @@ class MorganAssistant:
             details["error"] = str(e)
 
         return {"status": status_val, "details": details}
+
+    async def get_wellness_insights(self, user_id: str) -> Dict[str, Any]:
+        """Get wellness insights for a user."""
+        if hasattr(self.core, "orchestrator"):
+            return await self.core.orchestrator.get_wellness_insights(user_id)
+        return {"message": "Wellness tracking not available"}
+
+    async def get_habit_patterns(self, user_id: str) -> Dict[str, Any]:
+        """Get detected habit patterns for a user."""
+        if hasattr(self.core, "orchestrator"):
+            return await self.core.orchestrator.get_habit_patterns(user_id)
+        return {"habits": [], "total_interactions": 0}
+
+    async def get_conversation_quality(self, conversation_id: str) -> Dict[str, Any]:
+        """Get conversation quality assessment."""
+        if hasattr(self.core, "orchestrator"):
+            return await self.core.orchestrator.get_conversation_quality(conversation_id)
+        return {"message": "Quality assessment not available"}
+
+    async def get_proactive_suggestions(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get proactive suggestions for a user."""
+        if hasattr(self.core, "orchestrator"):
+            return await self.core.orchestrator.get_suggestions(user_id)
+        return []
 
     async def shutdown(self):
         """Shutdown the assistant."""

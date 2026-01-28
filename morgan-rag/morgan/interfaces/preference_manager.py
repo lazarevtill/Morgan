@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from ..emotional.models import CommunicationStyle, ResponseLength, UserPreferences
+from ..intelligence.core.models import CommunicationStyle, ResponseLength, UserPreferences
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)

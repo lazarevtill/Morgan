@@ -76,7 +76,7 @@ class Reminder:
     context: Dict[str, Any] = field(default_factory=dict)
     
     # Scheduling information
-    scheduled_time: datetime
+    scheduled_time: datetime = field(default_factory=datetime.utcnow)
     delivery_method: ReminderDeliveryMethod = ReminderDeliveryMethod.PROACTIVE_MESSAGE
     snooze_duration: timedelta = timedelta(minutes=15)
     max_snoozes: int = 3

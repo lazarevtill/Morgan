@@ -858,20 +858,54 @@ def add_knowledge_from_text(text: str, source: str = "manual_input") -> bool:
         ... )
     """
     try:
-        kb = KnowledgeBase()
+        from morgan.services.embeddings import get_embedding_service
+        from morgan.vector_db.client import VectorDBClient
+        from morgan.config import get_settings
 
-        # Create a simple chunk (not used in current implementation)
-        # This would need to be integrated with the document processor
-        # for proper hierarchical embedding support
+        settings = get_settings()
+        embedding_service = get_embedding_service()
+        vector_db = VectorDBClient()
+        collection_name = "morgan_knowledge"
 
-        # Process as single document
-        kb.ingest_documents(
-            source_path="manual",  # Placeholder
-            document_type="text",
-            show_progress=False,
-        )
+        # Split text into chunks if it's long
+        chunk_size = settings.morgan_chunk_size
+        chunk_overlap = settings.morgan_chunk_overlap
+        chunks = []
+        if len(text) <= chunk_size:
+            chunks = [text]
+        else:
+            start = 0
+            while start < len(text):
+                end = min(start + chunk_size, len(text))
+                chunks.append(text[start:end])
+                start += chunk_size - chunk_overlap
 
-        # For now, return False as this needs proper integration
+        # Generate embeddings and store
+        import uuid as _uuid
+        from datetime import datetime as _dt
+
+        points = []
+        for chunk_text in chunks:
+            chunk_id = str(_uuid.uuid4())
+            embedding = embedding_service.encode(text=chunk_text, instruction="document")
+            points.append({
+                "id": chunk_id,
+                "vector": embedding,
+                "payload": {
+                    "content": chunk_text,
+                    "source": source,
+                    "metadata": {"source_type": "manual_text"},
+                    "ingested_at": _dt.utcnow().isoformat(),
+                    "document_type": "text",
+                    "embedding_type": "legacy",
+                },
+            })
+
+        if points:
+            vector_db.upsert_points(collection_name, points)
+            logger.info(f"Added {len(points)} chunks from text (source: {source})")
+            return True
+
         return False
 
     except Exception as e:

@@ -8,6 +8,10 @@ Features:
 - MCP server integration for web search and Context7 docs
 - Multi-step reasoning for complex queries
 - Proactive assistance (anticipation + suggestions)
+- Conversation intelligence (flow, quality, topics, interruptions)
+- Communication adaptation (style, nonverbal, cultural, preferences)
+- Learning engine integration
+- Habit detection and adaptation
 """
 
 import time
@@ -47,6 +51,10 @@ class ConversationOrchestrator:
     - Multi-turn conversation context
     - Multi-step reasoning for complex queries
     - Proactive suggestions and anticipation
+    - Conversation intelligence (flow management, quality assessment)
+    - Communication adaptation (style, nonverbal, cultural awareness)
+    - Learning engine for behavioral adaptation
+    - Habit detection and wellness tracking
     """
 
     def __init__(
@@ -82,9 +90,35 @@ class ConversationOrchestrator:
         self._task_anticipator = None
         self._suggestion_engine = None
 
+        # Conversation intelligence services (lazy loaded)
+        self._flow_manager = None
+        self._quality_assessor = None
+        self._topic_learner = None
+        self._interruption_handler = None
+
+        # Communication services (lazy loaded)
+        self._communication_adapter = None
+        self._nonverbal_detector = None
+        self._cultural_awareness = None
+        self._comm_preference_learner = None
+
+        # Learning services (lazy loaded)
+        self._learning_engine = None
+
+        # Habit services (lazy loaded)
+        self._habit_detector = None
+        self._habit_adaptation = None
+        self._wellness_tracker = None
+
         # Initialize proactive services if enabled
         if enable_proactive:
             self._init_proactive_services()
+
+        # Initialize feature module services
+        self._init_conversation_services()
+        self._init_communication_services()
+        self._init_learning_services()
+        self._init_habit_services()
 
     def _init_proactive_services(self):
         """Initialize proactive assistance services."""
@@ -108,6 +142,73 @@ class ConversationOrchestrator:
         except ImportError as e:
             logger.warning(f"Proactive services not available: {e}")
             self.enable_proactive = False
+
+    def _init_conversation_services(self):
+        """Initialize conversation intelligence services."""
+        try:
+            from morgan.conversation.flow import get_conversation_flow_manager
+            from morgan.conversation.quality import get_conversation_quality_assessor
+            from morgan.conversation.topics import get_topic_preference_learner
+            from morgan.conversation.interruption import get_interruption_handler
+
+            settings = get_settings()
+            if settings.morgan_enable_conversation_flow:
+                self._flow_manager = get_conversation_flow_manager()
+            if settings.morgan_enable_quality_assessment:
+                self._quality_assessor = get_conversation_quality_assessor()
+            self._topic_learner = get_topic_preference_learner()
+            self._interruption_handler = get_interruption_handler()
+            logger.info("Conversation intelligence services initialized")
+        except ImportError as e:
+            logger.warning(f"Conversation intelligence services not available: {e}")
+
+    def _init_communication_services(self):
+        """Initialize communication services."""
+        try:
+            from morgan.communication.style import get_communication_style_adapter
+            from morgan.communication.nonverbal import get_nonverbal_cue_detector
+            from morgan.communication.cultural import get_cultural_emotional_awareness
+            from morgan.communication.preferences import get_user_preference_learner
+
+            settings = get_settings()
+            if settings.morgan_enable_communication_adapter:
+                self._communication_adapter = get_communication_style_adapter()
+            if settings.morgan_enable_nonverbal_detection:
+                self._nonverbal_detector = get_nonverbal_cue_detector()
+            if settings.morgan_enable_cultural_awareness:
+                self._cultural_awareness = get_cultural_emotional_awareness()
+            self._comm_preference_learner = get_user_preference_learner()
+            logger.info("Communication services initialized")
+        except ImportError as e:
+            logger.warning(f"Communication services not available: {e}")
+
+    def _init_learning_services(self):
+        """Initialize learning engine services."""
+        try:
+            from morgan.learning.engine import get_learning_engine
+
+            settings = get_settings()
+            if settings.morgan_enable_learning:
+                self._learning_engine = get_learning_engine()
+            logger.info("Learning services initialized")
+        except ImportError as e:
+            logger.warning(f"Learning services not available: {e}")
+
+    def _init_habit_services(self):
+        """Initialize habit detection and adaptation services."""
+        try:
+            from morgan.habits.detector import HabitDetector
+            from morgan.habits.adaptation import HabitBasedAdaptation
+            from morgan.habits.wellness import WellnessHabitTracker
+
+            settings = get_settings()
+            if settings.morgan_enable_habits:
+                self._habit_detector = HabitDetector()
+                self._habit_adaptation = HabitBasedAdaptation()
+                self._wellness_tracker = WellnessHabitTracker()
+            logger.info("Habit services initialized")
+        except ImportError as e:
+            logger.warning(f"Habit services not available: {e}")
 
     def _get_full_reasoning_engine(self):
         """Get full multi-step reasoning engine (lazy loaded)."""
@@ -156,20 +257,22 @@ class ConversationOrchestrator:
         """
         Ask Morgan a question with emotional intelligence and external knowledge.
 
-        Args:
-            question: The question to answer
-            conversation_id: Optional conversation ID for context
-            user_id: Optional user ID for personalization
-            include_sources: Whether to include sources in response
-            max_context: Maximum context tokens
-            use_external_knowledge: Whether to use web search/Context7
-            use_deep_reasoning: Use multi-step reasoning for complex queries
+        Extended pipeline with conversation intelligence, communication adaptation,
+        learning, and habit-based personalization.
         """
         start_time = time.time()
 
         # Ensure IDs
         conv_id = conversation_id or str(uuid.uuid4())
         uid = user_id or "anonymous"
+
+        # Module results (populated throughout pipeline)
+        flow_result = None
+        nonverbal_analysis = None
+        cultural_context = None
+        quality_assessment = None
+        habit_adaptations = []
+        learning_adaptations = None
 
         try:
             # Step 1: Get conversation memory context
@@ -185,6 +288,20 @@ class ConversationOrchestrator:
                     conversation_id, max_turns=5
                 )
 
+            # Step 1b: Check for interruption (conversation intelligence)
+            interruption_result = None
+            if self._interruption_handler and memory_history:
+                try:
+                    previous_content = memory_history[-1].get("answer", "") if memory_history else ""
+                    interruption_result = self._interruption_handler.detect_interruption(
+                        current_message=question,
+                        previous_context=previous_content,
+                        conversation_id=conv_id,
+                        user_id=uid,
+                    )
+                except Exception as e:
+                    logger.debug(f"Interruption detection skipped: {e}")
+
             # Step 2: Contextualize query for multi-turn reasoning
             search_query = await self.reasoning.contextualize_query(
                 question, memory_history
@@ -199,10 +316,32 @@ class ConversationOrchestrator:
                 previous_messages=[m.get("question", "") for m in memory_history],
             )
 
+            # Step 2b: Detect non-verbal cues (communication module)
+            if self._nonverbal_detector:
+                try:
+                    nonverbal_analysis = self._nonverbal_detector.analyze_text(
+                        text=question,
+                        context=conv_context,
+                    )
+                except Exception as e:
+                    logger.debug(f"Non-verbal detection skipped: {e}")
+
             # Step 3: Analyze emotional state
             emotional_state = self.emotional_processor.emotional_engine.analyze_emotion(
                 question, conv_context
             )
+
+            # Step 3b: Manage conversation flow (conversation intelligence)
+            if self._flow_manager:
+                try:
+                    flow_result = self._flow_manager.process_turn(
+                        conversation_id=conv_id,
+                        user_id=uid,
+                        message=question,
+                        emotional_state=emotional_state,
+                    )
+                except Exception as e:
+                    logger.debug(f"Flow management skipped: {e}")
 
             # Step 4: Handle user profile and personalization
             user_profile = None
@@ -210,12 +349,61 @@ class ConversationOrchestrator:
                 processor = self.emotional_processor
                 user_profile = processor.get_or_create_user_profile(user_id)
 
+            # Step 4b: Detect cultural context (communication module)
+            if self._cultural_awareness:
+                try:
+                    cultural_context = self._cultural_awareness.detect_cultural_context(
+                        user_id=uid,
+                        message=question,
+                        conversation_context=conv_context,
+                    )
+                except Exception as e:
+                    logger.debug(f"Cultural context detection skipped: {e}")
+
             # Step 5: Adapt conversation style
             conversation_style = None
             if user_profile:
                 conversation_style = self.emotional_processor.relationship_manager.adapt_conversation_style(
                     user_profile, emotional_state
                 )
+
+            # Step 5b: Enhanced style adaptation (communication module)
+            comm_style_result = None
+            if self._communication_adapter and user_profile:
+                try:
+                    comm_style_result = self._communication_adapter.adapt_style(
+                        user_id=uid,
+                        emotional_state=emotional_state,
+                        conversation_context=conv_context,
+                        cultural_context=cultural_context,
+                    )
+                except Exception as e:
+                    logger.debug(f"Communication style adaptation skipped: {e}")
+
+            # Step 5c: Apply habit-based adaptations
+            if self._habit_adaptation:
+                try:
+                    habit_result = self._habit_adaptation.get_adaptations(
+                        user_id=uid,
+                        context=conv_context,
+                    )
+                    if habit_result:
+                        habit_adaptations = [
+                            a.description if hasattr(a, 'description') else str(a)
+                            for a in (habit_result if isinstance(habit_result, list) else [habit_result])
+                        ]
+                except Exception as e:
+                    logger.debug(f"Habit adaptation skipped: {e}")
+
+            # Step 5d: Get behavioral adaptations from learning engine
+            if self._learning_engine:
+                try:
+                    learning_adaptations = self._learning_engine.adapt_behavior(
+                        user_id=uid,
+                        context=conv_context,
+                    )
+                except Exception as e:
+                    logger.debug(f"Learning adaptation skipped: {e}")
 
             # Step 6: Check for anticipated task (proactive)
             anticipated_response = None
@@ -235,13 +423,27 @@ class ConversationOrchestrator:
             if use_external_knowledge:
                 external_results = await self._fetch_external_knowledge(search_query)
 
-            # Step 8: Build context for LLM
+            # Step 8: Build context for LLM (enhanced with module data)
             knowledge_context = self._build_knowledge_context(
                 search_results, external_results
             )
+
+            # Build enhanced style context
+            style_context = str(conversation_style) if conversation_style else ""
+            if comm_style_result:
+                style_context += f"\nCommunication: {comm_style_result}"
+            if cultural_context:
+                style_context += f"\nCultural: {cultural_context}"
+            if flow_result:
+                style_context += f"\nFlow: {flow_result}"
+            if habit_adaptations:
+                style_context += f"\nHabit adaptations: {', '.join(habit_adaptations)}"
+            if learning_adaptations:
+                style_context += f"\nLearning: {learning_adaptations}"
+
             context = (
                 f"Emotional State: {emotional_state}\n"
-                f"Style: {conversation_style}\n"
+                f"Style: {style_context}\n"
                 f"Knowledge:\n{knowledge_context}\n"
                 f"Memory: {memory_context}"
             )
@@ -271,7 +473,7 @@ class ConversationOrchestrator:
                     user_profile, conv_context, emotional_state
                 )
 
-            # Step 11: Create final response
+            # Step 11: Create final response (enhanced with module data)
             all_sources = self._collect_sources(
                 search_results, external_results, include_sources
             )
@@ -292,6 +494,20 @@ class ConversationOrchestrator:
                 empathy_level=empathetic_response.empathy_level,
                 personalization_elements=(empathetic_response.personalization_elements),
                 milestone_celebration=(milestone.description if milestone else None),
+                # New fields from integrated modules
+                flow_state=(flow_result.state.value if flow_result and hasattr(flow_result, 'state') else None),
+                quality_score=None,  # Populated after quality assessment
+                nonverbal_cues_detected=(
+                    [c.description for c in nonverbal_analysis.detected_cues]
+                    if nonverbal_analysis and hasattr(nonverbal_analysis, 'detected_cues')
+                    else None
+                ),
+                cultural_adaptations=(
+                    [str(cultural_context)]
+                    if cultural_context
+                    else None
+                ),
+                habit_adaptations=habit_adaptations or None,
             )
 
             # Step 12: Process memories and update profile
@@ -304,6 +520,68 @@ class ConversationOrchestrator:
                 self.emotional_processor.update_user_profile(
                     user_profile, conv_context, emotional_state, response.confidence, []
                 )
+
+            # Step 12b: Quality assessment (non-blocking)
+            if self._quality_assessor:
+                try:
+                    quality_assessment = self._quality_assessor.assess_turn(
+                        conversation_id=conv_id,
+                        user_id=uid,
+                        user_message=question,
+                        assistant_response=llm_response_content,
+                        emotional_state=emotional_state,
+                    )
+                    if quality_assessment and hasattr(quality_assessment, 'overall_score'):
+                        response.quality_score = quality_assessment.overall_score
+                except Exception as e:
+                    logger.debug(f"Quality assessment skipped: {e}")
+
+            # Step 12c: Update topic preferences (conversation intelligence)
+            if self._topic_learner:
+                try:
+                    self._topic_learner.learn_from_conversation(
+                        user_id=uid,
+                        message=question,
+                        response=llm_response_content,
+                        emotional_state=emotional_state,
+                    )
+                except Exception as e:
+                    logger.debug(f"Topic learning skipped: {e}")
+
+            # Step 12d: Learn from interaction (learning engine)
+            if self._learning_engine:
+                try:
+                    self._learning_engine.process_interaction(
+                        user_id=uid,
+                        context=conv_context,
+                        response=llm_response_content,
+                        emotional_state=emotional_state,
+                    )
+                except Exception as e:
+                    logger.debug(f"Learning engine update skipped: {e}")
+
+            # Step 12e: Record interaction for habit detection
+            if self._habit_detector:
+                try:
+                    self._habit_detector.record_interaction(
+                        user_id=uid,
+                        message=question,
+                        timestamp=datetime.utcnow(),
+                    )
+                except Exception as e:
+                    logger.debug(f"Habit recording skipped: {e}")
+
+            # Step 12f: Learn communication preferences
+            if self._comm_preference_learner:
+                try:
+                    self._comm_preference_learner.learn_from_interaction(
+                        user_id=uid,
+                        message=question,
+                        response=llm_response_content,
+                        emotional_state=emotional_state,
+                    )
+                except Exception as e:
+                    logger.debug(f"Communication preference learning skipped: {e}")
 
             # Step 13: Update proactive context and anticipate next tasks
             if self.enable_proactive:
@@ -678,6 +956,52 @@ class ConversationOrchestrator:
         plan = await self.create_task_plan(goal=goal, context=context)
         return await self.execute_task_plan(plan=plan, on_progress=on_progress)
 
+    async def get_wellness_insights(self, user_id: str) -> dict:
+        """Get wellness insights for a user."""
+        if not self._wellness_tracker:
+            return {"message": "Wellness tracking not enabled"}
+        try:
+            return self._wellness_tracker.get_wellness_summary(user_id)
+        except Exception as e:
+            logger.warning(f"Failed to get wellness insights: {e}")
+            return {"error": str(e)}
+
+    async def get_habit_patterns(self, user_id: str) -> dict:
+        """Get detected habit patterns for a user."""
+        if not self._habit_detector:
+            return {"message": "Habit detection not enabled"}
+        try:
+            analysis = self._habit_detector.get_user_habits(user_id)
+            if analysis:
+                return {
+                    "habits": [
+                        {
+                            "name": h.name,
+                            "type": h.habit_type.value,
+                            "frequency": h.frequency.value,
+                            "confidence": h.confidence.value,
+                            "consistency": h.consistency_score,
+                        }
+                        for h in analysis.habits
+                    ] if hasattr(analysis, 'habits') else [],
+                    "total_interactions": analysis.total_interactions if hasattr(analysis, 'total_interactions') else 0,
+                }
+            return {"habits": [], "total_interactions": 0}
+        except Exception as e:
+            logger.warning(f"Failed to get habit patterns: {e}")
+            return {"error": str(e)}
+
+    async def get_conversation_quality(self, conversation_id: str) -> dict:
+        """Get conversation quality assessment."""
+        if not self._quality_assessor:
+            return {"message": "Quality assessment not enabled"}
+        try:
+            summary = self._quality_assessor.get_quality_summary(conversation_id)
+            return summary if summary else {"message": "No quality data available"}
+        except Exception as e:
+            logger.warning(f"Failed to get conversation quality: {e}")
+            return {"error": str(e)}
+
     async def start_proactive_monitoring(self):
         """Start proactive monitoring services."""
         if self._context_monitor:
@@ -688,6 +1012,14 @@ class ConversationOrchestrator:
 
         logger.info("Proactive monitoring started")
 
+        # Start habit monitoring services
+        if self._habit_detector:
+            try:
+                # Habit detector doesn't have start/stop but we log readiness
+                logger.info("Habit detection active")
+            except Exception as e:
+                logger.warning(f"Failed to start habit monitoring: {e}")
+
     async def stop_proactive_monitoring(self):
         """Stop proactive monitoring services."""
         if self._context_monitor:
@@ -697,3 +1029,7 @@ class ConversationOrchestrator:
             await self._task_anticipator.stop_preparation_worker()
 
         logger.info("Proactive monitoring stopped")
+
+        # Stop habit monitoring services
+        if self._habit_detector:
+            logger.info("Habit detection stopped")
