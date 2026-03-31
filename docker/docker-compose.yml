@@ -29,6 +29,14 @@ services:
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://192.168.100.233:11434/v1}
       - EMBEDDING_FORCE_REMOTE=true
 
+      # Channel configuration
+      - MORGAN_ENABLE_CHANNELS=${MORGAN_ENABLE_CHANNELS:-false}
+      - MORGAN_TELEGRAM_TOKEN=${MORGAN_TELEGRAM_TOKEN:-}
+
+      # Synology Chat (optional)
+      - MORGAN_SYNOLOGY_TOKEN=${MORGAN_SYNOLOGY_TOKEN:-}
+      - MORGAN_SYNOLOGY_INCOMING_URL=${MORGAN_SYNOLOGY_INCOMING_URL:-}
+
       # Legacy MORGAN_* vars (used by docker-compose.yml and some middleware)
       - MORGAN_LLM_PROVIDER=ollama
       - MORGAN_LLM_ENDPOINT=${MORGAN_LLM_ENDPOINT:-http://192.168.100.233:11434}

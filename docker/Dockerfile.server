@@ -39,6 +39,11 @@ COPY morgan-server/morgan_server /build/morgan-server/morgan_server
 WORKDIR /build/morgan-server
 RUN pip install --no-cache-dir -e .
 
+# Install optional channel dependencies (Telegram, Synology Chat)
+RUN pip install --no-cache-dir \
+    "python-telegram-bot>=20.0" \
+    "aiohttp>=3.9.0"
+
 # =============================================================================
 # Stage 2: Production stage - Minimal runtime image
 # =============================================================================

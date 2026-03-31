@@ -217,9 +217,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                         except Exception as exc:
                             logger.warning("Synology Chat channel init failed (non-fatal): %s", exc)
 
+                    # Wire gateway to assistant so channel messages get responses
+                    async def _channel_agent_handler(agent_id, session_key, message):
+                        """Route channel messages through the Morgan assistant."""
+                        try:
+                            result = await assistant.chat(
+                                message=message.content,
+                                user_id=message.peer_id,
+                                conversation_id=str(session_key),
+                            )
+                            return result.answer if hasattr(result, 'answer') else str(result)
+                        except Exception as chat_exc:
+                            logger.error("Channel chat failed: %s", chat_exc)
+                            return "Sorry, I encountered an error processing your message."
+
+                    gateway.set_agent_handler(_channel_agent_handler)
+
                     await gateway.start()
                     app.state.channel_gateway = gateway
-                    logger.info("ChannelGateway initialized")
+                    logger.info("ChannelGateway initialized with agent handler")
                 except Exception as exc:
                     logger.warning("ChannelGateway init failed (non-fatal): %s", exc)
 
