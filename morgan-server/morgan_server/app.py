@@ -187,6 +187,36 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 try:
                     from morgan.channels import ChannelGateway
                     gateway = ChannelGateway(default_agent_id="main")
+
+                    # Register Telegram channel if token is configured
+                    if rag_settings.morgan_telegram_token:
+                        try:
+                            from morgan.channels.telegram_channel import TelegramChannel
+                            telegram_ch = TelegramChannel(
+                                token=rag_settings.morgan_telegram_token,
+                            )
+                            gateway.register_channel(telegram_ch)
+                            logger.info("Telegram channel registered with gateway")
+                        except Exception as exc:
+                            logger.warning("Telegram channel init failed (non-fatal): %s", exc)
+
+                    # Register Synology Chat channel if token + URL are configured
+                    if rag_settings.morgan_synology_token and rag_settings.morgan_synology_incoming_url:
+                        try:
+                            from morgan.channels.synology_channel import SynologyChannel
+                            synology_ch = SynologyChannel(
+                                token=rag_settings.morgan_synology_token,
+                                incoming_url=rag_settings.morgan_synology_incoming_url,
+                                webhook_path=rag_settings.morgan_synology_webhook_path,
+                                webhook_port=rag_settings.morgan_synology_webhook_port,
+                                bot_name=rag_settings.morgan_synology_bot_name,
+                                rate_limit_per_minute=rag_settings.morgan_synology_rate_limit,
+                            )
+                            gateway.register_channel(synology_ch)
+                            logger.info("Synology Chat channel registered with gateway")
+                        except Exception as exc:
+                            logger.warning("Synology Chat channel init failed (non-fatal): %s", exc)
+
                     await gateway.start()
                     app.state.channel_gateway = gateway
                     logger.info("ChannelGateway initialized")
