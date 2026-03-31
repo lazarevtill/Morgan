@@ -51,14 +51,15 @@ async def list_tools() -> List[Dict[str, Any]]:
 
         result = []
         for tool in executor.list_tools():
+            schema = None
+            if tool.input_schema:
+                schema = tool.input_schema.to_dict() if hasattr(tool.input_schema, "to_dict") else None
             result.append(
                 {
                     "name": tool.name,
                     "description": tool.description,
                     "aliases": list(tool.aliases) if tool.aliases else [],
-                    "input_schema": tool.input_schema.model_json_schema()
-                    if tool.input_schema
-                    else None,
+                    "input_schema": schema,
                 }
             )
         return result
@@ -93,9 +94,9 @@ async def execute_tool(name: str, body: ToolExecuteRequest) -> Dict[str, Any]:
         )
         return {
             "output": result.output,
-            "error": result.error,
+            "error_code": result.error_code,
             "is_error": result.is_error,
-            "duration_ms": result.duration_ms,
+            "metadata": result.metadata,
         }
     except HTTPException:
         raise
@@ -139,7 +140,7 @@ async def list_skills() -> List[Dict[str, Any]]:
                 "name": s.name,
                 "description": s.description,
                 "user_invocable": s.user_invocable,
-                "variables": s.variables,
+                "argument_names": getattr(s, "argument_names", []),
             }
             for s in registry.list_all()
         ]
@@ -179,7 +180,7 @@ async def execute_skill(name: str, body: SkillExecuteRequest) -> Dict[str, Any]:
 
         return {
             "name": skill.name,
-            "rendered_prompt": skill.render(body.variables),
+            "rendered_prompt": skill.get_prompt(body.variables),
             "status": "rendered",
         }
     except HTTPException:
