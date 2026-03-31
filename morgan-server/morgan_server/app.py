@@ -27,6 +27,7 @@ from morgan_server.api.routes import (
     health_router,
     profile_router,
     features_router,
+    tools_router,
 )
 
 
@@ -120,6 +121,81 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             },
         )
 
+        # ================================================================
+        # Initialize new modules (Task 13: Integration Wiring)
+        # ================================================================
+        try:
+            from morgan.config.settings import get_settings as get_rag_settings
+
+            rag_settings = get_rag_settings()
+
+            # --- Workspace ---
+            if rag_settings.morgan_enable_workspace:
+                try:
+                    from morgan.workspace import WorkspaceManager, get_workspace_path
+                    ws_path = rag_settings.morgan_workspace_path or str(
+                        get_workspace_path()
+                    )
+                    workspace_mgr = WorkspaceManager(workspace_dir=__import__("pathlib").Path(ws_path))
+                    workspace_mgr.bootstrap()
+                    app.state.workspace_manager = workspace_mgr
+                    logger.info("Workspace bootstrapped at %s", ws_path)
+                except Exception as exc:
+                    logger.warning("Workspace init failed (non-fatal): %s", exc)
+
+            # --- AppStateStore ---
+            try:
+                from morgan.app_state import AppStateStore
+                app.state.app_state_store = AppStateStore()
+                logger.info("AppStateStore initialized")
+            except Exception as exc:
+                logger.warning("AppStateStore init failed (non-fatal): %s", exc)
+
+            # --- HookManager ---
+            try:
+                from morgan.hook_system import HookManager
+                app.state.hook_manager = HookManager()
+                logger.info("HookManager initialized")
+            except Exception as exc:
+                logger.warning("HookManager init failed (non-fatal): %s", exc)
+
+            # --- TaskManager ---
+            try:
+                from morgan.task_manager import TaskManager
+                app.state.task_manager = TaskManager()
+                logger.info("TaskManager initialized")
+            except Exception as exc:
+                logger.warning("TaskManager init failed (non-fatal): %s", exc)
+
+            # --- Scheduling (CronService + HeartbeatManager) ---
+            if rag_settings.morgan_enable_scheduling:
+                try:
+                    from morgan.scheduling import CronService, HeartbeatManager
+                    cron_service = CronService()
+                    await cron_service.start()
+                    app.state.cron_service = cron_service
+
+                    heartbeat_mgr = HeartbeatManager()
+                    await heartbeat_mgr.start()
+                    app.state.heartbeat_manager = heartbeat_mgr
+                    logger.info("Scheduling (Cron + Heartbeat) initialized")
+                except Exception as exc:
+                    logger.warning("Scheduling init failed (non-fatal): %s", exc)
+
+            # --- ChannelGateway ---
+            if rag_settings.morgan_enable_channels:
+                try:
+                    from morgan.channels import ChannelGateway
+                    gateway = ChannelGateway(default_agent_id="main")
+                    await gateway.start()
+                    app.state.channel_gateway = gateway
+                    logger.info("ChannelGateway initialized")
+                except Exception as exc:
+                    logger.warning("ChannelGateway init failed (non-fatal): %s", exc)
+
+        except Exception as exc:
+            logger.warning("New module initialization failed (non-fatal): %s", exc)
+
         # Application is now running
         yield
 
@@ -141,6 +217,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             if hasattr(app.state, "session_manager"):
                 logger.info("Shutting down session manager...")
                 shutdown_tasks.append(app.state.session_manager.stop())
+
+            # Shutdown new module services
+            if hasattr(app.state, "channel_gateway"):
+                logger.info("Shutting down channel gateway...")
+                shutdown_tasks.append(app.state.channel_gateway.stop())
+            if hasattr(app.state, "heartbeat_manager"):
+                logger.info("Shutting down heartbeat manager...")
+                shutdown_tasks.append(app.state.heartbeat_manager.stop())
+            if hasattr(app.state, "cron_service"):
+                logger.info("Shutting down cron service...")
+                shutdown_tasks.append(app.state.cron_service.stop())
 
             # Shutdown assistant
             if hasattr(app.state, "assistant"):
@@ -289,6 +376,9 @@ def create_app(
 
     # Feature module routes (suggestions, wellness, habits, quality)
     app.include_router(features_router, tags=["Features"])
+
+    # New module routes (tools, skills, tasks, channels, workspace)
+    app.include_router(tools_router, tags=["Modules"])
 
     logger.info("API routes registered")
 

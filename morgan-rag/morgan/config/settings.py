@@ -211,6 +211,45 @@ class Settings(BaseSettings):
         default=True, description="Enable non-verbal cue detection from text patterns"
     )
 
+    # --- New module flags (Task 13: Integration Wiring) ---
+
+    morgan_enable_tools: bool = Field(
+        default=True, description="Enable pluggable tool execution framework"
+    )
+
+    morgan_enable_workspace: bool = Field(
+        default=True, description="Enable SOUL.md workspace pattern"
+    )
+
+    morgan_enable_compaction: bool = Field(
+        default=True, description="Enable automatic context compaction"
+    )
+
+    morgan_enable_channels: bool = Field(
+        default=False, description="Enable multi-channel gateway (Telegram, Discord). Off by default — needs token config"
+    )
+
+    morgan_enable_scheduling: bool = Field(
+        default=False, description="Enable cron + heartbeat scheduling. Off by default"
+    )
+
+    morgan_enable_agents: bool = Field(
+        default=True, description="Enable agent/subagent spawning system"
+    )
+
+    morgan_workspace_path: Optional[str] = Field(
+        default=None, description="Override workspace directory path"
+    )
+
+    # Channel config
+    morgan_telegram_token: Optional[str] = Field(
+        default=None, description="Telegram bot token for channel gateway"
+    )
+
+    morgan_discord_token: Optional[str] = Field(
+        default=None, description="Discord bot token for channel gateway"
+    )
+
     # ============================================================================
     # Document Processing Settings
     # ============================================================================
