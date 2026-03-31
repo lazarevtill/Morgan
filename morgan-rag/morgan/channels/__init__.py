@@ -19,6 +19,8 @@ Usage:
 from morgan.channels.base import BaseChannel, InboundMessage, OutboundMessage
 from morgan.channels.gateway import ChannelGateway
 from morgan.channels.routing import ResolvedRoute, RouteBinding, RouteResolver, SessionKey
+from morgan.channels.telegram_channel import TelegramChannel
+from morgan.channels.synology_channel import SynologyChannel
 
 __all__ = [
     "BaseChannel",
@@ -29,4 +31,6 @@ __all__ = [
     "RouteBinding",
     "RouteResolver",
     "SessionKey",
+    "SynologyChannel",
+    "TelegramChannel",
 ]

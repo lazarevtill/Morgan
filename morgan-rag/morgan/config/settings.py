@@ -250,6 +250,31 @@ class Settings(BaseSettings):
         default=None, description="Discord bot token for channel gateway"
     )
 
+    # Synology Chat
+    morgan_synology_token: Optional[str] = Field(
+        default=None, description="Synology Chat shared webhook token"
+    )
+
+    morgan_synology_incoming_url: Optional[str] = Field(
+        default=None, description="Synology Chat incoming webhook URL for sending messages"
+    )
+
+    morgan_synology_webhook_path: str = Field(
+        default="/webhook/synology", description="URL path for Synology outgoing webhook listener"
+    )
+
+    morgan_synology_webhook_port: int = Field(
+        default=5001, description="Port for Synology webhook listener", ge=1024, le=65535
+    )
+
+    morgan_synology_bot_name: str = Field(
+        default="Morgan", description="Bot display name for Synology Chat"
+    )
+
+    morgan_synology_rate_limit: int = Field(
+        default=30, description="Rate limit per user per minute for Synology Chat", ge=1, le=300
+    )
+
     # ============================================================================
     # Document Processing Settings
     # ============================================================================
