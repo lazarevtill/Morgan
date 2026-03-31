@@ -729,6 +729,258 @@ async def _check_health(
 
 
 # ============================================================================
+# Tools Command
+# ============================================================================
+
+
+@cli.command()
+@click.pass_context
+def tools(ctx: click.Context):
+    """
+    List available Morgan tools.
+
+    Displays all registered tools with their descriptions and schemas.
+    """
+    asyncio.run(
+        _list_tools(
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
+
+
+async def _list_tools(
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
+):
+    """List tools implementation."""
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request("GET", "/api/tools")
+        if response:
+            ui.render_status("success", f"Found {len(response)} tools")
+            for tool in response:
+                console.print(f"  [bold]{tool['name']}[/bold] - {tool.get('description', '')}")
+        else:
+            ui.render_status("info", "No tools available")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+# ============================================================================
+# Skills Command
+# ============================================================================
+
+
+@cli.command()
+@click.pass_context
+def skills(ctx: click.Context):
+    """
+    List available Morgan skills.
+
+    Displays all registered skills with descriptions.
+    """
+    asyncio.run(
+        _list_skills(
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
+
+
+async def _list_skills(
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
+):
+    """List skills implementation."""
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request("GET", "/api/skills")
+        if response:
+            ui.render_status("success", f"Found {len(response)} skills")
+            for skill in response:
+                console.print(f"  [bold]{skill['name']}[/bold] - {skill.get('description', '')}")
+        else:
+            ui.render_status("info", "No skills available")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+# ============================================================================
+# Tasks Command
+# ============================================================================
+
+
+@cli.command()
+@click.pass_context
+def tasks(ctx: click.Context):
+    """
+    List background tasks.
+
+    Displays all currently tracked background tasks and their status.
+    """
+    asyncio.run(
+        _list_tasks(
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
+
+
+async def _list_tasks(
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
+):
+    """List tasks implementation."""
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request("GET", "/api/tasks")
+        if response:
+            ui.render_status("success", f"Found {len(response)} tasks")
+            for task in response:
+                status = task.get("status", "unknown")
+                console.print(
+                    f"  [{task['task_id'][:8]}] {task.get('description', '')} "
+                    f"([bold]{status}[/bold])"
+                )
+        else:
+            ui.render_status("info", "No background tasks")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+# ============================================================================
+# Workspace Command
+# ============================================================================
+
+
+@cli.command()
+@click.pass_context
+def workspace(ctx: click.Context):
+    """
+    Show workspace status.
+
+    Displays the current workspace configuration including SOUL.md,
+    USER.md, and MEMORY.md file status.
+    """
+    asyncio.run(
+        _workspace_status(
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
+
+
+async def _workspace_status(
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
+):
+    """Workspace status implementation."""
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request("GET", "/api/workspace")
+        status = response.get("status", "unknown")
+        if status == "active":
+            ui.render_status("success", "Workspace is active")
+            console.print(f"  Path: {response.get('path', 'N/A')}")
+            console.print(f"  SOUL.md: {'yes' if response.get('has_soul') else 'no'}")
+            console.print(f"  USER.md: {'yes' if response.get('has_user') else 'no'}")
+            console.print(f"  MEMORY.md: {'yes' if response.get('has_memory') else 'no'}")
+        else:
+            ui.render_status("info", f"Workspace status: {status}")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+# ============================================================================
+# Channels Command
+# ============================================================================
+
+
+@cli.command()
+@click.pass_context
+def channels(ctx: click.Context):
+    """
+    List active communication channels.
+
+    Shows all configured channels (Telegram, Discord, etc.) and their status.
+    """
+    asyncio.run(
+        _list_channels(
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
+
+
+async def _list_channels(
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
+):
+    """List channels implementation."""
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request("GET", "/api/channels")
+        if response:
+            ui.render_status("success", f"Found {len(response)} channels")
+            for ch in response:
+                console.print(f"  [bold]{ch['name']}[/bold] ({ch.get('type', 'unknown')})")
+        else:
+            ui.render_status("info", "No active channels (enable with MORGAN_ENABLE_CHANNELS=true)")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+# ============================================================================
+# Schedule Command Group
+# ============================================================================
+
+
+@cli.group()
+@click.pass_context
+def schedule(ctx: click.Context):
+    """
+    Manage cron scheduling.
+
+    Commands for listing and adding cron jobs.
+    """
+    pass
+
+
+@schedule.command("list")
+@click.pass_context
+def schedule_list(ctx: click.Context):
+    """List scheduled cron jobs."""
+    console.print("[dim]Cron job listing requires server connection.[/dim]")
+    console.print("[dim]Enable scheduling with MORGAN_ENABLE_SCHEDULING=true[/dim]")
+
+
+@schedule.command("add")
+@click.argument("cron_expression")
+@click.argument("command")
+@click.pass_context
+def schedule_add(ctx: click.Context, cron_expression: str, command: str):
+    """
+    Add a cron job.
+
+    CRON_EXPRESSION: Standard cron expression (e.g., "*/5 * * * *")
+    COMMAND: The command/prompt to run on schedule
+    """
+    console.print(f"[dim]Would add cron job: {cron_expression} -> {command}[/dim]")
+    console.print("[dim]Enable scheduling with MORGAN_ENABLE_SCHEDULING=true[/dim]")
+
+
+# ============================================================================
 # Main Entry Point
 # ============================================================================
 
