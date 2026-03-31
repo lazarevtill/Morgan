@@ -104,6 +104,35 @@ class LLMService:
             self.fast_model,
         )
 
+    @staticmethod
+    def _extract_content(message) -> str:
+        """Extract response content from LLM message, handling thinking models.
+
+        Thinking models (qwen3.5, etc.) may return empty content with a separate
+        'reasoning' field, or wrap thinking in <think>...</think> tags.
+        """
+        import re
+
+        content = message.content or ""
+
+        # If content is empty, check for reasoning field (Ollama thinking models)
+        if not content.strip():
+            reasoning = getattr(message, "reasoning", None) or getattr(message, "reasoning_content", None)
+            if reasoning and isinstance(reasoning, str):
+                # If reasoning contains </think> tag, extract text after it
+                parts = re.split(r"</think>\s*", reasoning, maxsplit=1)
+                if len(parts) > 1 and parts[-1].strip():
+                    content = parts[-1].strip()
+                else:
+                    # Whole reasoning is the response (no think tags)
+                    content = reasoning.strip()
+
+        # If content has <think>...</think> tags inline, strip them
+        if content and "<think>" in content:
+            content = re.sub(r"<think>.*?</think>\s*", "", content, flags=re.DOTALL).strip()
+
+        return content
+
     def _ensure_initialized(self):
         """Ensure service is initialized (sync version)."""
         if self._initialized:
@@ -252,8 +281,10 @@ class LLMService:
 
             latency_ms = (time.time() - start_time) * 1000
 
+            content = self._extract_content(response.choices[0].message)
+
             return LLMResponse(
-                content=response.choices[0].message.content,
+                content=content,
                 model=response.model,
                 finish_reason=response.choices[0].finish_reason,
                 usage=response.usage.model_dump() if response.usage else {},
@@ -382,8 +413,10 @@ class LLMService:
 
             latency_ms = (time.time() - start_time) * 1000
 
+            content = self._extract_content(response.choices[0].message)
+
             return LLMResponse(
-                content=response.choices[0].message.content,
+                content=content,
                 model=response.model,
                 finish_reason=response.choices[0].finish_reason,
                 usage=response.usage.model_dump() if response.usage else {},

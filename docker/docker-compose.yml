@@ -12,27 +12,35 @@ services:
       - MORGAN_HOST=0.0.0.0
       - MORGAN_PORT=8080
       - MORGAN_WORKERS=4
-      
-      # LLM configuration (remote Ollama - not in compose)
+
+      # LLM configuration — Settings fields (no prefix, matches pydantic Settings)
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://192.168.100.233:11434/v1}
+      - LLM_MODEL=${LLM_MODEL:-qwen3.5:35b}
+      - LLM_API_KEY=${LLM_API_KEY:-ollama-local-key}
+      - LLM_MAX_TOKENS=8192
+      - LLM_TEMPERATURE=0.7
+
+      # Vector database — matches Settings.qdrant_url
+      - QDRANT_URL=http://qdrant:6333
+
+      # Embedding configuration — matches Settings fields
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:latest}
+      - OLLAMA_HOST=${OLLAMA_HOST:-192.168.100.233:11434}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://192.168.100.233:11434/v1}
+      - EMBEDDING_FORCE_REMOTE=true
+
+      # Legacy MORGAN_* vars (used by docker-compose.yml and some middleware)
       - MORGAN_LLM_PROVIDER=ollama
-      - MORGAN_LLM_ENDPOINT=${MORGAN_LLM_ENDPOINT:-http://host.docker.internal:11434}
-      - MORGAN_LLM_MODEL=${MORGAN_LLM_MODEL:-qwen2.5:32b-instruct-q4_K_M}
-      - MORGAN_LLM_API_KEY=${MORGAN_LLM_API_KEY:-}
-      - MORGAN_LLM_FAST_MODEL=${MORGAN_LLM_FAST_MODEL:-qwen2.5:7b-instruct-q5_K_M}
-      
-      # Distributed LLM endpoints (comma-separated)
-      - MORGAN_LLM_ENDPOINTS=${MORGAN_LLM_ENDPOINTS:-}
-      - MORGAN_LLM_STRATEGY=${MORGAN_LLM_STRATEGY:-round_robin}
-      
-      # Vector database configuration
+      - MORGAN_LLM_ENDPOINT=${MORGAN_LLM_ENDPOINT:-http://192.168.100.233:11434}
+      - MORGAN_LLM_MODEL=${MORGAN_LLM_MODEL:-qwen3.5:35b}
+      - MORGAN_LLM_API_KEY=${MORGAN_LLM_API_KEY:-ollama}
       - MORGAN_VECTOR_DB_URL=http://qdrant:6333
-      - MORGAN_VECTOR_DB_API_KEY=${MORGAN_VECTOR_DB_API_KEY:-}
-      
-      # Embedding configuration (Qwen3-Embedding via Ollama)
+
+      # Embedding legacy vars
       - MORGAN_EMBEDDING_PROVIDER=${MORGAN_EMBEDDING_PROVIDER:-ollama}
-      - MORGAN_EMBEDDING_MODEL=${MORGAN_EMBEDDING_MODEL:-qwen3-embedding:4b}
+      - MORGAN_EMBEDDING_MODEL=${MORGAN_EMBEDDING_MODEL:-qwen3-embedding:latest}
       - MORGAN_EMBEDDING_DEVICE=${MORGAN_EMBEDDING_DEVICE:-cpu}
-      - MORGAN_EMBEDDING_ENDPOINT=${MORGAN_EMBEDDING_ENDPOINT:-}
+      - MORGAN_EMBEDDING_ENDPOINT=${MORGAN_EMBEDDING_ENDPOINT:-http://192.168.100.233:11434/v1}
       - MORGAN_EMBEDDING_DIMENSIONS=${MORGAN_EMBEDDING_DIMENSIONS:-2048}
       
       # Hugging Face token for model downloads
