@@ -130,10 +130,9 @@ cd morgan
 cd docker
 cp .env.example .env
 docker compose up -d
-
-# Pull LLM model
-docker compose exec ollama ollama pull qwen2.5:7b
-docker compose exec ollama ollama pull qwen3-embedding:4b
+# .env.example is preconfigured for remote Ollama hosts:
+#   - 192.168.100.233 (primary LLM)
+#   - 192.168.100.222 (smaller/embedding models)
 
 # Start chatting
 docker compose run --rm morgan-cli chat

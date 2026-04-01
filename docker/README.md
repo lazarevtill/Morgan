@@ -11,12 +11,8 @@ cd docker
 # Copy env template once
 cp .env.example .env
 
-# Start full local stack (server + cli image + ollama + redis + qdrant)
+# Start stack (server + redis + qdrant; remote Ollama from .env)
 docker compose up -d
-
-# Pull models into Ollama container
-docker compose exec ollama ollama pull qwen2.5:7b
-docker compose exec ollama ollama pull qwen3-embedding:4b
 
 # Optional monitoring (Prometheus + Grafana)
 docker compose --profile monitoring up -d
@@ -38,7 +34,8 @@ vi .env
 ```
 
 **Key variables:**
-- `MORGAN_LLM_ENDPOINT` - LLM endpoint (defaults to in-stack Ollama)
+- `MORGAN_LLM_ENDPOINT` - Primary remote Ollama endpoint
+- `MORGAN_EMBEDDING_ENDPOINT` - Remote Ollama endpoint for smaller/embedding models
 - `MORGAN_LLM_MODEL` - Main LLM model name
 - `MORGAN_ENABLE_CHANNELS` - enable Telegram/Discord/Synology adapters
 - `HF_TOKEN` - Hugging Face API token (for gated model downloads)
@@ -162,12 +159,12 @@ docker compose run --rm morgan-cli chat
 docker compose run --rm morgan-cli ask "hello morgan"
 ```
 
-### Ollama (Port 11434)
+### Remote Ollama Endpoints
 
-Local LLM runtime used by the stack:
+The stack uses external Ollama hosts configured in `.env`:
 
-- API: `http://localhost:11434`
-- Pull models: `docker compose exec ollama ollama pull <model>`
+- Primary LLM host: `http://192.168.100.233:11434`
+- Smaller/embedding host: `http://192.168.100.222:11434`
 
 ### Qdrant (Ports 6333, 6334)
 
@@ -265,16 +262,15 @@ These are set automatically by the configuration:
 
 ### First Run
 
-The first startup may take several minutes as models are downloaded:
+The first startup may take several minutes while app services initialize.
 
-**Ollama Models (pull manually before starting):**
+**Ensure models exist on your remote Ollama hosts before starting:**
 ```bash
-# Qwen3-Embedding (recommended: 4b for RTX 4070, 8b for RTX 3090)
-ollama pull qwen3-embedding:4b
+# Smaller/embedding node (192.168.100.222)
+ollama pull qwen3-embedding:latest
 
-# LLM models
-ollama pull qwen2.5:32b-instruct-q4_K_M
-ollama pull qwen2.5:7b-instruct-q5_K_M
+# Primary LLM node (192.168.100.233)
+ollama pull qwen3.5:35b
 ```
 
 **Auto-downloaded Models:**
@@ -300,13 +296,13 @@ docker compose up -d
 
 ### Connection Refused to LLM
 
-Ensure Ollama is running and accessible:
+Ensure your remote Ollama hosts are reachable:
 ```bash
-# Check Ollama
-curl http://localhost:11434/api/tags
+# Primary LLM endpoint
+curl http://192.168.100.233:11434/api/tags
 
-# For Docker, use host.docker.internal
-MORGAN_LLM_ENDPOINT=http://host.docker.internal:11434
+# Smaller/embedding endpoint
+curl http://192.168.100.222:11434/api/tags
 ```
 
 ### GPU Not Detected

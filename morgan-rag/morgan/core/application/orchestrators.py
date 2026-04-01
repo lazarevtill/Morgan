@@ -878,14 +878,23 @@ class ConversationOrchestrator:
             return ""
 
         try:
-            tool_schemas = self._tool_executor.list_tools()
+            registered_tools = self._tool_executor.list_tools()
         except Exception as exc:
             logger.debug("Tool schema listing failed: %s", exc)
             return ""
 
-        if not tool_schemas:
+        if not registered_tools:
             return ""
 
+        tool_schemas = [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "aliases": list(tool.aliases),
+                "input_schema": tool.input_schema.to_dict(),
+            }
+            for tool in registered_tools
+        ]
         schemas_text = json.dumps(tool_schemas, ensure_ascii=True)
         return (
             "Tool usage is enabled.\n"
