@@ -31,8 +31,10 @@ RUN useradd -m -u 1000 -s /bin/bash morgan && \
     chown -R morgan:morgan /app
 
 COPY --from=builder /opt/venv /opt/venv
+COPY --chown=morgan:morgan shared /app/shared
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH="/app"
 
 USER morgan
 
