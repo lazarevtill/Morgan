@@ -221,15 +221,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     async def _channel_agent_handler(agent_id, session_key, message):
                         """Route channel messages through the Morgan assistant."""
                         try:
+                            logger.info("Channel handler: processing message from %s: %s",
+                                       message.peer_id, message.content[:100])
                             result = await assistant.chat(
                                 message=message.content,
                                 user_id=message.peer_id,
                                 conversation_id=str(session_key),
                             )
-                            return result.answer if hasattr(result, 'answer') else str(result)
+                            answer = result.answer if hasattr(result, 'answer') else str(result)
+                            logger.info("Channel handler: got answer (%d chars)", len(answer) if answer else 0)
+                            if not answer or not answer.strip():
+                                return "I processed your message but couldn't generate a response. Please try again."
+                            return answer
                         except Exception as chat_exc:
-                            logger.error("Channel chat failed: %s", chat_exc)
-                            return "Sorry, I encountered an error processing your message."
+                            logger.error("Channel chat failed: %s", chat_exc, exc_info=True)
+                            return f"Sorry, I encountered an error: {str(chat_exc)[:200]}"
 
                     gateway.set_agent_handler(_channel_agent_handler)
 

@@ -233,6 +233,11 @@ class TelegramChannel(BaseChannel):
         # Callback-query handler (inline keyboard buttons)
         self._app.add_handler(CallbackQueryHandler(self._on_callback_query))
 
+        # Error handler — python-telegram-bot silently swallows exceptions without this
+        async def _error_handler(update, context):
+            logger.error("Telegram handler error: %s", context.error, exc_info=context.error)
+        self._app.add_error_handler(_error_handler)
+
         await self._app.initialize()
 
         # Fetch bot info
@@ -284,7 +289,7 @@ class TelegramChannel(BaseChannel):
             logger.info("Starting Telegram channel polling...")
             await self._app.updater.start_polling(
                 allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=True,
+                drop_pending_updates=False,
             )
 
     async def stop(self) -> None:
@@ -347,6 +352,7 @@ class TelegramChannel(BaseChannel):
         self, update: "Update", context: "ContextTypes.DEFAULT_TYPE"
     ) -> None:
         """Handle /start command."""
+        logger.info("Received /start from %s", getattr(update.effective_user, "first_name", "?"))
         if not self._check_access(update):
             return
 
@@ -764,7 +770,13 @@ class TelegramChannel(BaseChannel):
         self, update: "Update", context: "ContextTypes.DEFAULT_TYPE"
     ) -> None:
         """Handle incoming text messages."""
+        logger.info(
+            "Received text message from %s: %s",
+            getattr(update.effective_user, "first_name", "?"),
+            (update.effective_message.text or "")[:100] if update.effective_message else "?",
+        )
         if not self._check_access(update):
+            logger.info("Access denied for user %s", getattr(update.effective_user, "id", "?"))
             return
 
         effective_message = update.effective_message
