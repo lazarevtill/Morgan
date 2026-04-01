@@ -5,10 +5,12 @@ Task 13: Integration Wiring — exposes the 12 new modules via REST endpoints.
 """
 
 import logging
+import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +25,63 @@ router = APIRouter(prefix="/api", tags=["Modules"])
 class ToolExecuteRequest(BaseModel):
     """Request body for POST /api/tools/{name}."""
 
-    input: Dict[str, Any] = {}
+    input: Dict[str, Any] = Field(default_factory=dict)
     user_id: Optional[str] = None
 
 
 class SkillExecuteRequest(BaseModel):
     """Request body for POST /api/skills/{name}."""
 
-    variables: Dict[str, str] = {}
+    variables: Dict[str, str] = Field(default_factory=dict)
+    prompt_context: Optional[str] = None
+
+
+class ScheduleAddRequest(BaseModel):
+    """Request body for POST /api/schedule."""
+
+    schedule: str
+    prompt: str
+    channel: str = "system"
+    model: str = "default"
+    isolated: bool = False
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+def _build_tool_executor():
+    from morgan.tools import ToolExecutor
+    from morgan.tools.builtin import ALL_BUILTIN_TOOLS
+
+    executor = ToolExecutor()
+    for tool in ALL_BUILTIN_TOOLS:
+        executor.register(tool)
+    return executor
+
+
+def _build_skill_registry(request: Optional[Request] = None):
+    from morgan.skills import SkillRegistry, load_skills_from_dir
+
+    registry = SkillRegistry()
+
+    bundled_dir = (
+        Path(__file__).resolve().parents[4]
+        / "morgan-rag"
+        / "morgan"
+        / "skills"
+        / "bundled"
+    )
+    if bundled_dir.exists():
+        for skill in load_skills_from_dir(str(bundled_dir)):
+            registry.register(skill)
+
+    if request is not None:
+        ws_mgr = getattr(request.app.state, "workspace_manager", None)
+        if ws_mgr is not None:
+            workspace_skills_dir = ws_mgr._dir / "skills"
+            if workspace_skills_dir.exists():
+                for skill in load_skills_from_dir(str(workspace_skills_dir)):
+                    registry.register(skill)
+
+    return registry
 
 
 # ============================================================================
@@ -42,27 +93,8 @@ class SkillExecuteRequest(BaseModel):
 async def list_tools() -> List[Dict[str, Any]]:
     """List available tools with their schemas."""
     try:
-        from morgan.tools import ToolExecutor
-        from morgan.tools.builtin import ALL_BUILTIN_TOOLS
-
-        executor = ToolExecutor()
-        for tool in ALL_BUILTIN_TOOLS:
-            executor.register(tool)
-
-        result = []
-        for tool in executor.list_tools():
-            schema = None
-            if tool.input_schema:
-                schema = tool.input_schema.to_dict() if hasattr(tool.input_schema, "to_dict") else None
-            result.append(
-                {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "aliases": list(tool.aliases) if tool.aliases else [],
-                    "input_schema": schema,
-                }
-            )
-        return result
+        executor = _build_tool_executor()
+        return executor.list_tools()
     except ImportError:
         return []
     except Exception as exc:
@@ -74,23 +106,17 @@ async def list_tools() -> List[Dict[str, Any]]:
 async def execute_tool(name: str, body: ToolExecuteRequest) -> Dict[str, Any]:
     """Execute a tool by name."""
     try:
-        from morgan.tools import ToolContext, ToolExecutor
-        from morgan.tools.builtin import ALL_BUILTIN_TOOLS
-        from morgan.tools.permissions import PermissionContext, PermissionMode
-
-        executor = ToolExecutor()
-        for tool in ALL_BUILTIN_TOOLS:
-            executor.register(tool)
+        executor = _build_tool_executor()
 
         tool = executor.get_tool(name)
         if tool is None:
             raise HTTPException(status_code=404, detail=f"Tool '{name}' not found")
 
         result = await executor.execute(
-            tool_name=name,
+            name=name,
             input_data=body.input,
-            context=ToolContext(user_id=body.user_id or "api"),
-            permission_context=PermissionContext(mode=PermissionMode.BYPASS),
+            conversation_id=f"api:tools:{name}",
+            user_id=body.user_id or "api",
         )
         return {
             "output": result.output,
@@ -113,34 +139,17 @@ async def execute_tool(name: str, body: ToolExecuteRequest) -> Dict[str, Any]:
 async def list_skills() -> List[Dict[str, Any]]:
     """List available skills."""
     try:
-        from morgan.skills import SkillRegistry, load_skills_from_dir
-        from morgan.workspace import get_workspace_path
-
-        registry = SkillRegistry()
-
-        # Load bundled skills
-        try:
-            import importlib.resources as pkg_resources
-
-            bundled_dir = (
-                __import__("pathlib").Path(__file__).resolve().parents[4]
-                / "morgan-rag"
-                / "morgan"
-                / "skills"
-                / "bundled"
-            )
-            if bundled_dir.exists():
-                for skill in load_skills_from_dir(str(bundled_dir)):
-                    registry.register(skill)
-        except Exception:
-            pass
+        registry = _build_skill_registry()
 
         return [
             {
                 "name": s.name,
                 "description": s.description,
                 "user_invocable": s.user_invocable,
-                "argument_names": getattr(s, "argument_names", []),
+                "argument_names": list(getattr(s, "argument_names", [])),
+                "allowed_tools": list(getattr(s, "allowed_tools", [])),
+                "model": getattr(s, "model", None),
+                "effort": getattr(s, "effort", None),
             }
             for s in registry.list_all()
         ]
@@ -155,33 +164,29 @@ async def list_skills() -> List[Dict[str, Any]]:
 async def execute_skill(name: str, body: SkillExecuteRequest) -> Dict[str, Any]:
     """Run a skill by name."""
     try:
-        from morgan.skills import SkillExecutor, SkillRegistry, load_skills_from_dir
+        from morgan.skills import SkillExecutor
 
-        registry = SkillRegistry()
-
-        # Load bundled skills
-        try:
-            bundled_dir = (
-                __import__("pathlib").Path(__file__).resolve().parents[4]
-                / "morgan-rag"
-                / "morgan"
-                / "skills"
-                / "bundled"
-            )
-            if bundled_dir.exists():
-                for skill in load_skills_from_dir(str(bundled_dir)):
-                    registry.register(skill)
-        except Exception:
-            pass
+        registry = _build_skill_registry()
 
         skill = registry.get(name)
         if skill is None:
             raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
 
+        executor = SkillExecutor()
+        result = await executor.execute(
+            skill=skill,
+            args=body.variables,
+            context=body.prompt_context,
+        )
+
         return {
             "name": skill.name,
             "rendered_prompt": skill.get_prompt(body.variables),
-            "status": "rendered",
+            "status": "ok" if result.success else "error",
+            "agent_type": result.agent_type,
+            "output": result.output,
+            "error": result.error,
+            "metadata": result.metadata,
         }
     except HTTPException:
         raise
@@ -284,11 +289,87 @@ async def trigger_memory_consolidation(request: Request) -> Dict[str, Any]:
         from morgan.memory_consolidation import MemoryConsolidator
 
         consolidator = MemoryConsolidator(workspace_dir=ws_mgr._dir)
-        result = consolidator.consolidate()
-        return {"status": "ok", "result": result}
+        result = consolidator.consolidate(days_to_review=7)
+        return {"status": "ok", "updated_memory": bool(result), "result": result}
     except ImportError:
         raise HTTPException(
             status_code=503, detail="Memory consolidation module not available"
         )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ============================================================================
+# Schedule
+# ============================================================================
+
+
+@router.get("/schedule")
+async def list_schedule(request: Request) -> Dict[str, Any]:
+    """List registered cron jobs."""
+    cron_service = getattr(request.app.state, "cron_service", None)
+    if cron_service is None:
+        return {"enabled": False, "jobs": []}
+
+    jobs = []
+    for job in cron_service.list_jobs():
+        jobs.append(
+            {
+                "job_id": job.job_id,
+                "schedule": job.schedule,
+                "prompt": job.prompt,
+                "channel": job.channel,
+                "model": job.model,
+                "isolated": job.isolated,
+                "metadata": job.metadata,
+            }
+        )
+    return {"enabled": True, "jobs": jobs}
+
+
+@router.post("/schedule")
+async def add_schedule(request: Request, body: ScheduleAddRequest) -> Dict[str, Any]:
+    """Register a cron job."""
+    cron_service = getattr(request.app.state, "cron_service", None)
+    if cron_service is None:
+        raise HTTPException(status_code=503, detail="Scheduling is not enabled")
+
+    try:
+        from morgan.scheduling import CronJob
+
+        job = CronJob(
+            job_id=f"job-{uuid.uuid4().hex[:12]}",
+            schedule=body.schedule,
+            prompt=body.prompt,
+            channel=body.channel,
+            model=body.model,
+            isolated=body.isolated,
+            metadata=dict(body.metadata),
+        )
+        cron_service.add_job(job)
+
+        if getattr(cron_service, "_started", False) and getattr(
+            cron_service, "_scheduler", None
+        ) is not None:
+            cron_service._register_ap_job(job)
+
+        hook_manager = getattr(request.app.state, "hook_manager", None)
+        if hook_manager is not None:
+            from morgan.hook_system import HookType
+
+            await hook_manager.trigger(
+                HookType.CONFIG_CHANGE,
+                {
+                    "component": "schedule",
+                    "action": "add_job",
+                    "job_id": job.job_id,
+                },
+            )
+
+        return {"status": "ok", "job_id": job.job_id}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

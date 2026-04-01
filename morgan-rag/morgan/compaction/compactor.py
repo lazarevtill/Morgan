@@ -54,6 +54,9 @@ class Compactor:
             messages = result["compacted_messages"]
     """
 
+    def __init__(self, hook_manager: Optional[Any] = None) -> None:
+        self._hook_manager = hook_manager
+
     async def compact(
         self,
         messages: List[Dict[str, Any]],
@@ -90,6 +93,21 @@ class Compactor:
                 "tokens_saved": 0,
             }
 
+        if self._hook_manager is not None:
+            try:
+                from morgan.hook_system import HookType
+
+                await self._hook_manager.trigger(
+                    HookType.PRE_COMPACT,
+                    {
+                        "message_count": len(messages),
+                        "keep_recent": keep_recent,
+                        "context_window": context_window,
+                    },
+                )
+            except Exception as exc:
+                logger.debug("PRE_COMPACT hook failed: %s", exc)
+
         old_messages = messages[:-keep_recent] if keep_recent > 0 else list(messages)
         recent_messages = messages[-keep_recent:] if keep_recent > 0 else []
 
@@ -117,12 +135,22 @@ class Compactor:
             estimate_messages_tokens(messages) - new_tokens, 0
         )
 
-        return {
+        result = {
             "was_compacted": True,
             "compacted_messages": compacted_messages,
             "summary": summary,
             "tokens_saved": tokens_saved,
         }
+
+        if self._hook_manager is not None:
+            try:
+                from morgan.hook_system import HookType
+
+                await self._hook_manager.trigger(HookType.POST_COMPACT, result)
+            except Exception as exc:
+                logger.debug("POST_COMPACT hook failed: %s", exc)
+
+        return result
 
     # ------------------------------------------------------------------
     # Internal helpers

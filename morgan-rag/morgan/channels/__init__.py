@@ -21,6 +21,7 @@ from morgan.channels.gateway import ChannelGateway
 from morgan.channels.routing import ResolvedRoute, RouteBinding, RouteResolver, SessionKey
 from morgan.channels.telegram_channel import TelegramChannel
 from morgan.channels.synology_channel import SynologyChannel
+from morgan.channels.discord_channel import DiscordChannel
 
 __all__ = [
     "BaseChannel",
@@ -31,6 +32,7 @@ __all__ = [
     "RouteBinding",
     "RouteResolver",
     "SessionKey",
+    "DiscordChannel",
     "SynologyChannel",
     "TelegramChannel",
 ]

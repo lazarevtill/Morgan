@@ -36,6 +36,7 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
 from morgan.channels.base import BaseChannel, InboundMessage, OutboundMessage
@@ -1291,28 +1292,60 @@ class TelegramChannel(BaseChannel):
     def _get_available_skills(self) -> list[tuple[str, str]]:
         """Try to load available skills from the skill registry."""
         try:
-            from morgan.skills import SkillRegistry
-            # If skills are loaded globally, try to access them
-            # For now, return the default list
+            from morgan.skills import SkillRegistry, load_skills_from_dir
+
+            registry = SkillRegistry()
+
+            bundled_dir = Path(__file__).resolve().parents[1] / "skills" / "bundled"
+            if bundled_dir.exists():
+                for skill in load_skills_from_dir(str(bundled_dir)):
+                    registry.register(skill)
+
+            workspace_dir = self._resolve_workspace_dir()
+            if workspace_dir is not None:
+                workspace_skills_dir = workspace_dir / "skills"
+                if workspace_skills_dir.exists():
+                    for skill in load_skills_from_dir(str(workspace_skills_dir)):
+                        registry.register(skill)
+
+            skills = []
+            for skill in registry.list_all():
+                if getattr(skill, "user_invocable", True):
+                    skills.append((skill.name, skill.description))
+            return sorted(skills, key=lambda item: item[0])
+        except Exception:
+            logger.debug("Falling back to default skill list", exc_info=True)
             return MORGAN_DEFAULT_SKILLS
-        except ImportError:
-            return MORGAN_DEFAULT_SKILLS
+
+    def _resolve_workspace_dir(self) -> Optional[Path]:
+        """Resolve workspace directory from settings or default workspace path."""
+        try:
+            from morgan.config import get_settings
+            from morgan.workspace import get_workspace_path
+
+            settings = get_settings()
+            if settings.morgan_workspace_path:
+                return Path(settings.morgan_workspace_path)
+            return get_workspace_path()
+        except Exception:
+            logger.debug("Could not resolve workspace directory", exc_info=True)
+            return None
 
     def _get_memory_status_text(self) -> str:
         """Get a short memory status string."""
         try:
-            from morgan.memory_consolidation import DailyLogManager
-            from morgan.workspace import WorkspaceManager
+            workspace_dir = self._resolve_workspace_dir()
+            if workspace_dir is None:
+                return "status unavailable"
 
-            workspace = WorkspaceManager()
-            memory_path = workspace.workspace_path / "MEMORY.md"
+            memory_path = workspace_dir / "MEMORY.md"
             if memory_path.exists():
                 size = memory_path.stat().st_size
                 if size > 1024:
                     return f"MEMORY.md: {size / 1024:.1f} KB"
                 return f"MEMORY.md: {size} bytes"
             return "MEMORY.md: not found"
-        except (ImportError, Exception):
+        except Exception:
             return "available"
 
     def _get_memory_detail_text(self) -> str:
@@ -1320,24 +1353,36 @@ class TelegramChannel(BaseChannel):
         lines = ["<b>Memory Status</b>\n"]
 
         try:
-            from morgan.workspace import WorkspaceManager
-            workspace = WorkspaceManager()
-            memory_path = workspace.workspace_path / "MEMORY.md"
+            workspace_dir = self._resolve_workspace_dir()
+            if workspace_dir is None:
+                lines.append("Workspace: unavailable")
+                raise RuntimeError("workspace-unavailable")
+
+            memory_path = workspace_dir / "MEMORY.md"
             if memory_path.exists():
                 size = memory_path.stat().st_size
-                line_count = memory_path.read_text().count("\n")
+                line_count = memory_path.read_text(encoding="utf-8").count("\n")
                 lines.append(f"MEMORY.md: {size / 1024:.1f} KB ({line_count} lines)")
             else:
                 lines.append("MEMORY.md: not found")
-        except (ImportError, Exception):
+        except Exception:
             lines.append("MEMORY.md: status unavailable")
 
         try:
             from morgan.memory_consolidation import DailyLogManager
-            dlm = DailyLogManager()
-            log_count = len(list(dlm.log_dir.glob("*.md"))) if dlm.log_dir.exists() else 0
+
+            workspace_dir = self._resolve_workspace_dir()
+            if workspace_dir is None:
+                raise RuntimeError("workspace-unavailable")
+
+            dlm = DailyLogManager(workspace_dir / "memory")
+            log_count = (
+                len(list(dlm.memory_dir.glob("*.md")))
+                if dlm.memory_dir.exists()
+                else 0
+            )
             lines.append(f"Daily logs: {log_count} entries")
-        except (ImportError, Exception):
+        except Exception:
             lines.append("Daily logs: status unavailable")
 
         lines.append(f"\nActive conversations: {len(self._conversations)}")

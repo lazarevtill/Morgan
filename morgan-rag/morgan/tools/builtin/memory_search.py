@@ -1,12 +1,13 @@
 """
 Memory search tool for the Morgan tool system.
 
-Delegates to morgan.memory.memory_processor for searching stored memories.
-Handles ImportError gracefully if the service is not available.
+Delegates to morgan.memory_consolidation.HybridMemorySearch, combining
+keyword (BM25-like) search with optional vector scoring over daily logs.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from morgan.tools.base import BaseTool, ToolContext, ToolInputSchema, ToolResult
@@ -14,11 +15,7 @@ from morgan.tools.base import BaseTool, ToolContext, ToolInputSchema, ToolResult
 
 class MemorySearchTool(BaseTool):
     """
-    Memory search tool that delegates to Morgan's memory processor.
-
-    Searches conversation memories and stored knowledge through the
-    existing morgan.memory module. If the service is not available
-    (ImportError), returns a graceful error.
+    Memory search tool that delegates to HybridMemorySearch.
 
     Examples:
         {"query": "user's favorite programming language"}
@@ -40,7 +37,7 @@ class MemorySearchTool(BaseTool):
             },
             "conversation_id": {
                 "type": "string",
-                "description": "Optional: limit search to a specific conversation",
+                "description": "Optional conversation id (reserved for future filtering)",
             },
         },
         required=("query",),
@@ -67,60 +64,46 @@ class MemorySearchTool(BaseTool):
     async def execute(
         self, input_data: Dict[str, Any], context: ToolContext
     ) -> ToolResult:
-        """Execute a memory search via the memory processor."""
+        """Execute a memory search via HybridMemorySearch."""
         query = input_data["query"].strip()
         max_results = input_data.get("max_results", 5)
         conversation_id = input_data.get("conversation_id", context.conversation_id)
 
         try:
-            from morgan.memory import get_memory_processor
+            from morgan.config import get_settings
+            from morgan.memory_consolidation import HybridMemorySearch
+            from morgan.workspace import get_workspace_path
 
-            processor = get_memory_processor()
+            settings = get_settings()
+            workspace_dir = (
+                Path(settings.morgan_workspace_path)
+                if settings.morgan_workspace_path
+                else get_workspace_path()
+            )
+            memory_dir = workspace_dir / "memory"
 
-            # The memory processor may have different search method signatures
-            # depending on the version. We try the most common patterns.
-            if hasattr(processor, "search_memories"):
-                results = await processor.search_memories(
-                    query=query,
-                    conversation_id=conversation_id,
-                    max_results=max_results,
-                )
-            elif hasattr(processor, "search"):
-                results = await processor.search(
-                    query=query,
-                    limit=max_results,
-                )
-            else:
-                return ToolResult(
-                    output="Memory processor does not have a search method",
-                    is_error=True,
-                    error_code="SERVICE_INCOMPATIBLE",
-                    metadata={"query": query},
-                )
+            search = HybridMemorySearch(memory_dir)
+            results = search.hybrid_search(query=query, limit=max_results)
 
             if not results:
                 return ToolResult(
                     output=f"No memories found for: {query}",
-                    metadata={"query": query, "result_count": 0},
+                    metadata={
+                        "query": query,
+                        "result_count": 0,
+                        "conversation_id": conversation_id,
+                    },
                 )
 
-            # Format results
             output_lines = [f"Memory search results for: {query}\n"]
             for i, memory in enumerate(results, 1):
-                if hasattr(memory, "content"):
-                    content = memory.content
-                elif isinstance(memory, dict):
-                    content = memory.get("content", str(memory))
-                else:
-                    content = str(memory)
+                content = memory.get("content", "")
+                score = memory.get("score")
+                path = memory.get("path", "")
+                date_hint = Path(path).stem if path else "unknown-date"
+                score_text = f" (score: {score:.2f})" if isinstance(score, (int, float)) else ""
 
-                score = ""
-                if hasattr(memory, "importance_score"):
-                    score = f" (importance: {memory.importance_score:.2f})"
-                elif isinstance(memory, dict) and "score" in memory:
-                    score = f" (score: {memory['score']:.2f})"
-
-                output_lines.append(f"{i}. {content}{score}")
+                output_lines.append(f"{i}. [{date_hint}] {content.strip()}{score_text}")
                 output_lines.append("")
 
             return ToolResult(
@@ -129,16 +112,17 @@ class MemorySearchTool(BaseTool):
                     "query": query,
                     "result_count": len(results),
                     "conversation_id": conversation_id,
+                    "workspace_memory_dir": str(memory_dir),
                 },
             )
 
-        except ImportError:
+        except ImportError as e:
             return ToolResult(
                 output="Memory search service is not available. "
-                "The morgan.memory module could not be imported.",
+                "The memory consolidation modules could not be imported.",
                 is_error=True,
                 error_code="SERVICE_UNAVAILABLE",
-                metadata={"query": query},
+                metadata={"query": query, "details": str(e)},
             )
         except Exception as e:
             return ToolResult(
