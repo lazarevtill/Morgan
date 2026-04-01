@@ -18,6 +18,19 @@ pip install morgan-cli
 
 ## Quick Start
 
+### Docker Compose (Recommended)
+
+```bash
+cd docker
+docker compose up -d
+
+# interactive chat
+docker compose run --rm morgan-cli chat
+
+# one-off question
+docker compose run --rm morgan-cli ask "hello morgan"
+```
+
 ### Using HTTP Client
 
 ```python

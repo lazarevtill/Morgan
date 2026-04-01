@@ -1,31 +1,40 @@
-# Morgan CLI Dockerfile (optional - for containerized client)
-FROM python:3.11-slim
+# Morgan CLI Dockerfile
+# Multi-stage build keeps runtime image small and secure.
 
-# Set working directory
+# =============================================================================
+# Stage 1: Build dependencies
+# =============================================================================
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN pip install --upgrade pip setuptools wheel
+
+COPY morgan-cli/pyproject.toml morgan-cli/README.md /build/morgan-cli/
+COPY morgan-cli/morgan_cli /build/morgan-cli/morgan_cli
+
+WORKDIR /build/morgan-cli
+RUN pip install --no-cache-dir .
+
+# =============================================================================
+# Stage 2: Runtime image
+# =============================================================================
+FROM python:3.11-slim AS runtime
+
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create non-root user
-RUN useradd -m -u 1000 morgan && \
+RUN useradd -m -u 1000 -s /bin/bash morgan && \
+    mkdir -p /app && \
     chown -R morgan:morgan /app
 
-# Copy CLI package
-COPY --chown=morgan:morgan morgan-cli/pyproject.toml morgan-cli/README.md ./
-COPY --chown=morgan:morgan morgan-cli/morgan_cli ./morgan_cli
-
-# Install dependencies
-RUN pip install --no-cache-dir -e .
-
-# Switch to non-root user
-USER morgan
-
-# Set environment variables
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 
-# Default command
+USER morgan
+
 ENTRYPOINT ["morgan"]
 CMD ["--help"]

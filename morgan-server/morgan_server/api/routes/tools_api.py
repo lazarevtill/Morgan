@@ -47,17 +47,31 @@ class ScheduleAddRequest(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
+# Module-level caches so we don't rebuild on every request.
+_cached_tool_executor = None
+_cached_skill_registry = None
+
+
 def _build_tool_executor():
+    global _cached_tool_executor
+    if _cached_tool_executor is not None:
+        return _cached_tool_executor
+
     from morgan.tools import ToolExecutor
     from morgan.tools.builtin import ALL_BUILTIN_TOOLS
 
     executor = ToolExecutor()
     for tool in ALL_BUILTIN_TOOLS:
         executor.register(tool)
+    _cached_tool_executor = executor
     return executor
 
 
 def _build_skill_registry(request: Optional[Request] = None):
+    global _cached_skill_registry
+    if _cached_skill_registry is not None:
+        return _cached_skill_registry
+
     from morgan.skills import SkillRegistry, load_skills_from_dir
 
     registry = SkillRegistry()
@@ -81,6 +95,7 @@ def _build_skill_registry(request: Optional[Request] = None):
                 for skill in load_skills_from_dir(str(workspace_skills_dir)):
                     registry.register(skill)
 
+    _cached_skill_registry = registry
     return registry
 
 
@@ -94,7 +109,15 @@ async def list_tools() -> List[Dict[str, Any]]:
     """List available tools with their schemas."""
     try:
         executor = _build_tool_executor()
-        return executor.list_tools()
+        return [
+            {
+                "name": t.name,
+                "description": t.description,
+                "aliases": list(t.aliases),
+                "input_schema": t.input_schema.to_dict(),
+            }
+            for t in executor.list_tools()
+        ]
     except ImportError:
         return []
     except Exception as exc:
@@ -106,17 +129,22 @@ async def list_tools() -> List[Dict[str, Any]]:
 async def execute_tool(name: str, body: ToolExecuteRequest) -> Dict[str, Any]:
     """Execute a tool by name."""
     try:
+        from morgan.tools.base import ToolContext
+
         executor = _build_tool_executor()
 
         tool = executor.get_tool(name)
         if tool is None:
             raise HTTPException(status_code=404, detail=f"Tool '{name}' not found")
 
-        result = await executor.execute(
-            name=name,
-            input_data=body.input,
-            conversation_id=f"api:tools:{name}",
+        ctx = ToolContext(
             user_id=body.user_id or "api",
+            conversation_id=f"api:tools:{name}",
+        )
+        result = await executor.execute(
+            tool_name=name,
+            input_data=body.input,
+            context=ctx,
         )
         return {
             "output": result.output,

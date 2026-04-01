@@ -24,7 +24,7 @@ from ..tools.builtin import ALL_BUILTIN_TOOLS
 from ..workspace import WorkspaceManager, get_workspace_path
 
 # Legacy imports removed
-from morgan.hook_system import HookManager
+from morgan.hook_system import HookManager, HookType
 from morgan.intelligence.core.intelligence_engine import (
     get_emotional_intelligence_engine,
 )
@@ -159,20 +159,43 @@ class MorganAssistant:
         question: str,
         conversation_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        session_type: str = "main",
     ) -> AsyncGenerator[str, None]:
         """
         Ask Morgan a question with streaming response.
 
         Runs the full orchestrator pipeline (Steps 1-8) for context gathering,
         emotion analysis, and style adaptation, then streams only the LLM
-        generation step. Post-generation steps (memory, learning) run after
-        streaming completes.
+        generation step. Post-generation steps (memory, learning, hooks,
+        daily-log, auto-compact) run after streaming completes.
         """
         conv_id = conversation_id or str(uuid.uuid4())
         uid = user_id or "anonymous"
         orch = self.orchestrator
 
+        # === Hook: MESSAGE_INBOUND ===
+        await orch._trigger_hook(HookType.MESSAGE_INBOUND, {
+            "question": question, "user_id": uid,
+            "conversation_id": conv_id, "session_type": session_type,
+        })
+
         # === Pre-generation pipeline (Steps 1-8) ===
+        # Step 0: Workspace context
+        workspace_context = ""
+        if orch._workspace_manager:
+            try:
+                ws = orch._workspace_manager.load_session_context(session_type)
+                parts = []
+                if ws.get("soul"):
+                    parts.append(ws["soul"])
+                if ws.get("user"):
+                    parts.append(ws["user"])
+                if ws.get("memory"):
+                    parts.append(ws["memory"])
+                workspace_context = "\n---\n".join(parts)
+            except Exception:
+                pass
+
         # Step 1: Memory context
         memory_history = []
         memory_context = ""
@@ -266,7 +289,10 @@ class MorganAssistant:
         if flow_result:
             style_context += f"\nFlow: {flow_result}"
 
-        context = (
+        context = ""
+        if workspace_context:
+            context += f"{workspace_context}\n---\n"
+        context += (
             f"Emotional State: {emotional_state}\n"
             f"Style: {style_context}\n"
             f"Knowledge:\n{knowledge_context}\n"
@@ -283,6 +309,18 @@ class MorganAssistant:
             yield chunk_text
 
         # === Post-generation pipeline (Steps 10-13) ===
+        # Hook: MESSAGE_REPLY
+        await orch._trigger_hook(HookType.MESSAGE_REPLY, {
+            "question": question, "answer": full_response,
+            "user_id": uid, "conversation_id": conv_id,
+        })
+
+        # Daily log append
+        await orch._append_daily_log(question, full_response, uid, conv_id)
+
+        # Auto-compact check
+        await orch._maybe_auto_compact(conv_id)
+
         # Step 12: Memory update
         if conversation_id:
             orch.emotional_processor.process_conversation_memory(

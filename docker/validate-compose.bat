@@ -4,13 +4,13 @@ REM Validation script for Docker Compose configuration (Windows)
 echo === Morgan Docker Compose Validation ===
 echo.
 
-REM Check if docker-compose is installed
-docker-compose --version >nul 2>&1
+REM Check if Docker Compose plugin is available
+docker compose version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo X docker-compose is not installed
+    echo X docker compose is not available
     exit /b 1
 )
-echo + docker-compose is installed
+echo + docker compose is available
 
 REM Check if Docker is running
 docker info >nul 2>&1
@@ -23,7 +23,7 @@ echo + Docker daemon is running
 REM Validate docker-compose.yml syntax
 echo.
 echo Validating docker-compose.yml...
-docker-compose -f docker-compose.yml config --quiet >nul 2>&1
+docker compose -f docker-compose.yml config --quiet >nul 2>&1
 if %errorlevel% neq 0 (
     echo X docker-compose.yml has syntax errors
     exit /b 1
@@ -69,11 +69,11 @@ echo.
 echo === Validation Complete ===
 echo.
 echo To start services:
-echo   docker-compose up -d
+echo   docker compose up -d
 echo.
 echo To start with monitoring:
-echo   docker-compose --profile monitoring up -d
+echo   docker compose --profile monitoring up -d
 echo.
 echo To view logs:
-echo   docker-compose logs -f
+echo   docker compose logs -f
 echo.
