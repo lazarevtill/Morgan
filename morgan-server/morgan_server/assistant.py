@@ -198,13 +198,11 @@ class MorganAssistant:
         limit: int = 5,
     ) -> List[Dict[str, Any]]:
         """Search knowledge base."""
-        # Core has knowledge.search_knowledge
-        # Assuming synchronous or async? Core assistant.py uses synchronous validation wrapper?
-        # self.knowledge.search_knowledge is likely async or sync?
-        # In orchestrator it was: search_results = self.knowledge.search_knowledge(...)
-        # Let's check if it's awaitable. Orchestrator didn't await it.
-        results = self.core.knowledge.search_knowledge(query, max_results=limit)
-        return results
+        result = self.core.knowledge.search_knowledge(query, max_results=limit)
+        # Handle both sync and async returns
+        if asyncio.iscoroutine(result):
+            result = await result
+        return result
 
     def get_user_profile(self, user_id: str) -> Optional[Any]:
         """Get user profile."""

@@ -256,18 +256,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                         except Exception as exc:
                             logger.warning("Synology Chat channel init failed (non-fatal): %s", exc)
 
-                    # Wire gateway to assistant so channel messages get responses
+                    # Wire gateway to assistant so channel messages get responses.
+                    # The session_key string encodes session type (dm/group)
+                    # which _infer_session_type in the server assistant parses
+                    # to control memory gating (MEMORY.md only for dm, not group).
                     async def _channel_agent_handler(agent_id, session_key, message):
-                        """Route channel messages through the Morgan assistant."""
+                        """Route channel messages through the Morgan assistant.
+
+                        Memory behaviour:
+                        - DM sessions (session_key contains \":dm:\") → full
+                          memory access (MEMORY.md, daily logs, workspace).
+                        - Group sessions (\":group:\") → memory gated out by
+                          WorkspaceManager.load_session_context().
+                        """
                         try:
-                            logger.info("Channel handler: processing message from %s: %s",
-                                       message.peer_id, message.content[:100])
+                            logger.info(
+                                "Channel handler: processing message from %s via %s: %s",
+                                message.peer_id,
+                                message.channel,
+                                message.content[:100],
+                            )
                             result = await assistant.chat(
                                 message=message.content,
                                 user_id=message.peer_id,
                                 conversation_id=str(session_key),
                             )
-                            answer = result.answer if hasattr(result, 'answer') else str(result)
+                            answer = result.answer if hasattr(result, "answer") else str(result)
                             logger.info("Channel handler: got answer (%d chars)", len(answer) if answer else 0)
                             if not answer or not answer.strip():
                                 return "I processed your message but couldn't generate a response. Please try again."
@@ -340,14 +354,50 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.info("Shutting down cron service...")
                 shutdown_tasks.append(app.state.cron_service.stop())
 
-            # Shutdown assistant
+            # Wait for async shutdowns first
+            if shutdown_tasks:
+                await asyncio.gather(*shutdown_tasks, return_exceptions=True)
+
+            # Shutdown task manager (sync, clear all tracked tasks)
+            if hasattr(app.state, "task_manager"):
+                logger.info("Shutting down task manager...")
+                try:
+                    tm = app.state.task_manager
+                    if hasattr(tm, "shutdown"):
+                        result = tm.shutdown()
+                        if asyncio.iscoroutine(result):
+                            await result
+                except Exception as exc:
+                    logger.warning("TaskManager shutdown error (non-fatal): %s", exc)
+
+            # Clear hook manager (unregister all handlers)
+            if hasattr(app.state, "hook_manager"):
+                logger.info("Shutting down hook manager...")
+                # Nothing async to do, but clear references
+                app.state.hook_manager = None
+
+            # Clear app state store
+            if hasattr(app.state, "app_state_store"):
+                logger.info("Shutting down app state store...")
+                app.state.app_state_store = None
+
+            # Clear workspace manager reference
+            if hasattr(app.state, "workspace_manager"):
+                logger.info("Shutting down workspace manager...")
+                app.state.workspace_manager = None
+
+            # Shutdown assistant last (depends on other modules)
             if hasattr(app.state, "assistant"):
                 logger.info("Shutting down assistant...")
                 await app.state.assistant.shutdown()
 
-            # Wait for all shutdowns to complete
-            if shutdown_tasks:
-                await asyncio.gather(*shutdown_tasks, return_exceptions=True)
+            # Reset tools_api module caches
+            try:
+                from morgan_server.api.routes import tools_api
+                tools_api._cached_tool_executor = None
+                tools_api._cached_skill_registry = None
+            except Exception:
+                pass
 
             logger.info("Morgan Server shut down successfully")
 

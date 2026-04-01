@@ -23,6 +23,17 @@ cd morgan-rag
 pip install -e .
 ```
 
+### Docker-First Local Development
+
+```bash
+cd docker
+cp .env.example .env
+docker compose up -d
+```
+
+This runs the full stack in containers (`morgan-server`, `morgan-cli`, `ollama`,
+`qdrant`, `redis`). Use `docker compose run --rm morgan-cli ...` for CLI commands.
+
 ### Basic Usage
 
 ```python

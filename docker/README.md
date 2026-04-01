@@ -5,11 +5,24 @@ Docker configurations for deploying Morgan in various setups.
 ## Quick Start (Single Machine)
 
 ```bash
-# Start Morgan with Redis and Qdrant
+# From repository root
+cd docker
+
+# Copy env template once
+cp .env.example .env
+
+# Start full local stack (server + cli image + ollama + redis + qdrant)
 docker compose up -d
 
-# With monitoring (Prometheus + Grafana)
+# Pull models into Ollama container
+docker compose exec ollama ollama pull qwen2.5:7b
+docker compose exec ollama ollama pull qwen3-embedding:4b
+
+# Optional monitoring (Prometheus + Grafana)
 docker compose --profile monitoring up -d
+
+# Run CLI from container
+docker compose run --rm morgan-cli chat
 ```
 
 ## Configuration
@@ -19,15 +32,15 @@ docker compose --profile monitoring up -d
 Copy and customize the environment file:
 
 ```bash
-cp env.example .env
+cp .env.example .env
 # Edit with your values
 vi .env
 ```
 
 **Key variables:**
-- `MORGAN_LLM_ENDPOINT` - Ollama endpoint URL
+- `MORGAN_LLM_ENDPOINT` - LLM endpoint (defaults to in-stack Ollama)
 - `MORGAN_LLM_MODEL` - Main LLM model name
-- `MORGAN_DISTRIBUTED_CONFIG` - Path to distributed config YAML
+- `MORGAN_ENABLE_CHANNELS` - enable Telegram/Discord/Synology adapters
 - `HF_TOKEN` - Hugging Face API token (for gated model downloads)
 
 ### Hugging Face Token
@@ -78,6 +91,8 @@ export MORGAN_DISTRIBUTED_CONFIG=/app/config/distributed.local.yaml
 
 Uses `docker-compose.yml`:
 - Morgan Server
+- Morgan CLI image (run via `docker compose run`)
+- Ollama
 - Redis (session/cache)
 - Qdrant (vector DB)
 - Prometheus/Grafana (optional)
@@ -134,6 +149,25 @@ Main API server with endpoints:
 - `POST /chat` - Chat endpoint
 - `POST /ask` - Question answering
 - `GET /docs` - API documentation
+
+### Morgan CLI (Containerized)
+
+Run CLI commands through compose:
+
+```bash
+# interactive chat
+docker compose run --rm morgan-cli chat
+
+# one-off question
+docker compose run --rm morgan-cli ask "hello morgan"
+```
+
+### Ollama (Port 11434)
+
+Local LLM runtime used by the stack:
+
+- API: `http://localhost:11434`
+- Pull models: `docker compose exec ollama ollama pull <model>`
 
 ### Qdrant (Ports 6333, 6334)
 

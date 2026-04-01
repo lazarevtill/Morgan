@@ -6,12 +6,12 @@ set -e
 echo "=== Morgan Docker Compose Validation ==="
 echo ""
 
-# Check if docker-compose is installed
-if ! command -v docker-compose &> /dev/null; then
-    echo "❌ docker-compose is not installed"
+# Check if Docker Compose plugin is available
+if ! docker compose version &> /dev/null; then
+    echo "❌ docker compose is not available"
     exit 1
 fi
-echo "✓ docker-compose is installed"
+echo "✓ docker compose is available"
 
 # Check if Docker is running
 if ! docker info &> /dev/null; then
@@ -23,7 +23,7 @@ echo "✓ Docker daemon is running"
 # Validate docker-compose.yml syntax
 echo ""
 echo "Validating docker-compose.yml..."
-if docker-compose -f docker-compose.yml config --quiet; then
+if docker compose -f docker-compose.yml config --quiet; then
     echo "✓ docker-compose.yml is valid"
 else
     echo "❌ docker-compose.yml has syntax errors"
@@ -69,10 +69,10 @@ echo ""
 echo "=== Validation Complete ==="
 echo ""
 echo "To start services:"
-echo "  docker-compose up -d"
+echo "  docker compose up -d"
 echo ""
 echo "To start with monitoring:"
-echo "  docker-compose --profile monitoring up -d"
+echo "  docker compose --profile monitoring up -d"
 echo ""
 echo "To view logs:"
-echo "  docker-compose logs -f"
+echo "  docker compose logs -f"
