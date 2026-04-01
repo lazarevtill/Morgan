@@ -260,11 +260,11 @@ class Settings(BaseSettings):
     )
 
     morgan_synology_webhook_path: str = Field(
-        default="/webhook/synology", description="URL path for Synology outgoing webhook listener"
+        default="/synology-webhook", description="URL path for Synology outgoing webhook listener"
     )
 
     morgan_synology_webhook_port: int = Field(
-        default=5001, description="Port for Synology webhook listener", ge=1024, le=65535
+        default=8765, description="Port for Synology webhook listener", ge=1024, le=65535
     )
 
     morgan_synology_bot_name: str = Field(
@@ -481,17 +481,13 @@ class Settings(BaseSettings):
         # Resolve to absolute path
         v = v.resolve()
 
-        # Check for path traversal attempts
-        try:
-            # Ensure data dir is not in system directories
-            if str(v).startswith(
-                ("/etc", "/root", "/sys", "/proc", "C:\\Windows", "C:\\Program Files")
-            ):
-                raise ValueError(
-                    f"SECURITY: Data directory cannot be in system directories: {v}"
-                )
-        except Exception:
-            pass
+        # Ensure data dir is not in system directories
+        if str(v).startswith(
+            ("/etc", "/root", "/sys", "/proc", "C:\\Windows", "C:\\Program Files")
+        ):
+            raise ValueError(
+                f"SECURITY: Data directory cannot be in system directories: {v}"
+            )
 
         # Create directory with restricted permissions
         try:

@@ -10,6 +10,7 @@ the Morgan server FastAPI application.
 import logging
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional, AsyncGenerator
 
 from fastapi import FastAPI
@@ -136,7 +137,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     ws_path = rag_settings.morgan_workspace_path or str(
                         get_workspace_path()
                     )
-                    workspace_mgr = WorkspaceManager(workspace_dir=__import__("pathlib").Path(ws_path))
+                    workspace_mgr = WorkspaceManager(workspace_dir=Path(ws_path))
                     workspace_mgr.bootstrap()
                     app.state.workspace_manager = workspace_mgr
                     logger.info("Workspace bootstrapped at %s", ws_path)
@@ -156,6 +157,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 from morgan.hook_system import HookManager
                 app.state.hook_manager = HookManager()
                 logger.info("HookManager initialized")
+
+                # Share the hook manager with the assistant/orchestrator pipeline.
+                if hasattr(app.state, "assistant") and hasattr(app.state.assistant, "core"):
+                    app.state.assistant.core.hook_manager = app.state.hook_manager
+                    if hasattr(app.state.assistant.core, "orchestrator"):
+                        app.state.assistant.core.orchestrator._hook_manager = app.state.hook_manager
+                    if hasattr(app.state.assistant.core, "compactor") and app.state.assistant.core.compactor:
+                        app.state.assistant.core.compactor._hook_manager = app.state.hook_manager
             except Exception as exc:
                 logger.warning("HookManager init failed (non-fatal): %s", exc)
 
@@ -170,8 +179,38 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             # --- Scheduling (CronService + HeartbeatManager) ---
             if rag_settings.morgan_enable_scheduling:
                 try:
-                    from morgan.scheduling import CronService, HeartbeatManager
+                    from morgan.memory_consolidation import MemoryConsolidator
+                    from morgan.scheduling import CronJob, CronService, HeartbeatManager
                     cron_service = CronService()
+
+                    async def _run_memory_consolidation() -> None:
+                        if not hasattr(app.state, "workspace_manager"):
+                            return
+                        workspace_dir = app.state.workspace_manager._dir
+                        consolidator = MemoryConsolidator(workspace_dir=workspace_dir)
+                        try:
+                            consolidator.consolidate(days_to_review=7)
+                            logger.info("Scheduled memory consolidation completed")
+                        except Exception as consolidate_exc:
+                            logger.warning(
+                                "Scheduled memory consolidation failed: %s",
+                                consolidate_exc,
+                            )
+
+                    def _cron_job_handler(job: CronJob) -> None:
+                        if job.metadata.get("job_type") == "memory_consolidation":
+                            asyncio.create_task(_run_memory_consolidation())
+
+                    cron_service.set_job_handler(_cron_job_handler)
+                    cron_service.add_job(
+                        CronJob(
+                            job_id="memory-consolidation-daily",
+                            schedule="0 2 * * *",
+                            prompt="Consolidate recent memory logs",
+                            channel="system",
+                            metadata={"job_type": "memory_consolidation"},
+                        )
+                    )
                     await cron_service.start()
                     app.state.cron_service = cron_service
 
@@ -248,6 +287,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:
             logger.warning("New module initialization failed (non-fatal): %s", exc)
 
+        if hasattr(app.state, "hook_manager"):
+            try:
+                from morgan.hook_system import HookType
+
+                await app.state.hook_manager.trigger(
+                    HookType.SESSION_START, {"scope": "server"}
+                )
+            except Exception as exc:
+                logger.warning("SESSION_START hook failed (non-fatal): %s", exc)
+
         # Application is now running
         yield
 
@@ -262,6 +311,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Shutting down Morgan Server...")
 
         try:
+            if hasattr(app.state, "hook_manager"):
+                try:
+                    from morgan.hook_system import HookType
+
+                    await app.state.hook_manager.trigger(
+                        HookType.SESSION_END, {"scope": "server"}
+                    )
+                except Exception as exc:
+                    logger.warning("SESSION_END hook failed (non-fatal): %s", exc)
+
             # Close all component connections gracefully
             shutdown_tasks = []
 

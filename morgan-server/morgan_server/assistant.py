@@ -7,6 +7,7 @@ a complete personal assistant experience.
 Refactored to use `morgan-rag` shared domain models.
 """
 
+import asyncio
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -106,12 +107,14 @@ class MorganAssistant:
         """
         # Delegate to Core
         # Core 'ask' is async? 'ask' in assistant.py is async def ask(...)
+        session_type = self._infer_session_type(conversation_id)
 
         core_response = await self.core.ask(
             question=message,
             conversation_id=conversation_id,
             user_id=user_id,
             include_sources=use_knowledge,
+            session_type=session_type,
         )
 
         # Map core_response to AssistantResponse
@@ -158,6 +161,19 @@ class MorganAssistant:
             habit_adaptations=getattr(core_response, "habit_adaptations", None) or [],
             nonverbal_cues_detected=getattr(core_response, "nonverbal_cues_detected", None) or [],
         )
+
+    @staticmethod
+    def _infer_session_type(conversation_id: Optional[str]) -> str:
+        """Infer session type from ChannelGateway session key format."""
+        if not conversation_id:
+            return "main"
+        if ":group:" in conversation_id:
+            return "group"
+        if ":dm:" in conversation_id:
+            return "dm"
+        if conversation_id.endswith(":main") or conversation_id == "main":
+            return "main"
+        return "main"
 
     # Legacy method support - mapped to Core functionality where possible
 
@@ -329,5 +345,7 @@ class MorganAssistant:
 
     async def shutdown(self):
         """Shutdown the assistant."""
-        # Perform any cleanup needed for Core
-        pass
+        if hasattr(self.core, "shutdown"):
+            result = self.core.shutdown()
+            if asyncio.iscoroutine(result):
+                await result

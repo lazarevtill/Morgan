@@ -14,6 +14,7 @@ Features:
 - Habit detection and adaptation
 """
 
+import json
 import time
 import uuid
 from datetime import datetime, timezone
@@ -30,8 +31,14 @@ from morgan.services.external_knowledge import (
     KnowledgeSource,
     get_external_knowledge_service,
 )
+from morgan.compaction import AutoCompactTracker, Compactor, should_auto_compact
+from morgan.hook_system import HookManager, HookType
+from morgan.memory_consolidation import DailyLogManager
+from morgan.security import MemoryGate
+from morgan.tools import ToolExecutor
 from morgan.utils.logger import get_logger
 from morgan.intelligence.core.models import ConversationContext
+from morgan.workspace import WorkspaceManager
 from .reasoning import ReasoningEngine
 
 logger = get_logger(__name__)
@@ -66,6 +73,12 @@ class ConversationOrchestrator:
         external_knowledge_service: Optional[ExternalKnowledgeService] = None,
         enable_reasoning: bool = True,
         enable_proactive: bool = True,
+        tool_executor: Optional[ToolExecutor] = None,
+        hook_manager: Optional[HookManager] = None,
+        workspace_manager: Optional[WorkspaceManager] = None,
+        auto_compact_tracker: Optional[AutoCompactTracker] = None,
+        compactor: Optional[Compactor] = None,
+        daily_log_manager: Optional[DailyLogManager] = None,
     ):
         self.knowledge = knowledge_service
         self.memory = memory_service
@@ -82,6 +95,14 @@ class ConversationOrchestrator:
         # Feature flags
         self.enable_reasoning = enable_reasoning
         self.enable_proactive = enable_proactive
+        self._tool_executor = tool_executor
+        self._hook_manager = hook_manager
+        self._workspace_manager = workspace_manager
+        self._auto_compact_tracker = auto_compact_tracker
+        self._compactor = compactor
+        self._daily_log_manager = daily_log_manager
+        self._memory_gate = MemoryGate()
+        self._session_histories: dict[str, list[dict[str, Any]]] = {}
 
         # Proactive services (lazy loaded)
         self._full_reasoning_engine = None
@@ -253,6 +274,7 @@ class ConversationOrchestrator:
         max_context: Optional[int] = None,
         use_external_knowledge: bool = True,
         use_deep_reasoning: bool = False,
+        session_type: str = "main",
     ) -> Any:
         """
         Ask Morgan a question with emotional intelligence and external knowledge.
@@ -265,6 +287,16 @@ class ConversationOrchestrator:
         # Ensure IDs
         conv_id = conversation_id or str(uuid.uuid4())
         uid = user_id or "anonymous"
+
+        await self._trigger_hook(
+            HookType.MESSAGE_INBOUND,
+            {
+                "conversation_id": conv_id,
+                "user_id": uid,
+                "message": question,
+                "session_type": session_type,
+            },
+        )
 
         # Module results (populated throughout pipeline)
         flow_result = None
@@ -447,24 +479,42 @@ class ConversationOrchestrator:
                 f"Knowledge:\n{knowledge_context}\n"
                 f"Memory: {memory_context}"
             )
+            context = self._prepend_workspace_context(
+                context=context,
+                session_type=session_type,
+            )
 
             # Step 9: Generate response (with optional deep reasoning)
             if use_deep_reasoning and self.enable_reasoning:
                 llm_response_content = await self._generate_with_reasoning(
                     question, context
                 )
+                history = self._session_histories.get(conv_id, [])
+                history.extend(
+                    [
+                        {"role": "user", "content": question},
+                        {"role": "assistant", "content": llm_response_content},
+                    ]
+                )
+                self._session_histories[conv_id] = history[-40:]
             elif anticipated_response:
                 llm_response_content = anticipated_response
+                history = self._session_histories.get(conv_id, [])
+                history.extend(
+                    [
+                        {"role": "user", "content": question},
+                        {"role": "assistant", "content": llm_response_content},
+                    ]
+                )
+                self._session_histories[conv_id] = history[-40:]
             else:
                 # Standard generation
-                empathetic_response = self.emotional_processor.emotional_engine.generate_empathetic_response(
-                    emotional_state, context
+                llm_response_content = await self._generate_response_with_tool_loop(
+                    conv_id=conv_id,
+                    user_id=uid,
+                    question=question,
+                    system_prompt=context,
                 )
-
-                llm_response = self.llm.generate(
-                    prompt=f"Question: {question}", system_prompt=context
-                )
-                llm_response_content = llm_response.content
 
             # Step 10: Check for milestones
             milestone = None
@@ -588,6 +638,23 @@ class ConversationOrchestrator:
                 await self._update_proactive_context(
                     uid, question, response.answer, emotional_state
                 )
+
+            await self._append_daily_log(
+                question=question,
+                answer=response.answer,
+                user_id=uid,
+                conversation_id=conv_id,
+            )
+            await self._maybe_auto_compact(conv_id)
+            await self._trigger_hook(
+                HookType.MESSAGE_REPLY,
+                {
+                    "conversation_id": conv_id,
+                    "user_id": uid,
+                    "answer": response.answer,
+                    "session_type": session_type,
+                },
+            )
 
             logger.info(f"Answered in {time.time() - start_time:.2f}s")
             return response
@@ -764,6 +831,263 @@ class ConversationOrchestrator:
                 sources.append(f"{result.source.value}:{result.title}")
 
         return sources
+
+    def _prepend_workspace_context(self, context: str, session_type: str) -> str:
+        """Prefix the LLM system prompt with workspace context when enabled."""
+        workspace_context = self._render_workspace_context(session_type=session_type)
+        if not workspace_context:
+            return context
+        return f"{workspace_context}\n\n{context}"
+
+    def _render_workspace_context(self, session_type: str) -> str:
+        """Render workspace files into a compact system-prompt section."""
+        if self._workspace_manager is None:
+            return ""
+
+        try:
+            loaded = self._workspace_manager.load_session_context(session_type=session_type)
+        except Exception as exc:
+            logger.debug("Workspace context unavailable: %s", exc)
+            return ""
+
+        sections: list[str] = []
+        section_map = [
+            ("soul", "SOUL.md"),
+            ("user", "USER.md"),
+            ("tools", "TOOLS.md"),
+            ("daily_log_today", "Daily log (today)"),
+            ("daily_log_yesterday", "Daily log (yesterday)"),
+        ]
+        for key, title in section_map:
+            value = loaded.get(key)
+            if isinstance(value, str) and value.strip():
+                sections.append(f"## {title}\n{value.strip()}")
+
+        if self._memory_gate.should_load_memory(session_type):
+            memory_text = loaded.get("memory")
+            if isinstance(memory_text, str) and memory_text.strip():
+                sections.append(f"## MEMORY.md\n{memory_text.strip()}")
+
+        if not sections:
+            return ""
+        return "Workspace Context:\n" + "\n\n".join(sections)
+
+    def _format_tool_schema_instructions(self) -> str:
+        """Provide tool schemas and response contract for tool calls."""
+        if self._tool_executor is None:
+            return ""
+
+        try:
+            tool_schemas = self._tool_executor.list_tools()
+        except Exception as exc:
+            logger.debug("Tool schema listing failed: %s", exc)
+            return ""
+
+        if not tool_schemas:
+            return ""
+
+        schemas_text = json.dumps(tool_schemas, ensure_ascii=True)
+        return (
+            "Tool usage is enabled.\n"
+            "If you need a tool, reply with ONLY valid JSON in this exact shape:\n"
+            '{"tool_use":{"name":"<tool_name>","input":{...}}}\n'
+            "Do not add prose around tool JSON.\n\n"
+            f"Available tool schemas:\n{schemas_text}"
+        )
+
+    @staticmethod
+    def _extract_tool_call(content: str) -> Optional[dict[str, Any]]:
+        """Parse a tool_use JSON object from model output."""
+        text = (content or "").strip()
+        if not text:
+            return None
+
+        candidates = [text]
+        if "```" in text:
+            parts = text.split("```")
+            for part in parts:
+                candidate = part.strip()
+                if candidate.startswith("json"):
+                    candidate = candidate[4:].strip()
+                if candidate.startswith("{") and candidate.endswith("}"):
+                    candidates.append(candidate)
+
+        for candidate in candidates:
+            try:
+                payload = json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+
+            if isinstance(payload, dict) and isinstance(payload.get("tool_use"), dict):
+                tool_use = payload["tool_use"]
+                name = tool_use.get("name")
+                tool_input = tool_use.get("input", {})
+                if isinstance(name, str) and isinstance(tool_input, dict):
+                    return {"name": name, "input": tool_input}
+
+            if (
+                isinstance(payload, dict)
+                and payload.get("type") == "tool_use"
+                and isinstance(payload.get("name"), str)
+            ):
+                tool_input = payload.get("input", {})
+                if isinstance(tool_input, dict):
+                    return {"name": payload["name"], "input": tool_input}
+
+        return None
+
+    async def _generate_response_with_tool_loop(
+        self,
+        conv_id: str,
+        user_id: str,
+        question: str,
+        system_prompt: str,
+        max_tool_rounds: int = 5,
+    ) -> str:
+        """Run LLM -> tool -> LLM loop until final text response."""
+        session_history = list(self._session_histories.get(conv_id, []))
+        tool_instructions = self._format_tool_schema_instructions()
+        system_content = (
+            f"{system_prompt}\n\n{tool_instructions}".strip()
+            if tool_instructions
+            else system_prompt
+        )
+
+        messages: list[dict[str, str]] = [{"role": "system", "content": system_content}]
+        messages.extend(session_history)
+        messages.append({"role": "user", "content": question})
+
+        final_answer: Optional[str] = None
+
+        for _ in range(max_tool_rounds):
+            llm_response = await self.llm.achat(messages=messages)
+            assistant_content = (llm_response.content or "").strip()
+
+            tool_call = (
+                self._extract_tool_call(assistant_content)
+                if self._tool_executor is not None
+                else None
+            )
+            if tool_call is None:
+                final_answer = assistant_content
+                messages.append({"role": "assistant", "content": assistant_content})
+                break
+
+            tool_name = tool_call["name"]
+            tool_input = tool_call["input"]
+            await self._trigger_hook(
+                HookType.PRE_TOOL_USE,
+                {
+                    "conversation_id": conv_id,
+                    "user_id": user_id,
+                    "tool_name": tool_name,
+                    "tool_input": tool_input,
+                },
+            )
+
+            tool_result = await self._tool_executor.execute(
+                name=tool_name,
+                input_data=tool_input,
+                conversation_id=conv_id,
+                user_id=user_id,
+            )
+
+            await self._trigger_hook(
+                HookType.POST_TOOL_USE,
+                {
+                    "conversation_id": conv_id,
+                    "user_id": user_id,
+                    "tool_name": tool_name,
+                    "tool_input": tool_input,
+                    "tool_output": tool_result.output,
+                    "tool_error": tool_result.is_error,
+                },
+            )
+
+            tool_feedback = {
+                "tool_result": {
+                    "name": tool_name,
+                    "is_error": tool_result.is_error,
+                    "error_code": tool_result.error_code,
+                    "output": tool_result.output,
+                    "metadata": tool_result.metadata,
+                }
+            }
+            messages.append({"role": "assistant", "content": assistant_content})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Tool execution result. Continue responding to the user:\n"
+                        + json.dumps(tool_feedback, ensure_ascii=True)
+                    ),
+                }
+            )
+
+        if final_answer is None:
+            final_answer = (
+                "I reached the tool-usage iteration limit while working on your request."
+            )
+            messages.append({"role": "assistant", "content": final_answer})
+
+        self._session_histories[conv_id] = [
+            message for message in messages if message.get("role") != "system"
+        ][-40:]
+
+        return final_answer
+
+    async def _append_daily_log(
+        self,
+        question: str,
+        answer: str,
+        user_id: str,
+        conversation_id: str,
+    ) -> None:
+        """Append the current turn to memory daily logs."""
+        if self._daily_log_manager is None:
+            return
+        try:
+            entry = (
+                f"user={user_id} conv={conversation_id} "
+                f"Q: {question.strip()[:300]} | A: {answer.strip()[:500]}"
+            )
+            self._daily_log_manager.append(entry)
+        except Exception as exc:
+            logger.debug("Daily log append failed: %s", exc)
+
+    async def _maybe_auto_compact(self, conversation_id: str) -> None:
+        """Run auto-compaction when token thresholds are exceeded."""
+        if self._auto_compact_tracker is None or self._compactor is None:
+            return
+
+        history = self._session_histories.get(conversation_id, [])
+        if not history:
+            return
+
+        if not should_auto_compact(self._auto_compact_tracker, history):
+            return
+
+        try:
+            compacted = await self._compactor.compact(messages=history)
+            if compacted.get("was_compacted"):
+                compacted_messages = compacted.get("compacted_messages", history)
+                if isinstance(compacted_messages, list):
+                    self._session_histories[conversation_id] = compacted_messages
+                self._auto_compact_tracker.record_success()
+            else:
+                self._auto_compact_tracker.record_failure()
+        except Exception as exc:
+            logger.warning("Auto-compaction failed: %s", exc)
+            self._auto_compact_tracker.record_failure()
+
+    async def _trigger_hook(self, hook_type: HookType, context: Any) -> None:
+        """Trigger hook handlers if the hook manager is available."""
+        if self._hook_manager is None:
+            return
+        try:
+            await self._hook_manager.trigger(hook_type, context)
+        except Exception as exc:
+            logger.debug("Hook %s failed: %s", hook_type.value, exc)
 
     async def search_external(
         self,
