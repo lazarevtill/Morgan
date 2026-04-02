@@ -23,8 +23,8 @@ pip install -e ".[dev]"
 ### Using Docker
 
 ```bash
-docker build -t morgan-server -f docker/Dockerfile.server .
-docker run -p 8080:8080 morgan-server
+cd docker
+docker compose up -d morgan-server redis qdrant ollama
 ```
 
 ## Quick Start
@@ -193,7 +193,8 @@ uvicorn morgan_server.app:create_app --factory --host 0.0.0.0 --port 8080 --work
 ### Docker Compose
 
 ```bash
-docker-compose up -d
+cd docker
+docker compose up -d
 ```
 
 This starts:

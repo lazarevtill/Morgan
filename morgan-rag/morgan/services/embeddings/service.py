@@ -15,6 +15,7 @@ from morgan.config import get_settings
 from morgan.services.embeddings.models import EmbeddingStats
 from morgan.utils.logger import get_logger
 from morgan.utils.model_cache import setup_model_cache  # Use canonical implementation
+from morgan.utils.singleton import SingletonFactory
 
 logger = get_logger(__name__)
 
@@ -121,8 +122,11 @@ class EmbeddingService:
             self.settings, "embedding_model", "qwen3-embedding:4b"
         )
 
+        import os
+        _env_dims = os.environ.get("MORGAN_EMBEDDING_DIMENSIONS") or os.environ.get("EMBEDDING_DIMENSIONS")
+        _default_dims = int(_env_dims) if _env_dims else 4096
         self.dimensions = dimensions or getattr(
-            self.settings, "embedding_dimensions", 2048
+            self.settings, "embedding_dimensions", _default_dims
         )
 
         self.local_model_name = local_model or getattr(
@@ -777,9 +781,6 @@ class EmbeddingService:
 # =============================================================================
 # Singleton Management
 # =============================================================================
-
-from morgan.utils.singleton import SingletonFactory
-
 
 def _cleanup_embedding_service(service: EmbeddingService) -> None:
     """Cleanup function for embedding service."""

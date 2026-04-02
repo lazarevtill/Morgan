@@ -211,6 +211,70 @@ class Settings(BaseSettings):
         default=True, description="Enable non-verbal cue detection from text patterns"
     )
 
+    # --- New module flags (Task 13: Integration Wiring) ---
+
+    morgan_enable_tools: bool = Field(
+        default=True, description="Enable pluggable tool execution framework"
+    )
+
+    morgan_enable_workspace: bool = Field(
+        default=True, description="Enable SOUL.md workspace pattern"
+    )
+
+    morgan_enable_compaction: bool = Field(
+        default=True, description="Enable automatic context compaction"
+    )
+
+    morgan_enable_channels: bool = Field(
+        default=False, description="Enable multi-channel gateway (Telegram, Discord). Off by default — needs token config"
+    )
+
+    morgan_enable_scheduling: bool = Field(
+        default=False, description="Enable cron + heartbeat scheduling. Off by default"
+    )
+
+    morgan_enable_agents: bool = Field(
+        default=True, description="Enable agent/subagent spawning system"
+    )
+
+    morgan_workspace_path: Optional[str] = Field(
+        default=None, description="Override workspace directory path"
+    )
+
+    # Channel config
+    morgan_telegram_token: Optional[str] = Field(
+        default=None, description="Telegram bot token for channel gateway"
+    )
+
+    morgan_discord_token: Optional[str] = Field(
+        default=None, description="Discord bot token for channel gateway"
+    )
+
+    # Synology Chat
+    morgan_synology_token: Optional[str] = Field(
+        default=None, description="Synology Chat shared webhook token"
+    )
+
+    morgan_synology_incoming_url: Optional[str] = Field(
+        default=None, description="Synology Chat incoming webhook URL for sending messages"
+    )
+
+    morgan_synology_webhook_path: str = Field(
+        default="/synology-webhook", description="URL path for Synology outgoing webhook listener"
+    )
+
+    morgan_synology_webhook_port: int = Field(
+        default=8765, description="Port for Synology webhook listener", ge=1024, le=65535
+    )
+
+    morgan_synology_bot_name: str = Field(
+        default="Morgan", description="Bot display name for Synology Chat"
+    )
+
+    morgan_synology_rate_limit: int = Field(
+        default=30, description="Rate limit per user per minute for Synology Chat", ge=1, le=300
+    )
+
     # ============================================================================
     # Document Processing Settings
     # ============================================================================
@@ -417,17 +481,13 @@ class Settings(BaseSettings):
         # Resolve to absolute path
         v = v.resolve()
 
-        # Check for path traversal attempts
-        try:
-            # Ensure data dir is not in system directories
-            if str(v).startswith(
-                ("/etc", "/root", "/sys", "/proc", "C:\\Windows", "C:\\Program Files")
-            ):
-                raise ValueError(
-                    f"SECURITY: Data directory cannot be in system directories: {v}"
-                )
-        except Exception:
-            pass
+        # Ensure data dir is not in system directories
+        if str(v).startswith(
+            ("/etc", "/root", "/sys", "/proc", "C:\\Windows", "C:\\Program Files")
+        ):
+            raise ValueError(
+                f"SECURITY: Data directory cannot be in system directories: {v}"
+            )
 
         # Create directory with restricted permissions
         try:

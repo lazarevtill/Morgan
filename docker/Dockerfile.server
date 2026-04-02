@@ -27,9 +27,9 @@ RUN pip install --upgrade pip setuptools wheel
 COPY morgan-rag/pyproject.toml morgan-rag/README.md /build/morgan-rag/
 COPY morgan-rag/morgan /build/morgan-rag/morgan
 
-# Install morgan-rag in virtual environment with server extras
+# Install morgan-rag in virtual environment with all server/runtime extras
 WORKDIR /build/morgan-rag
-RUN pip install --no-cache-dir -e ".[server]"
+RUN pip install --no-cache-dir -e ".[server,channels,scheduling,tokens]"
 
 # Copy server package files
 COPY morgan-server/pyproject.toml morgan-server/README.md /build/morgan-server/
@@ -38,6 +38,9 @@ COPY morgan-server/morgan_server /build/morgan-server/morgan_server
 # Install morgan-server and its dependencies
 WORKDIR /build/morgan-server
 RUN pip install --no-cache-dir -e .
+
+# Install search backends
+RUN pip install --no-cache-dir "duckduckgo-search>=7.0"
 
 # =============================================================================
 # Stage 2: Production stage - Minimal runtime image

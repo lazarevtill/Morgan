@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 
 
 class EmotionType(Enum):
-    """Primary emotion types based on Ekman's basic emotions."""
+    """Primary emotion types — Ekman's basics plus common LLM outputs."""
 
     JOY = "joy"
     SADNESS = "sadness"
@@ -21,6 +21,44 @@ class EmotionType(Enum):
     SURPRISE = "surprise"
     DISGUST = "disgust"
     NEUTRAL = "neutral"
+    EXCITEMENT = "excitement"
+    CURIOSITY = "curiosity"
+    ANXIETY = "anxiety"
+    GRATITUDE = "gratitude"
+    FRUSTRATION = "frustration"
+    HOPE = "hope"
+    LOVE = "love"
+    CONFUSION = "confusion"
+    CONTENTMENT = "contentment"
+
+    @classmethod
+    def from_string(cls, value: str) -> "EmotionType":
+        """Parse emotion string with synonym mapping. Never raises."""
+        v = value.lower().strip()
+        try:
+            return cls(v)
+        except ValueError:
+            pass
+        _MAP = {
+            "happy": cls.JOY, "happiness": cls.JOY, "delight": cls.JOY,
+            "sad": cls.SADNESS, "grief": cls.SADNESS,
+            "angry": cls.ANGER, "rage": cls.ANGER, "irritation": cls.ANGER,
+            "scared": cls.FEAR, "terror": cls.FEAR, "worry": cls.ANXIETY,
+            "anxious": cls.ANXIETY, "nervous": cls.ANXIETY,
+            "surprised": cls.SURPRISE, "shock": cls.SURPRISE,
+            "disgusted": cls.DISGUST,
+            "excited": cls.EXCITEMENT, "enthusiasm": cls.EXCITEMENT,
+            "curious": cls.CURIOSITY, "interest": cls.CURIOSITY,
+            "grateful": cls.GRATITUDE, "thankful": cls.GRATITUDE,
+            "frustrated": cls.FRUSTRATION, "annoyed": cls.FRUSTRATION,
+            "hopeful": cls.HOPE, "optimistic": cls.HOPE,
+            "loving": cls.LOVE, "affection": cls.LOVE,
+            "confused": cls.CONFUSION, "puzzled": cls.CONFUSION,
+            "content": cls.CONTENTMENT, "calm": cls.CONTENTMENT,
+            "peaceful": cls.CONTENTMENT, "relaxed": cls.CONTENTMENT,
+            "bored": cls.NEUTRAL, "indifferent": cls.NEUTRAL,
+        }
+        return _MAP.get(v, cls.NEUTRAL)
 
 
 class CommunicationStyle(Enum):

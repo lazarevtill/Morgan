@@ -5,11 +5,20 @@ Docker configurations for deploying Morgan in various setups.
 ## Quick Start (Single Machine)
 
 ```bash
-# Start Morgan with Redis and Qdrant
+# From repository root
+cd docker
+
+# Copy env template once
+cp .env.example .env
+
+# Start stack (server + redis + qdrant; remote Ollama from .env)
 docker compose up -d
 
-# With monitoring (Prometheus + Grafana)
+# Optional monitoring (Prometheus + Grafana)
 docker compose --profile monitoring up -d
+
+# Run CLI from container
+docker compose run --rm morgan-cli chat
 ```
 
 ## Configuration
@@ -19,15 +28,16 @@ docker compose --profile monitoring up -d
 Copy and customize the environment file:
 
 ```bash
-cp env.example .env
+cp .env.example .env
 # Edit with your values
 vi .env
 ```
 
 **Key variables:**
-- `MORGAN_LLM_ENDPOINT` - Ollama endpoint URL
+- `MORGAN_LLM_ENDPOINT` - Primary remote Ollama endpoint
+- `MORGAN_EMBEDDING_ENDPOINT` - Remote Ollama endpoint for smaller/embedding models
 - `MORGAN_LLM_MODEL` - Main LLM model name
-- `MORGAN_DISTRIBUTED_CONFIG` - Path to distributed config YAML
+- `MORGAN_ENABLE_CHANNELS` - enable Telegram/Discord/Synology adapters
 - `HF_TOKEN` - Hugging Face API token (for gated model downloads)
 
 ### Hugging Face Token
@@ -78,6 +88,8 @@ export MORGAN_DISTRIBUTED_CONFIG=/app/config/distributed.local.yaml
 
 Uses `docker-compose.yml`:
 - Morgan Server
+- Morgan CLI image (run via `docker compose run`)
+- Ollama
 - Redis (session/cache)
 - Qdrant (vector DB)
 - Prometheus/Grafana (optional)
@@ -134,6 +146,25 @@ Main API server with endpoints:
 - `POST /chat` - Chat endpoint
 - `POST /ask` - Question answering
 - `GET /docs` - API documentation
+
+### Morgan CLI (Containerized)
+
+Run CLI commands through compose:
+
+```bash
+# interactive chat
+docker compose run --rm morgan-cli chat
+
+# one-off question
+docker compose run --rm morgan-cli ask "hello morgan"
+```
+
+### Remote Ollama Endpoints
+
+The stack uses external Ollama hosts configured in `.env`:
+
+- Primary LLM host: `http://192.168.100.233:11434`
+- Smaller/embedding host: `http://192.168.100.222:11434`
 
 ### Qdrant (Ports 6333, 6334)
 
@@ -231,16 +262,15 @@ These are set automatically by the configuration:
 
 ### First Run
 
-The first startup may take several minutes as models are downloaded:
+The first startup may take several minutes while app services initialize.
 
-**Ollama Models (pull manually before starting):**
+**Ensure models exist on your remote Ollama hosts before starting:**
 ```bash
-# Qwen3-Embedding (recommended: 4b for RTX 4070, 8b for RTX 3090)
-ollama pull qwen3-embedding:4b
+# Smaller/embedding node (192.168.100.222)
+ollama pull qwen3-embedding:latest
 
-# LLM models
-ollama pull qwen2.5:32b-instruct-q4_K_M
-ollama pull qwen2.5:7b-instruct-q5_K_M
+# Primary LLM node (192.168.100.233)
+ollama pull qwen3.5:35b
 ```
 
 **Auto-downloaded Models:**
@@ -266,13 +296,13 @@ docker compose up -d
 
 ### Connection Refused to LLM
 
-Ensure Ollama is running and accessible:
+Ensure your remote Ollama hosts are reachable:
 ```bash
-# Check Ollama
-curl http://localhost:11434/api/tags
+# Primary LLM endpoint
+curl http://192.168.100.233:11434/api/tags
 
-# For Docker, use host.docker.internal
-MORGAN_LLM_ENDPOINT=http://host.docker.internal:11434
+# Smaller/embedding endpoint
+curl http://192.168.100.222:11434/api/tags
 ```
 
 ### GPU Not Detected
