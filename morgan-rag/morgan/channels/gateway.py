@@ -142,5 +142,6 @@ class ChannelGateway:
             peer_id=message.peer_id,
             content=response_text,
             group_id=message.group_id,
+            metadata=dict(message.metadata),
         )
         await channel.send(reply)

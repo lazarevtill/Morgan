@@ -134,11 +134,11 @@ class EmotionalMemory:
         """Create memory from dictionary."""
         # Reconstruct emotional state
         emotional_state = EmotionalState(
-            primary_emotion=EmotionType(data["emotional_state"]["primary_emotion"]),
+            primary_emotion=EmotionType.from_string(data["emotional_state"]["primary_emotion"]),
             intensity=data["emotional_state"]["intensity"],
             confidence=data["emotional_state"]["confidence"],
             secondary_emotions=[
-                EmotionType(e) for e in data["emotional_state"]["secondary_emotions"]
+                EmotionType.from_string(e) for e in data["emotional_state"]["secondary_emotions"]
             ],
             emotional_indicators=data["emotional_state"]["emotional_indicators"],
             timestamp=datetime.fromisoformat(data["emotional_state"]["timestamp"]),

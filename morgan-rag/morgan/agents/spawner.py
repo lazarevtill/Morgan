@@ -2,11 +2,14 @@
 Agent spawner.
 
 Manages the execution of agent definitions by calling either a user-provided
-run function or falling back to Morgan's LLM service.
+run function or falling back to Morgan's LLM service with full tool support.
 """
+from __future__ import annotations
 
+import json
 import logging
-from typing import Any, Callable, Coroutine, List, Optional
+import re
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from morgan.agents.base import AgentDefinition, AgentResult
 
@@ -17,25 +20,11 @@ class AgentSpawner:
     """
     Spawns and executes agents based on their definitions.
 
+    Agents get the same tool-calling capabilities as the main orchestrator:
+    they can call web_search, fetch_url, create_forum_topic, etc.
+
     Accepts an optional run_fn for custom execution logic. When no run_fn is
-    provided, defaults to calling get_llm_service().agenerate().
-
-    The run_fn signature is:
-        async def run_fn(
-            prompt: str,
-            system_prompt: str,
-            tools: List[str],
-            model: Optional[str],
-        ) -> str
-
-    Usage:
-        # With custom run function
-        spawner = AgentSpawner(run_fn=my_custom_runner)
-        result = await spawner.spawn(agent_def, prompt="Do something")
-
-        # With default LLM service
-        spawner = AgentSpawner()
-        result = await spawner.spawn(agent_def, prompt="Do something")
+    provided, defaults to using the LLM service with a tool execution loop.
     """
 
     def __init__(
@@ -46,8 +35,10 @@ class AgentSpawner:
                 Coroutine[Any, Any, str],
             ]
         ] = None,
+        tool_executor: Optional[Any] = None,
     ):
         self._run_fn = run_fn
+        self._tool_executor = tool_executor
 
     async def spawn(
         self,
@@ -55,18 +46,7 @@ class AgentSpawner:
         prompt: str,
         context: Optional[str] = None,
     ) -> AgentResult:
-        """
-        Spawn an agent and execute it.
-
-        Args:
-            definition: The agent definition to execute.
-            prompt: The user prompt to send to the agent.
-            context: Optional context to append to the prompt.
-
-        Returns:
-            AgentResult with the agent's output or error information.
-        """
-        # Build the full prompt with optional context
+        """Spawn an agent and execute it with full tool support."""
         full_prompt = prompt
         if context:
             full_prompt = f"{prompt}\n\nContext:\n{context}"
@@ -109,17 +89,146 @@ class AgentSpawner:
         definition: AgentDefinition,
     ) -> str:
         """
-        Default execution using Morgan's LLM service.
+        Default execution using Morgan's LLM service with tool loop.
 
-        Imports get_llm_service lazily to avoid circular imports and allow
-        the spawner to work without a running LLM service when a custom
-        run_fn is provided.
+        If the agent definition specifies allowed tools and a tool executor
+        is available, runs a tool-calling loop (up to 5 rounds). Otherwise
+        falls back to a single LLM call.
         """
         from morgan.services import get_llm_service
 
         llm = get_llm_service()
-        response = await llm.agenerate(
-            prompt=prompt,
-            system_prompt=system_prompt,
+
+        # Resolve tool executor — use provided or try to build one
+        executor = self._tool_executor
+        if executor is None and definition.tools:
+            executor = self._build_tool_executor(definition.tools)
+
+        # No tools → simple single call
+        if executor is None or not definition.tools:
+            response = await llm.agenerate(
+                prompt=prompt, system_prompt=system_prompt
+            )
+            return response.content
+
+        # Build tool schema instructions
+        tool_schemas = []
+        for tool in executor.list_tools():
+            if tool.name in definition.tools or not definition.tools:
+                tool_schemas.append({
+                    "name": tool.name,
+                    "description": tool.description,
+                    "input_schema": tool.input_schema.to_dict(),
+                })
+
+        if not tool_schemas:
+            response = await llm.agenerate(
+                prompt=prompt, system_prompt=system_prompt
+            )
+            return response.content
+
+        schemas_text = json.dumps(tool_schemas, ensure_ascii=False)
+        tool_instructions = (
+            "# Tools\n"
+            "You have tools available. To use one, respond with ONLY this JSON:\n"
+            '{"tool_use":{"name":"<tool_name>","input":{...}}}\n\n'
+            f"Available tools:\n{schemas_text}"
         )
-        return response.content
+
+        full_system = f"{system_prompt}\n\n{tool_instructions}" if system_prompt else tool_instructions
+
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": full_system},
+            {"role": "user", "content": prompt},
+        ]
+
+        # Tool loop — up to 5 rounds
+        for _ in range(5):
+            response = await llm.achat(messages=messages)
+            content = (response.content or "").strip()
+
+            tool_call = self._extract_tool_call(content)
+            if tool_call is None:
+                return content
+
+            tool_name = tool_call["name"]
+            tool_input = tool_call["input"]
+
+            logger.info("Agent '%s' calling tool: %s", definition.agent_type, tool_name)
+
+            from morgan.tools.base import ToolContext
+            ctx = ToolContext(user_id="agent", conversation_id=f"agent:{definition.agent_type}")
+            result = await executor.execute(
+                tool_name=tool_name,
+                input_data=tool_input,
+                context=ctx,
+            )
+
+            messages.append({"role": "assistant", "content": content})
+            messages.append({
+                "role": "user",
+                "content": f"Tool result ({tool_name}):\n{result.output}",
+            })
+
+        # Exhausted rounds — ask for final answer
+        messages.append({
+            "role": "user",
+            "content": "Please provide your final answer based on the tool results above.",
+        })
+        response = await llm.achat(messages=messages)
+        return (response.content or "").strip()
+
+    @staticmethod
+    def _extract_tool_call(content: str) -> Optional[Dict[str, Any]]:
+        """Extract tool_use JSON from LLM output."""
+        if not content:
+            return None
+
+        def _try_parse(s: str) -> Optional[Dict[str, Any]]:
+            try:
+                payload = json.loads(s)
+            except (json.JSONDecodeError, ValueError):
+                return None
+            if isinstance(payload, dict) and isinstance(payload.get("tool_use"), dict):
+                tu = payload["tool_use"]
+                if isinstance(tu.get("name"), str):
+                    return {"name": tu["name"], "input": tu.get("input", {})}
+            return None
+
+        # Try whole text
+        result = _try_parse(content.strip())
+        if result:
+            return result
+
+        # Try embedded JSON
+        match = re.search(r'\{"tool_use"\s*:', content)
+        if match:
+            depth = 0
+            for i in range(match.start(), len(content)):
+                if content[i] == '{':
+                    depth += 1
+                elif content[i] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        result = _try_parse(content[match.start():i + 1])
+                        if result:
+                            return result
+                        break
+
+        return None
+
+    @staticmethod
+    def _build_tool_executor(allowed_tools: List[str]) -> Optional[Any]:
+        """Build a ToolExecutor with the specified tools."""
+        try:
+            from morgan.tools import ToolExecutor
+            from morgan.tools.builtin import ALL_BUILTIN_TOOLS
+
+            executor = ToolExecutor()
+            for tool in ALL_BUILTIN_TOOLS:
+                if not allowed_tools or tool.name in allowed_tools:
+                    executor.register(tool)
+            return executor if executor.list_tools() else None
+        except Exception as e:
+            logger.debug("Failed to build tool executor for agent: %s", e)
+            return None

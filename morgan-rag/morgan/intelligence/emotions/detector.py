@@ -237,11 +237,11 @@ The primary_emotion should be the TRUE emotion (hidden if masking, real if sarca
                 indicators.append(f"hidden_emotion:{emotion_data['hidden_emotion']}")
 
             emotional_state = EmotionalState(
-                primary_emotion=EmotionType(emotion_data["primary_emotion"]),
+                primary_emotion=EmotionType.from_string(emotion_data["primary_emotion"]),
                 intensity=float(emotion_data["intensity"]),
                 confidence=float(emotion_data["confidence"]),
                 secondary_emotions=[
-                    EmotionType(e)
+                    EmotionType.from_string(e)
                     for e in emotion_data.get("secondary_emotions", [])
                     if e in [et.value for et in EmotionType]
                 ],
@@ -554,11 +554,11 @@ The primary_emotion should be the TRUE emotion (hidden if masking, real if sarca
             emotion_data = json.loads(response.content.strip())
 
             return EmotionalState(
-                primary_emotion=EmotionType(emotion_data["primary_emotion"]),
+                primary_emotion=EmotionType.from_string(emotion_data["primary_emotion"]),
                 intensity=float(emotion_data["intensity"]),
                 confidence=float(emotion_data["confidence"]),
                 secondary_emotions=[
-                    EmotionType(e) for e in emotion_data.get("secondary_emotions", [])
+                    EmotionType.from_string(e) for e in emotion_data.get("secondary_emotions", [])
                 ],
                 emotional_indicators=emotion_data.get("indicators", []),
             )
@@ -725,11 +725,11 @@ The primary_emotion should be the TRUE emotion (hidden if masking, real if sarca
     def _deserialize_emotion(self, data: Dict[str, Any]) -> EmotionalState:
         """Deserialize emotional state from cache."""
         return EmotionalState(
-            primary_emotion=EmotionType(data["primary_emotion"]),
+            primary_emotion=EmotionType.from_string(data["primary_emotion"]),
             intensity=data["intensity"],
             confidence=data["confidence"],
             secondary_emotions=[
-                EmotionType(e) for e in data.get("secondary_emotions", [])
+                EmotionType.from_string(e) for e in data.get("secondary_emotions", [])
             ],
             emotional_indicators=data.get("emotional_indicators", []),
             timestamp=datetime.fromisoformat(data["timestamp"]),

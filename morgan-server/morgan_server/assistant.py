@@ -8,12 +8,10 @@ Refactored to use `morgan-rag` shared domain models.
 """
 
 import asyncio
-from typing import Optional, Dict, Any, List
+from typing import Awaitable, Callable, Optional, Dict, Any, List
 from dataclasses import dataclass, field
-from datetime import datetime
 
 from morgan.core.assistant import MorganAssistant as CoreMorganAssistant
-from morgan.intelligence.core.models import EmotionalState
 
 # from morgan.services.llm_service import LLMClient, LLMMessage # Removed as classes don't exist in Core
 
@@ -99,14 +97,12 @@ class MorganAssistant:
         conversation_id: Optional[str] = None,
         use_knowledge: bool = True,
         use_memory: bool = True,
-        # API allows these flags, Core defaults to True usually.
-        # We can pass them if Core supports, otherwise we consume them.
+        channel_metadata: Optional[Dict[str, Any]] = None,
+        approval_callback: Optional[Callable[[str, str, dict], Awaitable[bool]]] = None,
     ) -> AssistantResponse:
         """
         Process a chat message and generate a response.
         """
-        # Delegate to Core
-        # Core 'ask' is async? 'ask' in assistant.py is async def ask(...)
         session_type = self._infer_session_type(conversation_id)
 
         core_response = await self.core.ask(
@@ -115,6 +111,8 @@ class MorganAssistant:
             user_id=user_id,
             include_sources=use_knowledge,
             session_type=session_type,
+            channel_metadata=channel_metadata,
+            approval_callback=approval_callback,
         )
 
         # Map core_response to AssistantResponse

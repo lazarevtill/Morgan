@@ -31,13 +31,16 @@ If ``python-telegram-bot`` is not installed the module still imports; calling
 from __future__ import annotations
 
 import asyncio
+import base64
 import html
+import json
 import logging
 import os
 import re
 import time
+import uuid as _uuid
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Optional
 
 from morgan.channels.base import BaseChannel, InboundMessage, OutboundMessage
 
@@ -48,14 +51,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 try:
     from telegram import (
-        Bot,
         BotCommand,
         InlineKeyboardButton,
         InlineKeyboardMarkup,
         Update,
     )
     from telegram.constants import ChatAction, ParseMode
-    from telegram.error import RetryAfter, TimedOut, NetworkError, BadRequest
+    from telegram.error import RetryAfter, TimedOut, NetworkError, BadRequest, Forbidden
     from telegram.ext import (
         Application,
         CallbackQueryHandler,
@@ -159,6 +161,57 @@ class TelegramChannel(BaseChannel):
         # Typing indicator tasks per chat
         self._typing_tasks: dict[str, asyncio.Task] = {}
 
+        # Partial responses for error recovery (keyed by chat_key)
+        self._partial_responses: dict[str, str] = {}
+
+        # Streaming configuration
+        self._streaming_min_length: int = 500  # Only stream messages longer than this
+        self._streaming_steps: int = 4  # Number of progressive edits
+        self._streaming_delay: float = 1.0  # Seconds between edits
+
+        # Exec-approval futures: approval_id -> asyncio.Future[bool]
+        self._approval_futures: dict[str, asyncio.Future] = {}
+
+        # Topic name cache (lazy-initialized in _get_topic_name)
+        self._topic_name_cache: dict[str, str] = {}
+
+        # Persistence path for group activation & topic cache
+        self._state_path = Path("/home/morgan/.morgan/telegram_state.json")
+
+    # -- State persistence ---------------------------------------------------
+
+    def _save_state(self) -> None:
+        """Persist group activation modes and topic name cache to disk."""
+        try:
+            self._state_path.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                "group_activation": self._group_activation,
+                "topic_name_cache": self._topic_name_cache,
+            }
+            tmp_path = str(self._state_path) + ".tmp"
+            with open(tmp_path, "w") as f:
+                json.dump(data, f, indent=2)
+            os.replace(tmp_path, str(self._state_path))
+        except Exception as exc:
+            logger.warning("Failed to save Telegram state: %s", exc)
+
+    def _load_state(self) -> None:
+        """Load group activation modes and topic name cache from disk."""
+        if not self._state_path.exists():
+            return
+        try:
+            with open(self._state_path) as f:
+                data = json.load(f)
+            self._group_activation = data.get("group_activation", {})
+            self._topic_name_cache = data.get("topic_name_cache", {})
+            logger.info(
+                "Loaded Telegram state: %d group activations, %d cached topic names",
+                len(self._group_activation),
+                len(self._topic_name_cache),
+            )
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Failed to load Telegram state: %s", exc)
+
     # -- BaseChannel interface -----------------------------------------------
 
     @property
@@ -173,6 +226,9 @@ class TelegramChannel(BaseChannel):
                 "python-telegram-bot is not installed. "
                 "Install it with: pip install python-telegram-bot"
             )
+
+        # Restore persisted state (group activation modes, topic cache)
+        self._load_state()
 
         self._start_time = time.time()
 
@@ -251,6 +307,14 @@ class TelegramChannel(BaseChannel):
             self._bot_id,
         )
 
+        # Register bot with action tools so the LLM can create topics, pin, etc.
+        try:
+            from morgan.tools.builtin.telegram_actions import set_telegram_bot
+            set_telegram_bot(self._app.bot, self._bot_id)
+            logger.info("Telegram bot registered with action tools")
+        except Exception:
+            logger.debug("Telegram action tools not available", exc_info=True)
+
         # Register BotFather menu commands
         commands = [
             BotCommand("start", "Start chatting with Morgan"),
@@ -290,7 +354,7 @@ class TelegramChannel(BaseChannel):
             logger.info("Starting Telegram channel polling...")
             await self._app.updater.start_polling(
                 allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=False,
+                drop_pending_updates=True,
             )
 
     async def stop(self) -> None:
@@ -312,7 +376,7 @@ class TelegramChannel(BaseChannel):
 
     async def send(self, message: OutboundMessage) -> None:
         """Send an outbound message with chunking, HTML formatting,
-        and typing indicator."""
+        typing indicator, and simulated streaming for long responses."""
         if self._app is None:
             logger.warning("Telegram channel is not started; cannot send.")
             return
@@ -333,6 +397,18 @@ class TelegramChannel(BaseChannel):
         formatted = self._markdown_to_html(content)
 
         chunks = self._chunk_message(formatted)
+
+        # For single-chunk long messages, use simulated streaming
+        if len(chunks) == 1 and len(content) > self._streaming_min_length:
+            reply_markup = self._quick_action_buttons()
+            await self._send_streaming(
+                chat_id=chat_id,
+                text=chunks[0],
+                thread_id=thread_id,
+                reply_markup=reply_markup,
+            )
+            return
+
         for i, chunk in enumerate(chunks):
             # Add quick-action buttons to the last chunk
             reply_markup = None
@@ -346,6 +422,114 @@ class TelegramChannel(BaseChannel):
                 reply_markup=reply_markup,
                 parse_mode_str="HTML",
             )
+
+    async def _send_streaming(
+        self,
+        chat_id: int,
+        text: str,
+        thread_id: Optional[int] = None,
+        reply_markup: Optional[Any] = None,
+    ) -> None:
+        """Send a long message with simulated streaming (progressive edits).
+
+        Sends an initial excerpt, then edits the message several times to
+        reveal more content, finishing with the full text and reply_markup.
+        This gives users a 'typing' feel for long responses.
+        """
+        if self._app is None:
+            return
+
+        # Find a good initial break point: first sentence or first 200 chars
+        initial_len = min(200, len(text))
+        # Try to break at a sentence boundary
+        for sep in (". ", ".\n", "! ", "!\n", "? ", "?\n"):
+            idx = text.find(sep, 50, 300)
+            if idx != -1:
+                initial_len = idx + len(sep)
+                break
+
+        initial_text = text[:initial_len] + " ..."
+
+        # Send the initial excerpt
+        await self._enforce_rate_limit()
+        parse_mode = None
+        if _HAS_TELEGRAM:
+            try:
+                parse_mode = ParseMode.HTML
+            except NameError:
+                pass
+
+        kwargs: dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": initial_text,
+        }
+        if parse_mode:
+            kwargs["parse_mode"] = parse_mode
+        if thread_id is not None:
+            kwargs["message_thread_id"] = thread_id
+
+        try:
+            sent_msg = await self._app.bot.send_message(**kwargs)
+            self._send_timestamps.append(time.monotonic())
+        except Exception as exc:
+            logger.warning("Streaming initial send failed, falling back to direct: %s", exc)
+            await self._send_with_retry(
+                chat_id=chat_id,
+                text=text,
+                thread_id=thread_id,
+                reply_markup=reply_markup,
+                parse_mode_str="HTML",
+            )
+            return
+
+        message_id = sent_msg.message_id
+
+        # Progressive edits — reveal content in steps
+        remaining_text = text[initial_len:]
+        step_size = len(remaining_text) // self._streaming_steps
+        if step_size < 50:
+            step_size = len(remaining_text)  # Just do one final edit
+
+        revealed = initial_len
+        for step in range(self._streaming_steps - 1):
+            await asyncio.sleep(self._streaming_delay)
+
+            revealed += step_size
+            if revealed >= len(text):
+                break
+
+            partial = text[:revealed] + " ..."
+            try:
+                edit_kwargs: dict[str, Any] = {
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "text": partial,
+                }
+                if parse_mode:
+                    edit_kwargs["parse_mode"] = parse_mode
+                await self._app.bot.edit_message_text(**edit_kwargs)
+            except Exception as exc:
+                logger.debug("Streaming edit step %d failed: %s", step, exc)
+                # Non-fatal — we'll send the final version next
+                break
+
+        # Final edit with complete text and reply_markup
+        await asyncio.sleep(self._streaming_delay)
+        try:
+            final_kwargs: dict[str, Any] = {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": text,
+            }
+            if parse_mode:
+                final_kwargs["parse_mode"] = parse_mode
+            if reply_markup is not None:
+                final_kwargs["reply_markup"] = reply_markup
+            await self._app.bot.edit_message_text(**final_kwargs)
+        except Exception as exc:
+            logger.warning("Streaming final edit failed: %s", exc)
+            # If the final edit fails, the partial message is still visible
+            # which is better than nothing
 
     # -- Command handlers ----------------------------------------------------
 
@@ -758,6 +942,7 @@ class TelegramChannel(BaseChannel):
 
         mode = parts[1].lower()
         self._group_activation[group_id] = mode
+        self._save_state()
 
         await self._send_with_retry(
             chat_id=chat_id,
@@ -777,18 +962,23 @@ class TelegramChannel(BaseChannel):
             (update.effective_message.text or "")[:100] if update.effective_message else "?",
         )
         if not self._check_access(update):
-            logger.info("Access denied for user %s", getattr(update.effective_user, "id", "?"))
+            logger.warning("Access denied for user %s", getattr(update.effective_user, "id", "?"))
             return
+
+        logger.info("Access check passed, processing message...")
+        print("[TELEGRAM DEBUG] Access passed, building InboundMessage", flush=True)
 
         effective_message = update.effective_message
         effective_user = update.effective_user
         chat = update.effective_chat
 
         if effective_message is None or effective_user is None:
+            logger.warning("Missing effective_message or effective_user, dropping")
             return
 
         peer_id = str(effective_user.id)
         is_group = chat is not None and chat.type in ("group", "supergroup")
+        logger.info("Message from peer=%s, is_group=%s", peer_id, is_group)
 
         # Group mention / reply requirement
         if is_group and not self._should_respond_in_group(update):
@@ -807,20 +997,24 @@ class TelegramChannel(BaseChannel):
 
         group_id = str(chat.id) if is_group else None
 
-        # Forum / topic support
+        # Forum / topic support — thread_id is passed in metadata and
+        # the routing layer creates per-topic session keys explicitly.
         thread_id = getattr(effective_message, "message_thread_id", None)
-        if thread_id is not None and group_id is not None:
-            group_id = f"{chat.id}:{thread_id}"
 
-        chat_id = int(group_id.split(":")[0] if group_id else peer_id)
+        chat_id = int(group_id if group_id else peer_id)
         chat_key = str(chat_id)
 
         metadata: dict[str, Any] = {
             "message_id": effective_message.message_id,
+            "chat_id": str(chat_id),
             "chat_type": chat.type if chat else "unknown",
         }
         if thread_id is not None:
             metadata["message_thread_id"] = thread_id
+            # Try to get the forum topic name for context isolation
+            topic_name = self._get_topic_name(chat.id, thread_id, effective_message)
+            if topic_name:
+                metadata["topic_name"] = topic_name
 
         msg = InboundMessage(
             channel="telegram",
@@ -835,7 +1029,49 @@ class TelegramChannel(BaseChannel):
         self._start_typing(chat_id, thread_id)
 
         try:
-            await self.on_message(msg)
+            print(f"[TELEGRAM DEBUG] Dispatching to gateway for peer={peer_id}", flush=True)
+            logger.info("Dispatching message to gateway handler for peer %s", peer_id)
+            await asyncio.wait_for(self.on_message(msg), timeout=120.0)
+            logger.info("Gateway handler completed for peer %s", peer_id)
+            # Clear any stored partial response on success
+            self._partial_responses.pop(chat_key, None)
+        except asyncio.TimeoutError:
+            logger.error("Gateway handler timed out (120s) for peer %s", peer_id)
+            # Check if we captured a partial response before timeout
+            partial = self._partial_responses.pop(chat_key, None)
+            if partial and len(partial.strip()) > 20:
+                logger.info("Sending partial response (%d chars) after timeout", len(partial))
+                await self._send_with_retry(
+                    chat_id=chat_id,
+                    text=partial + "\n\n<i>[Response truncated due to timeout]</i>",
+                    thread_id=thread_id,
+                    parse_mode_str="HTML",
+                )
+            else:
+                await self._send_with_retry(
+                    chat_id=chat_id,
+                    text="Sorry, my response took too long. Please try again.",
+                )
+        except Exception as exc:
+            logger.error("Gateway handler failed for peer %s: %s", peer_id, exc, exc_info=True)
+            # Check if the exception or partial responses contain usable text
+            partial = self._partial_responses.pop(chat_key, None)
+            if partial and len(partial.strip()) > 20:
+                logger.info(
+                    "Sending partial response (%d chars) after error: %s",
+                    len(partial), type(exc).__name__,
+                )
+                await self._send_with_retry(
+                    chat_id=chat_id,
+                    text=partial + "\n\n<i>[Response incomplete due to an error]</i>",
+                    thread_id=thread_id,
+                    parse_mode_str="HTML",
+                )
+            else:
+                await self._send_with_retry(
+                    chat_id=chat_id,
+                    text="Sorry, I encountered an error processing your message.",
+                )
         finally:
             self._processing.pop(chat_key, None)
             self._stop_typing(chat_key)
@@ -843,7 +1079,7 @@ class TelegramChannel(BaseChannel):
     async def _on_photo(
         self, update: "Update", context: "ContextTypes.DEFAULT_TYPE"
     ) -> None:
-        """Handle photo messages - extract caption and note photo in metadata."""
+        """Handle photo messages - download image, base64 encode, and pass to pipeline."""
         if not self._check_access(update):
             return
 
@@ -874,10 +1110,24 @@ class TelegramChannel(BaseChannel):
         }
         if thread_id is not None:
             metadata["message_thread_id"] = thread_id
-        if effective_message.photo:
-            metadata["photo_file_id"] = effective_message.photo[-1].file_id
 
-        content = caption if caption else "[Photo received]"
+        # Download the highest-resolution photo and base64-encode it
+        if effective_message.photo:
+            photo = effective_message.photo[-1]  # largest size
+            metadata["photo_file_id"] = photo.file_id
+            try:
+                file = await self._app.bot.get_file(photo.file_id)
+                data = await file.download_as_bytearray()
+                b64_str = base64.b64encode(bytes(data)).decode("ascii")
+                metadata["image_base64"] = b64_str
+                logger.info(
+                    "Downloaded photo (%d bytes, %d b64 chars) from %s",
+                    len(data), len(b64_str), peer_id,
+                )
+            except Exception as exc:
+                logger.warning("Failed to download photo from %s: %s", peer_id, exc)
+
+        content = caption if caption else "Describe this image"
 
         msg = InboundMessage(
             channel="telegram",
@@ -1149,6 +1399,26 @@ class TelegramChannel(BaseChannel):
             )
             return
 
+        # Handle exec-approval buttons (approve:<id> / deny:<id>)
+        if callback_data.startswith("approve:") or callback_data.startswith("deny:"):
+            parts = callback_data.split(":", 1)
+            action = parts[0]  # "approve" or "deny"
+            approval_id = parts[1] if len(parts) > 1 else ""
+            future = self._approval_futures.pop(approval_id, None)
+            if future and not future.done():
+                future.set_result(action == "approve")
+                status = "Approved" if action == "approve" else "Denied"
+                await self._send_with_retry(
+                    chat_id=chat_id,
+                    text=f"Tool execution {status.lower()}.",
+                )
+            else:
+                await self._send_with_retry(
+                    chat_id=chat_id,
+                    text="This approval request has expired or was already handled.",
+                )
+            return
+
         # Forward tool/skill callbacks as messages to the gateway
         msg = InboundMessage(
             channel="telegram",
@@ -1195,6 +1465,142 @@ class TelegramChannel(BaseChannel):
             thread_id=thread_id,
             reply_markup=reply_markup,
         )
+
+    async def request_approval(
+        self,
+        chat_id: int,
+        tool_name: str,
+        description: str,
+        tool_input: dict,
+        timeout: float = 60.0,
+        thread_id: Optional[int] = None,
+    ) -> bool:
+        """Send an inline-keyboard approval prompt and wait for user response.
+
+        Args:
+            chat_id: Telegram chat to send the prompt to.
+            tool_name: Name of the tool requesting approval.
+            description: Human-readable description of the action.
+            tool_input: The tool input parameters (shown to user).
+            timeout: Seconds to wait before auto-denying.
+            thread_id: Optional forum topic thread id.
+
+        Returns:
+            ``True`` if the user approved, ``False`` otherwise (denied or timed out).
+        """
+        approval_id = _uuid.uuid4().hex[:12]
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[bool] = loop.create_future()
+        self._approval_futures[approval_id] = future
+
+        # Build a concise summary of tool_input for the user
+        input_summary = ", ".join(
+            f"{k}={v!r}" for k, v in list(tool_input.items())[:5]
+        )
+        if len(input_summary) > 200:
+            input_summary = input_summary[:200] + "..."
+
+        prompt_text = (
+            f"Tool approval required: <b>{tool_name}</b>\n"
+            f"{description}\n"
+            f"<code>{input_summary}</code>"
+        )
+
+        buttons = [
+            [
+                ("Approve", f"approve:{approval_id}"),
+                ("Deny", f"deny:{approval_id}"),
+            ]
+        ]
+        await self.send_with_keyboard(
+            chat_id=chat_id,
+            text=prompt_text,
+            buttons=buttons,
+            thread_id=thread_id,
+        )
+
+        try:
+            result = await asyncio.wait_for(future, timeout=timeout)
+            return result
+        except asyncio.TimeoutError:
+            self._approval_futures.pop(approval_id, None)
+            await self._send_with_retry(
+                chat_id=chat_id,
+                text=f"Approval for <b>{tool_name}</b> timed out. Denying by default.",
+                thread_id=thread_id,
+                parse_mode_str="HTML",
+            )
+            return False
+
+    # -- Topic name resolution -------------------------------------------------
+
+    def _get_topic_name(
+        self, chat_id: int, thread_id: int, message: Any
+    ) -> Optional[str]:
+        """Resolve the forum topic name for context isolation.
+
+        Caches names to avoid repeated API calls. Falls back to
+        extracting from the reply_to_message (Telegram includes a
+        service message with the topic name as the thread root).
+        """
+        cache_key = f"{chat_id}:{thread_id}"
+
+        # Check instance cache first, then shared class cache
+        if cache_key in self._topic_name_cache:
+            return self._topic_name_cache[cache_key]
+        # Check shared cache (populated by create_forum_topic tool)
+        shared = getattr(type(self), "_shared_topic_cache", {})
+        if cache_key in shared:
+            name = shared[cache_key]
+            self._topic_name_cache[cache_key] = name
+            self._save_state()
+            return name
+
+        # Try to extract from the message's reply_to_message (topic root)
+        reply = getattr(message, "reply_to_message", None)
+        if reply:
+            # Forum topic root messages have forum_topic_created
+            ftc = getattr(reply, "forum_topic_created", None)
+            if ftc and hasattr(ftc, "name"):
+                self._topic_name_cache[cache_key] = ftc.name
+                self._save_state()
+                return ftc.name
+
+        # General topic (thread_id == 1) is unnamed
+        if thread_id == 1:
+            name = "General"
+            self._topic_name_cache[cache_key] = name
+            self._save_state()
+            return name
+
+        return None
+
+    async def _resolve_topic_name_async(
+        self, chat_id: int, thread_id: int
+    ) -> Optional[str]:
+        """Fetch topic name, trying multiple strategies."""
+        cache_key = f"{chat_id}:{thread_id}"
+        if cache_key in self._topic_name_cache:
+            return self._topic_name_cache[cache_key]
+
+        if thread_id == 1:
+            self._topic_name_cache[cache_key] = "General"
+            self._save_state()
+            return "General"
+
+        # Try to get topic name by sending a dummy getForumTopicIconSticker
+        # (Telegram Bot API doesn't have getForumTopic, but we can read the
+        # topic name from chat message history or use a workaround)
+        if self._app and self._app.bot:
+            try:
+                # editForumTopic with only icon_custom_emoji_id="" will return
+                # the topic info in the error or succeed silently. Instead,
+                # we'll try to read the pinned/service messages.
+                pass
+            except Exception:
+                pass
+
+        return None
 
     # -- Internal helpers ----------------------------------------------------
 
@@ -1555,12 +1961,17 @@ class TelegramChannel(BaseChannel):
         reply_markup: Optional[Any] = None,
         parse_mode_str: Optional[str] = None,
     ) -> None:
-        """Send a single message with rate-limit awareness and retry logic.
+        """Send a single message with rate-limit awareness and classified retry.
 
-        Handles:
-        - Rate limiting (429 RetryAfter)
-        - Network errors with exponential backoff
-        - HTML parse errors with plain text fallback
+        Error classification:
+        - RetryAfter (429): sleep for the specified duration, then retry
+        - TimedOut / NetworkError: retry with exponential backoff
+        - BadRequest (parse error): fall back to plain text
+        - BadRequest (thread_id set): retry once without message_thread_id
+          (the forum topic may have been deleted)
+        - BadRequest (other): permanent error, log and stop
+        - Forbidden: bot was blocked/kicked, log and stop immediately
+        - Other exceptions: exponential backoff retry
         """
         if self._app is None:
             return
@@ -1587,6 +1998,9 @@ class TelegramChannel(BaseChannel):
         if reply_markup is not None:
             kwargs["reply_markup"] = reply_markup
 
+        # Track whether we already retried without thread_id
+        _retried_without_thread = False
+
         last_exc: Optional[Exception] = None
         for attempt in range(self._max_retries):
             try:
@@ -1596,8 +2010,28 @@ class TelegramChannel(BaseChannel):
             except Exception as exc:
                 last_exc = exc
 
-                # Handle rate limiting (429)
-                if _HAS_TELEGRAM and isinstance(exc, RetryAfter):
+                if not _HAS_TELEGRAM:
+                    # Can't classify without the library
+                    delay = self._retry_base_delay * (2 ** attempt)
+                    logger.warning(
+                        "Telegram send attempt %d/%d failed: %s. "
+                        "Retrying in %.1fs.",
+                        attempt + 1, self._max_retries, exc, delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+
+                # --- Forbidden: bot blocked/kicked — stop immediately ---
+                if isinstance(exc, Forbidden):
+                    logger.warning(
+                        "Forbidden error for chat %s — bot may be "
+                        "blocked or kicked: %s",
+                        chat_id, exc,
+                    )
+                    return
+
+                # --- Rate limiting (429 RetryAfter) ---
+                if isinstance(exc, RetryAfter):
                     wait_time = exc.retry_after
                     logger.warning(
                         "Rate limited by Telegram. Waiting %ds before retry.",
@@ -1606,25 +2040,65 @@ class TelegramChannel(BaseChannel):
                     await asyncio.sleep(wait_time)
                     continue
 
-                # Handle HTML parse errors - fall back to plain text
-                if _HAS_TELEGRAM and isinstance(exc, BadRequest):
+                # --- BadRequest: sub-classify ---
+                if isinstance(exc, BadRequest):
                     error_msg = str(exc).lower()
+
+                    # HTML parse error — fall back to plain text
                     if "parse" in error_msg or "can't parse" in error_msg:
                         logger.warning(
-                            "HTML parse error, falling back to plain text: %s", exc
+                            "HTML parse error, falling back to plain "
+                            "text: %s", exc,
                         )
                         kwargs.pop("parse_mode", None)
-                        # Strip HTML tags for plain text fallback
                         kwargs["text"] = re.sub(r"<[^>]+>", "", text)
                         continue
 
+                    # Thread/topic deleted — retry without thread_id
+                    if (
+                        thread_id is not None
+                        and not _retried_without_thread
+                        and (
+                            "thread" in error_msg
+                            or "topic" in error_msg
+                            or "not found" in error_msg
+                            or "message_thread_id" in error_msg
+                        )
+                    ):
+                        logger.warning(
+                            "BadRequest with thread_id=%s, retrying "
+                            "without it: %s",
+                            thread_id, exc,
+                        )
+                        kwargs.pop("message_thread_id", None)
+                        _retried_without_thread = True
+                        continue
+
+                    # Other BadRequest — permanent, don't retry
+                    logger.error(
+                        "Permanent BadRequest for chat %s: %s",
+                        chat_id, exc,
+                    )
+                    return
+
+                # --- TimedOut / NetworkError: retry with backoff ---
+                if isinstance(exc, (TimedOut, NetworkError)):
+                    delay = self._retry_base_delay * (2 ** attempt)
+                    logger.warning(
+                        "Network/timeout error on attempt %d/%d: %s. "
+                        "Retrying in %.1fs.",
+                        attempt + 1, self._max_retries, exc, delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+
+                # --- Unknown exception: retry with backoff ---
                 delay = self._retry_base_delay * (2 ** attempt)
                 logger.warning(
-                    "Telegram send attempt %d/%d failed: %s. Retrying in %.1fs.",
-                    attempt + 1,
-                    self._max_retries,
-                    exc,
-                    delay,
+                    "Telegram send attempt %d/%d failed (%s): %s. "
+                    "Retrying in %.1fs.",
+                    attempt + 1, self._max_retries,
+                    type(exc).__name__, exc, delay,
                 )
                 await asyncio.sleep(delay)
 

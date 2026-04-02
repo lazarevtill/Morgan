@@ -152,7 +152,7 @@ class EmotionalTrigger:
             user_id=data["user_id"],
             trigger_pattern=data["trigger_pattern"],
             trigger_type=data["trigger_type"],
-            emotional_responses=[EmotionType(e) for e in data["emotional_responses"]],
+            emotional_responses=[EmotionType.from_string(e) for e in data["emotional_responses"]],
             sensitivity_score=data["sensitivity_score"],
             confidence=data["confidence"],
             context_factors=data["context_factors"],
@@ -383,7 +383,7 @@ Focus on finding 3-5 most significant triggers, not every possible one."""
                 # Map emotional response to EmotionType
                 emotion_response = trigger_data.get("emotional_response", "neutral")
                 try:
-                    emotion_type = EmotionType(emotion_response)
+                    emotion_type = EmotionType.from_string(emotion_response)
                 except ValueError:
                     emotion_type = EmotionType.NEUTRAL
 
