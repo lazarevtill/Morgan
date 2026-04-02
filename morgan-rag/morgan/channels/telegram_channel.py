@@ -176,7 +176,8 @@ class TelegramChannel(BaseChannel):
         self._topic_name_cache: dict[str, str] = {}
 
         # Persistence path for group activation & topic cache
-        self._state_path = Path("/home/morgan/.morgan/telegram_state.json")
+        _ws = os.environ.get("MORGAN_WORKSPACE_PATH") or str(Path.home() / ".morgan")
+        self._state_path = Path(_ws) / "telegram_state.json"
 
     # -- State persistence ---------------------------------------------------
 

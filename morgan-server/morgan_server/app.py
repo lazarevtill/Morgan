@@ -181,7 +181,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 try:
                     from morgan.memory_consolidation import MemoryConsolidator
                     from morgan.scheduling import CronJob, CronService, HeartbeatManager
-                    cron_persistence = Path("/home/morgan/.morgan/cron_jobs.json")
+                    import os as _os
+                    _ws = _os.environ.get("MORGAN_WORKSPACE_PATH") or str(Path.home() / ".morgan")
+                    cron_persistence = Path(_ws) / "cron_jobs.json"
                     cron_persistence.parent.mkdir(parents=True, exist_ok=True)
                     cron_service = CronService(persistence_path=str(cron_persistence))
                     cron_service.load()
