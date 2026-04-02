@@ -153,14 +153,14 @@ class EmotionalRecovery:
     def from_dict(cls, data: Dict[str, Any]) -> "EmotionalRecovery":
         """Create recovery from dictionary."""
         initial_state = EmotionalState(
-            primary_emotion=EmotionType(data["initial_state"]["primary_emotion"]),
+            primary_emotion=EmotionType.from_string(data["initial_state"]["primary_emotion"]),
             intensity=data["initial_state"]["intensity"],
             confidence=0.8,  # Default confidence
             timestamp=datetime.fromisoformat(data["initial_state"]["timestamp"]),
         )
 
         recovery_state = EmotionalState(
-            primary_emotion=EmotionType(data["recovery_state"]["primary_emotion"]),
+            primary_emotion=EmotionType.from_string(data["recovery_state"]["primary_emotion"]),
             intensity=data["recovery_state"]["intensity"],
             confidence=0.8,  # Default confidence
             timestamp=datetime.fromisoformat(data["recovery_state"]["timestamp"]),
@@ -184,7 +184,7 @@ class EmotionalRecovery:
         # Restore intermediate states
         for state_data in data["intermediate_states"]:
             state = EmotionalState(
-                primary_emotion=EmotionType(state_data["primary_emotion"]),
+                primary_emotion=EmotionType.from_string(state_data["primary_emotion"]),
                 intensity=state_data["intensity"],
                 confidence=0.8,
                 timestamp=datetime.fromisoformat(state_data["timestamp"]),

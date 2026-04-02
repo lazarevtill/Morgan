@@ -222,13 +222,14 @@ Respond with JSON ONLY:
 }}"""
 
             response = self.llm_service.generate(
-                prompt=prompt, temperature=0.2, max_tokens=500
+                prompt=prompt, temperature=0.2, max_tokens=500,
+                use_fast_model=True,
             )
 
             # Parse JSON using utility that handles reasoning blocks
             data = parse_llm_json(response.content)
             if data is None:
-                logger.warning("Failed to parse semantic emotion response")
+                logger.debug("Failed to parse semantic emotion response, falling back to rule-based")
                 return None
 
             indicators = data.get("indicators", [])
@@ -240,11 +241,11 @@ Respond with JSON ONLY:
                 indicators.append(f"hidden_emotion:{data['hidden_emotion']}")
 
             result = EmotionalState(
-                primary_emotion=EmotionType(data["primary_emotion"]),
+                primary_emotion=EmotionType.from_string(data["primary_emotion"]),
                 intensity=float(data["intensity"]),
                 confidence=float(data["confidence"]),
                 secondary_emotions=[
-                    EmotionType(e) for e in data.get("secondary_emotions", [])
+                    EmotionType.from_string(e) for e in data.get("secondary_emotions", [])
                     if e in [et.value for et in EmotionType]
                 ],
                 emotional_indicators=indicators,
@@ -604,11 +605,11 @@ Respond with JSON ONLY:
                 return None
 
             return EmotionalState(
-                primary_emotion=EmotionType(emotion_data["primary_emotion"]),
+                primary_emotion=EmotionType.from_string(emotion_data["primary_emotion"]),
                 intensity=float(emotion_data["intensity"]),
                 confidence=float(emotion_data["confidence"]),
                 secondary_emotions=[
-                    EmotionType(e) for e in emotion_data.get("secondary_emotions", [])
+                    EmotionType.from_string(e) for e in emotion_data.get("secondary_emotions", [])
                 ],
                 emotional_indicators=emotion_data.get("indicators", []),
             )

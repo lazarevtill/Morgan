@@ -1,0 +1,158 @@
+name: morgan
+
+services:
+  morgan-server:
+    build:
+      context: .
+      dockerfile: morgan-server/Dockerfile
+      target: runtime
+    container_name: morgan-server
+    env_file:
+      - .env
+    environment:
+      MORGAN_HOST: 0.0.0.0
+      MORGAN_PORT: 8080
+      MORGAN_WORKERS: ${MORGAN_WORKERS:-1}
+      MORGAN_LOG_LEVEL: ${MORGAN_LOG_LEVEL:-INFO}
+      MORGAN_LOG_FORMAT: ${MORGAN_LOG_FORMAT:-json}
+
+      # Server config (morgan-server)
+      MORGAN_LLM_PROVIDER: ${MORGAN_LLM_PROVIDER:-ollama}
+      MORGAN_LLM_ENDPOINT: ${MORGAN_LLM_ENDPOINT:-http://ollama:11434}
+      MORGAN_LLM_MODEL: ${MORGAN_LLM_MODEL:-qwen2.5:7b}
+      MORGAN_VECTOR_DB_URL: ${MORGAN_VECTOR_DB_URL:-http://qdrant:6333}
+      MORGAN_EMBEDDING_PROVIDER: ${MORGAN_EMBEDDING_PROVIDER:-ollama}
+      MORGAN_EMBEDDING_MODEL: ${MORGAN_EMBEDDING_MODEL:-nomic-embed-text}
+      MORGAN_EMBEDDING_ENDPOINT: ${MORGAN_EMBEDDING_ENDPOINT:-http://ollama:11434/v1}
+      MORGAN_EMBEDDING_DEVICE: ${MORGAN_EMBEDDING_DEVICE:-cpu}
+
+      # Core settings (morgan-rag)
+      llm_base_url: ${LLM_BASE_URL:-http://ollama:11434/v1}
+      llm_api_key: ${LLM_API_KEY:-ollama}
+      llm_model: ${LLM_MODEL:-qwen2.5:7b}
+      qdrant_url: ${QDRANT_URL:-http://qdrant:6333}
+      qdrant_api_key: ${QDRANT_API_KEY:-}
+      embedding_model: ${EMBEDDING_MODEL:-nomic-embed-text}
+      embedding_base_url: ${EMBEDDING_BASE_URL:-http://ollama:11434/v1}
+      embedding_force_remote: ${EMBEDDING_FORCE_REMOTE:-true}
+      morgan_enable_tools: ${MORGAN_ENABLE_TOOLS:-true}
+      morgan_enable_workspace: ${MORGAN_ENABLE_WORKSPACE:-true}
+      morgan_enable_compaction: ${MORGAN_ENABLE_COMPACTION:-true}
+      morgan_enable_channels: ${MORGAN_ENABLE_CHANNELS:-false}
+      morgan_enable_scheduling: ${MORGAN_ENABLE_SCHEDULING:-false}
+      morgan_enable_agents: ${MORGAN_ENABLE_AGENTS:-true}
+    ports:
+      - "8080:8080"
+    volumes:
+      - morgan-data:/app/data
+      - morgan-workspace:/home/morgan/.morgan
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
+  morgan-cli:
+    build:
+      context: .
+      dockerfile: morgan-cli/Dockerfile
+      target: runtime
+    container_name: morgan-cli
+    environment:
+      MORGAN_SERVER_URL: ${MORGAN_SERVER_URL:-http://morgan-server:8080}
+      MORGAN_USER_ID: ${MORGAN_USER_ID:-docker-user}
+    depends_on:
+      morgan-server:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+    profiles:
+      - cli
+
+  # Optional standalone morgan-rag runtime (for local module-level work)
+  morgan-rag:
+    build:
+      context: .
+      dockerfile: morgan-rag/Dockerfile
+      target: runtime
+    container_name: morgan-rag
+    env_file:
+      - .env
+    environment:
+      llm_base_url: ${LLM_BASE_URL:-http://ollama:11434/v1}
+      llm_api_key: ${LLM_API_KEY:-ollama}
+      llm_model: ${LLM_MODEL:-qwen2.5:7b}
+      qdrant_url: ${QDRANT_URL:-http://qdrant:6333}
+      embedding_model: ${EMBEDDING_MODEL:-nomic-embed-text}
+      embedding_base_url: ${EMBEDDING_BASE_URL:-http://ollama:11434/v1}
+      embedding_force_remote: ${EMBEDDING_FORCE_REMOTE:-true}
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    ports:
+      - "8090:8080"
+    volumes:
+      - morgan-data:/app/data
+      - morgan-workspace:/home/morgan/.morgan
+    profiles:
+      - rag
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: morgan-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: morgan-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: morgan-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  morgan-data:
+  morgan-workspace:
+  ollama-data:
+  qdrant-data:
+  redis-data:

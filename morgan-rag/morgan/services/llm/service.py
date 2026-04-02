@@ -6,6 +6,7 @@ implementation that supports both single and distributed modes.
 """
 
 import asyncio
+import os
 import threading
 import time
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
@@ -15,6 +16,7 @@ from openai import OpenAI
 from morgan.config import get_settings
 from morgan.services.llm.models import LLMMode, LLMResponse
 from morgan.utils.logger import get_logger
+from morgan.utils.singleton import SingletonFactory
 
 logger = get_logger(__name__)
 
@@ -84,8 +86,8 @@ class LLMService:
         self.main_model = model or getattr(
             self.settings, "llm_model", "qwen2.5:32b-instruct-q4_K_M"
         )
-        self.fast_model = fast_model or getattr(
-            self.settings, "llm_fast_model", "qwen2.5:7b-instruct-q5_K_M"
+        self.fast_model = fast_model or os.environ.get("LLM_FAST_MODEL") or getattr(
+            self.settings, "llm_fast_model", "gemma3:4b"
         )
         self.strategy = strategy
 
@@ -103,6 +105,35 @@ class LLMService:
             self.main_model,
             self.fast_model,
         )
+
+    @staticmethod
+    def _extract_content(message) -> str:
+        """Extract response content from LLM message, handling thinking models.
+
+        Thinking models (qwen3.5, etc.) may return empty content with a separate
+        'reasoning' field, or wrap thinking in <think>...</think> tags.
+        """
+        import re
+
+        content = message.content or ""
+
+        # If content is empty, check for reasoning field (Ollama thinking models)
+        if not content.strip():
+            reasoning = getattr(message, "reasoning", None) or getattr(message, "reasoning_content", None)
+            if reasoning and isinstance(reasoning, str):
+                # If reasoning contains </think> tag, extract text after it
+                parts = re.split(r"</think>\s*", reasoning, maxsplit=1)
+                if len(parts) > 1 and parts[-1].strip():
+                    content = parts[-1].strip()
+                else:
+                    # Whole reasoning is the response (no think tags)
+                    content = reasoning.strip()
+
+        # If content has <think>...</think> tags inline, strip them
+        if content and "<think>" in content:
+            content = re.sub(r"<think>.*?</think>\s*", "", content, flags=re.DOTALL).strip()
+
+        return content
 
     def _ensure_initialized(self):
         """Ensure service is initialized (sync version)."""
@@ -122,7 +153,7 @@ class LLMService:
 
     def _init_single(self):
         """Initialize single-endpoint mode."""
-        base_url = getattr(self.settings, "llm_base_url", "http://localhost:11434/v1")
+        base_url = os.environ.get("LLM_BASE_URL") or getattr(self.settings, "llm_base_url", "http://localhost:11434/v1")
         api_key = getattr(self.settings, "llm_api_key", "ollama")
 
         self._client = OpenAI(
@@ -130,6 +161,17 @@ class LLMService:
             api_key=api_key or "ollama",
         )
         self._distributed_client = None
+
+        # Optional: separate endpoint for fast model (e.g., a different host)
+        fast_base_url = os.environ.get("LLM_FAST_BASE_URL")
+        if fast_base_url and fast_base_url != base_url:
+            self._fast_client = OpenAI(
+                base_url=fast_base_url,
+                api_key=api_key or "ollama",
+            )
+            logger.info("LLM fast model endpoint: %s", fast_base_url)
+        else:
+            self._fast_client = None
 
         logger.info("LLM single mode initialized: %s", base_url)
 
@@ -234,6 +276,8 @@ class LLMService:
     ) -> LLMResponse:
         """Generate using single endpoint."""
         model = self.fast_model if use_fast_model else self.main_model
+        # Use dedicated fast client if available (different host)
+        client = (self._fast_client or self._client) if use_fast_model else self._client
         messages = []
 
         if system_prompt:
@@ -243,7 +287,7 @@ class LLMService:
         try:
             start_time = time.time()
 
-            response = self._client.chat.completions.create(
+            response = client.chat.completions.create(
                 model=model,
                 messages=messages,
                 max_tokens=max_tokens or self.settings.llm_max_tokens,
@@ -252,8 +296,10 @@ class LLMService:
 
             latency_ms = (time.time() - start_time) * 1000
 
+            content = self._extract_content(response.choices[0].message)
+
             return LLMResponse(
-                content=response.choices[0].message.content,
+                content=content,
                 model=response.model,
                 finish_reason=response.choices[0].finish_reason,
                 usage=response.usage.model_dump() if response.usage else {},
@@ -382,8 +428,10 @@ class LLMService:
 
             latency_ms = (time.time() - start_time) * 1000
 
+            content = self._extract_content(response.choices[0].message)
+
             return LLMResponse(
-                content=response.choices[0].message.content,
+                content=content,
                 model=response.model,
                 finish_reason=response.choices[0].finish_reason,
                 usage=response.usage.model_dump() if response.usage else {},
@@ -530,27 +578,136 @@ class LLMService:
         Returns:
             LLMResponse with generated content
         """
-        # Extract system prompt and format messages
-        system_prompt = None
-        prompt_parts = []
+        # Use the proper chat completions API with structured messages
+        # (not the flattened prompt format — that loses tool instructions)
+        self._ensure_initialized()
 
-        for msg in messages:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            if role == "system":
-                system_prompt = content
-            elif role == "user":
-                prompt_parts.append(f"Human: {content}")
-            elif role == "assistant":
-                prompt_parts.append(f"Assistant: {content}")
+        model = self.fast_model if use_fast_model else self.main_model
 
-        return await self.agenerate(
-            prompt="\n".join(prompt_parts),
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system_prompt=system_prompt,
-            use_fast_model=use_fast_model,
+        if self.mode == LLMMode.DISTRIBUTED and self._distributed_client:
+            # Distributed mode: flatten as fallback
+            system_prompt = None
+            prompt_parts = []
+            for msg in messages:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                if role == "system":
+                    system_prompt = content
+                elif role == "user":
+                    prompt_parts.append(f"Human: {content}")
+                elif role == "assistant":
+                    prompt_parts.append(f"Assistant: {content}")
+            return await self.agenerate(
+                prompt="\n".join(prompt_parts),
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system_prompt=system_prompt,
+                use_fast_model=use_fast_model,
+            )
+
+        # Single mode: use structured messages directly
+        client = (self._fast_client or self._client) if use_fast_model else self._client
+        loop = asyncio.get_event_loop()
+
+        def _sync_chat():
+            start_time = time.time()
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens or self.settings.llm_max_tokens,
+                temperature=temperature or self.settings.llm_temperature,
+            )
+            latency_ms = (time.time() - start_time) * 1000
+            content = self._extract_content(response.choices[0].message)
+            return LLMResponse(
+                content=content,
+                model=response.model,
+                finish_reason=response.choices[0].finish_reason,
+                usage=response.usage.model_dump() if response.usage else {},
+                latency_ms=latency_ms,
+                endpoint_used=getattr(self.settings, "llm_base_url", "unknown"),
+            )
+
+        return await loop.run_in_executor(None, _sync_chat)
+
+    async def agenerate_with_image(
+        self,
+        prompt: str,
+        image_base64: str,
+        model: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+    ) -> LLMResponse:
+        """
+        Generate a response from a vision-capable LLM given text and an image.
+
+        Uses the OpenAI chat completions API with a multimodal message
+        containing both text and an image_url (base64 data URI).  Ollama
+        supports this format for vision models (e.g. gemma3, llava).
+
+        Args:
+            prompt: Text prompt describing what to do with the image.
+            image_base64: Base64-encoded image data (JPEG or PNG).
+            model: Vision model to use.  Falls back to env var
+                ``LLM_VISION_MODEL`` then ``"gemma3:4b"``.
+            max_tokens: Maximum tokens to generate.
+
+        Returns:
+            LLMResponse with the generated description / answer.
+        """
+        self._ensure_initialized()
+
+        vision_model = (
+            model
+            or os.environ.get("LLM_VISION_MODEL")
+            or "gemma3:4b"
         )
+
+        data_uri = f"data:image/jpeg;base64,{image_base64}"
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": data_uri},
+                    },
+                ],
+            }
+        ]
+
+        # Use fast client for vision if available (vision models often on separate host)
+        vision_base_url = os.environ.get("LLM_VISION_BASE_URL") or os.environ.get("LLM_FAST_BASE_URL")
+        if vision_base_url:
+            vision_client = OpenAI(
+                base_url=vision_base_url,
+                api_key=getattr(self.settings, "llm_api_key", "ollama") or "ollama",
+            )
+        else:
+            vision_client = self._fast_client or self._client
+
+        loop = asyncio.get_event_loop()
+
+        def _sync_vision_call() -> LLMResponse:
+            start_time = time.time()
+            response = vision_client.chat.completions.create(
+                model=vision_model,
+                messages=messages,
+                max_tokens=max_tokens or self.settings.llm_max_tokens,
+            )
+            latency_ms = (time.time() - start_time) * 1000
+            content = self._extract_content(response.choices[0].message)
+            return LLMResponse(
+                content=content,
+                model=response.model,
+                finish_reason=response.choices[0].finish_reason,
+                usage=response.usage.model_dump() if response.usage else {},
+                latency_ms=latency_ms,
+                endpoint_used=getattr(self.settings, "llm_base_url", "unknown"),
+            )
+
+        return await loop.run_in_executor(None, _sync_vision_call)
 
     async def astream(
         self,
@@ -696,8 +853,6 @@ class LLMService:
 # =============================================================================
 # Singleton Management
 # =============================================================================
-
-from morgan.utils.singleton import SingletonFactory
 
 # Create singleton factory with cleanup method
 _llm_service_factory = SingletonFactory(LLMService, cleanup_method="shutdown")

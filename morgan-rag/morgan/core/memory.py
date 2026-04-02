@@ -568,7 +568,6 @@ class MemoryService:
                 collection_name=self.turn_collection,
                 filter_conditions={"conversation_id": conversation_id},
                 limit=max_turns,
-                order_by="timestamp",
             )
 
             # Convert to ConversationTurn objects

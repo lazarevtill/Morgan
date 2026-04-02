@@ -729,6 +729,491 @@ async def _check_health(
 
 
 # ============================================================================
+# Tools Command
+# ============================================================================
+
+
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def tools(ctx: click.Context):
+    """
+    List available Morgan tools.
+
+    Displays all registered tools with their descriptions and schemas.
+    """
+    if ctx.invoked_subcommand is None:
+        asyncio.run(
+            _list_tools(
+                ctx.obj.get("server_url"),
+                ctx.obj.get("api_key"),
+                ctx.obj.get("user_id"),
+            )
+        )
+
+
+@tools.command("run")
+@click.argument("name")
+@click.argument("input_json", required=False, default="{}")
+@click.pass_context
+def tools_run(ctx: click.Context, name: str, input_json: str):
+    """Run a tool by name with JSON input."""
+    asyncio.run(
+        _run_tool(
+            name=name,
+            input_json=input_json,
+            server_url=ctx.obj.get("server_url"),
+            api_key=ctx.obj.get("api_key"),
+            user_id=ctx.obj.get("user_id"),
+        )
+    )
+
+
+async def _list_tools(
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
+):
+    """List tools implementation."""
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request("GET", "/api/tools")
+        if response:
+            ui.render_status("success", f"Found {len(response)} tools")
+            for tool in response:
+                console.print(f"  [bold]{tool['name']}[/bold] - {tool.get('description', '')}")
+        else:
+            ui.render_status("info", "No tools available")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+async def _run_tool(
+    name: str,
+    input_json: str,
+    server_url: Optional[str],
+    api_key: Optional[str],
+    user_id: Optional[str],
+):
+    """Execute one tool via server API."""
+    import json
+
+    try:
+        payload = json.loads(input_json)
+        if not isinstance(payload, dict):
+            raise ValueError("Tool input must be a JSON object")
+    except Exception as exc:
+        ui.render_error(f"Invalid tool input JSON: {exc}")
+        sys.exit(2)
+
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request(
+            "POST",
+            f"/api/tools/{name}",
+            {"input": payload, "user_id": user_id},
+        )
+        if response.get("is_error"):
+            ui.render_status("error", f"Tool failed: {response.get('error_code')}")
+        else:
+            ui.render_status("success", f"Tool {name} executed")
+        ui.render_message(str(response.get("output", "")), sender="Tool")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+# ============================================================================
+# Skills Command
+# ============================================================================
+
+
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def skills(ctx: click.Context):
+    """
+    List available Morgan skills.
+
+    Displays all registered skills with descriptions.
+    """
+    if ctx.invoked_subcommand is None:
+        asyncio.run(
+            _list_skills(
+                ctx.obj.get("server_url"),
+                ctx.obj.get("api_key"),
+                ctx.obj.get("user_id"),
+            )
+        )
+
+
+@skills.command("run")
+@click.argument("name")
+@click.option(
+    "--var",
+    "variables",
+    multiple=True,
+    help="Template variable in key=value format (repeatable)",
+)
+@click.option("--context", "prompt_context", default=None, help="Optional prompt context")
+@click.pass_context
+def skills_run(
+    ctx: click.Context, name: str, variables: tuple[str, ...], prompt_context: Optional[str]
+):
+    """Run a skill by name."""
+    asyncio.run(
+        _run_skill(
+            name=name,
+            variables=variables,
+            prompt_context=prompt_context,
+            server_url=ctx.obj.get("server_url"),
+            api_key=ctx.obj.get("api_key"),
+            user_id=ctx.obj.get("user_id"),
+        )
+    )
+
+
+async def _list_skills(
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
+):
+    """List skills implementation."""
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request("GET", "/api/skills")
+        if response:
+            ui.render_status("success", f"Found {len(response)} skills")
+            for skill in response:
+                console.print(f"  [bold]{skill['name']}[/bold] - {skill.get('description', '')}")
+        else:
+            ui.render_status("info", "No skills available")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+async def _run_skill(
+    name: str,
+    variables: tuple[str, ...],
+    prompt_context: Optional[str],
+    server_url: Optional[str],
+    api_key: Optional[str],
+    user_id: Optional[str],
+):
+    """Execute one skill via server API."""
+    vars_dict: dict[str, str] = {}
+    for item in variables:
+        if "=" not in item:
+            ui.render_error(f"Invalid --var '{item}', expected key=value")
+            sys.exit(2)
+        key, value = item.split("=", 1)
+        vars_dict[key.strip()] = value
+
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request(
+            "POST",
+            f"/api/skills/{name}",
+            {"variables": vars_dict, "prompt_context": prompt_context},
+        )
+        status = response.get("status", "unknown")
+        if status == "ok":
+            ui.render_status("success", f"Skill {name} executed")
+        else:
+            ui.render_status("error", f"Skill {name} failed")
+        ui.render_message(str(response.get("output", "")), sender="Skill")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+# ============================================================================
+# Tasks Command
+# ============================================================================
+
+
+@cli.command()
+@click.pass_context
+def tasks(ctx: click.Context):
+    """
+    List background tasks.
+
+    Displays all currently tracked background tasks and their status.
+    """
+    asyncio.run(
+        _list_tasks(
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
+
+
+async def _list_tasks(
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
+):
+    """List tasks implementation."""
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request("GET", "/api/tasks")
+        if response:
+            ui.render_status("success", f"Found {len(response)} tasks")
+            for task in response:
+                status = task.get("status", "unknown")
+                console.print(
+                    f"  [{task['task_id'][:8]}] {task.get('description', '')} "
+                    f"([bold]{status}[/bold])"
+                )
+        else:
+            ui.render_status("info", "No background tasks")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+# ============================================================================
+# Workspace Command
+# ============================================================================
+
+
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def workspace(ctx: click.Context):
+    """
+    Show workspace status.
+
+    Displays the current workspace configuration including SOUL.md,
+    USER.md, and MEMORY.md file status.
+    """
+    if ctx.invoked_subcommand is None:
+        asyncio.run(
+            _workspace_status(
+                ctx.obj.get("server_url"),
+                ctx.obj.get("api_key"),
+                ctx.obj.get("user_id"),
+            )
+        )
+
+
+@workspace.command("consolidate")
+@click.pass_context
+def workspace_consolidate(ctx: click.Context):
+    """Trigger workspace memory consolidation."""
+    asyncio.run(
+        _workspace_consolidate(
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
+
+
+async def _workspace_status(
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
+):
+    """Workspace status implementation."""
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request("GET", "/api/workspace")
+        status = response.get("status", "unknown")
+        if status == "active":
+            ui.render_status("success", "Workspace is active")
+            console.print(f"  Path: {response.get('path', 'N/A')}")
+            console.print(f"  SOUL.md: {'yes' if response.get('has_soul') else 'no'}")
+            console.print(f"  USER.md: {'yes' if response.get('has_user') else 'no'}")
+            console.print(f"  MEMORY.md: {'yes' if response.get('has_memory') else 'no'}")
+        else:
+            ui.render_status("info", f"Workspace status: {status}")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+async def _workspace_consolidate(
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
+):
+    """Trigger memory consolidation through server API."""
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request("POST", "/api/workspace/consolidate", {})
+        if response.get("status") == "ok":
+            ui.render_status("success", "Memory consolidation triggered")
+        else:
+            ui.render_status("warning", "Memory consolidation returned non-ok status")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+# ============================================================================
+# Channels Command
+# ============================================================================
+
+
+@cli.command()
+@click.pass_context
+def channels(ctx: click.Context):
+    """
+    List active communication channels.
+
+    Shows all configured channels (Telegram, Discord, etc.) and their status.
+    """
+    asyncio.run(
+        _list_channels(
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
+
+
+async def _list_channels(
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
+):
+    """List channels implementation."""
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request("GET", "/api/channels")
+        if response:
+            ui.render_status("success", f"Found {len(response)} channels")
+            for ch in response:
+                console.print(f"  [bold]{ch['name']}[/bold] ({ch.get('type', 'unknown')})")
+        else:
+            ui.render_status("info", "No active channels (enable with MORGAN_ENABLE_CHANNELS=true)")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+# ============================================================================
+# Schedule Command Group
+# ============================================================================
+
+
+@cli.group()
+@click.pass_context
+def schedule(ctx: click.Context):
+    """
+    Manage cron scheduling.
+
+    Commands for listing and adding cron jobs.
+    """
+    return None
+
+
+@schedule.command("list")
+@click.pass_context
+def schedule_list(ctx: click.Context):
+    """List scheduled cron jobs."""
+    asyncio.run(
+        _schedule_list(
+            ctx.obj.get("server_url"),
+            ctx.obj.get("api_key"),
+            ctx.obj.get("user_id"),
+        )
+    )
+
+
+@schedule.command("add")
+@click.argument("cron_expression")
+@click.argument("command")
+@click.option("--channel", default="system", help="Target channel for the cron job")
+@click.option("--model", default="default", help="Model override")
+@click.option("--isolated/--no-isolated", default=False, help="Run in isolated mode")
+@click.pass_context
+def schedule_add(
+    ctx: click.Context,
+    cron_expression: str,
+    command: str,
+    channel: str,
+    model: str,
+    isolated: bool,
+):
+    """
+    Add a cron job.
+
+    CRON_EXPRESSION: Standard cron expression (e.g., "*/5 * * * *")
+    COMMAND: The command/prompt to run on schedule
+    """
+    asyncio.run(
+        _schedule_add(
+            cron_expression=cron_expression,
+            command=command,
+            channel=channel,
+            model=model,
+            isolated=isolated,
+            server_url=ctx.obj.get("server_url"),
+            api_key=ctx.obj.get("api_key"),
+            user_id=ctx.obj.get("user_id"),
+        )
+    )
+
+
+async def _schedule_list(
+    server_url: Optional[str], api_key: Optional[str], user_id: Optional[str]
+):
+    """List cron jobs implementation."""
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request("GET", "/api/schedule")
+        jobs = response.get("jobs", [])
+        enabled = response.get("enabled", False)
+        if not enabled:
+            ui.render_status("info", "Scheduling is disabled on the server")
+        elif not jobs:
+            ui.render_status("info", "No scheduled jobs")
+        else:
+            ui.render_status("success", f"Found {len(jobs)} scheduled jobs")
+            for job in jobs:
+                console.print(
+                    f"  [bold]{job.get('job_id')}[/bold] "
+                    f"{job.get('schedule')} -> {job.get('prompt')}"
+                )
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+async def _schedule_add(
+    cron_expression: str,
+    command: str,
+    channel: str,
+    model: str,
+    isolated: bool,
+    server_url: Optional[str],
+    api_key: Optional[str],
+    user_id: Optional[str],
+):
+    """Add cron job implementation."""
+    try:
+        client = await create_client(server_url, api_key, user_id)
+        response = await client.http._request(
+            "POST",
+            "/api/schedule",
+            {
+                "schedule": cron_expression,
+                "prompt": command,
+                "channel": channel,
+                "model": model,
+                "isolated": isolated,
+            },
+        )
+        if response.get("status") == "ok":
+            ui.render_status("success", f"Scheduled job added: {response.get('job_id')}")
+        else:
+            ui.render_status("warning", "Server returned non-ok schedule response")
+        await client.close()
+    except Exception as e:
+        handle_error(e, server_url or "http://localhost:8080")
+        sys.exit(1)
+
+
+# ============================================================================
 # Main Entry Point
 # ============================================================================
 

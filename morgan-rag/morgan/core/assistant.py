@@ -8,16 +8,22 @@ Now includes companion features for building meaningful relationships.
 KISS Principle: Clean interface that orchestrates specialized modules.
 """
 
-import asyncio
 import uuid
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from pathlib import Path
+from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional
 
 from ..companion.relationship_manager import CompanionRelationshipManager
+from ..compaction import AutoCompactTracker, Compactor
 from ..config import get_settings
 from ..intelligence.core.models import ConversationContext
+from ..memory_consolidation import DailyLogManager
+from ..tools import ToolExecutor
+from ..tools.builtin import ALL_BUILTIN_TOOLS
+from ..workspace import WorkspaceManager, get_workspace_path
 
 # Legacy imports removed
+from morgan.hook_system import HookManager, HookType
 from morgan.intelligence.core.intelligence_engine import (
     get_emotional_intelligence_engine,
 )
@@ -64,6 +70,38 @@ class MorganAssistant:
         self.relationship_manager = CompanionRelationshipManager()
         self.memory_processor = get_memory_processor()
 
+        # ------------------------------------------------------------------
+        # Newly wired module integrations
+        # ------------------------------------------------------------------
+        self.hook_manager = HookManager()
+
+        self.workspace_manager: Optional[WorkspaceManager] = None
+        self.workspace_dir: Optional[Path] = None
+        if self.settings.morgan_enable_workspace:
+            self.workspace_dir = (
+                Path(self.settings.morgan_workspace_path)
+                if self.settings.morgan_workspace_path
+                else get_workspace_path()
+            )
+            self.workspace_manager = WorkspaceManager(workspace_dir=self.workspace_dir)
+            self.workspace_manager.bootstrap()
+
+        self.daily_log_manager: Optional[DailyLogManager] = None
+        if self.workspace_dir is not None:
+            self.daily_log_manager = DailyLogManager(self.workspace_dir / "memory")
+
+        self.tool_executor: Optional[ToolExecutor] = None
+        if self.settings.morgan_enable_tools:
+            self.tool_executor = ToolExecutor()
+            for tool in ALL_BUILTIN_TOOLS:
+                self.tool_executor.register(tool)
+
+        self.auto_compact_tracker: Optional[AutoCompactTracker] = None
+        self.compactor: Optional[Compactor] = None
+        if self.settings.morgan_enable_compaction:
+            self.auto_compact_tracker = AutoCompactTracker()
+            self.compactor = Compactor(hook_manager=self.hook_manager)
+
         # Specialized processors
         self.response_handler = ResponseHandler()
         self.conversation_manager = ConversationManager()
@@ -74,13 +112,23 @@ class MorganAssistant:
 
         # Orchestrator
         self.orchestrator = ConversationOrchestrator(
-            self.knowledge, self.memory, self.llm, self.emotional_processor
+            self.knowledge,
+            self.memory,
+            self.llm,
+            self.emotional_processor,
+            tool_executor=self.tool_executor,
+            hook_manager=self.hook_manager,
+            workspace_manager=self.workspace_manager,
+            auto_compact_tracker=self.auto_compact_tracker,
+            compactor=self.compactor,
+            daily_log_manager=self.daily_log_manager,
         )
 
         # Human-friendly state
         self.name = "Morgan"
         self.personality = (
-            "helpful, knowledgeable, conversational, and emotionally aware"
+            "a thoughtful, warm, and knowledgeable AI assistant (she/her) "
+            "who is conversational, emotionally aware, and fluent in all languages"
         )
 
         logger.info(f"{self.name} assistant initialized with clean DDD architecture!")
@@ -92,6 +140,9 @@ class MorganAssistant:
         user_id: Optional[str] = None,
         include_sources: bool = True,
         max_context: Optional[int] = None,
+        session_type: str = "main",
+        channel_metadata: Optional[Dict] = None,
+        approval_callback: Optional[Callable[[str, str, dict], Awaitable[bool]]] = None,
     ) -> Response:
         """
         Ask Morgan a question with emotional intelligence and companion awareness.
@@ -102,6 +153,9 @@ class MorganAssistant:
             user_id=user_id,
             include_sources=include_sources,
             max_context=max_context,
+            session_type=session_type,
+            channel_metadata=channel_metadata,
+            approval_callback=approval_callback,
         )
 
     async def ask_stream(
@@ -109,20 +163,43 @@ class MorganAssistant:
         question: str,
         conversation_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        session_type: str = "main",
     ) -> AsyncGenerator[str, None]:
         """
         Ask Morgan a question with streaming response.
 
         Runs the full orchestrator pipeline (Steps 1-8) for context gathering,
         emotion analysis, and style adaptation, then streams only the LLM
-        generation step. Post-generation steps (memory, learning) run after
-        streaming completes.
+        generation step. Post-generation steps (memory, learning, hooks,
+        daily-log, auto-compact) run after streaming completes.
         """
         conv_id = conversation_id or str(uuid.uuid4())
         uid = user_id or "anonymous"
         orch = self.orchestrator
 
+        # === Hook: MESSAGE_INBOUND ===
+        await orch._trigger_hook(HookType.MESSAGE_INBOUND, {
+            "question": question, "user_id": uid,
+            "conversation_id": conv_id, "session_type": session_type,
+        })
+
         # === Pre-generation pipeline (Steps 1-8) ===
+        # Step 0: Workspace context
+        workspace_context = ""
+        if orch._workspace_manager:
+            try:
+                ws = orch._workspace_manager.load_session_context(session_type)
+                parts = []
+                if ws.get("soul"):
+                    parts.append(ws["soul"])
+                if ws.get("user"):
+                    parts.append(ws["user"])
+                if ws.get("memory"):
+                    parts.append(ws["memory"])
+                workspace_context = "\n---\n".join(parts)
+            except Exception:
+                pass
+
         # Step 1: Memory context
         memory_history = []
         memory_context = ""
@@ -150,10 +227,9 @@ class MorganAssistant:
         )
 
         # Step 2b: Non-verbal cues
-        nonverbal_analysis = None
         if orch._nonverbal_detector:
             try:
-                nonverbal_analysis = orch._nonverbal_detector.analyze_text(
+                orch._nonverbal_detector.analyze_text(
                     text=question, context=conv_context,
                 )
             except Exception:
@@ -216,7 +292,10 @@ class MorganAssistant:
         if flow_result:
             style_context += f"\nFlow: {flow_result}"
 
-        context = (
+        context = ""
+        if workspace_context:
+            context += f"{workspace_context}\n---\n"
+        context += (
             f"Emotional State: {emotional_state}\n"
             f"Style: {style_context}\n"
             f"Knowledge:\n{knowledge_context}\n"
@@ -233,6 +312,18 @@ class MorganAssistant:
             yield chunk_text
 
         # === Post-generation pipeline (Steps 10-13) ===
+        # Hook: MESSAGE_REPLY
+        await orch._trigger_hook(HookType.MESSAGE_REPLY, {
+            "question": question, "answer": full_response,
+            "user_id": uid, "conversation_id": conv_id,
+        })
+
+        # Daily log append
+        await orch._append_daily_log(question, full_response, uid, conv_id)
+
+        # Auto-compact check
+        await orch._maybe_auto_compact(conv_id)
+
         # Step 12: Memory update
         if conversation_id:
             orch.emotional_processor.process_conversation_memory(
@@ -485,6 +576,17 @@ class MorganAssistant:
     async def get_habit_patterns(self, user_id: str) -> dict:
         """Get detected habit patterns for a user."""
         return await self.orchestrator.get_habit_patterns(user_id)
+
+    async def shutdown(self) -> None:
+        """Shutdown assistant services gracefully."""
+        try:
+            await self.orchestrator.stop_proactive_monitoring()
+        except Exception as exc:
+            logger.debug("Proactive monitoring shutdown skipped: %s", exc)
+        try:
+            self.llm.shutdown()
+        except Exception as exc:
+            logger.debug("LLM shutdown skipped: %s", exc)
 
     def __str__(self) -> str:
         """Human-friendly string representation."""

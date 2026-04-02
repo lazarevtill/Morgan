@@ -128,18 +128,14 @@ cd morgan
 
 # Start services
 cd docker
-cp env.example .env
-docker-compose up -d
-
-# Pull LLM model
-docker-compose exec ollama ollama pull qwen2.5:7b
-
-# Install client
-pip install -e ../morgan-cli
+cp .env.example .env
+docker compose up -d
+# .env.example is preconfigured for remote Ollama hosts:
+#   - 192.168.100.233 (primary LLM)
+#   - 192.168.100.222 (smaller/embedding models)
 
 # Start chatting
-export MORGAN_SERVER_URL=http://localhost:8080
-morgan chat
+docker compose run --rm morgan-cli chat
 ```
 
 ### Manual Installation

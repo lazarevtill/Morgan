@@ -79,8 +79,22 @@ class WebSearchService:
             max_cache_size: Maximum number of cached results
             rate_limit_per_minute: Maximum searches per minute
         """
+        import os
+
         self.settings = get_settings()
         self._lock = threading.Lock()
+
+        # Search backend configuration — read from env or settings
+        self._brave_api_key = (
+            os.environ.get("BRAVE_API_KEY")
+            or getattr(self.settings, "brave_api_key", None)
+            or None
+        )
+        self._searxng_url = (
+            os.environ.get("SEARXNG_URL")
+            or getattr(self.settings, "searxng_url", None)
+            or None
+        )
 
         # Cache settings
         self._cache: Dict[str, tuple[List[WebSearchResult], datetime]] = {}
@@ -99,10 +113,19 @@ class WebSearchService:
             "errors": 0,
         }
 
+        backends = []
+        if self._searxng_url:
+            backends.append(f"searxng({self._searxng_url})")
+        backends.append("duckduckgo")
+        if self._brave_api_key:
+            backends.append("brave-api")
+
         logger.info(
-            f"WebSearchService initialized: "
-            f"cache_ttl={cache_ttl_minutes}min, "
-            f"rate_limit={rate_limit_per_minute}/min"
+            "WebSearchService initialized: "
+            "cache_ttl=%dmin, rate_limit=%d/min, backends=%s",
+            cache_ttl_minutes,
+            rate_limit_per_minute,
+            " → ".join(backends),
         )
 
     async def search(
@@ -232,46 +255,39 @@ class WebSearchService:
 
         results: List[WebSearchResult] = []
 
-        # Try DuckDuckGo first (no API key needed)
-        try:
-            ddg_results = await self._search_duckduckgo(query, max_results)
-            if ddg_results:
-                results.extend(ddg_results)
-                logger.info(f"DuckDuckGo returned {len(ddg_results)} results")
-        except Exception as e:
-            logger.warning(f"DuckDuckGo search failed: {e}")
+        # Priority 1: SearXNG (local, fast, no rate limits, meta-search)
+        if self._searxng_url:
+            try:
+                searx_results = await self._search_searxng(query, max_results)
+                if searx_results:
+                    results.extend(searx_results)
+                    logger.info("SearXNG returned %d results", len(searx_results))
+            except Exception as e:
+                logger.warning("SearXNG search failed: %s", e)
 
-        # Try Brave Search API if configured and need more results
-        if (
-            len(results) < max_results
-            and hasattr(self.settings, "brave_api_key")
-            and self.settings.brave_api_key
-        ):
+        # Priority 2: DuckDuckGo (no API key, good fallback)
+        if len(results) < max_results:
+            try:
+                ddg_results = await self._search_duckduckgo(
+                    query, max_results - len(results)
+                )
+                if ddg_results:
+                    results.extend(ddg_results)
+                    logger.info("DuckDuckGo returned %d results", len(ddg_results))
+            except Exception as e:
+                logger.warning("DuckDuckGo search failed: %s", e)
+
+        # Priority 3: Brave Search API (if configured, high quality)
+        if len(results) < max_results and self._brave_api_key:
             try:
                 brave_results = await self._search_brave(
                     query, max_results - len(results)
                 )
                 if brave_results:
                     results.extend(brave_results)
-                    logger.info(f"Brave Search returned {len(brave_results)} results")
+                    logger.info("Brave Search returned %d results", len(brave_results))
             except Exception as e:
-                logger.warning(f"Brave Search failed: {e}")
-
-        # Try SearXNG if configured and need more results
-        if (
-            len(results) < max_results
-            and hasattr(self.settings, "searxng_url")
-            and self.settings.searxng_url
-        ):
-            try:
-                searx_results = await self._search_searxng(
-                    query, max_results - len(results)
-                )
-                if searx_results:
-                    results.extend(searx_results)
-                    logger.info(f"SearXNG returned {len(searx_results)} results")
-            except Exception as e:
-                logger.warning(f"SearXNG search failed: {e}")
+                logger.warning("Brave Search failed: %s", e)
 
         # Deduplicate by URL
         seen_urls = set()
@@ -425,7 +441,7 @@ class WebSearchService:
             return []
 
         results = []
-        api_key = getattr(self.settings, "brave_api_key", None)
+        api_key = self._brave_api_key
 
         if not api_key:
             return []
@@ -486,7 +502,7 @@ class WebSearchService:
             return []
 
         results = []
-        searxng_url = getattr(self.settings, "searxng_url", None)
+        searxng_url = self._searxng_url
 
         if not searxng_url:
             return []

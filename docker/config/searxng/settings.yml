@@ -1,0 +1,30 @@
+use_default_settings: true
+
+general:
+  instance_name: "Morgan Search"
+  enable_metrics: false
+
+search:
+  safe_search: 0
+  autocomplete: "duckduckgo"
+  default_lang: "all"
+  formats:
+    - html
+    - json
+
+server:
+  secret_key: "morgan-searxng-local-private"
+  limiter: false
+  image_proxy: true
+  method: "GET"
+
+ui:
+  static_use_hash: true
+  default_theme: simple
+
+outgoing:
+  request_timeout: 10
+  max_request_timeout: 15
+  useragent_suffix: ""
+  pool_connections: 100
+  pool_maxsize: 20

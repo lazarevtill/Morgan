@@ -7,12 +7,11 @@ a complete personal assistant experience.
 Refactored to use `morgan-rag` shared domain models.
 """
 
-from typing import Optional, Dict, Any, List
+import asyncio
+from typing import Awaitable, Callable, Optional, Dict, Any, List
 from dataclasses import dataclass, field
-from datetime import datetime
 
 from morgan.core.assistant import MorganAssistant as CoreMorganAssistant
-from morgan.intelligence.core.models import EmotionalState
 
 # from morgan.services.llm_service import LLMClient, LLMMessage # Removed as classes don't exist in Core
 
@@ -98,20 +97,22 @@ class MorganAssistant:
         conversation_id: Optional[str] = None,
         use_knowledge: bool = True,
         use_memory: bool = True,
-        # API allows these flags, Core defaults to True usually.
-        # We can pass them if Core supports, otherwise we consume them.
+        channel_metadata: Optional[Dict[str, Any]] = None,
+        approval_callback: Optional[Callable[[str, str, dict], Awaitable[bool]]] = None,
     ) -> AssistantResponse:
         """
         Process a chat message and generate a response.
         """
-        # Delegate to Core
-        # Core 'ask' is async? 'ask' in assistant.py is async def ask(...)
+        session_type = self._infer_session_type(conversation_id)
 
         core_response = await self.core.ask(
             question=message,
             conversation_id=conversation_id,
             user_id=user_id,
             include_sources=use_knowledge,
+            session_type=session_type,
+            channel_metadata=channel_metadata,
+            approval_callback=approval_callback,
         )
 
         # Map core_response to AssistantResponse
@@ -159,6 +160,19 @@ class MorganAssistant:
             nonverbal_cues_detected=getattr(core_response, "nonverbal_cues_detected", None) or [],
         )
 
+    @staticmethod
+    def _infer_session_type(conversation_id: Optional[str]) -> str:
+        """Infer session type from ChannelGateway session key format."""
+        if not conversation_id:
+            return "main"
+        if ":group:" in conversation_id:
+            return "group"
+        if ":dm:" in conversation_id:
+            return "dm"
+        if conversation_id.endswith(":main") or conversation_id == "main":
+            return "main"
+        return "main"
+
     # Legacy method support - mapped to Core functionality where possible
 
     async def get_conversation_history(
@@ -182,13 +196,11 @@ class MorganAssistant:
         limit: int = 5,
     ) -> List[Dict[str, Any]]:
         """Search knowledge base."""
-        # Core has knowledge.search_knowledge
-        # Assuming synchronous or async? Core assistant.py uses synchronous validation wrapper?
-        # self.knowledge.search_knowledge is likely async or sync?
-        # In orchestrator it was: search_results = self.knowledge.search_knowledge(...)
-        # Let's check if it's awaitable. Orchestrator didn't await it.
-        results = self.core.knowledge.search_knowledge(query, max_results=limit)
-        return results
+        result = self.core.knowledge.search_knowledge(query, max_results=limit)
+        # Handle both sync and async returns
+        if asyncio.iscoroutine(result):
+            result = await result
+        return result
 
     def get_user_profile(self, user_id: str) -> Optional[Any]:
         """Get user profile."""
@@ -329,5 +341,7 @@ class MorganAssistant:
 
     async def shutdown(self):
         """Shutdown the assistant."""
-        # Perform any cleanup needed for Core
-        pass
+        if hasattr(self.core, "shutdown"):
+            result = self.core.shutdown()
+            if asyncio.iscoroutine(result):
+                await result

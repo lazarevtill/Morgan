@@ -53,10 +53,10 @@ class Defaults:
     # LLM Configuration
     # =========================================================================
 
-    LLM_BASE_URL = "http://localhost:11434/v1"
-    LLM_API_KEY = "ollama-local"  # Placeholder for Ollama (no auth required)
-    LLM_MODEL = "qwen2.5:32b-instruct-q4_K_M"
-    LLM_FAST_MODEL = "qwen2.5:7b-instruct-q5_K_M"
+    LLM_BASE_URL = __import__("os").environ.get("LLM_BASE_URL") or "http://localhost:11434/v1"
+    LLM_API_KEY = __import__("os").environ.get("LLM_API_KEY") or "ollama-local"
+    LLM_MODEL = __import__("os").environ.get("LLM_MODEL") or "qwen3.5:35b"
+    LLM_FAST_MODEL = __import__("os").environ.get("LLM_FAST_MODEL") or "gemma3:12b"
     LLM_MAX_TOKENS = 2048
     LLM_TEMPERATURE = 0.7
     LLM_TIMEOUT = 60.0
@@ -68,7 +68,12 @@ class Defaults:
     # =========================================================================
 
     EMBEDDING_MODEL = "qwen3-embedding:4b"
-    EMBEDDING_DIMENSIONS = 2048
+    # Read from env if set, otherwise default to 4096 (qwen3-embedding:latest)
+    EMBEDDING_DIMENSIONS = int(
+        __import__("os").environ.get("MORGAN_EMBEDDING_DIMENSIONS")
+        or __import__("os").environ.get("EMBEDDING_DIMENSIONS")
+        or "4096"
+    )
     EMBEDDING_LOCAL_MODEL = "all-MiniLM-L6-v2"
     EMBEDDING_BATCH_SIZE = 100
     EMBEDDING_DEVICE = "cpu"
