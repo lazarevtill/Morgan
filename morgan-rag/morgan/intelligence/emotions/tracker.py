@@ -542,14 +542,14 @@ class EmotionalStateTracker:
         secondary_emotions = []
         if row["secondary_emotions"]:
             secondary_emotion_values = json.loads(row["secondary_emotions"])
-            secondary_emotions = [EmotionType(e) for e in secondary_emotion_values]
+            secondary_emotions = [EmotionType.from_string(e) for e in secondary_emotion_values]
 
         emotional_indicators = []
         if row["emotional_indicators"]:
             emotional_indicators = json.loads(row["emotional_indicators"])
 
         return EmotionalState(
-            primary_emotion=EmotionType(row["primary_emotion"]),
+            primary_emotion=EmotionType.from_string(row["primary_emotion"]),
             intensity=row["intensity"],
             confidence=row["confidence"],
             secondary_emotions=secondary_emotions,

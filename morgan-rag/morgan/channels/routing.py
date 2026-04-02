@@ -30,20 +30,21 @@ logger = logging.getLogger(__name__)
 class SessionKey:
     """Immutable, hashable key that uniquely identifies a conversation session.
 
-    Format:
+    Format (without thread):
         ``agent:{agent_id}:{channel}:{type}:{identifier}``
+    Format (with thread):
+        ``agent:{agent_id}:{channel}:{type}:{identifier}:thread:{thread_id}``
 
-    Factory class-methods are provided for the three standard shapes:
-
-    * ``for_dm``   -- ``agent:{agent_id}:{channel}:dm:{peer_id}``
-    * ``for_group`` -- ``agent:{agent_id}:{channel}:group:{group_id}``
-    * ``for_main`` -- ``agent:{agent_id}:main``
+    The optional ``thread_id`` field provides explicit per-topic isolation
+    for forum/thread-based channels (Telegram supergroups with topics).
+    Each thread gets its own session key, conversation history, and context.
     """
 
     agent_id: str
     channel: str
     session_type: str  # "dm", "group", or "main"
     identifier: str  # peer_id, group_id, or empty string
+    thread_id: Optional[str] = None  # Forum topic / thread ID
 
     # -- Factory methods -----------------------------------------------------
 
@@ -57,12 +58,18 @@ class SessionKey:
         )
 
     @staticmethod
-    def for_group(agent_id: str, channel: str, group_id: str) -> SessionKey:
+    def for_group(
+        agent_id: str,
+        channel: str,
+        group_id: str,
+        thread_id: Optional[str] = None,
+    ) -> SessionKey:
         return SessionKey(
             agent_id=agent_id,
             channel=channel,
             session_type="group",
             identifier=group_id,
+            thread_id=thread_id,
         )
 
     @staticmethod
@@ -79,10 +86,13 @@ class SessionKey:
     def __str__(self) -> str:
         if self.session_type == "main":
             return f"agent:{self.agent_id}:main"
-        return (
+        base = (
             f"agent:{self.agent_id}:{self.channel}"
             f":{self.session_type}:{self.identifier}"
         )
+        if self.thread_id is not None:
+            return f"{base}:thread:{self.thread_id}"
+        return base
 
 
 # ---------------------------------------------------------------------------
@@ -202,13 +212,20 @@ class RouteResolver:
             agent_id = self._default_agent_id
             matched_by = "default"
 
-        # Build session key
+        # Extract thread_id from metadata (set by channel adapters)
+        thread_id = message.metadata.get("message_thread_id")
+        thread_id_str = str(thread_id) if thread_id is not None else None
+
+        # Build session key — thread_id creates per-topic isolation
         if message.group_id is not None:
             session_type = "group"
+            # Use base group_id (without thread embedded) + explicit thread_id
+            base_group_id = str(message.group_id).split(":")[0]
             session_key = SessionKey.for_group(
                 agent_id=agent_id,
                 channel=message.channel,
-                group_id=message.group_id,
+                group_id=base_group_id,
+                thread_id=thread_id_str,
             )
         else:
             session_type = "dm"

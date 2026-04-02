@@ -181,7 +181,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 try:
                     from morgan.memory_consolidation import MemoryConsolidator
                     from morgan.scheduling import CronJob, CronService, HeartbeatManager
-                    cron_service = CronService()
+                    cron_persistence = Path("/home/morgan/.morgan/cron_jobs.json")
+                    cron_persistence.parent.mkdir(parents=True, exist_ok=True)
+                    cron_service = CronService(persistence_path=str(cron_persistence))
+                    cron_service.load()
 
                     async def _run_memory_consolidation() -> None:
                         if not hasattr(app.state, "workspace_manager"):
@@ -202,15 +205,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                             asyncio.create_task(_run_memory_consolidation())
 
                     cron_service.set_job_handler(_cron_job_handler)
-                    cron_service.add_job(
-                        CronJob(
-                            job_id="memory-consolidation-daily",
-                            schedule="0 2 * * *",
-                            prompt="Consolidate recent memory logs",
-                            channel="system",
-                            metadata={"job_type": "memory_consolidation"},
+                    # Only add default job if not already loaded from persistence
+                    if cron_service.get_job("memory-consolidation-daily") is None:
+                        cron_service.add_job(
+                            CronJob(
+                                job_id="memory-consolidation-daily",
+                                schedule="0 2 * * *",
+                                prompt="Consolidate recent memory logs",
+                                channel="system",
+                                metadata={"job_type": "memory_consolidation"},
+                            )
                         )
-                    )
+                    cron_service.save()
                     await cron_service.start()
                     app.state.cron_service = cron_service
 
@@ -233,6 +239,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                             from morgan.channels.telegram_channel import TelegramChannel
                             telegram_ch = TelegramChannel(
                                 token=rag_settings.morgan_telegram_token,
+                                require_mention_in_groups=False,
                             )
                             gateway.register_channel(telegram_ch)
                             logger.info("Telegram channel registered with gateway")
@@ -276,10 +283,51 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                                 message.channel,
                                 message.content[:100],
                             )
+                            # Pass channel metadata so tools know the chat context
+                            # (chat_id, message_id, thread_id for Telegram actions)
+                            channel_meta = dict(message.metadata)
+                            channel_meta["channel"] = message.channel
+                            channel_meta["group_id"] = message.group_id
+                            channel_meta["peer_id"] = message.peer_id
+
+                            # Build approval callback for dangerous tool execution.
+                            # If the message came from a Telegram channel, use its
+                            # inline-button approval mechanism; otherwise skip.
+                            approval_cb = None
+                            if message.channel == "telegram":
+                                tg_channel = gateway.channels.get("telegram")
+                                if tg_channel and hasattr(tg_channel, "request_approval"):
+                                    _chat_id = int(
+                                        str(message.group_id).split(":")[0]
+                                        if message.group_id
+                                        else message.peer_id
+                                    )
+                                    _thread_id = message.metadata.get("message_thread_id")
+
+                                    async def _approval_callback(
+                                        tool_name: str,
+                                        description: str,
+                                        tool_input: dict,
+                                        _cid: int = _chat_id,
+                                        _tid=_thread_id,
+                                        _ch=tg_channel,
+                                    ) -> bool:
+                                        return await _ch.request_approval(
+                                            chat_id=_cid,
+                                            tool_name=tool_name,
+                                            description=description,
+                                            tool_input=tool_input,
+                                            thread_id=_tid,
+                                        )
+
+                                    approval_cb = _approval_callback
+
                             result = await assistant.chat(
                                 message=message.content,
                                 user_id=message.peer_id,
                                 conversation_id=str(session_key),
+                                channel_metadata=channel_meta,
+                                approval_callback=approval_cb,
                             )
                             answer = result.answer if hasattr(result, "answer") else str(result)
                             logger.info("Channel handler: got answer (%d chars)", len(answer) if answer else 0)
@@ -352,6 +400,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 shutdown_tasks.append(app.state.heartbeat_manager.stop())
             if hasattr(app.state, "cron_service"):
                 logger.info("Shutting down cron service...")
+                try:
+                    app.state.cron_service.save()
+                except Exception as exc:
+                    logger.warning("Cron service save on shutdown failed: %s", exc)
                 shutdown_tasks.append(app.state.cron_service.stop())
 
             # Wait for async shutdowns first
@@ -482,7 +534,7 @@ def create_app(
     # ========================================================================
     # Step 3.5: Initialize Session Manager
     # ========================================================================
-    session_manager = initialize_session_manager(
+    initialize_session_manager(
         session_timeout_minutes=config.session_timeout_minutes,
         cleanup_interval_seconds=300,  # 5 minutes
         max_concurrent_requests=config.max_concurrent_requests,

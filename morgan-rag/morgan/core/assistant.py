@@ -8,11 +8,10 @@ Now includes companion features for building meaningful relationships.
 KISS Principle: Clean interface that orchestrates specialized modules.
 """
 
-import asyncio
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional
 
 from ..companion.relationship_manager import CompanionRelationshipManager
 from ..compaction import AutoCompactTracker, Compactor
@@ -128,7 +127,8 @@ class MorganAssistant:
         # Human-friendly state
         self.name = "Morgan"
         self.personality = (
-            "helpful, knowledgeable, conversational, and emotionally aware"
+            "a thoughtful, warm, and knowledgeable AI assistant (she/her) "
+            "who is conversational, emotionally aware, and fluent in all languages"
         )
 
         logger.info(f"{self.name} assistant initialized with clean DDD architecture!")
@@ -141,6 +141,8 @@ class MorganAssistant:
         include_sources: bool = True,
         max_context: Optional[int] = None,
         session_type: str = "main",
+        channel_metadata: Optional[Dict] = None,
+        approval_callback: Optional[Callable[[str, str, dict], Awaitable[bool]]] = None,
     ) -> Response:
         """
         Ask Morgan a question with emotional intelligence and companion awareness.
@@ -152,6 +154,8 @@ class MorganAssistant:
             include_sources=include_sources,
             max_context=max_context,
             session_type=session_type,
+            channel_metadata=channel_metadata,
+            approval_callback=approval_callback,
         )
 
     async def ask_stream(
@@ -223,10 +227,9 @@ class MorganAssistant:
         )
 
         # Step 2b: Non-verbal cues
-        nonverbal_analysis = None
         if orch._nonverbal_detector:
             try:
-                nonverbal_analysis = orch._nonverbal_detector.analyze_text(
+                orch._nonverbal_detector.analyze_text(
                     text=question, context=conv_context,
                 )
             except Exception:

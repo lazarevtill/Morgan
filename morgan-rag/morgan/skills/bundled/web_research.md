@@ -4,7 +4,7 @@ description: Research a topic using web search and synthesize findings into a co
 when-to-use: When the user needs up-to-date information from the web on a specific topic or question.
 allowed-tools:
   - web_search
-  - web_fetch
+  - fetch_url
   - memory_search
 effort: thorough
 user-invocable: true

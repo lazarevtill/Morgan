@@ -14,6 +14,8 @@ from morgan.tools.builtin.calculator import CalculatorTool
 from morgan.tools.builtin.file_read import FileReadTool
 from morgan.tools.builtin.memory_search import MemorySearchTool
 from morgan.tools.builtin.web_search import WebSearchTool
+from morgan.tools.builtin.fetch_url import FetchURLTool
+from morgan.tools.builtin.telegram_actions import TELEGRAM_ACTION_TOOLS
 
 # All built-in tool classes, instantiated and ready to register
 ALL_BUILTIN_TOOLS: List[BaseTool] = [
@@ -21,14 +23,18 @@ ALL_BUILTIN_TOOLS: List[BaseTool] = [
     FileReadTool(),
     BashTool(),
     WebSearchTool(),
+    FetchURLTool(),
     MemorySearchTool(),
+    *TELEGRAM_ACTION_TOOLS,
 ]
 
 __all__ = [
     "ALL_BUILTIN_TOOLS",
     "BashTool",
     "CalculatorTool",
+    "FetchURLTool",
     "FileReadTool",
     "MemorySearchTool",
     "WebSearchTool",
+    "TELEGRAM_ACTION_TOOLS",
 ]

@@ -39,6 +39,9 @@ COPY morgan-server/morgan_server /build/morgan-server/morgan_server
 WORKDIR /build/morgan-server
 RUN pip install --no-cache-dir -e .
 
+# Install search backends
+RUN pip install --no-cache-dir "duckduckgo-search>=7.0"
+
 # =============================================================================
 # Stage 2: Production stage - Minimal runtime image
 # =============================================================================

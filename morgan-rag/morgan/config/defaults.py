@@ -68,7 +68,12 @@ class Defaults:
     # =========================================================================
 
     EMBEDDING_MODEL = "qwen3-embedding:4b"
-    EMBEDDING_DIMENSIONS = 2048
+    # Read from env if set, otherwise default to 4096 (qwen3-embedding:latest)
+    EMBEDDING_DIMENSIONS = int(
+        __import__("os").environ.get("MORGAN_EMBEDDING_DIMENSIONS")
+        or __import__("os").environ.get("EMBEDDING_DIMENSIONS")
+        or "4096"
+    )
     EMBEDDING_LOCAL_MODEL = "all-MiniLM-L6-v2"
     EMBEDDING_BATCH_SIZE = 100
     EMBEDDING_DEVICE = "cpu"
