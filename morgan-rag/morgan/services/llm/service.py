@@ -153,7 +153,7 @@ class LLMService:
 
     def _init_single(self):
         """Initialize single-endpoint mode."""
-        base_url = getattr(self.settings, "llm_base_url", "http://localhost:11434/v1")
+        base_url = os.environ.get("LLM_BASE_URL") or getattr(self.settings, "llm_base_url", "http://localhost:11434/v1")
         api_key = getattr(self.settings, "llm_api_key", "ollama")
 
         self._client = OpenAI(
