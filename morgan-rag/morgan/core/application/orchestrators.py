@@ -500,10 +500,17 @@ class ConversationOrchestrator:
             if learning_adaptations:
                 style_context += f"\nLearning: {learning_adaptations}"
 
+            # Label knowledge sources so the LLM knows search already happened
+            knowledge_label = "Knowledge (auto-searched, USE these results):"
+            if external_results:
+                knowledge_label = (
+                    "Knowledge (web search already performed — results below, USE THEM):"
+                )
+
             context = (
                 f"Emotional State: {emotional_state}\n"
                 f"Style: {style_context}\n"
-                f"Knowledge:\n{knowledge_context}\n"
+                f"{knowledge_label}\n{knowledge_context}\n"
                 f"Memory: {memory_context}"
             )
 
@@ -965,20 +972,19 @@ class ConversationOrchestrator:
         schemas_text = json.dumps(tool_schemas, ensure_ascii=True)
         return (
             "# Tools\n"
-            "You have tools available. When you need to perform an action "
-            "(search the web, create a forum topic, read a file, etc.), "
-            "respond with ONLY this JSON — no text before or after:\n"
+            "You have tools. To use one, respond with ONLY this JSON "
+            "(no text before or after):\n"
             '{"tool_use":{"name":"<tool_name>","input":{...}}}\n\n'
-            "IMPORTANT: You MUST use tools when the user asks you to:\n"
-            "- Search for information → use web_search\n"
-            "- Read/fetch a web page or article → use fetch_url\n"
-            "- Create a forum thread/topic → use create_forum_topic\n"
-            "- React to a message → use react_to_message\n"
-            "- Pin a message → use pin_message\n"
-            "- Send to a specific thread → use send_to_topic\n"
-            "- Calculate something → use calculator\n\n"
-            "The chat_id is auto-injected — you don't need to provide it.\n"
-            "For research: first web_search to find URLs, then fetch_url to read full content.\n\n"
+            "IMPORTANT RULES:\n"
+            "- Web search results are ALREADY included in the Knowledge section above. "
+            "Use those results directly. Do NOT call web_search again unless the user "
+            "explicitly asks to search for something different.\n"
+            "- Use fetch_url to read a specific web page in full.\n"
+            "- Use create_forum_topic to create discussion threads.\n"
+            "- Use calculator for math.\n"
+            "- NEVER say 'tools are not working' — they work. Use the Knowledge "
+            "section above for search results.\n"
+            "- The chat_id is auto-injected.\n\n"
             f"Available tools:\n{schemas_text}"
         )
 
