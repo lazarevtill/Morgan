@@ -59,6 +59,7 @@ class SqliteTemporalStore:
             (fact.user_id, fact.subject, fact.predicate),
         )
         existing = [r["id"] for r in cur.fetchall()]
+        fact = fact.model_copy(deep=True)
         if fact.valid_from is None:
             fact.valid_from = now
         fact.last_confirmed = now
