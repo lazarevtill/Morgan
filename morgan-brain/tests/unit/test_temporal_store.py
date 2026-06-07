@@ -35,3 +35,10 @@ async def test_user_scoped():
     store = SqliteTemporalStore(":memory:")
     await store.upsert_fact(_fact("Berlin"), now=datetime(2026, 1, 1))
     assert await store.current_facts(user_id="u2") == []
+
+
+async def test_upsert_does_not_mutate_caller_object():
+    store = SqliteTemporalStore(":memory:")
+    f = _fact("Berlin")
+    await store.upsert_fact(f, now=datetime(2026, 1, 1))
+    assert f.valid_from is None and f.last_confirmed is None
