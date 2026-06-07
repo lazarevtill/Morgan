@@ -8,6 +8,8 @@ Morgan is a self-hosted, distributed personal AI assistant with emotional intell
 
 **Key Principle**: Quality over speed (5-10s response time acceptable for thoughtful responses). Privacy first - all processing on local hardware.
 
+> **Note on `ARCHITECTURE_V2.md`**: This root file describes a *proposed* ground-up microservices redesign (10 separate `morgan-*` services, event bus, SkillOpt). It is **not the current architecture** — the codebase is still the monolithic `morgan-rag` + thin `morgan-server`/`morgan-cli` split described below. Treat V2 as a design target, not current state, unless a task explicitly says to implement it.
+
 ## Build & Development Commands
 
 ### Installation (editable mode for development)
@@ -43,6 +45,8 @@ pytest --cov=morgan tests/
 ```bash
 # Format (Black, line-length: 100 for server/cli, 88 for morgan-rag)
 black morgan_server/ morgan_cli/
+# NOTE: morgan-rag's `make format`/`make lint` only target morgan/core/, morgan/services/, and tests/
+# (not the whole morgan/ package). Format other morgan-rag subpackages with black directly.
 cd morgan-rag && make format
 
 # Lint
@@ -78,6 +82,13 @@ morgan-cli (Terminal UI) ──HTTP/WS──► morgan-server (FastAPI) ──�
                                                                           ├── memory/
                                                                           └── search/
 ```
+
+### Repository Layout (beyond the three components)
+- **`shared/`** — Cross-cutting library (`config/`, `models/`, `utils/`, `infrastructure/`) imported by services that need distributed/multi-host primitives (e.g. `morgan-rag/morgan/infrastructure/distributed_*`, `morgan-cli/client.py`). Not all of `morgan-rag` uses it — it largely has its own equivalents under `morgan/`.
+- **`tests/`** (repo root) — Cross-component suites separate from each component's own `tests/`: `unit/`, `integration/` (API contracts, service/security integration), `e2e/` (full workflows), `ci/` (netbird, workflow validation). Run via `./scripts/test.sh` (`--unit` default, `--integration`, `--e2e`, `--all`, `--coverage`, `--services`, `--docker`).
+- **`.kiro/specs/`** — Kiro spec documents (`requirements.md` / `design.md` / `tasks.md` per feature). Consult these for intended behavior of in-progress work (e.g. `client-server-separation`, `codebase-cleanup-v2`, `morgan-multi-host-mvp`).
+- **`docker/`** + root `docker-compose.yml` + `morgan-rag/docker-compose.yml` — multiple compose stacks exist; confirm which one a task targets.
+- **`setup.sh`** / **`setup.bat`** — full environment bootstrap (Linux/macOS and Windows respectively).
 
 ### Service Layer Pattern (morgan-rag)
 Services are singletons accessed via factory functions:
