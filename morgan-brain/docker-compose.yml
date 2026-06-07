@@ -1,0 +1,59 @@
+name: morgan-brain
+
+services:
+  brain-api:
+    build: { context: ., dockerfile: Dockerfile, target: runtime }
+    command: python -m morgan_brain.apps.brain_api
+    ports: ["8080:8080"]
+    env_file: [.env]
+    environment:
+      MORGAN_EVENT_BUS: redis
+      MORGAN_REDIS_URL: redis://redis:6379/0
+      MORGAN_QDRANT_URL: http://qdrant:6333
+    depends_on:
+      redis: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+    volumes: ["./data:/app/data"]
+
+  learning-worker:
+    build: { context: ., dockerfile: Dockerfile, target: runtime }
+    command: python -m morgan_brain.apps.learning_worker
+    env_file: [.env]
+    environment:
+      MORGAN_EVENT_BUS: redis
+      MORGAN_REDIS_URL: redis://redis:6379/0
+      MORGAN_QDRANT_URL: http://qdrant:6333
+    depends_on:
+      redis: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+    volumes: ["./data:/app/data"]
+
+  # perception-gpu: deferred (interface only). Uncomment when voice/vision lands.
+  # perception-gpu:
+  #   build: { context: ., dockerfile: Dockerfile, target: runtime }
+  #   command: python -m morgan_brain.apps.perception_gpu
+  #   deploy: { resources: { reservations: { devices: [{ capabilities: [gpu] }] } } }
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes: ["redis-data:/data"]
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports: ["6333:6333"]
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/6333"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes: ["qdrant-storage:/qdrant/storage"]
+
+volumes:
+  redis-data:
+  qdrant-storage:
