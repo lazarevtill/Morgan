@@ -7,7 +7,7 @@ async def test_returns_fused_perception_for_text():
     out = await p.analyze(user_id="u1", text="Remind me about Berlin on Monday")
     assert out.text == "Remind me about Berlin on Monday"
     assert out.modalities_used == [Modality.TEXT]
-    assert out.intent.name in {"chat", "command", "question"}
+    assert out.intent.name == "command"
 
 
 async def test_extracts_capitalized_entities():
@@ -21,3 +21,9 @@ async def test_question_intent_detected():
     p = TextPerception()
     out = await p.analyze(user_id="u1", text="What time is it?")
     assert out.intent.name == "question"
+
+
+async def test_command_intent_detected():
+    p = TextPerception()
+    out = await p.analyze(user_id="u1", text="Schedule the meeting")
+    assert out.intent.name == "command"

@@ -11,7 +11,7 @@ from morgan_brain.models.base import Entity
 from morgan_brain.models.perception import FusedPerception, Intent, Modality
 
 _CAP_TOKEN = re.compile(r"\b([A-Z][a-z]{2,})\b")
-_STOPWORDS = {"I", "The", "A", "An", "What", "When", "Where", "Why", "How", "Remind", "Monday",
+_STOPWORDS = {"The", "What", "When", "Where", "Why", "How", "Remind", "Monday",
               "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
 
 
@@ -29,7 +29,7 @@ class TextPerception:
         unique = [e for e in entities if not (e.name in seen or seen.add(e.name))]
         return FusedPerception(
             text=text,
-            intent=Intent(name=intent_name, confidence=0.6),
+            intent=Intent(name=intent_name, confidence=0.6),  # heuristic-only; calibrated in Phase 2
             entities=unique,
             modalities_used=[Modality.TEXT],
         )
