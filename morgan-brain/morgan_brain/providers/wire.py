@@ -1,5 +1,6 @@
 """Provider-neutral wire types (OpenAI Chat Completions shape). No provider SDK imported here."""
 from __future__ import annotations
+import json
 from typing import Any, Literal
 from pydantic import BaseModel, Field
 
@@ -20,6 +21,12 @@ class ChatMessage(BaseModel):
 
     def to_openai(self) -> dict[str, Any]:
         d: dict[str, Any] = {"role": self.role, "content": self.content}
+        if self.tool_calls:
+            d["tool_calls"] = [
+                {"id": tc.id, "type": "function",
+                 "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}}
+                for tc in self.tool_calls
+            ]
         if self.tool_call_id:
             d["tool_call_id"] = self.tool_call_id
         return d
