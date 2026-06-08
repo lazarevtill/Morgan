@@ -4,7 +4,6 @@ All tests are deterministic and have no external dependencies.
 """
 from __future__ import annotations
 
-import pytest
 
 from morgan_brain.models.user import RelationshipStage
 from morgan_brain.proactivity.consent import ConsentGate, ConsentRule

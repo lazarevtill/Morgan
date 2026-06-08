@@ -5,9 +5,7 @@ The tests use FakeMcpClient throughout.
 """
 from __future__ import annotations
 
-from typing import Any
 
-import pytest
 
 from morgan_brain.modules.mcp.client import FakeMcpClient, McpToolInfo
 from morgan_brain.modules.mcp.hub import McpHub, McpServerConfig
