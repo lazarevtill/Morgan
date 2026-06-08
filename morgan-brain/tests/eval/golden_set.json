@@ -1,0 +1,130 @@
+[
+  {
+    "id": "er-01",
+    "probe": "EXPLICIT_RECALL",
+    "setup": [
+      "My name is Alex Chen.",
+      "I work as a senior software engineer at Meridian Labs."
+    ],
+    "query": "What is my name and where do I work?",
+    "expected": "Alex Chen, senior software engineer at Meridian Labs",
+    "should_inject": true
+  },
+  {
+    "id": "er-02",
+    "probe": "EXPLICIT_RECALL",
+    "setup": [
+      "My birthday is October 14th.",
+      "I am allergic to penicillin."
+    ],
+    "query": "When is my birthday and what am I allergic to?",
+    "expected": "October 14th; allergic to penicillin",
+    "should_inject": true
+  },
+  {
+    "id": "it-01",
+    "probe": "IMPLICIT_TRAIT",
+    "setup": [
+      "User regularly discusses running training plans.",
+      "User mentioned signing up for a half-marathon last spring.",
+      "User often asks about recovery nutrition after long runs."
+    ],
+    "query": "Based on what you know about me, what sport or hobby do I seem to be passionate about?",
+    "expected": "running / endurance running / marathons",
+    "should_inject": true
+  },
+  {
+    "id": "it-02",
+    "probe": "IMPLICIT_TRAIT",
+    "setup": [
+      "User always asks for code examples in Python.",
+      "User mentioned preferring to learn by doing rather than reading theory.",
+      "User has asked about pytest, mypy, and ruff across multiple sessions."
+    ],
+    "query": "What kind of learner and developer does my interaction history suggest I am?",
+    "expected": "hands-on / practical learner; Python developer who values code quality",
+    "should_inject": true
+  },
+  {
+    "id": "pu-01",
+    "probe": "PREFERENCE_UPDATE",
+    "setup": [
+      "Six months ago user said: I prefer verbose, detailed explanations.",
+      "Two weeks ago user explicitly said: I now prefer concise, bullet-point answers — please stop over-explaining."
+    ],
+    "query": "How would you describe my current preference for answer length and style?",
+    "expected": "concise bullet-point answers; the verbose preference has been superseded",
+    "should_inject": true
+  },
+  {
+    "id": "pu-02",
+    "probe": "PREFERENCE_UPDATE",
+    "setup": [
+      "User previously said they liked dark mode in all apps.",
+      "User recently said: I switched to light mode everywhere — my eyes feel better."
+    ],
+    "query": "What display theme do I prefer now?",
+    "expected": "light mode (updated from the earlier dark mode preference)",
+    "should_inject": true
+  },
+  {
+    "id": "lgd-01",
+    "probe": "LONG_GAP_DECAY",
+    "setup": [
+      "Three years ago user mentioned they love jazz and attend jazz concerts regularly."
+    ],
+    "query": "Do you know whether I still enjoy jazz?",
+    "expected": "I noted that you loved jazz and attended concerts about three years ago, but I am uncertain whether that preference is still current",
+    "should_inject": true
+  },
+  {
+    "id": "lgd-02",
+    "probe": "LONG_GAP_DECAY",
+    "setup": [
+      "Four years ago user said they were learning Mandarin.",
+      "No subsequent updates about Mandarin have been recorded."
+    ],
+    "query": "Am I still learning Mandarin?",
+    "expected": "I have an old note that you were learning Mandarin about four years ago, but I do not know if you continued — I would not want to assume",
+    "should_inject": true
+  },
+  {
+    "id": "op-01",
+    "probe": "OVER_PERSONALIZATION_NEGATIVE",
+    "setup": [
+      "User once mentioned — over two years ago — that they enjoy very long, comprehensive essays."
+    ],
+    "query": "Briefly explain what a linked list is.",
+    "expected": "A linked list is a linear data structure where each element (node) contains a value and a pointer to the next node.",
+    "should_inject": false
+  },
+  {
+    "id": "op-02",
+    "probe": "OVER_PERSONALIZATION_NEGATIVE",
+    "setup": [
+      "User mentioned liking Star Wars references in explanations about a year ago."
+    ],
+    "query": "Explain the difference between TCP and UDP.",
+    "expected": "TCP provides reliable, ordered delivery with error-checking; UDP is faster but does not guarantee delivery or ordering.",
+    "should_inject": false
+  },
+  {
+    "id": "ab-01",
+    "probe": "ABSTENTION",
+    "setup": [],
+    "query": "What is my mother's first name?",
+    "expected": "I don't know your mother's name — you haven't told me.",
+    "should_inject": true
+  },
+  {
+    "id": "ab-02",
+    "probe": "ABSTENTION",
+    "setup": [
+      "User's name is Jordan.",
+      "Jordan works as a graphic designer."
+    ],
+    "query": "What is my home address?",
+    "expected": "I don't have your home address — you haven't shared that information with me.",
+    "should_inject": true
+  }
+]
