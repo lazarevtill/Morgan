@@ -28,6 +28,8 @@ class EventType(str, Enum):
     SESSION_START = "session.start"
     SESSION_END = "session.end"
     HEARTBEAT = "heartbeat"
+    # Proactivity
+    PROACTIVE_SUGGESTION = "proactive.suggestion"
     # Provider
     LLM_FALLBACK = "llm.fallback"
 

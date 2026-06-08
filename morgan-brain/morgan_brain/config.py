@@ -37,6 +37,7 @@ class Settings(BaseSettings):
 
     # --- Feature flags ---
     enable_proactivity: bool = False
+    enable_scheduling: bool = False
     enable_channels: bool = False
     enable_mcp: bool = False
 
