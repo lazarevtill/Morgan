@@ -45,4 +45,5 @@ class OllamaLLMClient:
             resp = await client.post(self._url, json=payload)
             resp.raise_for_status()
             data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        content: str = data["choices"][0]["message"]["content"]
+        return content

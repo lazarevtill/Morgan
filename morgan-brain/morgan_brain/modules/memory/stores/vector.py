@@ -88,12 +88,12 @@ class QdrantVectorIndex:
 
     async def search(self, *, user_id: str, vector: list[float], top_k: int) -> list[VectorHit]:
         qm = self._qm
-        res = await self._client.search(
+        res = await self._client.query_points(
             collection_name=self._collection,
-            query_vector=vector,
+            query=vector,
             limit=top_k,
             query_filter=qm.Filter(
                 must=[qm.FieldCondition(key="user_id", match=qm.MatchValue(value=user_id))]
             ),
         )
-        return [VectorHit(id=str(p.id), score=p.score, payload=dict(p.payload or {})) for p in res]
+        return [VectorHit(id=str(p.id), score=p.score, payload=dict(p.payload or {})) for p in res.points]

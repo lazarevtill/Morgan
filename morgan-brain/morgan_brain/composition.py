@@ -12,15 +12,16 @@ from typing import Callable
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.core.orchestrator import Orchestrator
 from morgan_brain.interfaces.events import Event, EventType
+from morgan_brain.models.memory import Memory
 from morgan_brain.models.message import Conversation, Message, Role
 from morgan_brain.modules.learning.minimal import MinimalLearner
-from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder, OllamaEmbedder
+from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder, OllamaEmbedder
 from morgan_brain.modules.memory.store import MemoryModule
 from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
 from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex
 from morgan_brain.modules.perception.text.analyzer import TextPerception
 from morgan_brain.modules.personalization.passthrough import PassthroughPersonalizer
-from morgan_brain.modules.reasoning.llm.client import FakeLLMClient, OllamaLLMClient
+from morgan_brain.modules.reasoning.llm.client import FakeLLMClient, LLMClient, OllamaLLMClient
 from morgan_brain.modules.reasoning.reasoner import ReasoningModule
 from morgan_brain.modules.skills.noop import NoopSkillEngine
 from morgan_brain.security.memory_gate import MemoryGate
@@ -49,8 +50,8 @@ def _register_turn_storage(bus: InProcessBus, learner: MinimalLearner) -> None:
 
 def _assemble(
     *,
-    embedder,
-    llm,
+    embedder: Embedder,
+    llm: LLMClient,
     settings: Settings,
     clock: Callable[[], datetime],
     temporal_path: str,
@@ -96,9 +97,20 @@ def build_orchestrator(settings: Settings | None = None) -> Orchestrator:
     return orch
 
 
+class MemoryTestHandle:
+    """Thin handle exposing raw recall for integration-test assertions."""
+
+    def __init__(self, memory_module: MemoryModule) -> None:
+        self._memory_module = memory_module
+
+    async def recall_raw(self, *, user_id: str, text: str) -> list[Memory]:
+        from morgan_brain.models.memory import MemoryQuery
+        return await self._memory_module.recall(MemoryQuery(user_id=user_id, text=text, top_k=10))
+
+
 def build_orchestrator_for_test(
     *, reply: str, clock: Callable[[], datetime]
-):
+) -> tuple[Orchestrator, MemoryTestHandle]:
     """Test wiring: fake embedder + fake LLM + in-memory stores. Returns (orchestrator, memory
     handle) where the memory handle exposes recall_raw() for assertions."""
     settings = Settings(llm_model="test-model", llm_fast_model="test-model")
@@ -106,13 +118,7 @@ def build_orchestrator_for_test(
         embedder=FakeEmbedder(dim=16), llm=FakeLLMClient(reply=reply),
         settings=settings, clock=clock, temporal_path=":memory:",
     )
-
-    class _Handle:
-        async def recall_raw(self, *, user_id: str, text: str):
-            from morgan_brain.models.memory import MemoryQuery
-            return await memory_module.recall(MemoryQuery(user_id=user_id, text=text, top_k=10))
-
-    return orch, _Handle()
+    return orch, MemoryTestHandle(memory_module)
 
 
 def _sqlite_path(url: str) -> str:

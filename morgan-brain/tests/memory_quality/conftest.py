@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pytest
 
-from morgan_brain.models.memory import Memory, MemoryKind, MemoryQuery
+from morgan_brain.models.memory import Memory, MemoryKind
 from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
 from morgan_brain.modules.memory.store import MemoryModule
 from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
