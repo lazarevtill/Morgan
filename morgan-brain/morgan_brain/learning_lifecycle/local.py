@@ -172,11 +172,12 @@ class NoopOptimizer:
         self,
         name: str,
         *,
-        train: list[dict[str, Any]],
+        train: list[Any],
         scorer: Any,
         max_calls: int = 100,
+        current_body: str = "",
     ) -> PromptVersion:
-        """Return the current champion unchanged (Wave 1/5: real GEPA via MLflow)."""
+        """Return the current champion unchanged (Phase 3D: real GEPA via ReflectiveOptimizer)."""
         champ = await self._registry.champion(name)
         if champ is None:
             raise ValueError(
