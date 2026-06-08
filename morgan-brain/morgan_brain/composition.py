@@ -12,15 +12,17 @@ from typing import Callable
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.core.orchestrator import Orchestrator
 from morgan_brain.interfaces.events import Event, EventType
+from morgan_brain.learning.consolidation import MemoryConsolidator
+from morgan_brain.learning.learner import ConsolidationLearner
+from morgan_brain.learning.profile import UserProfileBuilder
 from morgan_brain.models.memory import Memory
 from morgan_brain.models.message import Conversation, Message, Role
-from morgan_brain.modules.learning.minimal import MinimalLearner
 from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder, OllamaEmbedder
 from morgan_brain.modules.memory.store import MemoryModule
 from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
 from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex
 from morgan_brain.modules.perception.text.analyzer import TextPerception
-from morgan_brain.modules.personalization.passthrough import PassthroughPersonalizer
+from morgan_brain.modules.personalization.adaptive import AdaptivePersonalizer
 from morgan_brain.modules.reasoning.reasoner import ReasoningModule
 from morgan_brain.modules.skills.noop import NoopSkillEngine
 from morgan_brain.providers.adapters.fake import FakeChatClient
@@ -35,7 +37,7 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _register_turn_storage(bus: InProcessBus, learner: MinimalLearner) -> None:
+def _register_turn_storage(bus: InProcessBus, learner: ConsolidationLearner) -> None:
     async def _store_turn(event: Event) -> None:
         payload = event.payload
         convo = Conversation(
@@ -59,19 +61,44 @@ def _assemble(
     clock: Callable[[], datetime],
     temporal_path: str,
 ) -> tuple[Orchestrator, MemoryModule]:
+    temporal = SqliteTemporalStore(temporal_path)
     memory_module = MemoryModule(
         embedder=embedder,
         vectors=InMemoryVectorIndex(),
-        temporal=SqliteTemporalStore(temporal_path),
+        temporal=temporal,
         clock=clock,
     )
     gate = MemoryGate(memory_module)
-    learner = MinimalLearner(memory=gate, clock=clock)
+    reg = CapabilityRegistry.from_packaged()
+    consolidator = MemoryConsolidator(
+        gate=gate,
+        temporal=temporal,
+        router=router,
+        capability_registry=reg,
+        clock=clock,
+    )
+    profile_builder = UserProfileBuilder(
+        gate=gate,
+        signals=None,
+        router=router,
+        capability_registry=reg,
+        clock=clock,
+    )
+    learner = ConsolidationLearner(
+        consolidator=consolidator,
+        gate=gate,
+        clock=clock,
+        profile_builder=profile_builder,
+    )
     bus = InProcessBus()
     _register_turn_storage(bus, learner)
+    personalizer = AdaptivePersonalizer(
+        profile_builder=profile_builder,
+        budget=settings.personalization_budget,
+    )
     orch = Orchestrator(
         perception=TextPerception(),
-        personalizer=PassthroughPersonalizer(),
+        personalizer=personalizer,
         memory=gate,
         skills=NoopSkillEngine(),
         reasoner=ReasoningModule(router=router, role="strong"),
@@ -117,6 +144,7 @@ def build_orchestrator_for_test(
     settings = Settings(llm_model="test-model", llm_fast_model="test-model")
 
     # Build a RoleRouter backed by FakeChatClient for the test.
+    # The fake client is used for both the orchestrator's LLM calls AND consolidation/profile.
     fake_client = FakeChatClient(reply=reply)
     reg = CapabilityRegistry.from_seed({
         "fake/test-model": {
