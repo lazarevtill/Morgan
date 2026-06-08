@@ -6,11 +6,10 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
 
 from morgan_brain.bus.inproc import InProcessBus
 from morgan_brain.interfaces.events import Event, EventType
-from morgan_brain.interfaces.tools import BaseTool, ToolResult
+from morgan_brain.interfaces.tools import ToolResult
 from morgan_brain.modules.tools.executor import ToolExecutorImpl, ToolRegistry
 from morgan_brain.security.permissions import Grant, PermissionGate, PermissionMode
 
