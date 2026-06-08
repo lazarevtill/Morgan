@@ -1,0 +1,121 @@
+"""Composition root — assemble the Orchestrator from settings (production) or fakes (tests).
+
+Also registers the cold-path turn-storage subscriber: on RESPONSE_GENERATED, the just-finished
+turn is persisted as episodic memory via the Learner. With the in-process bus this runs after the
+reply is produced; with the Redis bus (later phases) it runs in the learning-worker, off-path.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Callable
+
+from morgan_brain.config import Settings, get_settings
+from morgan_brain.core.orchestrator import Orchestrator
+from morgan_brain.interfaces.events import Event, EventType
+from morgan_brain.models.message import Conversation, Message, Role
+from morgan_brain.modules.learning.minimal import MinimalLearner
+from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder, OllamaEmbedder
+from morgan_brain.modules.memory.store import MemoryModule
+from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
+from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex
+from morgan_brain.modules.perception.text.analyzer import TextPerception
+from morgan_brain.modules.personalization.passthrough import PassthroughPersonalizer
+from morgan_brain.modules.reasoning.llm.client import FakeLLMClient, OllamaLLMClient
+from morgan_brain.modules.reasoning.reasoner import ReasoningModule
+from morgan_brain.modules.skills.noop import NoopSkillEngine
+from morgan_brain.security.memory_gate import MemoryGate
+from morgan_brain.bus.inproc import InProcessBus
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _register_turn_storage(bus: InProcessBus, learner: MinimalLearner) -> None:
+    async def _store_turn(event: Event) -> None:
+        payload = event.payload
+        convo = Conversation(
+            user_id=event.user_id,
+            session_id=payload.get("session_id") or "default",
+            messages=[
+                Message(user_id=event.user_id, role=Role.USER, content=payload["request"]),
+                Message(user_id=event.user_id, role=Role.ASSISTANT, content=payload["response"]),
+            ],
+        )
+        await learner.process_session(convo)
+
+    bus.subscribe(EventType.RESPONSE_GENERATED, _store_turn)
+
+
+def _assemble(
+    *,
+    embedder,
+    llm,
+    settings: Settings,
+    clock: Callable[[], datetime],
+    temporal_path: str,
+) -> tuple[Orchestrator, MemoryModule]:
+    memory_module = MemoryModule(
+        embedder=embedder,
+        vectors=InMemoryVectorIndex(),
+        temporal=SqliteTemporalStore(temporal_path),
+        clock=clock,
+    )
+    gate = MemoryGate(memory_module)
+    learner = MinimalLearner(memory=gate, clock=clock)
+    bus = InProcessBus()
+    _register_turn_storage(bus, learner)
+    orch = Orchestrator(
+        perception=TextPerception(),
+        personalizer=PassthroughPersonalizer(),
+        memory=gate,
+        skills=NoopSkillEngine(),
+        reasoner=ReasoningModule(
+            llm=llm, model=settings.llm_model, fast_model=settings.llm_fast_model
+        ),
+        learner=learner,
+        bus=bus,
+    )
+    return orch, memory_module
+
+
+def build_orchestrator(settings: Settings | None = None) -> Orchestrator:
+    """Production wiring (Ollama + in-memory vectors for Phase 1; Qdrant swaps in later)."""
+    import pathlib
+
+    settings = settings or get_settings()
+    temporal_path = _sqlite_path(settings.temporal_db_url)
+    if temporal_path != ":memory:":
+        pathlib.Path(temporal_path).parent.mkdir(parents=True, exist_ok=True)
+    embedder = OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
+    llm = OllamaLLMClient(settings.llm_endpoint)
+    orch, _ = _assemble(
+        embedder=embedder, llm=llm, settings=settings, clock=_utcnow,
+        temporal_path=temporal_path,
+    )
+    return orch
+
+
+def build_orchestrator_for_test(
+    *, reply: str, clock: Callable[[], datetime]
+):
+    """Test wiring: fake embedder + fake LLM + in-memory stores. Returns (orchestrator, memory
+    handle) where the memory handle exposes recall_raw() for assertions."""
+    settings = Settings(llm_model="test-model", llm_fast_model="test-model")
+    orch, memory_module = _assemble(
+        embedder=FakeEmbedder(dim=16), llm=FakeLLMClient(reply=reply),
+        settings=settings, clock=clock, temporal_path=":memory:",
+    )
+
+    class _Handle:
+        async def recall_raw(self, *, user_id: str, text: str):
+            from morgan_brain.models.memory import MemoryQuery
+            return await memory_module.recall(MemoryQuery(user_id=user_id, text=text, top_k=10))
+
+    return orch, _Handle()
+
+
+def _sqlite_path(url: str) -> str:
+    """Turn a sqlite:/// URL into a filesystem path; pass through ':memory:'."""
+    prefix = "sqlite:///"
+    return url[len(prefix):] if url.startswith(prefix) else url
