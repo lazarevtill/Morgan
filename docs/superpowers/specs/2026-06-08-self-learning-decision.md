@@ -96,6 +96,37 @@ budget) · premature LoRA (the 4-condition test) · local-LLM date hallucination
 - **Add** anti-sycophancy / over-personalization guardrails as first-class in Personalization &
   Proactivity, and the typed edit-capture signal layer.
 
+## Implementation substrate — MLflow (local, off the hot path)
+
+The self-learning lifecycle (optimize → version → evaluate → gate → promote → rollback → trace) is
+implemented on **MLflow 3** running **fully local** (SQLite backend + local filesystem artifacts),
+**not** hand-rolled. Adopt selectively; it lives only in the learning/eval plane, never the request
+runtime.
+
+- **GEPA via MLflow:** `mlflow.genai.optimize_prompts(predict_fn, train_data, prompt_uris,
+  optimizer=GepaPromptOptimizer(reflection_model=<biggest local model>, max_metric_calls=…),
+  scorers=[…])`. MLflow wraps GEPA — no separate DSPy orchestration needed. (Experimental as of
+  MLflow 3.5 — isolate behind our own `Optimizer` seam.)
+- **Champion preprompt = Prompt Registry:** `register_prompt` + `set_prompt_alias("champion", v)`;
+  rollback = re-point the alias (atomic, instant). `load_prompt("prompts:/morgan-system@champion")`
+  at inference.
+- **Validation gate = `mlflow.genai.evaluate`** with custom `@scorer`s (L1 recall@k, L2 preference
+  probes) + **Evaluation Datasets** (the golden set) + **`make_judge`** (3.4+) for the calibrated
+  cross-family judge (measures judge accuracy → our Cohen's κ requirement). "Beats-current-or-nothing"
+  = compare candidate vs `@champion` scores before re-pointing the alias.
+- **LoRA (if escalated) = Model Registry** aliases for versioned `morgan:vN` + rollback (defer until
+  the escalation test fires).
+- **Tracing/observability:** `mlflow-tracing` **slim package** in the service layer only
+  (~95% smaller; do not install full `mlflow` in the hot path).
+- **Privacy hard rules:** set `MLFLOW_DISABLE_TELEMETRY=true` and `DO_NOT_TRACK=true`; keep the
+  `reflection_model` and any judge models **local** (remote = a privacy-egress event); the MLflow
+  store is owner data → lives under the same encryption + `delete_subject()` fan-out as the rest.
+
+Alternatives ruled out: W&B/Weave & LangSmith (cloud-only — fail privacy), Langfuse (heavyweight
+multi-service deploy; shallow eval), plain Git+pytest (viable but rebuilds the registry/eval/history
+MLflow gives free). MLflow wins for *this* use case because it unifies GEPA + eval + champion
+registry + tracking locally.
+
 ## Key citations
 LaMP RAG-vs-PEFT arXiv:2409.09510 · GEPA arXiv:2507.19457 + dspy.ai/api/optimizers/GEPA +
 github.com/gepa-ai/gepa · SkillOpt (design only) arXiv:2605.23904 · PrefEval arXiv:2502.09597 ·
