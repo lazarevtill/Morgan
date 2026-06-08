@@ -26,7 +26,11 @@ class TextPerception:
             if m.group(1) not in _STOPWORDS
         ]
         seen: set[str] = set()
-        unique = [e for e in entities if not (e.name in seen or seen.add(e.name))]
+        unique: list[Entity] = []
+        for e in entities:
+            if e.name not in seen:
+                seen.add(e.name)
+                unique.append(e)
         return FusedPerception(
             text=text,
             intent=Intent(name=intent_name, confidence=0.6),  # heuristic-only; calibrated in Phase 2
