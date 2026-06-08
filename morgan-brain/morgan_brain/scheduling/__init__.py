@@ -11,11 +11,13 @@ from morgan_brain.scheduling.cron import (
     Scheduler,
 )
 from morgan_brain.scheduling.heartbeat import HeartbeatManager
+from morgan_brain.scheduling.learning_jobs import LearningScheduler
 
 __all__ = [
     "CronService",
     "HeartbeatManager",
     "InProcessScheduler",
     "Job",
+    "LearningScheduler",
     "Scheduler",
 ]
