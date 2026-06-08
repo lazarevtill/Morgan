@@ -96,3 +96,27 @@ class SqliteTemporalStore:
             (user_id, subject, predicate),
         ).fetchall()
         return [self._row_to_fact(r) for r in rows]
+
+    async def close_fact(self, fact_id: str, *, now: datetime) -> None:
+        """Close a fact's validity interval by setting ``valid_to = now``.
+
+        This is the "soft delete" operation — the fact is retained in history
+        with its interval closed, but will no longer appear in ``current_facts``.
+        If no fact with *fact_id* exists, this is a no-op.
+        """
+        self._conn.execute(
+            "UPDATE facts SET valid_to=? WHERE id=? AND valid_to IS NULL",
+            (_iso(now), fact_id),
+        )
+        self._conn.commit()
+
+    async def set_confidence(self, fact_id: str, confidence: float) -> None:
+        """Overwrite the ``confidence`` for *fact_id* in-place.
+
+        Used by the decay worker to persist decayed confidence scores.
+        """
+        self._conn.execute(
+            "UPDATE facts SET confidence=? WHERE id=?",
+            (confidence, fact_id),
+        )
+        self._conn.commit()
