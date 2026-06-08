@@ -28,6 +28,8 @@ class EventType(str, Enum):
     SESSION_START = "session.start"
     SESSION_END = "session.end"
     HEARTBEAT = "heartbeat"
+    # Provider
+    LLM_FALLBACK = "llm.fallback"
 
 
 class Event(BaseModel):
