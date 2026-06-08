@@ -36,6 +36,9 @@ class Event(BaseModel):
     type: EventType
     user_id: str
     payload: dict[str, Any] = Field(default_factory=dict)
+    # Additive-optional rule: new fields MUST carry a default so that consumers on an older
+    # schema_version can still deserialize without breaking.  Increment when fields are added.
+    schema_version: int = 1
 
 
 Handler = Callable[[Event], Awaitable[None]]
