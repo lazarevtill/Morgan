@@ -12,6 +12,7 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MORGAN_", env_file=".env", extra="ignore")
 
@@ -60,6 +61,11 @@ class Settings(BaseSettings):
 
     # Optional path to a YAML file with extra capability overrides (provider/model key).
     models_yaml: str | None = None
+
+    # --- Learning lifecycle ---
+    learning_backend: Literal["local", "mlflow"] = "local"
+    # SQLite URI for MLflow tracking store (used when learning_backend="mlflow").
+    mlflow_tracking_uri: str = "sqlite:///./data/mlflow.db"
 
     @model_validator(mode="after")
     def _fill_provider_defaults(self) -> "Settings":
