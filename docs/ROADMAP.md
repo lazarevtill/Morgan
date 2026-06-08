@@ -119,8 +119,8 @@ Full rationale + citations: [`docs/superpowers/specs/2026-06-08-platform-archite
 | — | 1 Memory + Reasoning | working text assistant w/ cross-turn recall (vector+BM25+entity, temporal facts) | ✅ done (44 tests, mypy-strict clean) |
 | 0 | Research + roadmap | self-learning + platform decisions + roadmap | ✅ done |
 | 0.5 | Provider Seam + Privacy Foundation | provider Protocols + role router + capability descriptors + structured-output ladder; encryption + classification + egress redaction; `schema_version` on events; learning-lifecycle seam + MLflow scaffold | ✅ done (204 tests, mypy-strict clean) |
-| 1 | 2 Learning + Personalization | async worker: trait/preference extraction → UserModel → measurable adaptation; chosen learning strategy | ⏳ next |
-| 2 | 3 Skills + Tools + MCP | platform extensibility + self-evolving skills / auto-preprompt optimizer | ⏳ planned |
+| 1 | 2 Learning + Personalization | signal capture + bi-temporal consolidation worker + adaptive personalization (profile injected every turn, learn-from-edits) + the 3-layer eval gate | ✅ done (350 tests, mypy-strict clean) |
+| 2 | 3 Skills + Tools + MCP | platform extensibility + self-evolving skills / GEPA auto-preprompt optimizer (on the eval gate) | ⏳ next |
 | 3 | 4 Proactivity | heartbeat + cron + pattern-triggered, consent-gated | ⏳ planned |
 | 4 | 5 Perception/voice + remote | voice (Whisper+emotion) behind the seam; remote gateway (auth, streaming, channels) | ⏳ planned |
 | 5 | Self-learning engine | the training loop (preprompt optimizer and/or LoRA pipeline) with held-out gates | ⏳ planned |
