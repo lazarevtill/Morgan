@@ -54,6 +54,7 @@ class FakeChatClient:
         self.calls: int = 0
         self.last_messages: list[ChatMessage] = []
         self.last_model: str = ""
+        self.last_response_format: dict[str, object] | None = None
 
     def _next_reply(self) -> str:
         if self._queue:
@@ -73,6 +74,7 @@ class FakeChatClient:
         self.calls += 1
         self.last_messages = messages
         self.last_model = model
+        self.last_response_format = response_format
         reply = self._next_reply()
         return ChatResult(text=reply, model=model, tool_calls=list(self._tool_calls))
 
