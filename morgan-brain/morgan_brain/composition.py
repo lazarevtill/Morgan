@@ -21,9 +21,12 @@ from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
 from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex
 from morgan_brain.modules.perception.text.analyzer import TextPerception
 from morgan_brain.modules.personalization.passthrough import PassthroughPersonalizer
-from morgan_brain.modules.reasoning.llm.client import FakeLLMClient, LLMClient, OllamaLLMClient
 from morgan_brain.modules.reasoning.reasoner import ReasoningModule
 from morgan_brain.modules.skills.noop import NoopSkillEngine
+from morgan_brain.providers.adapters.fake import FakeChatClient
+from morgan_brain.providers.capability import CapabilityRegistry
+from morgan_brain.providers.factory import build_router
+from morgan_brain.providers.router import Binding, RoleRouter
 from morgan_brain.security.memory_gate import MemoryGate
 from morgan_brain.bus.inproc import InProcessBus
 
@@ -51,7 +54,7 @@ def _register_turn_storage(bus: InProcessBus, learner: MinimalLearner) -> None:
 def _assemble(
     *,
     embedder: Embedder,
-    llm: LLMClient,
+    router: RoleRouter,
     settings: Settings,
     clock: Callable[[], datetime],
     temporal_path: str,
@@ -71,9 +74,7 @@ def _assemble(
         personalizer=PassthroughPersonalizer(),
         memory=gate,
         skills=NoopSkillEngine(),
-        reasoner=ReasoningModule(
-            llm=llm, model=settings.llm_model, fast_model=settings.llm_fast_model
-        ),
+        reasoner=ReasoningModule(router=router, role="strong"),
         learner=learner,
         bus=bus,
     )
@@ -89,9 +90,9 @@ def build_orchestrator(settings: Settings | None = None) -> Orchestrator:
     if temporal_path != ":memory:":
         pathlib.Path(temporal_path).parent.mkdir(parents=True, exist_ok=True)
     embedder = OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
-    llm = OllamaLLMClient(settings.llm_endpoint)
+    router = build_router(settings)
     orch, _ = _assemble(
-        embedder=embedder, llm=llm, settings=settings, clock=_utcnow,
+        embedder=embedder, router=router, settings=settings, clock=_utcnow,
         temporal_path=temporal_path,
     )
     return orch
@@ -114,9 +115,27 @@ def build_orchestrator_for_test(
     """Test wiring: fake embedder + fake LLM + in-memory stores. Returns (orchestrator, memory
     handle) where the memory handle exposes recall_raw() for assertions."""
     settings = Settings(llm_model="test-model", llm_fast_model="test-model")
+
+    # Build a RoleRouter backed by FakeChatClient for the test.
+    fake_client = FakeChatClient(reply=reply)
+    reg = CapabilityRegistry.from_seed({
+        "fake/test-model": {
+            "supports_tools": True,
+            "json_mode": "json_schema",
+            "context_window": 32768,
+        }
+    })
+    test_router = RoleRouter(
+        reg=reg,
+        bindings={"strong": [Binding("fake", "test-model", fake_client)]},
+    )
+
     orch, memory_module = _assemble(
-        embedder=FakeEmbedder(dim=16), llm=FakeLLMClient(reply=reply),
-        settings=settings, clock=clock, temporal_path=":memory:",
+        embedder=FakeEmbedder(dim=16),
+        router=test_router,
+        settings=settings,
+        clock=clock,
+        temporal_path=":memory:",
     )
     return orch, MemoryTestHandle(memory_module)
 
