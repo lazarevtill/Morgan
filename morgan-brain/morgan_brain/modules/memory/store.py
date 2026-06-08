@@ -14,7 +14,7 @@ from morgan_brain.modules.memory.indexing.embedder import Embedder
 from morgan_brain.modules.memory.retrieval.bm25 import Bm25Index
 from morgan_brain.modules.memory.retrieval.fusion import reciprocal_rank_fusion
 from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
-from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex, VectorHit, VectorRecord
+from morgan_brain.modules.memory.stores.vector import VectorHit, VectorIndex, VectorRecord
 
 
 class MemoryModule:
@@ -22,12 +22,12 @@ class MemoryModule:
         self,
         *,
         embedder: Embedder,
-        vectors: InMemoryVectorIndex | object,
+        vectors: VectorIndex,
         temporal: SqliteTemporalStore,
         clock: Callable[[], datetime],
     ) -> None:
         self._embedder = embedder
-        self._vectors = vectors  # VectorIndex
+        self._vectors = vectors
         self._temporal = temporal
         self._clock = clock
         self._bm25 = Bm25Index()
