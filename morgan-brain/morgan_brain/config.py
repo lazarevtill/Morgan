@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     enable_channels: bool = False
     enable_mcp: bool = False
 
+    # --- MCP servers ---
+    # List of MCP server configs (each a dict matching McpServerConfig fields).
+    # Default empty → no MCP servers, no behavior change.
+    # Example: [{"name": "calendar", "url_or_cmd": "npx mcp-server-calendar", "transport": "stdio"}]
+    mcp_servers: list[dict[str, Any]] = Field(default_factory=list)
+
     # --- Channels ---
     telegram_token: str = ""
     discord_token: str = ""
