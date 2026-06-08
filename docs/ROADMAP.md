@@ -81,13 +81,44 @@ front of Phase 2 (they deliver the +14.92% with no GPU); the GEPA optimizer is t
 Phase 2 / start of Phase 3, gated on the eval harness existing. Anti-sycophancy /
 over-personalization guardrails become first-class in Personalization & Proactivity.
 
+## Platform decisions (Wave 0 research)
+
+Full rationale + citations: [`docs/superpowers/specs/2026-06-08-platform-architecture-decision.md`](superpowers/specs/2026-06-08-platform-architecture-decision.md).
+
+- **Provider-agnostic, thin layer.** Build our own Protocol seams (`interfaces/llm.py` `ChatClient`,
+  `interfaces/embedding.py` `Embedder`, `interfaces/rerank.py` `Reranker`) over the **OpenAI
+  Chat-Completions wire format** (official `openai` SDK + per-provider `base_url`). **Do NOT import
+  LiteLLM in-process** (March-2026 PyPI supply-chain compromise) — if a 100+-provider gateway is ever
+  needed, run it as a pinned-digest sidecar behind one adapter. Role router (fast/strong/vision/…),
+  per-model **CapabilityDescriptor** (seed from vendored pricing JSON + startup probe),
+  **structured-output ladder** (native constrained decoding → tool-as-schema → prompted-JSON →
+  Pydantic validate + re-ask), fallback as an `LLM_FALLBACK` event.
+- **Agent platform, thin & standards-native.** A2A **Agent Card** manifest (+ `x-morgan` grants);
+  `AgentSupervisor` lifecycle event-sourced on the bus; **extend** `PermissionGate` into
+  capability-token grants (RFC 8693/9396); isolation tiers in-process → **WASI** → Firecracker;
+  **MCP host/client hardened now** (OAuth 2.1+PKCE+RFC 8707, server pinning, tool-description
+  sanitization). Adopt-now-as-adapters; watch AGNTCY/ANP.
+- **Privacy.** Envelope encryption (Argon2id KEK + **SQLCipher**), data classification, **single
+  egress chokepoint with reversible PII redaction** (local models full context; remote redacted;
+  secret-tier hard-blocked), **Cedar**-backed two-gate consent, `delete_subject()` fan-out, JSON
+  export, hash-chained audit log. RAG-first/discardable-LoRA *is* the privacy decision (real erasure).
+- **Future-proofing.** Hexagonal core + edge adapters + anti-corruption layer; **add `schema_version`
+  to the Event model before events are persisted**; version Protocols additively; capability
+  negotiation; hybrid sync-hot-path + event side-effects; feature flags; state in DB not memory.
+- **Learning-lifecycle substrate = MLflow 3, local.** GEPA via `mlflow.genai.optimize_prompts` +
+  `GepaPromptOptimizer`; champion preprompt = Prompt Registry aliases; validation gate =
+  `mlflow.genai.evaluate` + custom scorers + `make_judge`; LoRA tracking via Model Registry (later);
+  tracing via the `mlflow-tracing` slim package only. Privacy hard rules:
+  `MLFLOW_DISABLE_TELEMETRY=true` + `DO_NOT_TRACK=true`, all judge/reflection models local.
+
 ## Status
 
 | Wave | Phase | Outcome | State |
 |------|-------|---------|-------|
 | — | 0 Foundation | skeleton, config, events, protocols, MemoryGate, data model | ✅ done |
 | — | 1 Memory + Reasoning | working text assistant w/ cross-turn recall (vector+BM25+entity, temporal facts) | ✅ done (44 tests, mypy-strict clean) |
-| 0 | Research + roadmap | self-learning decision + master roadmap | 🔄 in progress |
+| 0 | Research + roadmap | self-learning + platform decisions + roadmap | ✅ done |
+| 0.5 | Provider Seam + Privacy Foundation | provider Protocols + role router + capability descriptors + structured-output ladder; encryption + classification + egress redaction; `schema_version` on events; local MLflow tracking scaffold | ⏳ next |
 | 1 | 2 Learning + Personalization | async worker: trait/preference extraction → UserModel → measurable adaptation; chosen learning strategy | ⏳ planned |
 | 2 | 3 Skills + Tools + MCP | platform extensibility + self-evolving skills / auto-preprompt optimizer | ⏳ planned |
 | 3 | 4 Proactivity | heartbeat + cron + pattern-triggered, consent-gated | ⏳ planned |
@@ -100,6 +131,27 @@ over-personalization guardrails become first-class in Personalization & Proactiv
 Each wave: **research delta → design spec → implementation plan → subagent-driven execution
 (TDD, two-stage review) → verification → finish-branch**. Independent research/audits use
 multi-agent workflows. Every wave ends green (tests + ruff + mypy-strict) and shippable.
+
+### Wave 0.5 — Provider Seam + Privacy Foundation (NEW, precedes Wave 1)
+Foundational to every later wave; highest single risk-reduction. Closes the gap that the
+`LLMClient`/`Embedder` seams named in principle #9 don't yet exist (Phase 1 uses a concrete
+`OllamaLLMClient`).
+- **Provider seams:** `interfaces/llm.py` (`ChatClient`), `interfaces/embedding.py` (`Embedder`),
+  `interfaces/rerank.py` (`Reranker`); refactor `ReasoningModule` onto `ChatClient` via a **role**
+  string. First adapters: `OllamaAdapter` + `OpenAICompatAdapter` (official `openai` SDK,
+  configurable `base_url`); `AnthropicAdapter` optional.
+- **Capability + routing:** `CapabilityDescriptor` (vendored pricing JSON + startup probe + YAML
+  override); role router (fast/strong/vision/long_context/embedding/rerank), capability-gated.
+- **Structured-output ladder:** native constrained decoding → tool-as-schema → prompted-JSON →
+  Pydantic validate + bounded re-ask. Streaming normalized to one internal delta type; jittered
+  retry (SDK retries off) + role-level fallback emitting `LLM_FALLBACK`.
+- **Future-proofing:** add `schema_version` to `interfaces/events.py` Event + CI schema-drift check.
+- **Privacy foundation:** SQLCipher on the SQLite store; Argon2id KEK + envelope DEKs; data
+  classification tags; the **egress redaction gateway** (regex → Presidio → deterministic
+  placeholders → streaming rehydrator) co-located with the provider layer; secret-tier hard-block.
+- **MLflow scaffold:** local tracking (`sqlite:///`), telemetry disabled, behind an `Optimizer`/
+  `Registry` seam; `mlflow-tracing` slim wired into the service layer.
+- Ends green (tests + ruff + mypy-strict), provider-swappable, with a redaction completeness test.
 
 ### Wave 1 — Phase 2: Learning + Personalization
 The heart of "learns from me." Async `learning-worker` (off the request path):
