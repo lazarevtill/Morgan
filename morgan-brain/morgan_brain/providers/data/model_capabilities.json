@@ -1,0 +1,81 @@
+{
+  "_comment": "Vendored capability seed — curated snapshot, not exhaustive. Override at runtime via CapabilityRegistry.override(). Values are conservative where uncertain.",
+
+  "ollama/qwen2.5:7b": {
+    "context_window": 32768,
+    "max_output": 4096,
+    "supports_tools": true,
+    "supports_parallel_tools": false,
+    "json_mode": "json_schema",
+    "supports_grammar": false,
+    "supports_vision": false,
+    "embedding_dim": 0,
+    "cost_in": 0.0,
+    "cost_out": 0.0
+  },
+
+  "ollama/qwen3:8b": {
+    "context_window": 32768,
+    "max_output": 4096,
+    "supports_tools": true,
+    "supports_parallel_tools": false,
+    "json_mode": "json_schema",
+    "supports_grammar": false,
+    "supports_vision": false,
+    "embedding_dim": 0,
+    "cost_in": 0.0,
+    "cost_out": 0.0
+  },
+
+  "ollama/llama3.1:8b": {
+    "context_window": 131072,
+    "max_output": 4096,
+    "supports_tools": true,
+    "supports_parallel_tools": false,
+    "json_mode": "json_object",
+    "supports_grammar": false,
+    "supports_vision": false,
+    "embedding_dim": 0,
+    "cost_in": 0.0,
+    "cost_out": 0.0
+  },
+
+  "ollama/qwen3-embedding:4b": {
+    "context_window": 8192,
+    "max_output": 0,
+    "supports_tools": false,
+    "supports_parallel_tools": false,
+    "json_mode": "none",
+    "supports_grammar": false,
+    "supports_vision": false,
+    "embedding_dim": 2560,
+    "cost_in": 0.0,
+    "cost_out": 0.0
+  },
+
+  "openai/gpt-4o-mini": {
+    "context_window": 128000,
+    "max_output": 16384,
+    "supports_tools": true,
+    "supports_parallel_tools": true,
+    "json_mode": "json_schema",
+    "supports_grammar": false,
+    "supports_vision": true,
+    "embedding_dim": 0,
+    "cost_in": 0.15,
+    "cost_out": 0.60
+  },
+
+  "anthropic/claude-3-5-sonnet": {
+    "context_window": 200000,
+    "max_output": 8192,
+    "supports_tools": true,
+    "supports_parallel_tools": true,
+    "json_mode": "json_object",
+    "supports_grammar": false,
+    "supports_vision": true,
+    "embedding_dim": 0,
+    "cost_in": 3.0,
+    "cost_out": 15.0
+  }
+}
