@@ -10,8 +10,6 @@ Coverage:
 """
 from __future__ import annotations
 
-import pytest
-
 from morgan_brain.privacy.classification import DataClass, classify
 
 
