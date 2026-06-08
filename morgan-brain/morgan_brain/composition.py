@@ -24,7 +24,8 @@ from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex
 from morgan_brain.modules.perception.text.analyzer import TextPerception
 from morgan_brain.modules.personalization.adaptive import AdaptivePersonalizer
 from morgan_brain.modules.reasoning.reasoner import ReasoningModule
-from morgan_brain.modules.skills.noop import NoopSkillEngine
+from morgan_brain.learning_lifecycle.local import LocalPromptRegistry
+from morgan_brain.modules.skills.registry import SkillRegistry
 from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.factory import build_router
@@ -60,6 +61,7 @@ def _assemble(
     settings: Settings,
     clock: Callable[[], datetime],
     temporal_path: str,
+    prompt_registry: LocalPromptRegistry | None = None,
 ) -> tuple[Orchestrator, MemoryModule]:
     temporal = SqliteTemporalStore(temporal_path)
     memory_module = MemoryModule(
@@ -96,11 +98,12 @@ def _assemble(
         profile_builder=profile_builder,
         budget=settings.personalization_budget,
     )
+    skills = SkillRegistry(registry=prompt_registry)
     orch = Orchestrator(
         perception=TextPerception(),
         personalizer=personalizer,
         memory=gate,
-        skills=NoopSkillEngine(),
+        skills=skills,
         reasoner=ReasoningModule(router=router, role="strong"),
         learner=learner,
         bus=bus,
@@ -118,9 +121,14 @@ def build_orchestrator(settings: Settings | None = None) -> Orchestrator:
         pathlib.Path(temporal_path).parent.mkdir(parents=True, exist_ok=True)
     embedder = OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
     router = build_router(settings)
+    prom_registry = LocalPromptRegistry()
     orch, _ = _assemble(
-        embedder=embedder, router=router, settings=settings, clock=_utcnow,
+        embedder=embedder,
+        router=router,
+        settings=settings,
+        clock=_utcnow,
         temporal_path=temporal_path,
+        prompt_registry=prom_registry,
     )
     return orch
 
