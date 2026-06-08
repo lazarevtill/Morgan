@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Callable
 
-from morgan_brain.models.memory import Memory, MemoryQuery, TemporalFact
+from morgan_brain.models.memory import Memory, MemoryKind, MemoryQuery, TemporalFact
 from morgan_brain.modules.memory.indexing.embedder import Embedder
 from morgan_brain.modules.memory.retrieval.bm25 import Bm25Index
 from morgan_brain.modules.memory.retrieval.fusion import reciprocal_rank_fusion
@@ -67,8 +67,22 @@ class MemoryModule:
         ]
 
         fused_ids = reciprocal_rank_fusion([vector_ranking, bm25_ranking, entity_ranking])
-        results = [self._by_id[mid] for mid in fused_ids if mid in self._by_id]
-        return results[: query.top_k]
+        episodic = [self._by_id[mid] for mid in fused_ids if mid in self._by_id]
+
+        # Currently-valid facts are authoritative; surface them alongside episodic recall.
+        # Phase 1 includes all current facts (volume is small until Phase 2 extraction);
+        # relevance-ranking of facts is a Phase 2 concern.
+        facts = await self._temporal.current_facts(user_id=query.user_id)
+        fact_memories = [
+            Memory(
+                user_id=query.user_id,
+                kind=MemoryKind.SEMANTIC,
+                content=f"{f.subject} {f.predicate} {f.object}".replace("_", " "),
+                source=f.source,
+            )
+            for f in facts
+        ]
+        return (fact_memories + episodic)[: query.top_k]
 
     def _owned(self, memory_id: str, user_id: str) -> bool:
         mem = self._by_id.get(memory_id)
