@@ -81,9 +81,19 @@ class Optimizer(Protocol):
         self,
         name: str,
         *,
-        train: list[dict[str, Any]],
+        train: list[Any],
         scorer: Any,
         max_calls: int = 100,
+        current_body: str = "",
     ) -> PromptVersion:
-        """Produce a candidate optimized prompt version without promoting it."""
+        """Produce a candidate optimized prompt version without promoting it.
+
+        Args:
+            name:         Prompt name (used in the returned ``PromptVersion``).
+            train:        Training examples — ``list[Example]`` or ``list[dict]``.
+            scorer:       Callable ``(body: str) → float`` (sync or async).
+            max_calls:    Maximum number of LLM / optimization iterations allowed.
+            current_body: The current champion body (baseline for comparison).
+                          Defaults to ``""`` (no current champion).
+        """
         ...
