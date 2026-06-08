@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
@@ -233,7 +233,16 @@ class CronService:
         """Return the names of all registered jobs."""
         return self._scheduler.list_jobs()
 
-    # Expose the underlying scheduler for tests that need tick().
+    async def tick(self, now: datetime) -> None:
+        """Drive a tick on the underlying scheduler (no-op if not InProcessScheduler).
+
+        This provides a type-safe way for the run loop and tests to advance the
+        scheduler clock without casting to InProcessScheduler.
+        """
+        if isinstance(self._scheduler, InProcessScheduler):
+            await self._scheduler.tick(now)
+
+    # Expose the underlying scheduler for tests that need tick() directly.
     @property
     def scheduler(self) -> Scheduler:
         return self._scheduler
