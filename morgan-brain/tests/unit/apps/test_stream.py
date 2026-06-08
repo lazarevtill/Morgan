@@ -12,10 +12,9 @@ from fastapi import FastAPI, Depends
 from fastapi.testclient import TestClient
 
 from morgan_brain.apps.brain_api.auth import require_api_key
-from morgan_brain.apps.brain_api.app import ChatRequest, create_app
+from morgan_brain.apps.brain_api.app import ChatRequest
 from morgan_brain.composition import build_orchestrator_for_test
 from morgan_brain.config import Settings
-from morgan_brain.interfaces.events import EventType
 
 _CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
 
@@ -67,8 +66,7 @@ async def test_stream_turn_is_user_scoped() -> None:
 
 def _sse_app(api_key: str = "") -> tuple[FastAPI, Settings, TestClient]:
     """Return a test app with the SSE endpoint and a known test reply."""
-    from morgan_brain.composition import build_orchestrator_for_test, MemoryTestHandle
-    from morgan_brain.core.orchestrator import Orchestrator
+    from morgan_brain.composition import build_orchestrator_for_test
     from morgan_brain.config import Settings
 
     settings = Settings(api_key=api_key, llm_model="test-model", llm_fast_model="test-model")
@@ -120,9 +118,9 @@ def test_sse_endpoint_delta_json_well_formed() -> None:
     _, _, client = _sse_app()
     resp = client.post("/api/chat/stream", json={"message": "hello"})
     data_lines = [line for line in resp.text.splitlines() if line.startswith("data:")]
-    token_lines = [l for l in data_lines if l != "data: [DONE]"]
+    token_lines = [ln for ln in data_lines if ln != "data: [DONE]"]
     for line in token_lines:
-        payload = json.loads(line[len("data: "):])
+        payload = json.loads(line[len("data: "):])  # noqa: FURB184
         assert "delta" in payload
         assert isinstance(payload["delta"], str)
 

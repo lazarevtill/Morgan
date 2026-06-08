@@ -125,15 +125,6 @@ class Orchestrator:
             memories=memories,
             skill_prompt=skill_prompt,
         )
-        # Determine the model used (best-effort: inspect the router if reachable).
-        needs_tools = bool(getattr(request, "tools", None))
-        try:
-            _, model_used = self._reasoner._router.chat_for(  # type: ignore[attr-defined]
-                self._reasoner._role, needs_tools=needs_tools  # type: ignore[attr-defined]
-            )
-        except AttributeError:
-            model_used = ""
-
         chunks: list[str] = []
         async for delta in self._reasoner.stream(request):
             chunks.append(delta)

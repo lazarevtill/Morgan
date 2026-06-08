@@ -19,9 +19,9 @@ internal verify logic is entirely local to this module.
 """
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable, Coroutine
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import HTTPException, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from morgan_brain.config import Settings
@@ -33,7 +33,7 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 _apikey_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
-def require_api_key(settings: Settings) -> Callable[..., None]:
+def require_api_key(settings: Settings) -> Callable[..., Coroutine[Any, Any, None]]:
     """Return a FastAPI dependency that enforces the configured API key.
 
     When the key is empty or the default sentinel (``"change-me"``), enforcement is

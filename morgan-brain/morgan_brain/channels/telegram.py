@@ -18,13 +18,7 @@ Status: SEAM — long-polling integration is deferred (GPU / channel deployment 
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from morgan_brain.channels.base import OutboundMessage
-
-if TYPE_CHECKING:
-    # Only for static analysis; never executed at runtime unless the dep is present.
-    import telegram  # noqa: F401
 
 
 class TelegramChannel:
@@ -59,7 +53,7 @@ class TelegramChannel:
             ImportError: If ``python-telegram-bot`` is not installed.
         """
         try:
-            from telegram.ext import Application  # type: ignore[import-untyped]
+            from telegram.ext import Application  # type: ignore[import-not-found]
         except ImportError as exc:  # pragma: no cover
             raise ImportError(
                 "python-telegram-bot is required for TelegramChannel. "
