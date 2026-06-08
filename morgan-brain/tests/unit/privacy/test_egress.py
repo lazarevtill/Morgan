@@ -168,6 +168,60 @@ class TestRemoteGateRedaction:
             f"Email should have been redacted, got: {sent_content!r}"
         )
 
+    @pytest.mark.asyncio
+    async def test_remote_stream_flushes_placeholder_without_finish_delta(self) -> None:
+        """If the provider ends the stream without a finish delta, any placeholder
+        that straddles the stream boundary must still be rehydrated and emitted."""
+        from typing import AsyncIterator
+
+        from morgan_brain.providers.wire import StreamDelta
+
+        # Build a redactor and pre-populate its map so we know the placeholder.
+        redactor = EgressRedactor()
+        _redacted, rmap = redactor.redact("contact bob@example.org please")
+        placeholder = next(iter(rmap))  # e.g. «EMAIL_1»
+
+        # Split the placeholder across two chunks, no finish delta at the end.
+        half = len(placeholder) // 2
+        chunk_a = placeholder[:half]
+        chunk_b = placeholder[half:]
+
+        class NoFinishClient:
+            """Fake client that yields a split placeholder with NO finish delta."""
+
+            async def _astream_impl(
+                self,
+                messages: list[ChatMessage],
+                *,
+                model: str,
+                tools: object = None,
+            ) -> AsyncIterator[StreamDelta]:
+                yield StreamDelta(kind="text_delta", text=chunk_a)
+                yield StreamDelta(kind="text_delta", text=chunk_b)
+                # intentionally no finish delta
+
+            def astream(
+                self,
+                messages: list[ChatMessage],
+                *,
+                model: str,
+                tools: object = None,
+            ) -> AsyncIterator[StreamDelta]:
+                return self._astream_impl(messages, model=model, tools=tools)
+
+        gate = EgressGate(NoFinishClient(), is_remote=True, redactor=redactor)  # type: ignore[arg-type]
+
+        collected_texts: list[str] = []
+        async for delta in gate.astream([user_msg("contact bob@example.org please")], model="m"):
+            if delta.kind == "text_delta" and delta.text:
+                collected_texts.append(delta.text)
+
+        output = "".join(collected_texts)
+        assert "bob@example.org" in output, (
+            f"Expected rehydrated email in output, got: {output!r}"
+        )
+        assert "«" not in output, f"Unrehydrated placeholder leaked into output: {output!r}"
+
 
 # ---------------------------------------------------------------------------
 # Remote gate — SECRET blocking

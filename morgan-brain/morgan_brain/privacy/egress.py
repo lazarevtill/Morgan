@@ -112,19 +112,28 @@ class EgressGate:
         from morgan_brain.privacy.redaction import rehydrate_stream
 
         step = rehydrate_stream(rmap)
+        _buffer_flushed = False
 
         async for delta in self._inner.astream(redacted_messages, model=model, tools=tools):
             if delta.kind == "text_delta" and delta.text:
                 rehydrated = step(delta.text)
                 yield StreamDelta(kind="text_delta", text=rehydrated)
             elif delta.kind == "finish":
-                # Flush the stream buffer
+                # Flush the stream buffer before forwarding the finish delta
                 remainder = step(None)
+                _buffer_flushed = True
                 if remainder:
                     yield StreamDelta(kind="text_delta", text=remainder)
                 yield delta
             else:
                 yield delta
+
+        # If the provider ended the stream without a finish delta, flush any
+        # remaining buffered/partially-rehydrated content now.
+        if not _buffer_flushed:
+            remainder = step(None)
+            if remainder:
+                yield StreamDelta(kind="text_delta", text=remainder)
 
     # ------------------------------------------------------------------
     # Helpers
