@@ -5,14 +5,33 @@ Uses a restricted AST walk — NO ``eval()`` of arbitrary code.
 Supported operators: + - * / // ** % and parentheses, integer and float literals.
 All other nodes (function calls, names, attributes, dunder methods, imports, …)
 are rejected with a ``ToolResult(ok=False, error=…)``.
+
+Resource-exhaustion guard
+-------------------------
+* ``**`` (Pow): rejects when the estimated result bit-length would exceed
+  ``_MAX_RESULT_BITS`` (default 10 000).  Guards both integer and float exponents.
+  The right-hand operand alone must not exceed ``_MAX_EXP`` (1 000).
+* Any BinOp intermediate integer result whose ``bit_length()`` exceeds
+  ``_MAX_RESULT_BITS`` is rejected immediately, preventing huge-Mult chains.
 """
 from __future__ import annotations
 
 import ast
+import math
 import operator
 from typing import Any, Union
 
 from morgan_brain.interfaces.tools import ToolResult
+
+# ---------------------------------------------------------------------------
+# Resource limits
+# ---------------------------------------------------------------------------
+
+# Maximum estimated bit-length of any intermediate or final integer result.
+_MAX_RESULT_BITS: int = 10_000  # ~3 010 decimal digits
+
+# Maximum allowed exponent (right-hand side of **).
+_MAX_EXP: int = 1_000
 
 # ---------------------------------------------------------------------------
 # Safe AST evaluator
@@ -53,6 +72,52 @@ _UNARYOP_MAP: dict[type[ast.unaryop], Any] = {
 _Number = Union[int, float]
 
 
+def _check_int_magnitude(value: int, op_name: str) -> None:
+    """Raise ``ValueError`` if *value* is an integer exceeding ``_MAX_RESULT_BITS``."""
+    if value.bit_length() > _MAX_RESULT_BITS:
+        raise ValueError(
+            f"Result of {op_name} is too large "
+            f"(> {_MAX_RESULT_BITS} bits); operation rejected to prevent DoS."
+        )
+
+
+def _guard_pow(left: _Number, right: _Number) -> _Number:
+    """Apply exponentiation with resource-exhaustion guards.
+
+    Raises ``ValueError`` if the result would be astronomically large.
+    """
+    # Guard: exponent must not exceed _MAX_EXP (catches 10**10**10 right side first)
+    if isinstance(right, float):
+        if not math.isfinite(right):
+            raise ValueError("Non-finite exponent")
+        abs_right = abs(right)
+    else:
+        abs_right = abs(right)
+
+    if abs_right > _MAX_EXP:
+        raise ValueError(
+            f"Exponent {right!r} exceeds the maximum allowed value ({_MAX_EXP}); "
+            "operation rejected to prevent DoS."
+        )
+
+    # Guard: estimate result bit-length for integer bases
+    if isinstance(left, int) and isinstance(right, int) and right > 0:
+        # bit_length of left**right ≈ right * bit_length(left)
+        estimated_bits = right * max(abs(left).bit_length(), 1)
+        if estimated_bits > _MAX_RESULT_BITS:
+            raise ValueError(
+                f"Result of {left}**{right} would require ~{estimated_bits} bits; "
+                "operation rejected to prevent DoS."
+            )
+
+    raw = operator.pow(left, right)
+    # Post-compute check for integer results (catches float→int edge cases)
+    if isinstance(raw, int):
+        _check_int_magnitude(raw, f"{left}**{right}")
+    result: _Number = raw  # operator.pow returns int|float for int|float inputs
+    return result
+
+
 def _eval_node(node: ast.AST) -> _Number:
     """Recursively evaluate a safe AST node; raise ``ValueError`` for anything else."""
     if not isinstance(node, _ALLOWED_NODE_TYPES):
@@ -79,7 +144,18 @@ def _eval_node(node: ast.AST) -> _Number:
             raise ValueError("Division by zero")
         if isinstance(node.op, ast.FloorDiv) and right == 0:
             raise ValueError("Division by zero")
-        return op_fn(left, right)  # type: ignore[no-any-return]
+
+        # --- Resource-exhaustion guards -----------------------------------
+        if isinstance(node.op, ast.Pow):
+            return _guard_pow(left, right)
+
+        result = op_fn(left, right)
+
+        # Guard intermediate integer magnitude (catches huge-Mult chains)
+        if isinstance(result, int):
+            _check_int_magnitude(result, type(node.op).__name__)
+
+        return result  # type: ignore[no-any-return]
 
     if isinstance(node, ast.UnaryOp):
         operand = _eval_node(node.operand)
