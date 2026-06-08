@@ -46,3 +46,19 @@ async def test_facts_delegate_to_temporal_store():
                                      object="Berlin"))
     facts = await m.current_facts(user_id="u1")
     assert len(facts) == 1 and facts[0].object == "Berlin"
+
+
+async def test_recall_surfaces_current_facts():
+    m = _module()
+    await m.upsert_fact(TemporalFact(user_id="u1", subject="user", predicate="lives_in",
+                                     object="Berlin"))
+    hits = await m.recall(MemoryQuery(user_id="u1", text="anything", top_k=5))
+    assert any("Berlin" in h.content for h in hits)
+
+
+async def test_recall_facts_are_user_scoped():
+    m = _module()
+    await m.upsert_fact(TemporalFact(user_id="u1", subject="user", predicate="lives_in",
+                                     object="Berlin"))
+    hits = await m.recall(MemoryQuery(user_id="u2", text="anything", top_k=5))
+    assert hits == []
