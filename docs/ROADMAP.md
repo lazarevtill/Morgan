@@ -122,9 +122,9 @@ Full rationale + citations: [`docs/superpowers/specs/2026-06-08-platform-archite
 | 1 | 2 Learning + Personalization | signal capture + bi-temporal consolidation worker + adaptive personalization (profile injected every turn, learn-from-edits) + the 3-layer eval gate | ✅ done (350 tests, mypy-strict clean) |
 | 2 | 3 Skills + Tools + MCP | tools (permission-gated, SSRF/DoS-hardened) + skills (trigger-matched, champion-versioned) + hardened MCP host (sanitize/pin/allowlist/default-deny) + **GEPA champion-preprompt optimizer** on the eval gate | ✅ done (542 tests, mypy-strict clean) |
 | 3 | 4 Proactivity | CronService + HeartbeatManager (APScheduler optional) + **LearningScheduler** (automates nightly consolidation + optimizer) + consent-gated ProactivityEngine; wired into the learning-worker | ✅ done (615 tests, mypy-strict clean) |
-| 4 | 5 Perception/voice + remote | voice (Whisper+emotion) behind the seam; remote gateway (auth, streaming, channels) | ⏳ next |
+| 4 | 5 Perception/voice + remote | **remote gateway** (API-key auth on /api/*, SSE streaming `/api/chat/stream`, channel gateway + per-chat allowlist + Telegram seam). Voice (Whisper+emotion) deferred behind the ready perception seam. | ✅ done (644 tests) — voice deferred |
 | 5 | Self-learning engine | **GEPA preprompt optimizer loop delivered** in Phase 3 (mine signals → reflective/MLflow-GEPA optimize → strict beats-current gate → champion promote/rollback). LoRA pipeline deferred by design (only if the 4-condition escalation test fires). | ✅ done (optimizer); LoRA deferred |
-| 6 | Integration + wiring | E2E, personalization eval harness, hardening, Ollama+remote wiring guide | ⏳ planned |
+| 6 | Integration + wiring | E2E suite green (644 tests), eval harness in place, security-hardened (SSRF/DoS/MCP), wiring guide ([`docs/WIRING.md`](WIRING.md)) | ✅ done — voice + LoRA deferred by design |
 
 ## Wave plans
 

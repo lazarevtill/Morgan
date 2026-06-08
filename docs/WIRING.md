@@ -1,7 +1,7 @@
 # Wiring Morgan to your models + running it
 
 How to point Morgan at your own LLM backend(s), run it, and start the learning loop. Reflects the
-**current** state on `main` (Phases 0–3 + Wave 0.5). Honest about what's automated vs. manual today.
+**current** state on `main` (Phases 0–5 + Wave 0.5; self-learning loop live). Honest about what's automated vs. deferred.
 
 > Morgan is **provider-agnostic**: any OpenAI-compatible endpoint works (local Ollama / llama.cpp /
 > vLLM / LM Studio, or a remote provider). Ollama is just the easy local default.
@@ -71,9 +71,10 @@ injected every turn so responses adapt.
 - **Feedback (capture it):** record edits/retries/thumbs against a turn via the `SignalRecorder`
   (edit = highest-value signal). These feed consolidation + the optimizer. *(A thin HTTP/CLI surface
   for feedback is part of Phase 4/Wave 6; the `SignalRecorder` API exists now.)*
-- **Consolidation (currently triggered, automated in Phase 4):** `ConsolidationLearner.consolidate(user_id)`
+- **Consolidation (automated):** with `MORGAN_ENABLE_SCHEDULING=true`, the `learning-worker` runs a
+  `LearningScheduler` that fires nightly consolidation — `ConsolidationLearner.consolidate(user_id)`
   turns recent episodics into durable bi-temporal facts (ADD/UPDATE/DELETE/NOOP, contradiction →
-  supersede, confidence decay). **Phase 4 adds the nightly/idle cron that runs this automatically.**
+  supersede, confidence decay). (APScheduler optional; an in-process scheduler is the default.)
 - **Self-optimization (offline, gated):** `ChampionTrainer.train(...)` mines positive examples from
   your high-value signals, asks the **reflection** model to propose an improved champion preprompt,
   scores it on the golden-set eval, and promotes it **only if it beats the current champion**. Enable
@@ -91,15 +92,25 @@ injected every turn so responses adapt.
 
 ## 6. Verifying quality (the eval gate)
 The 3-layer eval harness (`morgan_brain/eval/`) + golden set (`tests/eval/golden_set.json`) is the
-"did it learn me / don't regress" gate. Run the suite: `pytest -q` (542 green). Extend the golden set
+"did it learn me / don't regress" gate. Run the suite: `pytest -q` (644 green). Extend the golden set
 with your own preference probes; any self-learned promotion must beat the current champion on it.
 
-## 7. What's not automated yet (remaining waves)
-- **Phase 4:** heartbeat + cron to run consolidation/optimization on a schedule, and proactive
-  suggestions (consent-gated).
-- **Phase 5:** voice (Whisper + emotion) behind the perception seam; a hardened **remote gateway**
-  (Tailscale-first, JWT/API-key, SSE streaming, Telegram/Discord channels).
-- **Wave 6:** full end-to-end integration + this guide's automation.
+## 7. Remote access (Phase 5)
+- **Run the worker** (automates learning) alongside the API:
+  `MORGAN_ENABLE_SCHEDULING=true python -m morgan_brain.apps.learning_worker`.
+- **Streaming:** `POST /api/chat/stream` returns Server-Sent Events (`data: {...}` deltas, terminal
+  `data: [DONE]`).
+- **Auth (defense-in-depth):** `/api/*` requires `Authorization: Bearer <MORGAN_API_KEY>` (or
+  `X-API-Key`) **when a key is set**. `/health` is open.
+  > ⚠️ **Before exposing remotely you MUST set a real `MORGAN_API_KEY`** (the default `change-me`
+  > leaves `/api/*` open for local dev). Primary control per the architecture is **network posture**:
+  > run behind a **Tailscale tailnet with no public ports** — do not bind `0.0.0.0` to the internet.
+- **Channels:** set `MORGAN_ENABLE_CHANNELS=true` + `MORGAN_TELEGRAM_TOKEN` (needs `[channels]`).
+  Inbound messages are **per-chat allowlisted** (default-deny) before reaching the assistant.
 
-Until Phase 4 lands the scheduler, run consolidation/optimization on demand (call
-`ConsolidationLearner.consolidate` / `ChampionTrainer.train` from a script or REPL against your stores).
+## 8. What remains
+- **Voice** (Whisper ASR + Wav2Vec2 emotion + prosody) — the perception seam is ready; it plugs in
+  as the `perception-gpu` service with zero downstream change. Deferred (GPU service).
+- **LoRA fine-tuning** — deliberately deferred; only build it if the 4-condition escalation test in
+  the [self-learning decision](superpowers/specs/2026-06-08-self-learning-decision.md) ever fires.
+  RAG + the GEPA-optimized champion preprompt are the default and cover the vast majority of gains.
