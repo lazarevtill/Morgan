@@ -6,7 +6,6 @@ Everything above this layer depends on the seam types (``ChatClient``, ``Embedde
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -96,7 +95,7 @@ def _apply_yaml_overrides(reg: CapabilityRegistry, yaml_path: str) -> None:
     ``CapabilityDescriptor`` field dicts.
     """
     try:
-        import yaml  # type: ignore[import]
+        import yaml  # type: ignore[import-untyped]
     except ImportError:
         # PyYAML not installed — skip silently (factory still works without it)
         return

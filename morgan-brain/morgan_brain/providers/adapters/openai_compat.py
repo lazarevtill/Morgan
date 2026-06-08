@@ -61,7 +61,7 @@ class OpenAICompatAdapter:
         provider: str,
     ) -> None:
         # Import here so that the openai SDK is only required if this adapter is used.
-        import openai  # type: ignore[import]
+        import openai
 
         self._provider = provider
         self._base_url = base_url
@@ -215,7 +215,7 @@ class OpenAICompatEmbedder:
         api_key: str,
         model: str,
     ) -> None:
-        import openai  # type: ignore[import]
+        import openai
 
         self._model = model
         self._client = openai.AsyncOpenAI(

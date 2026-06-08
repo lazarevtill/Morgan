@@ -30,6 +30,6 @@ def build_messages(request: ReasoningRequest) -> list[ChatMessage]:
     messages: list[ChatMessage] = [ChatMessage(role="system", content="\n\n".join(parts))]
     for msg in request.history:
         # msg.role is a Role enum; .value gives the string ("user"/"assistant"/"system")
-        messages.append(ChatMessage(role=msg.role.value, content=msg.content))  # type: ignore[arg-type]
+        messages.append(ChatMessage(role=msg.role.value, content=msg.content))
     messages.append(ChatMessage(role="user", content=request.perception.text))
     return messages
