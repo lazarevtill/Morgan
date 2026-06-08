@@ -40,6 +40,16 @@ perception = ["openai-whisper", "onnxruntime", "transformers"]
 learning = ["mlflow>=3.4"]
 # Slim tracing-only package for the hot-path service layer (much smaller than full mlflow).
 tracing = ["mlflow-tracing"]
+# Privacy — field-level encryption + Presidio NER for PII redaction (Wave 0.5b).
+# presidio-analyzer/anonymizer: Tier-2 NER redaction (closes non-English name gap).
+# cryptography: AES-256-GCM seal/open for field-level encryption.
+# argon2-cffi: Argon2id KEK derivation from passphrase.
+privacy = [
+    "presidio-analyzer",
+    "presidio-anonymizer",
+    "cryptography>=42",
+    "argon2-cffi>=23",
+]
 
 [project.scripts]
 morgan = "clients.cli.__main__:main"
@@ -58,6 +68,16 @@ target-version = "py312"
 [tool.mypy]
 python_version = "3.12"
 strict = true
+
+# Optional-dep modules: warn_unused_ignores must be disabled per-file because
+# whether import-not-found fires depends on the local install state.  Using a
+# per-file override is cleaner than removing strict globally.
+[[tool.mypy.overrides]]
+module = [
+    "morgan_brain.privacy.redaction",
+    "morgan_brain.privacy.crypto",
+]
+warn_unused_ignores = false
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

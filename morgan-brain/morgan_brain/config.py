@@ -67,6 +67,19 @@ class Settings(BaseSettings):
     # SQLite URI for MLflow tracking store (used when learning_backend="mlflow").
     mlflow_tracking_uri: str = "sqlite:///./data/mlflow.db"
 
+    # --- Privacy (Wave 0.5b) ---
+    # redact_egress: enable PII redaction on outbound messages to remote providers.
+    # When True, EgressGate wraps every remote ChatClient with an EgressRedactor.
+    redact_egress: bool = False
+
+    # encryption: enable field-level AES-256-GCM encryption for sensitive store payloads.
+    # Requires the 'privacy' optional extra (cryptography + argon2-cffi).
+    encryption: bool = False
+
+    # passphrase: used to derive the Key Encryption Key (KEK) via Argon2id.
+    # In production, prefer a keyring reference rather than storing the raw passphrase.
+    passphrase: str = ""
+
     @model_validator(mode="after")
     def _fill_provider_defaults(self) -> "Settings":
         """Populate role_bindings and providers from legacy llm_* fields if not set."""
