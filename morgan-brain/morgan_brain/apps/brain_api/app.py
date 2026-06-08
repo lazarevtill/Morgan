@@ -1,7 +1,15 @@
-"""FastAPI app factory for brain-api. Phase 1: /api/chat drives the cognitive loop."""
+"""FastAPI app factory for brain-api.
+
+Phase 1: /api/chat (blocking) drives the cognitive loop.
+Phase 5: /api/chat/stream (SSE) streams token deltas with a terminal [DONE] sentinel.
+"""
 from __future__ import annotations
 
+import json
+from typing import AsyncIterator
+
 from fastapi import Depends, FastAPI
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from morgan_brain import __version__
@@ -38,6 +46,26 @@ def create_app() -> FastAPI:
             user_id=user_id, text=req.message, session_id=req.session_id
         )
         return ChatResponse(response=result.text, model_used=result.model_used)
+
+    @app.post("/api/chat/stream", dependencies=[_auth])
+    async def chat_stream(req: ChatRequest) -> StreamingResponse:
+        """SSE stream of token deltas.
+
+        Each token is emitted as ``data: <json>\\n\\n`` where the JSON object is
+        ``{"delta": "<text>"}``.  The stream ends with ``data: [DONE]\\n\\n``.
+        Clients should treat ``[DONE]`` as the end-of-stream sentinel (OpenAI convention).
+        """
+        user_id = req.user_id or settings.owner_user_id
+
+        async def _event_stream() -> AsyncIterator[str]:
+            async for delta in orchestrator.stream_turn(
+                user_id=user_id, text=req.message, session_id=req.session_id
+            ):
+                payload = json.dumps({"delta": delta})
+                yield f"data: {payload}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(_event_stream(), media_type="text/event-stream")
 
     return app
 
