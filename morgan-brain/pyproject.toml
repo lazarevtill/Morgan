@@ -35,6 +35,11 @@ channels = ["python-telegram-bot>=21.0", "discord.py>=2.4"]
 scheduling = ["apscheduler>=3.10"]
 tokens = ["tiktoken>=0.8"]
 perception = ["openai-whisper", "onnxruntime", "transformers"]
+# Learning lifecycle — MLflow-backed PromptRegistry + GEPA optimizer (Wave 1/5).
+# Core deps intentionally excluded; install this extra when enabling learning_backend="mlflow".
+learning = ["mlflow>=3.4"]
+# Slim tracing-only package for the hot-path service layer (much smaller than full mlflow).
+tracing = ["mlflow-tracing"]
 
 [project.scripts]
 morgan = "clients.cli.__main__:main"
