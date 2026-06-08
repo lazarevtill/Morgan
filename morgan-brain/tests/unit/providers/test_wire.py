@@ -17,7 +17,7 @@ def test_stream_delta_kinds():
 
 
 def test_to_openai_serializes_tool_calls():
-    from morgan_brain.providers.wire import ChatMessage, ToolCall
+    from morgan_brain.providers.wire import ChatMessage
     m = ChatMessage(role="assistant", content="",
                     tool_calls=[ToolCall(id="c1", name="search", arguments={"q": "x"})])
     d = m.to_openai()

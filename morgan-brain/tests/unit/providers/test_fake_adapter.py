@@ -1,4 +1,3 @@
-import pytest
 from morgan_brain.interfaces.llm import ChatClient
 from morgan_brain.interfaces.embedding import Embedder
 from morgan_brain.providers.adapters.fake import FakeChatClient, FakeEmbedder
