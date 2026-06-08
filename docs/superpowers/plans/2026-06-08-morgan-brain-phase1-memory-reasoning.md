@@ -1903,9 +1903,23 @@ git commit -m "chore: Phase 1 verification fixes"
 ## Deferred to a Phase 1.5 follow-up (explicitly out of scope here)
 - Swap production wiring from `InMemoryVectorIndex` to `QdrantVectorIndex` (persistence across
   restarts) + a `MemoryModule` that rebuilds its BM25/entity indexes from the vector store on boot.
+  (Also: `QdrantVectorIndex` needs UUID point-ids — current string ids will fail against Qdrant.)
 - Streaming responses over WebSocket.
 - CrossEncoder reranking rung above RRF.
 - Redis Streams bus + moving turn-storage into the learning-worker (true off-path writes).
+
+## Deferred to Phase 2 (Learning) — identified in the Phase 1 final review
+- **Fact *extraction* (writing facts during a turn).** Phase 1 wires the *read* side — `recall()`
+  now surfaces currently-valid facts (`upsert_fact`/`current_facts` are fully implemented + tested).
+  But nothing *writes* facts during a turn yet; `MinimalLearner` stores only episodic memories.
+  Extracting facts/preferences/behaviors from sessions is the Phase 2 Learning worker's job.
+- **Entity signal on the integrated path.** `TextPerception` extracts entities, but the
+  turn-storage path (`RESPONSE_GENERATED` → `MinimalLearner.process_session`) stores `Memory`
+  without entities, so the entity-overlap recall signal only fires for explicitly-tagged memories
+  (unit tests). Threading perception entities into stored memories lands with Phase 2 extraction.
+- **Full two-turn end-to-end assertion.** Memory→context and the cold-path store are each tested,
+  and an integration test covers the loop + cross-turn recall; a single test asserting "turn-1
+  fact influences turn-2 reasoning output" would close the last coverage seam.
 
 These are noted so the next plan can pick them up; Phase 1's goal (a working, recall-capable text
 assistant, fully unit-tested) is met without them.
