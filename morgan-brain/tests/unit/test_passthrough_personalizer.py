@@ -14,4 +14,4 @@ async def test_passthrough_reflects_comm_prefs_in_fragment():
 async def test_passthrough_empty_for_blank_user_model():
     p = PassthroughPersonalizer()
     ctx = await p.build(user_model=UserModel(user_id="u1"), perception=FusedPerception(text="hi"))
-    assert isinstance(ctx.system_fragment, str)
+    assert ctx.system_fragment == ""
