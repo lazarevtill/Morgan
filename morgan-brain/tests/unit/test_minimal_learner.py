@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from morgan_brain.models.memory import MemoryKind, MemorySource
 from morgan_brain.models.message import Conversation, Message, Role
 from morgan_brain.models.user import RelationshipStage
 from morgan_brain.modules.learning.minimal import MinimalLearner
@@ -40,3 +41,7 @@ async def test_process_session_stores_each_message_as_episodic():
     await learner.process_session(convo)
     assert len(mem.stored) == 2
     assert {m.content for m in mem.stored} == {"hello", "hi there"}
+    assert all(m.kind is MemoryKind.EPISODIC for m in mem.stored)
+    by_content = {m.content: m.source for m in mem.stored}
+    assert by_content["hello"] is MemorySource.USER_STATED
+    assert by_content["hi there"] is MemorySource.AGENT_INFERRED

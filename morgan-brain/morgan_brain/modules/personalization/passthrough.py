@@ -17,6 +17,8 @@ class PassthroughPersonalizer:
             bits.append(f"prefers {prefs.length} replies")
         if prefs.tone != "neutral":
             bits.append(f"tone: {prefs.tone}")
+        if prefs.formality != "neutral":
+            bits.append(f"formality: {prefs.formality}")
         if prefs.code_vs_prose != "balanced":
             bits.append(prefs.code_vs_prose.replace("_", " "))
         fragment = "; ".join(bits)
