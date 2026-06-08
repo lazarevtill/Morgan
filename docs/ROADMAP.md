@@ -121,8 +121,8 @@ Full rationale + citations: [`docs/superpowers/specs/2026-06-08-platform-archite
 | 0.5 | Provider Seam + Privacy Foundation | provider Protocols + role router + capability descriptors + structured-output ladder; encryption + classification + egress redaction; `schema_version` on events; learning-lifecycle seam + MLflow scaffold | ✅ done (204 tests, mypy-strict clean) |
 | 1 | 2 Learning + Personalization | signal capture + bi-temporal consolidation worker + adaptive personalization (profile injected every turn, learn-from-edits) + the 3-layer eval gate | ✅ done (350 tests, mypy-strict clean) |
 | 2 | 3 Skills + Tools + MCP | tools (permission-gated, SSRF/DoS-hardened) + skills (trigger-matched, champion-versioned) + hardened MCP host (sanitize/pin/allowlist/default-deny) + **GEPA champion-preprompt optimizer** on the eval gate | ✅ done (542 tests, mypy-strict clean) |
-| 3 | 4 Proactivity | heartbeat + cron + pattern-triggered, consent-gated | ⏳ next |
-| 4 | 5 Perception/voice + remote | voice (Whisper+emotion) behind the seam; remote gateway (auth, streaming, channels) | ⏳ planned |
+| 3 | 4 Proactivity | CronService + HeartbeatManager (APScheduler optional) + **LearningScheduler** (automates nightly consolidation + optimizer) + consent-gated ProactivityEngine; wired into the learning-worker | ✅ done (615 tests, mypy-strict clean) |
+| 4 | 5 Perception/voice + remote | voice (Whisper+emotion) behind the seam; remote gateway (auth, streaming, channels) | ⏳ next |
 | 5 | Self-learning engine | **GEPA preprompt optimizer loop delivered** in Phase 3 (mine signals → reflective/MLflow-GEPA optimize → strict beats-current gate → champion promote/rollback). LoRA pipeline deferred by design (only if the 4-condition escalation test fires). | ✅ done (optimizer); LoRA deferred |
 | 6 | Integration + wiring | E2E, personalization eval harness, hardening, Ollama+remote wiring guide | ⏳ planned |
 
