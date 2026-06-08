@@ -4,7 +4,6 @@ Deterministic, in-process, no network.
 """
 from __future__ import annotations
 
-import pytest
 
 from morgan_brain.modules.mcp.security import (
     ServerAllowlist,

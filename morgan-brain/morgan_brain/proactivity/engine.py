@@ -29,7 +29,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from morgan_brain.interfaces.events import Event, EventBus, EventType
-from morgan_brain.models.user import BehavioralPattern, RelationshipStage, UserModel
+from morgan_brain.models.user import BehavioralPattern, UserModel
 from morgan_brain.proactivity.consent import ConsentGate
 
 # ---------------------------------------------------------------------------
