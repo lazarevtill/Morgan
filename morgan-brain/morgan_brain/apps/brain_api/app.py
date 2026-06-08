@@ -1,10 +1,11 @@
 """FastAPI app factory for brain-api. Phase 1: /api/chat drives the cognitive loop."""
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from pydantic import BaseModel
 
 from morgan_brain import __version__
+from morgan_brain.apps.brain_api.auth import require_api_key
 from morgan_brain.composition import build_orchestrator
 from morgan_brain.config import get_settings
 
@@ -24,12 +25,13 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="morgan-brain", version=__version__)
     orchestrator = build_orchestrator(settings)
+    _auth = Depends(require_api_key(settings))
 
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__, "event_bus": settings.event_bus}
 
-    @app.post("/api/chat", response_model=ChatResponse)
+    @app.post("/api/chat", response_model=ChatResponse, dependencies=[_auth])
     async def chat(req: ChatRequest) -> ChatResponse:
         user_id = req.user_id or settings.owner_user_id
         result = await orchestrator.handle_turn(
