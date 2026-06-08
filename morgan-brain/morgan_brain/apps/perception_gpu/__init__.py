@@ -1,7 +1,11 @@
-"""perception-gpu — DEFERRED.
+"""perception-gpu — voice/vision perception service (DEFERRED, GPU deployment phase).
 
-This service does not exist yet. The ``interfaces.Perception`` Protocol is defined and the text
-implementation runs inline in brain-api. When voice/vision is built (design spec Phase 5), this
-package implements that same Protocol (Whisper ASR + Wav2Vec2 emotion + prosody sarcasm + vision)
-and brain-api routes audio/image inputs here — with zero change to any downstream module.
+The ``interfaces.Perception`` Protocol is already defined and the text-only implementation
+(``modules.perception.text.TextPerception``) runs inline in brain-api.  When voice is built,
+this service implements the same Protocol: Whisper ASR transcribes the audio frame to text,
+Wav2Vec2 extracts prosodic/emotion features, and the results are fused into a ``FusedPerception``
+object — which is then returned to brain-api.  Because every downstream module (Orchestrator,
+MemoryGate, Reasoner) depends only on the ``Perception`` Protocol and the ``FusedPerception``
+model, **zero downstream changes are required**: swapping ``TextPerception`` for this service
+is a one-line composition change in ``composition.py``.  DEFERRED — no functional code here.
 """
