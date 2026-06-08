@@ -6,9 +6,9 @@ Access it via ``get_settings()``.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -45,6 +45,41 @@ class Settings(BaseSettings):
 
     # --- Personalization budget (fraction of context window for injected traits) ---
     personalization_budget: float = Field(default=0.15, ge=0.0, le=1.0)
+
+    # --- Provider / role wiring (Wave 0.5a) ---
+    # role_bindings: maps role name → ordered list of "provider:model" strings.
+    # Default is derived from llm_model / llm_fast_model pointing at ollama.
+    # Example: {"strong": ["ollama:qwen2.5:7b"], "fast": ["ollama:qwen2.5:7b"]}
+    role_bindings: dict[str, list[str]] = Field(default_factory=dict)
+
+    # providers: per-provider connection config (base_url, api_key).
+    # Key is provider name (e.g. "ollama"); value is a dict with optional keys:
+    #   base_url (str), api_key (str).
+    # Default entry for "ollama" is derived from llm_endpoint.
+    providers: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+    # Optional path to a YAML file with extra capability overrides (provider/model key).
+    models_yaml: str | None = None
+
+    @model_validator(mode="after")
+    def _fill_provider_defaults(self) -> "Settings":
+        """Populate role_bindings and providers from legacy llm_* fields if not set."""
+        # providers: ensure ollama entry exists
+        if "ollama" not in self.providers:
+            self.providers = dict(self.providers)
+            self.providers["ollama"] = {
+                "base_url": self.llm_endpoint,
+                "api_key": "ollama",
+            }
+
+        # role_bindings: derive from llm_model / llm_fast_model if not set
+        if not self.role_bindings:
+            self.role_bindings = {
+                "strong": [f"ollama:{self.llm_model}"],
+                "fast": [f"ollama:{self.llm_fast_model}"],
+            }
+
+        return self
 
 
 @lru_cache
