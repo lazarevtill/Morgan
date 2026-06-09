@@ -10,6 +10,7 @@ Permission resolution order (most-specific wins):
 4. ASK mode without a grant = default-deny at execute time (caller must obtain a grant).
 5. Unknown tool with no grant and default=ASK → denied.
 """
+
 from __future__ import annotations
 
 import time
@@ -20,9 +21,9 @@ from pydantic import BaseModel
 
 
 class PermissionMode(str, Enum):
-    AUTO = "auto"    # execute without asking
-    ASK = "ask"      # require confirmation
-    DENY = "deny"    # never execute
+    AUTO = "auto"  # execute without asking
+    ASK = "ask"  # require confirmation
+    DENY = "deny"  # never execute
 
 
 class Grant(BaseModel):

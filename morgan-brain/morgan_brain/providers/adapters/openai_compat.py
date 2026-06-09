@@ -5,6 +5,7 @@ SDK internal retries are disabled (max_retries=0) — fallback is handled by Rol
 
 Implements both ``ChatClient`` and ``Embedder`` protocols.
 """
+
 from __future__ import annotations
 
 import json
@@ -168,9 +169,7 @@ class OpenAICompatAdapter:
                     for tc_delta in delta.tool_calls:
                         fn = tc_delta.function
                         try:
-                            args: dict[str, Any] = (
-                                json.loads(fn.arguments) if fn.arguments else {}
-                            )
+                            args: dict[str, Any] = json.loads(fn.arguments) if fn.arguments else {}
                         except (json.JSONDecodeError, TypeError):
                             args = {}
                         yield StreamDelta(

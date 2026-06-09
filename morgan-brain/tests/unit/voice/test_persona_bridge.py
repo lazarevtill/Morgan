@@ -1,4 +1,5 @@
 """Tests for persona_bridge.build_voice_persona."""
+
 from __future__ import annotations
 
 from morgan_brain.interfaces.voice import VoicePersona
@@ -73,7 +74,9 @@ def test_formal_tone_appears() -> None:
 
 def test_neutral_prefs_produce_no_pref_lines() -> None:
     """All-neutral prefs → no extra instruction lines (only stage line remains)."""
-    user = _make_user(tone="neutral", length="balanced", formality="neutral", code_vs_prose="balanced")
+    user = _make_user(
+        tone="neutral", length="balanced", formality="neutral", code_vs_prose="balanced"
+    )
     vp = build_voice_persona(user_model=user)
     # stage line must still be present
     assert "getting to know" in vp.role_prompt.lower()
@@ -174,7 +177,9 @@ def test_char_budget_hard_limit() -> None:
         tone="warm",
         length="thorough",
         formality="formal",
-        traits=[Trait(name=f"trait{i}", value="x" * 50, confidence=float(i) / 10) for i in range(1, 8)],
+        traits=[
+            Trait(name=f"trait{i}", value="x" * 50, confidence=float(i) / 10) for i in range(1, 8)
+        ],
     )
     big_champion = "Champion header: " + "B" * 1000
     vp = build_voice_persona(
@@ -234,8 +239,7 @@ def test_different_user_ids_can_differ() -> None:
     # We need at least 2 distinct slots found
     assert len(results) >= 2, "Could not find two user_ids mapping to different catalog slots"
     voices = {
-        build_voice_persona(user_model=_make_user(user_id=uid)).voice_id
-        for uid in results.values()
+        build_voice_persona(user_model=_make_user(user_id=uid)).voice_id for uid in results.values()
     }
     assert len(voices) >= 2
 

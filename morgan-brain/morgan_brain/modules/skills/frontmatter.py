@@ -11,6 +11,7 @@ No PyYAML dependency; no standard library ``tomllib`` import needed.
 Returns ``({}, full_text)`` when no frontmatter block is found, so any plain
 markdown file is accepted without error.
 """
+
 from __future__ import annotations
 
 import re
@@ -68,7 +69,7 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str | int | list[str | int]]
             return {}, text
     else:
         fm_block = rest[:close_idx]
-        body = rest[close_idx + 5:]  # skip "\n---\n"
+        body = rest[close_idx + 5 :]  # skip "\n---\n"
 
     meta: dict[str, str | int | list[str | int]] = {}
     lines = fm_block.split("\n")

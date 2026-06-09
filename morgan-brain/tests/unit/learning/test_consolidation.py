@@ -5,6 +5,7 @@ All tests are deterministic:
   - FakeChatClient (no network)
   - SqliteTemporalStore(":memory:") (no disk)
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -278,8 +279,11 @@ async def test_apply_add_dedup_skips_existing_fact() -> None:
 @pytest.mark.asyncio
 async def test_consolidate_orchestrates_propose_and_apply() -> None:
     reply = _make_batch(
-        op="ADD", subject="user", predicate="works_at", object="Acme",
-        reason="user mentioned employer"
+        op="ADD",
+        subject="user",
+        predicate="works_at",
+        object="Acme",
+        reason="user mentioned employer",
     )
     consolidator, temporal, gate = _build_stack([reply], clock=lambda: T0)
 

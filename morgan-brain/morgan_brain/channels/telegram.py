@@ -16,6 +16,7 @@ if the ``[channels]`` extra is absent:
 
 Status: SEAM — long-polling integration is deferred (GPU / channel deployment phase).
 """
+
 from __future__ import annotations
 
 from morgan_brain.channels.base import OutboundMessage

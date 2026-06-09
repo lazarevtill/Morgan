@@ -21,6 +21,7 @@ Event schema
         "evidence": ["...", ...],
     }
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -90,7 +91,9 @@ def _pattern_to_suggestion(pattern: BehavioralPattern) -> ProactiveSuggestion:
             return ProactiveSuggestion(
                 kind=kind,
                 message=message,
-                evidence=[pattern.description, pattern.cue] if pattern.cue else [pattern.description],
+                evidence=[pattern.description, pattern.cue]
+                if pattern.cue
+                else [pattern.description],
             )
     return ProactiveSuggestion(
         kind=_DEFAULT_KIND,

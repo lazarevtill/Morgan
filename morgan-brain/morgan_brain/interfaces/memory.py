@@ -3,6 +3,7 @@
 
 All access is user-scoped and must go through the MemoryGate (see security/).
 """
+
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
@@ -24,6 +25,8 @@ class MemoryStore(Protocol):
         """Assert a fact; supersedes any conflicting currently-valid fact (no overwrite)."""
         ...
 
-    async def current_facts(self, *, user_id: str, subject: str | None = None) -> list[TemporalFact]:
+    async def current_facts(
+        self, *, user_id: str, subject: str | None = None
+    ) -> list[TemporalFact]:
         """Return currently-valid facts (valid_to is None)."""
         ...

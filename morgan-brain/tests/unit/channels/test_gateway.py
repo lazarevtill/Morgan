@@ -2,6 +2,7 @@
 
 All tests are deterministic — no network, no real Telegram/Discord.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -18,9 +19,7 @@ _CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
 _REPLY = "gateway reply"
 
 
-def _make_gateway(
-    *, allowed: set[str] | None = None
-) -> tuple[ChannelGateway, FakeChannel]:
+def _make_gateway(*, allowed: set[str] | None = None) -> tuple[ChannelGateway, FakeChannel]:
     orch, _ = build_orchestrator_for_test(reply=_REPLY, clock=_CLOCK)
     allowlist = ChatAllowlist(allowed=allowed)
     gw = ChannelGateway(

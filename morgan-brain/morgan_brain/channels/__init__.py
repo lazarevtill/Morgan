@@ -8,6 +8,7 @@ Exposes the public surface:
 * ``FakeChannel`` — in-process fake for tests.
 * ``TelegramChannel`` — stub (lazy import; needs ``[channels]`` extra).
 """
+
 from morgan_brain.channels.base import Channel, InboundMessage, OutboundMessage
 from morgan_brain.channels.allowlist import ChatAllowlist
 from morgan_brain.channels.gateway import ChannelGateway

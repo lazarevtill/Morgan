@@ -28,6 +28,7 @@ Security hardening
 The resolver callable (``socket.getaddrinfo`` by default) is injectable so
 tests can simulate private-IP resolution without real DNS/network.
 """
+
 from __future__ import annotations
 
 import ipaddress

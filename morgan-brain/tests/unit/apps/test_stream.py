@@ -2,6 +2,7 @@
 
 All tests are deterministic: no network, no filesystem.
 """
+
 from __future__ import annotations
 
 import json
@@ -120,7 +121,7 @@ def test_sse_endpoint_delta_json_well_formed() -> None:
     data_lines = [line for line in resp.text.splitlines() if line.startswith("data:")]
     token_lines = [ln for ln in data_lines if ln != "data: [DONE]"]
     for line in token_lines:
-        payload = json.loads(line[len("data: "):])  # noqa: FURB184
+        payload = json.loads(line[len("data: ") :])  # noqa: FURB184
         assert "delta" in payload
         assert isinstance(payload["delta"], str)
 

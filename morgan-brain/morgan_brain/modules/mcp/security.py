@@ -19,6 +19,7 @@ Mitigations implemented here:
   3. ``verify_fingerprint`` — compares a freshly computed hash to a pinned one.
   4. ``ServerAllowlist`` — gate that rejects unlisted MCP servers entirely.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -32,9 +33,18 @@ import re
 # Each tuple: (compiled pattern, replacement).  Applied in order.
 _INJECTION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # Direct meta-instruction verbs targeting the model's instruction context.
-    (re.compile(r"ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?", re.I), "[REDACTED]"),
-    (re.compile(r"disregard\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?", re.I), "[REDACTED]"),
-    (re.compile(r"forget\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?", re.I), "[REDACTED]"),
+    (
+        re.compile(r"ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?", re.I),
+        "[REDACTED]",
+    ),
+    (
+        re.compile(r"disregard\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?", re.I),
+        "[REDACTED]",
+    ),
+    (
+        re.compile(r"forget\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?", re.I),
+        "[REDACTED]",
+    ),
     # Fake system / assistant turn injections.
     (re.compile(r"\bsystem\s*:", re.I), "[REDACTED]:"),
     (re.compile(r"\bassistant\s*:", re.I), "[REDACTED]:"),
@@ -42,7 +52,10 @@ _INJECTION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"[​‌‍⁠­‪-‮⁦-⁩]+"), ""),
     # "Now do X" / "Your new task is" imperative override patterns.
     (re.compile(r"now\s+(?:you\s+must|do|perform|execute)\s+", re.I), "[REDACTED] "),
-    (re.compile(r"your\s+(?:new\s+)?(?:task|goal|objective|role|purpose)\s+is\b", re.I), "[REDACTED] is"),
+    (
+        re.compile(r"your\s+(?:new\s+)?(?:task|goal|objective|role|purpose)\s+is\b", re.I),
+        "[REDACTED] is",
+    ),
     # Jailbreak phrase "DAN" / "developer mode".
     (re.compile(r"\bDAN\b"), "[REDACTED]"),
     (re.compile(r"developer\s+mode", re.I), "[REDACTED]"),
@@ -106,9 +119,7 @@ def tool_fingerprint(name: str, description: str, schema: dict[str, object]) -> 
     return hashlib.sha256(_canonical_bytes(name, description, schema)).hexdigest()
 
 
-def verify_fingerprint(
-    name: str, description: str, schema: dict[str, object], pinned: str
-) -> bool:
+def verify_fingerprint(name: str, description: str, schema: dict[str, object], pinned: str) -> bool:
     """Return True if the recomputed fingerprint equals *pinned*.
 
     A False return means the server silently changed the tool definition after

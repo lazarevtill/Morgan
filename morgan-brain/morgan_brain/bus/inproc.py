@@ -1,6 +1,7 @@
 """In-process event bus. Handlers run in the same process — used when all modules share
 brain-api. Satisfies the EventBus Protocol exactly like the Redis backend.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict

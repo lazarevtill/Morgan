@@ -9,6 +9,7 @@ Coverage:
 - KNOWN GAP: regex-only mode does NOT catch non-English names (Presidio needed).
 - The gap test is marked xfail so it is visible and documented.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -192,7 +193,7 @@ class TestRehydrateStream:
         step = rehydrate_stream(rmap)
         part1 = step(chunk1)  # may be empty or partial (before «)
         part2 = step(chunk2)  # receives rest of placeholder
-        flush = step(None)    # flush remainder
+        flush = step(None)  # flush remainder
 
         full = part1 + part2 + flush
         assert "user@example.com" in full
@@ -222,7 +223,9 @@ class TestRehydrateStream:
         # Split placeholder into three roughly equal parts
         n = len(placeholder)
         chunk_a = redacted[: redacted.index(placeholder) + n // 3]
-        chunk_b = redacted[redacted.index(placeholder) + n // 3 : redacted.index(placeholder) + 2 * n // 3]
+        chunk_b = redacted[
+            redacted.index(placeholder) + n // 3 : redacted.index(placeholder) + 2 * n // 3
+        ]
         chunk_c = redacted[redacted.index(placeholder) + 2 * n // 3 :]
 
         step = rehydrate_stream(rmap)

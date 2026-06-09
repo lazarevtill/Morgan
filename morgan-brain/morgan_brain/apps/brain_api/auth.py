@@ -17,6 +17,7 @@ The factory pattern here (``require_api_key(settings) -> Depends``) keeps the Fa
 router wiring unchanged: all callers do ``Depends(require_api_key(settings))`` and the
 internal verify logic is entirely local to this module.
 """
+
 from __future__ import annotations
 
 from typing import Any, Callable, Coroutine

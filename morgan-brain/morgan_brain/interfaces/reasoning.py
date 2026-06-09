@@ -2,6 +2,7 @@
 upstream inputs, routes to a model, optionally plans/reflects and calls tools, then generates.
 Deliberately not a god class: it coordinates, it does not own memory/learning/personalization.
 """
+
 from __future__ import annotations
 
 from typing import AsyncIterator, Protocol, runtime_checkable

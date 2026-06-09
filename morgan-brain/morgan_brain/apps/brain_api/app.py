@@ -3,6 +3,7 @@
 Phase 1: /api/chat (blocking) drives the cognitive loop.
 Phase 5: /api/chat/stream (SSE) streams token deltas with a terminal [DONE] sentinel.
 """
+
 from __future__ import annotations
 
 import json

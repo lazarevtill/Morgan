@@ -1,6 +1,7 @@
 """Tools contract — pluggable, permission-gated execution. There is exactly one permission
 model in the system (see security/permissions.py): one PermissionMode enum, one gate.
 """
+
 from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable

@@ -1,4 +1,5 @@
 """Event bus backends. Select via MORGAN_EVENT_BUS (inproc | redis)."""
+
 from __future__ import annotations
 
 from morgan_brain.config import get_settings

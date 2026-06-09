@@ -4,6 +4,7 @@ This is the only place that translates Settings values into concrete adapters.
 Everything above this layer depends on the seam types (``ChatClient``, ``Embedder``,
 ``RoleRouter``) rather than concrete adapters or SDKs.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

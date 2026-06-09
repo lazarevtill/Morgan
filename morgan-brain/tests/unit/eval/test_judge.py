@@ -2,6 +2,7 @@
 
 All tests use FakeChatClient (scripted replies) — NO network.
 """
+
 from __future__ import annotations
 
 import json
@@ -98,9 +99,7 @@ class TestLLMJudge:
         """The rubric text must appear in the messages sent to the client."""
         reply = _verdict_json(1.0, True)
         client = FakeChatClient(replies=[reply])
-        reg = CapabilityRegistry.from_seed(
-            {"fake/judge-model": {"json_mode": JsonMode.NONE}}
-        )
+        reg = CapabilityRegistry.from_seed({"fake/judge-model": {"json_mode": JsonMode.NONE}})
         router = RoleRouter(
             reg=reg,
             bindings={"judge": [Binding("fake", "judge-model", client)]},
@@ -153,9 +152,7 @@ class TestOrderInvariant:
             ]
         )
         judge = LLMJudge(router=router)
-        verdict = await judge.judge_order_invariant(
-            question="q", answer="a", expected="e"
-        )
+        verdict = await judge.judge_order_invariant(question="q", answer="a", expected="e")
         assert verdict.passed is True
 
     @pytest.mark.asyncio
@@ -168,9 +165,7 @@ class TestOrderInvariant:
             ]
         )
         judge = LLMJudge(router=router)
-        verdict = await judge.judge_order_invariant(
-            question="q", answer="a", expected="e"
-        )
+        verdict = await judge.judge_order_invariant(question="q", answer="a", expected="e")
         assert verdict.passed is False
 
     @pytest.mark.asyncio
@@ -182,9 +177,7 @@ class TestOrderInvariant:
             ]
         )
         judge = LLMJudge(router=router)
-        verdict = await judge.judge_order_invariant(
-            question="q", answer="a", expected="e"
-        )
+        verdict = await judge.judge_order_invariant(question="q", answer="a", expected="e")
         assert verdict.passed is False
 
     @pytest.mark.asyncio
@@ -196,9 +189,7 @@ class TestOrderInvariant:
             ]
         )
         judge = LLMJudge(router=router)
-        verdict = await judge.judge_order_invariant(
-            question="q", answer="a", expected="e"
-        )
+        verdict = await judge.judge_order_invariant(question="q", answer="a", expected="e")
         assert verdict.passed is False
 
     @pytest.mark.asyncio
@@ -240,8 +231,7 @@ class TestCalibratedJudge:
         judge_labels = human_labels[:]
         cj = self._make_calibrated_judge(judge_labels)
         items: list[tuple[dict[str, Any], bool]] = [
-            ({"question": "q", "answer": "a", "expected": "e"}, lbl)
-            for lbl in human_labels
+            ({"question": "q", "answer": "a", "expected": "e"}, lbl) for lbl in human_labels
         ]
         kappa = await cj.calibrate(items)
         assert abs(kappa - 1.0) < 1e-6
@@ -252,8 +242,7 @@ class TestCalibratedJudge:
         judge_labels = [False, False, True, True]  # perfect flip
         cj = self._make_calibrated_judge(judge_labels)
         items: list[tuple[dict[str, Any], bool]] = [
-            ({"question": "q", "answer": "a", "expected": "e"}, lbl)
-            for lbl in human_labels
+            ({"question": "q", "answer": "a", "expected": "e"}, lbl) for lbl in human_labels
         ]
         kappa = await cj.calibrate(items)
         assert kappa <= 0.0
@@ -265,8 +254,7 @@ class TestCalibratedJudge:
         judge_labels = [True] * 5 + [False] * 4 + [True]  # last one flipped
         cj = self._make_calibrated_judge(judge_labels)
         items: list[tuple[dict[str, Any], bool]] = [
-            ({"question": "q", "answer": "a", "expected": "e"}, lbl)
-            for lbl in human_labels
+            ({"question": "q", "answer": "a", "expected": "e"}, lbl) for lbl in human_labels
         ]
         kappa = await cj.calibrate(items)
         assert kappa > 0.6

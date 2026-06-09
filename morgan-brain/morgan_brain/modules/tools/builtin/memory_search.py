@@ -2,6 +2,7 @@
 
 Requires a ``MemoryGate`` instance; does not hit any network.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -51,7 +52,5 @@ class MemorySearchTool:
         top_k: int = 5,
         **_: Any,
     ) -> ToolResult:
-        memories = await self._gate.recall(
-            MemoryQuery(user_id=user_id, text=query, top_k=top_k)
-        )
+        memories = await self._gate.recall(MemoryQuery(user_id=user_id, text=query, top_k=top_k))
         return ToolResult(ok=True, output=[m.content for m in memories])

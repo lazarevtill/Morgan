@@ -2,6 +2,7 @@
 
 All deterministic, in-process, no network, no ``mcp`` package required.
 """
+
 from __future__ import annotations
 
 import importlib

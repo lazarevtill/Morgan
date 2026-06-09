@@ -15,6 +15,7 @@ Safe placeholder that returns the current champion unchanged.  The real GEPA-via
 optimizer lands in Wave 1/5 (``mlflow.genai.optimize_prompts`` with
 ``GepaPromptOptimizer``).
 """
+
 from __future__ import annotations
 
 import json
@@ -141,9 +142,7 @@ class LocalPromptRegistry:
 
         # Atomically clear old champion flag and set the new one.
         with self._conn:
-            self._conn.execute(
-                "UPDATE prompt_versions SET is_champion = 0 WHERE name = ?", (name,)
-            )
+            self._conn.execute("UPDATE prompt_versions SET is_champion = 0 WHERE name = ?", (name,))
             self._conn.execute(
                 "UPDATE prompt_versions SET is_champion = 1 WHERE name = ? AND version = ?",
                 (name, version),

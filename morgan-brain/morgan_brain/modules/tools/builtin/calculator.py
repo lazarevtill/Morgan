@@ -14,6 +14,7 @@ Resource-exhaustion guard
 * Any BinOp intermediate integer result whose ``bit_length()`` exceeds
   ``_MAX_RESULT_BITS`` is rejected immediately, preventing huge-Mult chains.
 """
+
 from __future__ import annotations
 
 import ast
@@ -192,9 +193,7 @@ class CalculatorTool:
     """
 
     name = "calculator"
-    description = (
-        "Evaluate a safe arithmetic expression (supports +, -, *, /, //, **, %)."
-    )
+    description = "Evaluate a safe arithmetic expression (supports +, -, *, /, //, **, %)."
 
     def schema(self) -> dict[str, Any]:
         return {

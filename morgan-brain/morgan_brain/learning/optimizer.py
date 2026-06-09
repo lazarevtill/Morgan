@@ -37,6 +37,7 @@ with ``MLFLOW_DISABLE_TELEMETRY=1`` / ``DO_NOT_TRACK=1`` forced.
 Until that path is available (or the extra is absent) the fallback is always
 ``ReflectiveOptimizer``, which requires only stdlib + the existing provider seam.
 """
+
 from __future__ import annotations
 
 import inspect
@@ -405,7 +406,10 @@ class GepaOptimizer:
         if self._use_mlflow():
             try:
                 return await self._optimize_mlflow(
-                    name, train=train, scorer=scorer, max_calls=max_calls,
+                    name,
+                    train=train,
+                    scorer=scorer,
+                    max_calls=max_calls,
                     current_body=current_body,
                 )
             except (ImportError, AttributeError, NotImplementedError) as exc:

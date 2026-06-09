@@ -2,6 +2,7 @@
 
 Deterministic, in-process, no network.
 """
+
 from __future__ import annotations
 
 
@@ -155,7 +156,10 @@ def test_verify_fingerprint_detects_schema_mutation() -> None:
     original_schema: dict[str, object] = {"type": "object", "properties": {}}
     pinned = tool_fingerprint(name, desc, original_schema)
 
-    mutated_schema: dict[str, object] = {"type": "object", "properties": {"evil": {"type": "string"}}}
+    mutated_schema: dict[str, object] = {
+        "type": "object",
+        "properties": {"evil": {"type": "string"}},
+    }
     assert verify_fingerprint(name, desc, mutated_schema, pinned) is False
 
 

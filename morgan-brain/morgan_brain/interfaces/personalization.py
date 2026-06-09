@@ -2,6 +2,7 @@
 selects the traits relevant to *this* turn (budget-aware), and produces context for Reasoning.
 Stateless: it writes nothing.
 """
+
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable

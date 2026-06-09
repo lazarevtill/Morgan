@@ -4,6 +4,7 @@
 ``RoleFallback`` — iterates a role's bindings, advancing on exception and publishing
     an ``LLM_FALLBACK`` event via an injected ``EventBus``.
 """
+
 from __future__ import annotations
 
 import asyncio

@@ -4,6 +4,7 @@
 ``OutboundMessage`` — reply to send back into a channel.
 ``Channel``         — Protocol every channel adapter must satisfy.
 """
+
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable

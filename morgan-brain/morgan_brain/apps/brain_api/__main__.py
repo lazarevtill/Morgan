@@ -1,4 +1,5 @@
 """Run brain-api: ``python -m morgan_brain.apps.brain_api``."""
+
 from __future__ import annotations
 
 import uvicorn

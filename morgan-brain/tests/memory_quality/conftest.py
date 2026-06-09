@@ -1,4 +1,5 @@
 """Fixtures + scorer for the memory-quality suite (design spec §13)."""
+
 from __future__ import annotations
 
 from datetime import datetime

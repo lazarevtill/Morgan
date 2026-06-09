@@ -5,6 +5,7 @@ All tests are deterministic:
   - tick() called directly — no real sleeping, no APScheduler dependency.
   - Job callables are simple counters (sync and async).
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -81,7 +82,7 @@ async def test_tick_does_not_run_before_interval() -> None:
     counter = _Counter()
     sched = InProcessScheduler(clock=_fixed_clock(T0))
     sched.add_job("j", counter, interval_seconds=60)
-    await sched.tick(T0)          # first run — due (last_run=None)
+    await sched.tick(T0)  # first run — due (last_run=None)
     await sched.tick(T0 + timedelta(seconds=30))  # 30 s later — not due
     assert counter.calls == 1
 
@@ -120,7 +121,7 @@ async def test_add_job_cron_only_uses_default_interval() -> None:
     counter = _Counter()
     sched = InProcessScheduler(clock=_fixed_clock(T0))
     sched.add_job("cron_j", counter, cron="0 * * * *")
-    await sched.tick(T0)            # first tick → runs (last_run=None)
+    await sched.tick(T0)  # first tick → runs (last_run=None)
     await sched.tick(T0 + timedelta(seconds=1800))  # 30 min later → not due
     assert counter.calls == 1
 

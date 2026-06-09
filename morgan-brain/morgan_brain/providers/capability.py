@@ -6,6 +6,7 @@ JSON mode, vision, embedding dim, cost). The CapabilityRegistry stores these des
 
 Capability is explicit (vendored seed + runtime override), never inferred from the response.
 """
+
 from __future__ import annotations
 
 import json

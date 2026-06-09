@@ -4,6 +4,7 @@ perception-gpu). Same EventBus Protocol as the in-process bus.
 Phase 0 stub: the consumer loop is sketched, not wired. Implemented in Phase 1+ when the
 learning-worker becomes a separate process.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict

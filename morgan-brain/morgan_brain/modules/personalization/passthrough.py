@@ -1,5 +1,6 @@
 """Phase 1 Personalizer: renders the user's communication preferences into a short system
 fragment. No trait selection yet (Phase 2) — it simply surfaces what little the UserModel holds."""
+
 from __future__ import annotations
 
 from morgan_brain.interfaces.personalization import PersonalizedContext

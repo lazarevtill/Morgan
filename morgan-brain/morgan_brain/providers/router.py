@@ -8,6 +8,7 @@ Usage::
     })
     client, model = router.chat_for("strong", needs_tools=True)
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -72,8 +73,7 @@ class RoleRouter:
         candidates = self._bindings.get(role)
         if not candidates:
             raise LookupError(
-                f"No bindings registered for role {role!r}. "
-                f"Known roles: {list(self._bindings)}"
+                f"No bindings registered for role {role!r}. Known roles: {list(self._bindings)}"
             )
 
         for binding in candidates:

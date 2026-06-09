@@ -5,6 +5,7 @@ Design refs:
   * self-learning ADR — value order: edit(3) > retry/thumb-down(2) > thumb-up(1) > nothing(0).
   * Deterministic clock pattern from SqliteTemporalStore.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -187,9 +188,7 @@ class SignalStore:
     # Read API
     # ------------------------------------------------------------------
 
-    async def for_user(
-        self, user_id: str, *, limit: int = 50
-    ) -> list[InteractionSignal]:
+    async def for_user(self, user_id: str, *, limit: int = 50) -> list[InteractionSignal]:
         """Return the *limit* most-recently recorded signals for *user_id* (newest first)."""
         rows = self._conn.execute(
             """

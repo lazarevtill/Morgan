@@ -1,5 +1,6 @@
 """Reciprocal Rank Fusion — combine several ranked id-lists into one. This is Phase 1's single
 rerank layer (CrossEncoder reranking is deferred per the degradation ladder)."""
+
 from __future__ import annotations
 
 

@@ -1,4 +1,5 @@
 """Tests for LocalPromptRegistry (SQLite-backed, dependency-light)."""
+
 from datetime import datetime
 
 import pytest

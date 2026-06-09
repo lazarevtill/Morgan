@@ -5,6 +5,7 @@ Implements the ``Learner`` Protocol by combining:
 - Real fact consolidation via ``MemoryConsolidator`` (Phase 2B).
 - Real UserModel derivation via ``UserProfileBuilder`` (Phase 2C, optional).
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -62,9 +63,7 @@ class ConsolidationLearner:
         """
         for msg in conversation.messages:
             source = (
-                MemorySource.USER_STATED
-                if msg.role is Role.USER
-                else MemorySource.AGENT_INFERRED
+                MemorySource.USER_STATED if msg.role is Role.USER else MemorySource.AGENT_INFERRED
             )
             await self._gate.store(
                 Memory(
@@ -94,5 +93,3 @@ class ConsolidationLearner:
         episodics, proposes fact operations via the LLM, and applies them.
         """
         await self._consolidator.consolidate(user_id)
-
-

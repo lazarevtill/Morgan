@@ -13,6 +13,7 @@ Coverage:
 - derive_kek round-trip (guarded by pytest.importorskip for argon2-cffi).
 - Import errors are clear when optional deps are absent.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -217,9 +218,7 @@ class TestRemoteGateRedaction:
                 collected_texts.append(delta.text)
 
         output = "".join(collected_texts)
-        assert "bob@example.org" in output, (
-            f"Expected rehydrated email in output, got: {output!r}"
-        )
+        assert "bob@example.org" in output, f"Expected rehydrated email in output, got: {output!r}"
         assert "«" not in output, f"Unrehydrated placeholder leaked into output: {output!r}"
 
 

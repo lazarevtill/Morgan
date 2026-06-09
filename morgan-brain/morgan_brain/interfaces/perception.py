@@ -3,6 +3,7 @@
 The text implementation runs inline in brain-api. The future audio/vision implementation lives
 in the ``perception-gpu`` service and satisfies this exact Protocol, so nothing downstream changes.
 """
+
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable

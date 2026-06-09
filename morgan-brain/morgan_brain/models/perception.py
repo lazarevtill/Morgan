@@ -1,5 +1,6 @@
 """Perception output contract. Every perception call — text now, audio/vision later —
 returns a ``FusedPerception`` so downstream modules never change when modalities are added."""
+
 from __future__ import annotations
 
 from enum import Enum

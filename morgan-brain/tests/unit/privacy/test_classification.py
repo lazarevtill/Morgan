@@ -8,6 +8,7 @@ Coverage:
 - Public: plain prose with no identifiable signals.
 - Ordering: DataClass comparison operators.
 """
+
 from __future__ import annotations
 
 from morgan_brain.privacy.classification import DataClass, classify

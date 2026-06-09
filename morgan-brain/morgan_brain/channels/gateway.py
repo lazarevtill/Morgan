@@ -22,6 +22,7 @@ Usage::
         channel="telegram", chat_id="chat_42", user_id="some_user", text="hello"
     ))
 """
+
 from __future__ import annotations
 
 from morgan_brain.channels.allowlist import ChatAllowlist

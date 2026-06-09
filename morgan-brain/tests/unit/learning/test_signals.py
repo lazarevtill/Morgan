@@ -1,4 +1,5 @@
 """Unit tests for InteractionSignal, SignalStore (TDD, Phase 2 Increment A)."""
+
 from __future__ import annotations
 
 from datetime import datetime

@@ -15,6 +15,7 @@ GoldenItem.should_inject:
 Eval items are FIREWALLED from what the assistant may consolidate:
 the harness reads predict_fn output only; it never writes to memory.
 """
+
 from __future__ import annotations
 
 import json

@@ -1,4 +1,5 @@
 """Tests for golden set loading and probe-type coverage."""
+
 from __future__ import annotations
 
 from morgan_brain.eval.golden import GoldenItem, ProbeType, load_golden_set

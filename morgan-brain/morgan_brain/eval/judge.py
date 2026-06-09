@@ -12,6 +12,7 @@ judge model family is hot-swappable via config.
 ``cohen_kappa`` is re-exported from ``scorers`` for callers that import only
 from ``judge``.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -78,9 +79,7 @@ def _build_judge_messages(
         system_content = system_content + f"\nAdditional rubric: {rubric}"
 
     user_content = (
-        f"Question: {question}\n\n"
-        f"Answer to evaluate: {answer}\n\n"
-        f"Reference answer: {expected}"
+        f"Question: {question}\n\nAnswer to evaluate: {answer}\n\nReference answer: {expected}"
     )
     return [
         ChatMessage(role="system", content=system_content),
@@ -168,13 +167,9 @@ class LLMJudge:
             orderings independently return passed=True.  The ``score`` is the
             average of the two scores and ``rationale`` is combined.
         """
-        v1 = await self.judge(
-            question=question, answer=answer, expected=expected, rubric=rubric
-        )
+        v1 = await self.judge(question=question, answer=answer, expected=expected, rubric=rubric)
         # Swapped ordering: answer ↔ expected
-        v2 = await self.judge(
-            question=question, answer=expected, expected=answer, rubric=rubric
-        )
+        v2 = await self.judge(question=question, answer=expected, expected=answer, rubric=rubric)
         both_pass = v1.passed and v2.passed
         avg_score = (v1.score + v2.score) / 2.0
         combined_rationale = f"[order1] {v1.rationale} | [order2] {v2.rationale}"

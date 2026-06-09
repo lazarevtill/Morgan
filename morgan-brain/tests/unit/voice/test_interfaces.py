@@ -3,6 +3,7 @@
 A class that provides the three required coroutine methods satisfies the
 ``VoiceConversation`` Protocol at runtime — no audio / GPU deps needed.
 """
+
 from __future__ import annotations
 
 import pytest

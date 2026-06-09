@@ -5,6 +5,7 @@ All tests are deterministic:
   - Injected jitter_offsets sequence for reproducible next_delay values.
   - InProcessBus captures emitted events.
 """
+
 from __future__ import annotations
 
 from datetime import datetime

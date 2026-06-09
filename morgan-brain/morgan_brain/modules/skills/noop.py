@@ -1,4 +1,5 @@
 """Phase 1 SkillEngine: selects nothing. Real skill selection + SkillOpt arrive in Phase 3."""
+
 from __future__ import annotations
 
 from morgan_brain.interfaces.skills import Skill

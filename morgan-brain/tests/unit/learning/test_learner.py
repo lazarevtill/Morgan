@@ -6,6 +6,7 @@ Verifies that ConsolidationLearner:
   - consolidate() applies MemoryConsolidator ops.
   - user_model() returns a default UserModel.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone

@@ -11,6 +11,7 @@ Design invariants:
 - Dedup pre-filter: ADD whose (subject, predicate, object) matches a currently-
   valid fact is silently skipped (treated as NOOP).
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -117,9 +118,7 @@ class MemoryConsolidator:
         """
         # Try to get a json_schema-capable binding first; fall back to any binding.
         try:
-            client, model = self._router.chat_for(
-                self._role, needs_json_schema=True
-            )
+            client, model = self._router.chat_for(self._role, needs_json_schema=True)
             provider = self._provider_for_model(model)
         except LookupError:
             client, model = self._router.chat_for(self._role)
@@ -127,13 +126,16 @@ class MemoryConsolidator:
 
         descriptor = self._reg.get(provider, model)
 
-        episodic_text = "\n".join(
-            f"- [{m.source.value}] {m.content}" for m in episodics
-        ) or "(none)"
-        facts_text = "\n".join(
-            f"- {f.subject} {f.predicate} {f.object} (conf={f.confidence:.2f})"
-            for f in existing_facts
-        ) or "(none)"
+        episodic_text = (
+            "\n".join(f"- [{m.source.value}] {m.content}" for m in episodics) or "(none)"
+        )
+        facts_text = (
+            "\n".join(
+                f"- {f.subject} {f.predicate} {f.object} (conf={f.confidence:.2f})"
+                for f in existing_facts
+            )
+            or "(none)"
+        )
 
         system_msg = ChatMessage(
             role="system",
@@ -180,9 +182,7 @@ class MemoryConsolidator:
         """
         now = self._clock()
         current = await self._temporal.current_facts(user_id=user_id)
-        current_set = {
-            (f.subject, f.predicate, f.object) for f in current
-        }
+        current_set = {(f.subject, f.predicate, f.object) for f in current}
 
         applied: list[FactOp] = []
 
@@ -225,9 +225,7 @@ class MemoryConsolidator:
             elif op.op is FactOpKind.DELETE:
                 # Close the currently-valid fact's interval without hard-deleting it.
                 matching = [
-                    f
-                    for f in current
-                    if f.subject == op.subject and f.predicate == op.predicate
+                    f for f in current if f.subject == op.subject and f.predicate == op.predicate
                 ]
                 for fact in matching:
                     await self._temporal.close_fact(fact.id, now=now)
@@ -247,9 +245,7 @@ class MemoryConsolidator:
         store, then runs propose + apply.
         """
         # Recall recent episodics (up to 50).
-        episodics = await self._gate.recall(
-            MemoryQuery(user_id=user_id, text="", top_k=50)
-        )
+        episodics = await self._gate.recall(MemoryQuery(user_id=user_id, text="", top_k=50))
         # Filter to episodic kind only (fact_memories are also returned by recall).
         episodics = [m for m in episodics if m.kind is MemoryKind.EPISODIC]
 

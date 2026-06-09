@@ -15,6 +15,7 @@ delta (e.g. "prefers concise, code-first, no hedging").
 ``apply_edit_delta``: merges the preference delta into a ``UserModel`` deterministically
 by keyword matching.  The LLM only produces the delta text; the merge is pure/deterministic.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -250,9 +251,7 @@ def render_md(user_model: UserModel) -> str:
 
     # topics
     if user_model.topics_of_interest:
-        top_topics = sorted(
-            user_model.topics_of_interest.items(), key=lambda kv: -kv[1]
-        )[:5]
+        top_topics = sorted(user_model.topics_of_interest.items(), key=lambda kv: -kv[1])[:5]
         lines.append("topics: " + ", ".join(t for t, _ in top_topics))
 
     # traits — sorted descending by confidence; we'll truncate when we hit budget
@@ -266,8 +265,7 @@ def render_md(user_model: UserModel) -> str:
     ]
     baseline = user_model.emotional_baseline
     dynamic_lines.append(
-        f"emotional_baseline: valence={baseline.valence:.2f} "
-        f"arousal={baseline.arousal:.2f}"
+        f"emotional_baseline: valence={baseline.valence:.2f} arousal={baseline.arousal:.2f}"
     )
 
     # Assemble without traits first, then add traits within budget
@@ -355,9 +353,7 @@ async def preference_delta_from_edit(
 # ---------------------------------------------------------------------------
 
 # Keyword → field update mapping
-_LENGTH_TERSE_KEYWORDS = frozenset(
-    {"concise", "terse", "brief", "short", "shorter", "compact"}
-)
+_LENGTH_TERSE_KEYWORDS = frozenset({"concise", "terse", "brief", "short", "shorter", "compact"})
 _LENGTH_THOROUGH_KEYWORDS = frozenset(
     {"thorough", "detailed", "verbose", "long", "elaborate", "comprehensive"}
 )

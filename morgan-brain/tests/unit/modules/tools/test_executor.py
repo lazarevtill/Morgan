@@ -2,6 +2,7 @@
 
 All tests are deterministic and in-process — no network, no filesystem side-effects.
 """
+
 from __future__ import annotations
 
 from typing import Any

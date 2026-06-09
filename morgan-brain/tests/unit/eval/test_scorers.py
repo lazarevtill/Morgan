@@ -1,4 +1,5 @@
 """Tests for L1 deterministic scorers (recall@k, f1@k) and Cohen's kappa."""
+
 from __future__ import annotations
 
 import pytest

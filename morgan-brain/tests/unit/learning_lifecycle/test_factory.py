@@ -1,4 +1,5 @@
 """Tests for learning_lifecycle.factory — backend selection + telemetry-off enforcement."""
+
 import os
 
 import pytest

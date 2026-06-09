@@ -2,6 +2,7 @@
 
 Uses a FakeChatClient-backed RoleRouter — no network, no Ollama dependency.
 """
+
 from __future__ import annotations
 
 from morgan_brain.interfaces.personalization import PersonalizedContext
@@ -25,13 +26,15 @@ def _make_router(
     supports_tools: bool = True,
     model: str = "qwen2.5:7b",
 ) -> RoleRouter:
-    reg = CapabilityRegistry.from_seed({
-        f"ollama/{model}": {
-            "supports_tools": supports_tools,
-            "json_mode": "json_schema",
-            "context_window": 32768,
+    reg = CapabilityRegistry.from_seed(
+        {
+            f"ollama/{model}": {
+                "supports_tools": supports_tools,
+                "json_mode": "json_schema",
+                "context_window": 32768,
+            }
         }
-    })
+    )
     client = FakeChatClient(reply=reply)
     return RoleRouter(
         reg=reg,
@@ -90,10 +93,12 @@ async def test_default_role_is_strong():
 
 async def test_tools_capable_binding_selected_when_tools_needed():
     """A request with tools routes to the tools-capable binding."""
-    reg = CapabilityRegistry.from_seed({
-        "ollama/weak": {"supports_tools": False, "json_mode": "none"},
-        "ollama/strong": {"supports_tools": True, "json_mode": "json_schema"},
-    })
+    reg = CapabilityRegistry.from_seed(
+        {
+            "ollama/weak": {"supports_tools": False, "json_mode": "none"},
+            "ollama/strong": {"supports_tools": True, "json_mode": "json_schema"},
+        }
+    )
     weak_client = FakeChatClient(reply="weak")
     strong_client = FakeChatClient(reply="strong")
     router = RoleRouter(

@@ -6,6 +6,7 @@ All tests are deterministic:
 * Clock is injected for CurrentTimeTool.
 * CalculatorTool uses a safe AST evaluator (no eval).
 """
+
 from __future__ import annotations
 
 import contextlib

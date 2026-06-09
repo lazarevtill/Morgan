@@ -3,8 +3,8 @@
 All deterministic, in-process, no network, no mcp package required.
 The tests use FakeMcpClient throughout.
 """
-from __future__ import annotations
 
+from __future__ import annotations
 
 
 from morgan_brain.modules.mcp.client import FakeMcpClient, McpToolInfo
@@ -152,9 +152,7 @@ async def test_no_allowlist_accepts_all_servers() -> None:
 
 async def test_tool_with_matching_pin_is_registered() -> None:
     tool_info = McpToolInfo(name="list_events", description="Lists calendar events.")
-    pinned = tool_fingerprint(
-        tool_info.name, tool_info.description, tool_info.input_schema
-    )
+    pinned = tool_fingerprint(tool_info.name, tool_info.description, tool_info.input_schema)
 
     hub, registry, _ = _hub(auto_grant=True)
     cfg = McpServerConfig(

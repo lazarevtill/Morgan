@@ -19,6 +19,7 @@ Anti-sycophancy / over-personalization guardrails:
 - Correctness is independent of the user model: the fragment is advisory only,
   never overrides factual grounding from memory recall.
 """
+
 from __future__ import annotations
 
 import re

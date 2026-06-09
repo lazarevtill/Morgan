@@ -6,6 +6,7 @@ engine are built + wired when the corresponding feature flags are enabled.
 No real event-loop running: we just confirm the build path is reachable without
 exceptions and that the right types are registered.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -97,7 +98,9 @@ async def test_register_proactivity_handler_subscribes_to_heartbeat() -> None:
 
 
 @pytest.mark.asyncio
-async def test_worker_run_with_flags_off_does_not_start_cron(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_worker_run_with_flags_off_does_not_start_cron(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """With both flags False, run() sets up the bus but no CronService is started."""
     import morgan_brain.apps.learning_worker.__main__ as worker_mod
 

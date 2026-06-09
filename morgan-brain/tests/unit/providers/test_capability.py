@@ -8,8 +8,16 @@ def test_descriptor_defaults_conservative():
 
 
 def test_registry_lookup_and_override():
-    reg = CapabilityRegistry.from_seed({"ollama/qwen2.5:7b": {"context_window": 32768,
-        "supports_tools": True, "json_mode": "json_schema", "embedding_dim": 0}})
+    reg = CapabilityRegistry.from_seed(
+        {
+            "ollama/qwen2.5:7b": {
+                "context_window": 32768,
+                "supports_tools": True,
+                "json_mode": "json_schema",
+                "embedding_dim": 0,
+            }
+        }
+    )
     d = reg.get("ollama", "qwen2.5:7b")
     assert d.context_window == 32768 and d.supports_tools is True
     reg.override("ollama", "qwen2.5:7b", {"context_window": 8192})

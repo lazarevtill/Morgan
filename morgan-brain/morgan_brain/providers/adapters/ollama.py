@@ -16,6 +16,7 @@ Usage::
     adapter = OllamaAdapter()                           # local defaults
     adapter = OllamaAdapter(base_url="http://host:11434/v1")  # remote
 """
+
 from __future__ import annotations
 
 from morgan_brain.providers.adapters.openai_compat import OpenAICompatAdapter

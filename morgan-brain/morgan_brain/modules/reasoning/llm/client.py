@@ -1,5 +1,6 @@
 """LLMClient: chat completion. OllamaLLMClient hits the OpenAI-compatible /v1/chat/completions
 endpoint; FakeLLMClient returns a scripted reply and records inputs for assertions."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

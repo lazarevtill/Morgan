@@ -13,6 +13,7 @@ Wave 1/5 note
 The full MLflow-backed registry (Prompt Registry + champion aliases + GEPA optimizer)
 lands in Wave 1/5.  The seam + telemetry enforcement is what ships now.
 """
+
 from __future__ import annotations
 
 import os

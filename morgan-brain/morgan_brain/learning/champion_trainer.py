@@ -28,6 +28,7 @@ Rollback
 All historical versions are preserved in the ``PromptRegistry``.  Rolling back to
 a previous champion is a single ``registry.set_champion(name, old_version)`` call.
 """
+
 from __future__ import annotations
 
 import logging

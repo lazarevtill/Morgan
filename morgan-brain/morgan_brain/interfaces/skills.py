@@ -4,6 +4,7 @@ A skill is a markdown doc with YAML frontmatter. The engine selects skills by tr
 injects the active ``best_skill.md`` into the reasoning context. Training happens offline in the
 learning-worker behind a validation gate; the request path only ever *reads* skills.
 """
+
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable

@@ -6,6 +6,7 @@
 Both satisfy their respective Protocols (``ChatClient``, ``Embedder``) so they can be
 substituted anywhere a real adapter is expected.
 """
+
 from __future__ import annotations
 
 import hashlib

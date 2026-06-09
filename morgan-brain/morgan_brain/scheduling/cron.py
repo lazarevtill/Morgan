@@ -10,6 +10,7 @@ Design principles
 * No ``datetime.now()`` calls inside any class — always receive the clock from
   the outside (``clock: Callable[[], datetime]``).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -134,7 +135,9 @@ class InProcessScheduler:
             effective_interval = 3600.0
 
         self._jobs[name] = _JobEntry(name, fn, effective_interval)
-        logger.debug("InProcessScheduler: registered job %r (interval=%.0fs)", name, effective_interval)
+        logger.debug(
+            "InProcessScheduler: registered job %r (interval=%.0fs)", name, effective_interval
+        )
 
     async def start(self) -> None:
         self._running = True

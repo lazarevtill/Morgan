@@ -3,6 +3,7 @@
 The clock is injectable so unit tests can pass a deterministic callable
 instead of relying on the real wall clock.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone

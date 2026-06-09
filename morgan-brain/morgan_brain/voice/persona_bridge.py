@@ -28,6 +28,7 @@ Priority order (highest survives budget truncation last):
 Deterministic ordering within each section: traits sorted descending by
 confidence then alphabetically by name.
 """
+
 from __future__ import annotations
 
 from morgan_brain.interfaces.voice import VoicePersona
@@ -176,9 +177,7 @@ def build_voice_persona(
     # Priority 4 (lowest) — champion preprompt header (first non-blank line)
     champion_header = ""
     if champion_preprompt:
-        first_line = next(
-            (ln.strip() for ln in champion_preprompt.splitlines() if ln.strip()), ""
-        )
+        first_line = next((ln.strip() for ln in champion_preprompt.splitlines() if ln.strip()), "")
         if first_line:
             champion_header = first_line
 

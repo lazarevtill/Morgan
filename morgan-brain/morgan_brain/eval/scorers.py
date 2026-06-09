@@ -11,6 +11,7 @@ does not artificially cap recall at a value below 1.
 cohen_kappa implements the standard 2×2 binary-classification formula so tests
 can verify judge calibration without any external library.
 """
+
 from __future__ import annotations
 
 

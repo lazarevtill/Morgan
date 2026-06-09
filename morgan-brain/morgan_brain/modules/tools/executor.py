@@ -5,6 +5,7 @@
 ``PermissionGate`` for default-deny admission control, and publishes a
 ``TOOL_INVOKED`` audit event on an optional bus.
 """
+
 from __future__ import annotations
 
 from typing import Any

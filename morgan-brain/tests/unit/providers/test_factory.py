@@ -3,6 +3,7 @@
 All tests use in-process adapters or Ollama adapters that construct fine offline.
 No network calls are made.
 """
+
 from __future__ import annotations
 
 import pytest

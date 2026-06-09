@@ -1,4 +1,5 @@
 """Embedder seam — unifies the memory Embedder. Model+dim are tracked in the CapabilityDescriptor."""
+
 from __future__ import annotations
 from typing import Protocol, runtime_checkable
 

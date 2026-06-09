@@ -14,6 +14,7 @@ Usage::
 
     assert ch.sent == [OutboundMessage(chat_id="chat1", text="hello")]
 """
+
 from __future__ import annotations
 
 from morgan_brain.channels.base import OutboundMessage

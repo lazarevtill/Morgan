@@ -19,6 +19,7 @@ ordinal mapping:
 
     NEW=0, ACQUAINTED=1, FAMILIAR=2, TRUSTED=3
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel

@@ -4,6 +4,7 @@ Phase 2C — profile.build() derives UserModel from facts; render_md() stays und
 preference_delta_from_edit + apply_edit_delta merge preferences deterministically.
 All tests use fakes — no network, no LLM, deterministic clock.
 """
+
 from __future__ import annotations
 
 import json
@@ -11,7 +12,11 @@ from datetime import datetime, timezone
 
 import pytest
 
-from morgan_brain.learning.profile import UserProfileBuilder, apply_edit_delta, preference_delta_from_edit
+from morgan_brain.learning.profile import (
+    UserProfileBuilder,
+    apply_edit_delta,
+    preference_delta_from_edit,
+)
 from morgan_brain.models.memory import MemorySource, TemporalFact
 from morgan_brain.models.user import CommunicationPrefs, RelationshipStage, UserModel
 from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
@@ -39,7 +44,9 @@ def _make_gate(facts: list[TemporalFact] | None = None) -> tuple[MemoryGate, Sql
     return gate, temporal
 
 
-async def _seed_fact(gate: MemoryGate, predicate: str, object_: str, confidence: float = 1.0) -> None:
+async def _seed_fact(
+    gate: MemoryGate, predicate: str, object_: str, confidence: float = 1.0
+) -> None:
     await gate.upsert_fact(
         TemporalFact(
             user_id=USER,

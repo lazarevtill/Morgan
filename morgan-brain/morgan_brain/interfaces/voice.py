@@ -5,6 +5,7 @@ and is deferred to Phase 5-voice.  Everything in ``morgan_brain`` depends only o
 Protocol + the two data models, keeping the brain audio-agnostic and fully testable
 without any GPU / audio dependencies.
 """
+
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable

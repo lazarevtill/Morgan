@@ -4,6 +4,7 @@ The API/CLI calls these methods after a turn is served.  All mutation is on
 the *same* row (keyed by ``user_id`` + ``turn_id``) so one signal per turn
 accumulates edit/retry/thumb feedback without duplicating the base record.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
