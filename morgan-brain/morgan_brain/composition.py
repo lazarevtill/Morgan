@@ -14,14 +14,22 @@ from typing import Callable, cast
 
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.core.orchestrator import Orchestrator
+from morgan_brain.eval.golden import default_golden_path, load_golden_set
+from morgan_brain.eval.harness import EvalHarness
+from morgan_brain.eval.judge import LLMJudge
+from morgan_brain.eval.runner import make_eval_scorer, make_predict_fn
 from morgan_brain.interfaces.events import Event, EventType
 from morgan_brain.interfaces.tools import BaseTool
+from morgan_brain.learning.champion_trainer import ChampionTrainer
 from morgan_brain.learning.consolidation import MemoryConsolidator
 from morgan_brain.learning.learner import ConsolidationLearner
+from morgan_brain.learning.optimizer import AnyScorer, ReflectiveOptimizer
 from morgan_brain.learning.profile import UserProfileBuilder
 from morgan_brain.learning.history import SessionHistoryStore
 from morgan_brain.learning.recorder import SignalRecorder
 from morgan_brain.learning.signals import SignalStore
+from morgan_brain.learning_lifecycle.factory import build_registry
+from morgan_brain.learning_lifecycle.interfaces import PromptRegistry
 from morgan_brain.models.memory import Memory
 from morgan_brain.models.message import Conversation, Message, Role
 from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder, OllamaEmbedder
@@ -52,6 +60,9 @@ from morgan_brain.security.permissions import Grant, PermissionGate, PermissionM
 from morgan_brain.bus import get_event_bus
 from morgan_brain.bus.inproc import InProcessBus
 from morgan_brain.interfaces.events import EventBus
+
+# Name used when storing the system-prompt champion in the registry.
+CHAMPION_PROMPT_NAME = "morgan-system"
 
 
 def _utcnow() -> datetime:
@@ -248,13 +259,38 @@ class AppContext:
     executor: ToolExecutorImpl
     skills: SkillRegistry
     learner: ConsolidationLearner
+    prompt_registry: PromptRegistry
     history_store: "SessionHistoryStore | None" = field(default=None)
+
+
+def _load_champion_override(registry: PromptRegistry) -> str:
+    """Best-effort synchronous read of the champion body.
+
+    Returns the champion body for CHAMPION_PROMPT_NAME if one is stored, or
+    empty string if no champion exists yet or if any error occurs.  The result
+    is read once at startup and passed as system_override on every turn.
+
+    This is intentionally synchronous + blocking (sqlite is fast enough at
+    startup) so it fits the existing synchronous factory pattern.
+    """
+    import asyncio
+
+    try:
+        loop = asyncio.new_event_loop()
+        try:
+            version = loop.run_until_complete(registry.champion(CHAMPION_PROMPT_NAME))
+        finally:
+            loop.close()
+        return version.body if version is not None else ""
+    except Exception:
+        return ""
 
 
 def build_app_context(settings: Settings | None = None) -> AppContext:
     """Production wiring: builds all components and returns an AppContext.
 
     The AppContext exposes every handle needed by API routes.
+    Reads the current champion prompt (if any) and wires it as system_override.
     """
     settings = settings or get_settings()
     temporal_path = _sqlite_path(settings.temporal_db_url)
@@ -269,7 +305,9 @@ def build_app_context(settings: Settings | None = None) -> AppContext:
 
     embedder = OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
     router = build_router(settings)
-    prom_registry = LocalPromptRegistry()
+    # Use the persistent registry (same path as the worker) so brain-api reads
+    # champions written by the learning-worker.
+    prom_registry: PromptRegistry = build_registry(settings)
     history_store = SessionHistoryStore()
 
     orch, _, signal_store, recorder, executor, skills, learner = _assemble(
@@ -279,7 +317,7 @@ def build_app_context(settings: Settings | None = None) -> AppContext:
         clock=_utcnow,
         temporal_path=temporal_path,
         signal_store_path=signal_path,
-        prompt_registry=prom_registry,
+        prompt_registry=prom_registry if isinstance(prom_registry, LocalPromptRegistry) else None,
         history_store=history_store,
         vectors=_build_vector_index(settings),
     )
@@ -291,6 +329,7 @@ def build_app_context(settings: Settings | None = None) -> AppContext:
         executor=executor,
         skills=skills,
         learner=learner,
+        prompt_registry=prom_registry,
         history_store=history_store,
     )
 
@@ -308,6 +347,9 @@ class WorkerContext:
     signal_store: SignalStore
     signal_recorder: SignalRecorder
     bus: EventBus
+    champion_trainer: ChampionTrainer
+    prompt_registry: PromptRegistry
+    eval_scorer: AnyScorer
 
 
 def build_worker_context(settings: Settings | None = None) -> WorkerContext:
@@ -320,6 +362,12 @@ def build_worker_context(settings: Settings | None = None) -> WorkerContext:
     With ``event_bus="redis"``, the worker subscribes to the Redis stream that
     brain-api publishes to. With ``event_bus="inproc"`` (dev/test), both processes
     would share an in-process bus — only useful in single-process mode.
+
+    The worker also builds:
+    - A PERSISTENT ``LocalPromptRegistry`` (same data/ path as brain-api).
+    - A ``ReflectiveOptimizer`` + ``ChampionTrainer`` for the offline optimize job.
+    - An eval-backed scorer (``make_eval_scorer``) so champion promotion is gated
+      by the real assistant running the golden set — never on the hot path.
     """
     settings = settings or get_settings()
     temporal_path = _sqlite_path(settings.temporal_db_url)
@@ -334,7 +382,7 @@ def build_worker_context(settings: Settings | None = None) -> WorkerContext:
     embedder = OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
     router = build_router(settings)
 
-    _, _, signal_store, recorder, _, _, learner = _assemble(
+    orch, _, signal_store, recorder, _, _, learner = _assemble(
         embedder=embedder,
         router=router,
         settings=settings,
@@ -344,12 +392,34 @@ def build_worker_context(settings: Settings | None = None) -> WorkerContext:
         vectors=_build_vector_index(settings),
     )
 
+    # Persistent registry — same file as brain-api reads.
+    registry: PromptRegistry = build_registry(settings)
+
+    # Optimizer + trainer.
+    optimizer = ReflectiveOptimizer(router=router)
+    trainer = ChampionTrainer(optimizer=optimizer, registry=registry, clock=_utcnow)
+
+    # Eval-backed scorer: run the real assistant over the golden set.
+    golden_path_str = settings.eval_golden_path
+    golden_items = load_golden_set(golden_path_str if golden_path_str else default_golden_path())
+    judge = LLMJudge(router=router, role="judge")
+    harness = EvalHarness(judge=judge)
+    predict_fn = make_predict_fn(orchestrator=orch, clock=_utcnow)
+    eval_scorer: AnyScorer = make_eval_scorer(
+        harness=harness,
+        golden_items=golden_items,
+        predict_fn=predict_fn,
+    )
+
     bus = get_event_bus()
     return WorkerContext(
         learner=learner,
         signal_store=signal_store,
         signal_recorder=recorder,
         bus=bus,
+        champion_trainer=trainer,
+        prompt_registry=registry,
+        eval_scorer=eval_scorer,
     )
 
 

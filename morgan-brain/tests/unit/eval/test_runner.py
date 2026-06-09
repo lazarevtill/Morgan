@@ -188,7 +188,6 @@ async def test_firewall_real_memory_untouched() -> None:
 @pytest.mark.asyncio
 async def test_firewall_gate_restored_on_exception() -> None:
     """Real gate is restored even if orchestrator raises an exception."""
-    from morgan_brain.core.orchestrator import Orchestrator
     from morgan_brain.composition import _assemble
     from morgan_brain.config import Settings
     from morgan_brain.bus.inproc import InProcessBus
