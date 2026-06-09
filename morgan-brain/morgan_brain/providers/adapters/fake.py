@@ -31,6 +31,9 @@ class FakeChatClient:
         replies:    Queue of reply texts consumed one per call; when exhausted, the last
                     item is repeated (so tests that do one extra call don't crash).
         tool_calls: Optional tool calls to include in every ChatResult.
+        results:    Queue of full ``ChatResult`` objects consumed one per call (highest
+                    priority; overrides *reply* / *replies* / *tool_calls* when set).
+                    When the queue is exhausted the last item is repeated.
 
     Attributes:
         calls:         Total number of ``agenerate`` invocations.
@@ -43,7 +46,18 @@ class FakeChatClient:
         reply: str = "",
         replies: list[str] | None = None,
         tool_calls: list[ToolCall] | None = None,
+        results: list[ChatResult] | None = None,
     ) -> None:
+        # Full-result queue: each entry is returned verbatim for one agenerate call.
+        # When exhausted, the last entry is repeated indefinitely.
+        # Mutually exclusive with reply/replies/tool_calls (results takes priority).
+        if results is not None:
+            self._result_queue: deque[ChatResult] = deque(results)
+            self._last_result: ChatResult | None = results[-1] if results else None
+        else:
+            self._result_queue = deque()
+            self._last_result = None
+
         if replies is not None:
             self._queue: deque[str] = deque(replies)
             self._last_reply: str = replies[-1] if replies else reply
@@ -76,6 +90,18 @@ class FakeChatClient:
         self.last_messages = messages
         self.last_model = model
         self.last_response_format = response_format
+        # Full-result queue takes priority (enables per-call tool_calls scripting).
+        if self._result_queue:
+            r = self._result_queue.popleft()
+            self._last_result = r
+            return ChatResult(text=r.text, model=model, tool_calls=list(r.tool_calls))
+        if self._last_result is not None:
+            # results= was provided and queue is exhausted — repeat last entry.
+            return ChatResult(
+                text=self._last_result.text,
+                model=model,
+                tool_calls=list(self._last_result.tool_calls),
+            )
         reply = self._next_reply()
         return ChatResult(text=reply, model=model, tool_calls=list(self._tool_calls))
 
