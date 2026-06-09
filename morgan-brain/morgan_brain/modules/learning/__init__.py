@@ -1,10 +1,11 @@
 """Learning module — implements ``interfaces.Learner``.
 
-Responsibility: asynchronous intelligence extraction. Extract facts/preferences/behaviors from
-completed sessions, maintain the stable UserModel, run SkillOpt training behind a validation
-gate, consolidate (dedup/decay/curate), mine behavioral patterns for proactivity.
-Service: learning-worker (off the request path). Phase: 2 (extraction + UserModel) · 3 (SkillOpt).
+Responsibility: asynchronous intelligence — capture signals, maintain the UserModel, consolidate
+episodics into bi-temporal facts, and run the eval-gated champion-preprompt optimizer.
+Service: learning-worker (off the request path). Built.
 
-Planned files: extractors/{trait,preference,pattern}.py, user_model/model.py,
-consolidation/{consolidator,decay}.py, skillopt/{trainer,trajectory,evaluator,registry}.py.
+Implementation lives in the sibling top-level package, not here: ``morgan_brain.learning``
+(recorder.py + signals.py — signal capture; learner.py + profile.py — UserModel;
+consolidation.py — facts; champion_trainer.py + optimizer.py — GEPA optimizer). The eval gate is
+``morgan_brain.eval``; the prompt-registry/optimizer seam is ``morgan_brain.learning_lifecycle``.
 """
