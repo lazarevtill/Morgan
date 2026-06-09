@@ -113,8 +113,8 @@ def make_predict_fn(
         # Temporarily swap in the scratch gate's store for this item's memory recall.
         # The orchestrator's _memory is the real gate; we monkey-patch only within
         # this call and restore it immediately after — guaranteeing FIREWALL isolation.
-        original_memory = orchestrator._memory  # type: ignore[attr-defined]
-        orchestrator._memory = scratch_gate  # type: ignore[attr-defined]
+        original_memory = orchestrator._memory
+        orchestrator._memory = scratch_gate
         try:
             result = await orchestrator.handle_turn(
                 user_id=EVAL_USER_ID,
@@ -123,7 +123,7 @@ def make_predict_fn(
             )
         finally:
             # FIREWALL: always restore the real gate, even on exception.
-            orchestrator._memory = original_memory  # type: ignore[attr-defined]
+            orchestrator._memory = original_memory
 
         return result.text
 

@@ -39,6 +39,8 @@ from morgan_brain.interfaces.events import Event, EventBus, EventType, Handler
 from morgan_brain.models.message import Conversation, Message, Role
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from morgan_brain.learning.learner import ConsolidationLearner
     from morgan_brain.scheduling.cron import CronService
     from morgan_brain.scheduling.learning_jobs import LearningScheduler
@@ -112,11 +114,14 @@ def _build_cron_service() -> "CronService":
 def _build_learning_scheduler(
     cron: "CronService",
     learner: "ConsolidationLearner",
+    champion_trainer: "Any | None" = None,
+    signal_store: "Any | None" = None,
+    eval_scorer: "Any | None" = None,
 ) -> "LearningScheduler | None":
     """Build a :class:`LearningScheduler` over the real learner from the worker context.
 
-    Registers nightly consolidation. ChampionTrainer is not wired here (requires an
-    eval runner — see Wire-D); when it becomes available, pass it as ``champion_trainer``.
+    Registers nightly consolidation + the eval-gated optimizer job when
+    ``champion_trainer``, ``signal_store``, and ``eval_scorer`` are all provided.
     """
     settings = get_settings()
     try:
@@ -125,10 +130,18 @@ def _build_learning_scheduler(
         ls = LearningScheduler(
             cron=cron,
             learner=learner,
+            champion_trainer=champion_trainer,
+            signal_store=signal_store,
+            scorer=eval_scorer,
             clock=_utcnow,
+            prompt_name="morgan-system",
         )
         ls.register_default_jobs(settings.owner_user_id)
-        log.info("learning-scheduler.registered", user_id=settings.owner_user_id)
+        log.info(
+            "learning-scheduler.registered",
+            user_id=settings.owner_user_id,
+            with_optimizer=champion_trainer is not None,
+        )
         return ls
     except Exception:
         log.exception("learning-scheduler.build-failed")
@@ -210,11 +223,17 @@ async def run(settings: Settings | None = None) -> None:
     from morgan_brain.learning.learner import ConsolidationLearner as _CL
 
     learner: _CL | None = None
+    champion_trainer: Any | None = None
+    signal_store_for_sched: Any | None = None
+    eval_scorer: Any | None = None
     try:
         from morgan_brain.composition import build_worker_context
 
         ctx = build_worker_context(_settings)
         learner = ctx.learner
+        champion_trainer = ctx.champion_trainer
+        signal_store_for_sched = ctx.signal_store
+        eval_scorer = ctx.eval_scorer
         log.info("worker-context.built")
     except Exception:
         log.exception("worker-context.build-failed; starting with no-op learner")
@@ -240,7 +259,13 @@ async def run(settings: Settings | None = None) -> None:
     cron = None
     if _settings.enable_scheduling and learner is not None:
         cron = _build_cron_service()
-        _build_learning_scheduler(cron, learner)
+        _build_learning_scheduler(
+            cron,
+            learner,
+            champion_trainer=champion_trainer,
+            signal_store=signal_store_for_sched,
+            eval_scorer=eval_scorer,
+        )
         await cron.start()
         log.info("learning-scheduler.started")
     elif _settings.enable_scheduling:

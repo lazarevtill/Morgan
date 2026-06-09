@@ -13,7 +13,6 @@ from datetime import datetime
 
 import pytest
 
-from morgan_brain.composition import build_orchestrator_for_test
 from morgan_brain.interfaces.personalization import PersonalizedContext
 from morgan_brain.interfaces.reasoning import ReasoningRequest
 from morgan_brain.models.memory import Memory, MemoryKind
@@ -83,31 +82,13 @@ async def test_handle_turn_system_override_in_system_message() -> None:
     """handle_turn with system_override causes override text to appear in the
     system message sent to the fake client."""
     from morgan_brain.providers.adapters.fake import FakeChatClient
-    from morgan_brain.providers.capability import CapabilityRegistry
-    from morgan_brain.providers.router import Binding, RoleRouter
     from morgan_brain.bus.inproc import InProcessBus
-    from morgan_brain.composition import _assemble
-    from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
     from morgan_brain.config import Settings
 
     override_text = "CHAMPION_OVERRIDE_SENTINEL"
     fake_client = FakeChatClient(reply="answer")
-    reg = CapabilityRegistry.from_seed(
-        {
-            "fake/test-model": {
-                "supports_tools": True,
-                "json_mode": "json_schema",
-                "context_window": 32768,
-            }
-        }
-    )
-    test_router = RoleRouter(
-        reg=reg,
-        bindings={"strong": [Binding("fake", "test-model", fake_client)]},
-    )
     settings = Settings(llm_model="test-model", llm_fast_model="test-model")
     bus = InProcessBus()
-    orch, _ = build_orchestrator_for_test(reply="answer", clock=CLOCK)
 
     # Rebuild with a client we can inspect
     orch2, _ = _build_orch_with_inspectable_client(override_text, fake_client, settings, bus)
@@ -135,7 +116,6 @@ def _build_orch_with_inspectable_client(
     from morgan_brain.providers.router import Binding, RoleRouter
     from morgan_brain.composition import _assemble
     from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
-    from morgan_brain.config import Settings
 
     fc = fake_client  # type: ignore[assignment]
     s = settings  # type: ignore[assignment]
@@ -167,8 +147,6 @@ def _build_orch_with_inspectable_client(
 async def test_handle_turn_no_override_no_sentinel() -> None:
     """Default (no system_override) does NOT add sentinel to system message."""
     from morgan_brain.providers.adapters.fake import FakeChatClient
-    from morgan_brain.providers.capability import CapabilityRegistry
-    from morgan_brain.providers.router import Binding, RoleRouter
     from morgan_brain.bus.inproc import InProcessBus
     from morgan_brain.config import Settings
 
@@ -189,8 +167,6 @@ async def test_handle_turn_no_override_no_sentinel() -> None:
 async def test_handle_turn_with_id_system_override() -> None:
     """handle_turn_with_id also threads system_override into the system message."""
     from morgan_brain.providers.adapters.fake import FakeChatClient
-    from morgan_brain.providers.capability import CapabilityRegistry
-    from morgan_brain.providers.router import Binding, RoleRouter
     from morgan_brain.bus.inproc import InProcessBus
     from morgan_brain.config import Settings
 
