@@ -69,6 +69,7 @@ class Orchestrator:
         text: str,
         session_id: str | None = None,
         history: list[Any] | None = None,
+        system_override: str = "",
     ) -> tuple[ReasoningResult, str]:
         """Like handle_turn but also returns the turn_id alongside the result."""
         turn_id = uuid.uuid4().hex
@@ -102,6 +103,7 @@ class Orchestrator:
                 skill_prompt=skill_prompt,
                 tools=self._scoped_tools(skills),
                 history=history or [],
+                system_override=system_override,
             )
         )
 
@@ -127,6 +129,7 @@ class Orchestrator:
         text: str,
         session_id: str | None = None,
         history: list[Any] | None = None,
+        system_override: str = "",
     ) -> ReasoningResult:
         turn_id = uuid.uuid4().hex
 
@@ -159,6 +162,7 @@ class Orchestrator:
                 skill_prompt=skill_prompt,
                 tools=self._scoped_tools(skills),
                 history=history or [],
+                system_override=system_override,
             )
         )
 
