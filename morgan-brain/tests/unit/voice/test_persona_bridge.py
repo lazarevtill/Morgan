@@ -1,8 +1,6 @@
 """Tests for persona_bridge.build_voice_persona."""
 from __future__ import annotations
 
-import pytest
-
 from morgan_brain.interfaces.voice import VoicePersona
 from morgan_brain.models.emotion import EmotionState, EmotionType
 from morgan_brain.models.user import (

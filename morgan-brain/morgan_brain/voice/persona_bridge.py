@@ -30,6 +30,10 @@ confidence then alphabetically by name.
 """
 from __future__ import annotations
 
+from morgan_brain.interfaces.voice import VoicePersona
+from morgan_brain.models.emotion import EmotionState, EmotionType
+from morgan_brain.models.user import RelationshipStage, UserModel
+
 _DEFAULT_CATALOG: list[str] = ["NATF0", "NATF1", "NATM0", "NATM1", "VARF0", "VARM0"]
 
 _STAGE_LINES: dict[str, str] = {
@@ -40,10 +44,6 @@ _STAGE_LINES: dict[str, str] = {
 }
 
 _MAX_TRAITS: int = 5  # include at most this many traits in the prompt
-
-from morgan_brain.interfaces.voice import VoicePersona
-from morgan_brain.models.emotion import EmotionState, EmotionType
-from morgan_brain.models.user import RelationshipStage, UserModel
 
 
 def _nat_prefix(catalog: list[str]) -> list[str]:
