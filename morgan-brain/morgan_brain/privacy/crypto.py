@@ -80,7 +80,8 @@ def seal(plaintext: bytes, dek: bytes) -> bytes:
     nonce = os.urandom(12)
     aesgcm = AESGCM(dek)
     ct = aesgcm.encrypt(nonce, plaintext, None)  # ct includes 16-byte GCM tag appended
-    return nonce + ct
+    sealed: bytes = nonce + ct
+    return sealed
 
 
 def open_sealed(ciphertext: bytes, dek: bytes) -> bytes:
@@ -111,7 +112,8 @@ def open_sealed(ciphertext: bytes, dek: bytes) -> bytes:
     nonce = ciphertext[:12]
     ct = ciphertext[12:]
     aesgcm = AESGCM(dek)
-    return aesgcm.decrypt(nonce, ct, None)
+    plaintext: bytes = aesgcm.decrypt(nonce, ct, None)
+    return plaintext
 
 
 # ---------------------------------------------------------------------------
