@@ -50,9 +50,7 @@ def _make_fake_client(search_points: list[Any] | None = None) -> MagicMock:
     client.upsert = AsyncMock(return_value=None)
     client.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
     client.create_collection = AsyncMock(return_value=None)
-    client.query_points = AsyncMock(
-        return_value=_make_fake_result(search_points or [])
-    )
+    client.query_points = AsyncMock(return_value=_make_fake_result(search_points or []))
     return client
 
 

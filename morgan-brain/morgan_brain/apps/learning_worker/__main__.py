@@ -35,7 +35,7 @@ import structlog
 
 from morgan_brain.bus import get_event_bus
 from morgan_brain.config import Settings, get_settings
-from morgan_brain.interfaces.events import Event, EventBus, EventType
+from morgan_brain.interfaces.events import Event, EventBus, EventType, Handler
 from morgan_brain.models.message import Conversation, Message, Role
 
 if TYPE_CHECKING:
@@ -61,7 +61,7 @@ def _make_response_handler(
     learner: "ConsolidationLearner",
     *,
     clock: Callable[[], datetime] = _utcnow,
-) -> Callable[[Event], "asyncio.coroutines.Coroutine[object, object, None]"]:
+) -> "Handler":
     """Return an async handler that processes a RESPONSE_GENERATED event.
 
     Reconstructs a :class:`Conversation` from the event payload and calls
@@ -207,6 +207,9 @@ async def run(settings: Settings | None = None) -> None:
     # Build the real worker context (production stores + configured bus).
     # For inproc dev runs brain-api already handles turn storage, but the
     # worker wiring is harmless (no-op subscriber on an isolated inproc bus).
+    from morgan_brain.learning.learner import ConsolidationLearner as _CL
+
+    learner: _CL | None = None
     try:
         from morgan_brain.composition import build_worker_context
 
@@ -215,7 +218,6 @@ async def run(settings: Settings | None = None) -> None:
         log.info("worker-context.built")
     except Exception:
         log.exception("worker-context.build-failed; starting with no-op learner")
-        learner = None  # type: ignore[assignment]
 
     # Obtain and start the configured event bus.
     bus = get_event_bus()

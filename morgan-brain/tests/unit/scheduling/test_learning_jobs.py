@@ -52,6 +52,7 @@ class _FakeInteractionSignal:
         self.thumb = thumb
         self.retried = False
 
+
 T0 = datetime(2026, 1, 1, 0, 0, 0)
 CONSOLIDATE_INTERVAL = 100.0  # short interval so tests can tick past it easily
 OPTIMIZE_INTERVAL = 50.0
@@ -105,15 +106,11 @@ class _FakeSignalStore:
         self._explicit_examples: list[Any] | None = examples
         self.high_value_calls: list[dict[str, Any]] = []
 
-    async def high_value(
-        self, user_id: str, *, min_rank: int = 1, limit: int = 50
-    ) -> list[Any]:
+    async def high_value(self, user_id: str, *, min_rank: int = 1, limit: int = 50) -> list[Any]:
         self.high_value_calls.append({"user_id": user_id, "min_rank": min_rank, "limit": limit})
         if self._explicit_examples is not None:
             # Explicit list (possibly empty): return as-is scoped to user_id.
-            return [
-                s for s in self._explicit_examples if getattr(s, "user_id", None) == user_id
-            ]
+            return [s for s in self._explicit_examples if getattr(s, "user_id", None) == user_id]
         # Auto mode: return one thumb-up signal for the requested user so train() is called.
         return [
             _FakeInteractionSignal(
