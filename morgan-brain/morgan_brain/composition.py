@@ -45,7 +45,9 @@ from morgan_brain.providers.router import Binding, RoleRouter
 from morgan_brain.providers.wire import ChatResult, ToolSpec
 from morgan_brain.security.memory_gate import MemoryGate
 from morgan_brain.security.permissions import Grant, PermissionGate, PermissionMode
+from morgan_brain.bus import get_event_bus
 from morgan_brain.bus.inproc import InProcessBus
+from morgan_brain.interfaces.events import EventBus
 
 
 def _utcnow() -> datetime:
@@ -53,7 +55,7 @@ def _utcnow() -> datetime:
 
 
 def _register_turn_storage(
-    bus: InProcessBus,
+    bus: EventBus,
     learner: ConsolidationLearner,
     recorder: SignalRecorder,
     history_store: "SessionHistoryStore | None" = None,
@@ -100,7 +102,7 @@ def _register_turn_storage(
 def _build_tool_executor(
     gate: MemoryGate,
     clock: Callable[[], datetime],
-    bus: InProcessBus,
+    bus: EventBus,
 ) -> tuple[ToolExecutorImpl, list[ToolSpec]]:
     """Build the ToolRegistry + executor with builtin tools pre-registered.
 
@@ -143,6 +145,7 @@ def _assemble(
     signal_store_path: str = ":memory:",
     prompt_registry: LocalPromptRegistry | None = None,
     history_store: "SessionHistoryStore | None" = None,
+    bus: EventBus | None = None,
 ) -> tuple[
     Orchestrator,
     MemoryModule,
@@ -183,15 +186,21 @@ def _assemble(
         clock=clock,
         profile_builder=profile_builder,
     )
-    bus = InProcessBus()
-    _register_turn_storage(bus, learner, recorder, history_store)
+    # Use the injected bus (tests) or the config-driven one (production).
+    # get_event_bus() reads settings.event_bus: "inproc" → InProcessBus, "redis" → RedisStreamsBus.
+    resolved_bus: EventBus = bus if bus is not None else get_event_bus()
+    # Register the in-process turn-storage subscriber only when the bus is in-process.
+    # With the Redis bus the learning-worker process subscribes to the same stream and
+    # handles turn storage off-path — registering here would double-process every turn.
+    if isinstance(resolved_bus, InProcessBus):
+        _register_turn_storage(resolved_bus, learner, recorder, history_store)
     personalizer = AdaptivePersonalizer(
         profile_builder=profile_builder,
         budget=settings.personalization_budget,
     )
     skills = SkillRegistry(registry=prompt_registry)
 
-    executor, tool_specs = _build_tool_executor(gate=gate, clock=clock, bus=bus)
+    executor, tool_specs = _build_tool_executor(gate=gate, clock=clock, bus=resolved_bus)
 
     orch = Orchestrator(
         perception=TextPerception(),
@@ -200,7 +209,7 @@ def _assemble(
         skills=skills,
         reasoner=ReasoningModule(router=router, role="strong", executor=executor),
         learner=learner,
-        bus=bus,
+        bus=resolved_bus,
         tools=tool_specs,
     )
     return orch, memory_module, signal_store, recorder, executor, skills, learner
@@ -317,12 +326,14 @@ def build_orchestrator_for_test(
         bindings={"strong": [Binding("fake", "test-model", fake_client)]},
     )
 
+    test_bus = InProcessBus()
     orch, memory_module, _, _, _, _, _ = _assemble(
         embedder=FakeEmbedder(dim=16),
         router=test_router,
         settings=settings,
         clock=clock,
         temporal_path=":memory:",
+        bus=test_bus,
     )
     return orch, MemoryTestHandle(memory_module)
 
@@ -357,16 +368,17 @@ def build_orchestrator_for_test_with_signals(
         bindings={"strong": [Binding("fake", "test-model", fake_client)]},
     )
 
+    test_bus = InProcessBus()
     orch, _, signal_store, _, _, _, _ = _assemble(
         embedder=FakeEmbedder(dim=16),
         router=test_router,
         settings=settings,
         clock=clock,
         temporal_path=":memory:",
+        bus=test_bus,
     )
-    # The bus is an InProcessBus — cast to expose subscribe() to test subscribers.
-    extracted_bus = cast(InProcessBus, orch._bus)  # noqa: SLF001
-    return orch, signal_store, extracted_bus
+    # Return the injected bus directly — no cast needed since we created it above.
+    return orch, signal_store, test_bus
 
 
 def _sqlite_path(url: str) -> str:
