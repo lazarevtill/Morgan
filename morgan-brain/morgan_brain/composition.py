@@ -8,11 +8,12 @@ reply is produced; with the Redis bus (later phases) it runs in the learning-wor
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Callable, cast
 
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.core.orchestrator import Orchestrator
 from morgan_brain.interfaces.events import Event, EventType
+from morgan_brain.interfaces.tools import BaseTool
 from morgan_brain.learning.consolidation import MemoryConsolidator
 from morgan_brain.learning.learner import ConsolidationLearner
 from morgan_brain.learning.profile import UserProfileBuilder
@@ -25,13 +26,20 @@ from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex
 from morgan_brain.modules.perception.text.analyzer import TextPerception
 from morgan_brain.modules.personalization.adaptive import AdaptivePersonalizer
 from morgan_brain.modules.reasoning.reasoner import ReasoningModule
+from morgan_brain.modules.tools.builtin.calculator import CalculatorTool
+from morgan_brain.modules.tools.builtin.clock_tool import CurrentTimeTool
+from morgan_brain.modules.tools.builtin.fetch_url import FetchUrlTool
+from morgan_brain.modules.tools.builtin.memory_search import MemorySearchTool
+from morgan_brain.modules.tools.executor import ToolExecutorImpl, ToolRegistry
 from morgan_brain.learning_lifecycle.local import LocalPromptRegistry
 from morgan_brain.modules.skills.registry import SkillRegistry
 from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.factory import build_router
 from morgan_brain.providers.router import Binding, RoleRouter
+from morgan_brain.providers.wire import ChatResult, ToolSpec
 from morgan_brain.security.memory_gate import MemoryGate
+from morgan_brain.security.permissions import Grant, PermissionGate, PermissionMode
 from morgan_brain.bus.inproc import InProcessBus
 
 
@@ -53,6 +61,42 @@ def _register_turn_storage(bus: InProcessBus, learner: ConsolidationLearner) -> 
         await learner.process_session(convo)
 
     bus.subscribe(EventType.RESPONSE_GENERATED, _store_turn)
+
+
+def _build_tool_executor(
+    gate: MemoryGate,
+    clock: Callable[[], datetime],
+    bus: InProcessBus,
+) -> tuple[ToolExecutorImpl, list[ToolSpec]]:
+    """Build the ToolRegistry + executor with builtin tools pre-registered.
+
+    Safe tools (calculator, current_time, memory_search) are granted AUTO so the
+    loop can run them without confirmation.  FetchUrlTool is registered but left on
+    ASK (the default) so it cannot be called autonomously in the loop.
+    """
+    registry = ToolRegistry()
+    # cast: concrete tools have named params in run() beyond **kwargs; the Protocol
+    # uses **kwargs: Any — structurally compatible at runtime but mypy strict disagrees.
+    registry.register(cast(BaseTool, CalculatorTool()))
+    registry.register(cast(BaseTool, CurrentTimeTool(clock=clock)))
+    registry.register(cast(BaseTool, MemorySearchTool(gate=gate)))
+    registry.register(cast(BaseTool, FetchUrlTool()))
+
+    perm_gate = PermissionGate(default=PermissionMode.ASK)
+    for safe_tool in ("calculator", "current_time", "memory_search"):
+        perm_gate.grant(Grant(tool=safe_tool, scope="execute"))
+
+    executor = ToolExecutorImpl(registry=registry, gate=perm_gate, bus=bus)
+
+    specs = [
+        ToolSpec(
+            name=spec["name"],
+            description=spec["description"],
+            parameters=spec["schema"],
+        )
+        for spec in registry.list_specs()
+    ]
+    return executor, specs
 
 
 def _assemble(
@@ -100,14 +144,18 @@ def _assemble(
         budget=settings.personalization_budget,
     )
     skills = SkillRegistry(registry=prompt_registry)
+
+    executor, tool_specs = _build_tool_executor(gate=gate, clock=clock, bus=bus)
+
     orch = Orchestrator(
         perception=TextPerception(),
         personalizer=personalizer,
         memory=gate,
         skills=skills,
-        reasoner=ReasoningModule(router=router, role="strong"),
+        reasoner=ReasoningModule(router=router, role="strong", executor=executor),
         learner=learner,
         bus=bus,
+        tools=tool_specs,
     )
     return orch, memory_module
 
@@ -147,15 +195,29 @@ class MemoryTestHandle:
 
 
 def build_orchestrator_for_test(
-    *, reply: str, clock: Callable[[], datetime]
+    *,
+    reply: str,
+    clock: Callable[[], datetime],
+    chat_results: "list[ChatResult] | None" = None,
 ) -> tuple[Orchestrator, MemoryTestHandle]:
     """Test wiring: fake embedder + fake LLM + in-memory stores. Returns (orchestrator, memory
-    handle) where the memory handle exposes recall_raw() for assertions."""
+    handle) where the memory handle exposes recall_raw() for assertions.
+
+    Args:
+        reply:        Default reply text for FakeChatClient (back-compat).
+        clock:        Deterministic clock callable.
+        chat_results: Optional list of ``ChatResult`` objects to script per-call responses
+                      (enables tool-call integration tests without network).
+    """
     settings = Settings(llm_model="test-model", llm_fast_model="test-model")
 
     # Build a RoleRouter backed by FakeChatClient for the test.
     # The fake client is used for both the orchestrator's LLM calls AND consolidation/profile.
-    fake_client = FakeChatClient(reply=reply)
+    fake_client: FakeChatClient
+    if chat_results is not None:
+        fake_client = FakeChatClient(results=chat_results)
+    else:
+        fake_client = FakeChatClient(reply=reply)
     reg = CapabilityRegistry.from_seed(
         {
             "fake/test-model": {

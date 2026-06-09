@@ -10,7 +10,7 @@ mockable. The discipline it enforces:
 
 from __future__ import annotations
 
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 from morgan_brain.interfaces.events import Event, EventBus, EventType
 from morgan_brain.interfaces.learning import Learner
@@ -19,6 +19,7 @@ from morgan_brain.interfaces.personalization import Personalizer
 from morgan_brain.interfaces.reasoning import Reasoner, ReasoningRequest, ReasoningResult
 from morgan_brain.interfaces.skills import SkillEngine
 from morgan_brain.models.memory import MemoryQuery
+from morgan_brain.providers.wire import ToolSpec
 from morgan_brain.security.memory_gate import MemoryGate
 
 
@@ -33,6 +34,7 @@ class Orchestrator:
         reasoner: Reasoner,
         learner: Learner,
         bus: EventBus,
+        tools: list[ToolSpec] | None = None,
     ) -> None:
         self._perception = perception
         self._personalizer = personalizer
@@ -41,6 +43,23 @@ class Orchestrator:
         self._reasoner = reasoner
         self._learner = learner
         self._bus = bus
+        self._tools: list[ToolSpec] = tools or []
+
+    def _scoped_tools(self, selected_skills: list[Any]) -> list[ToolSpec]:
+        """Return the ToolSpec list to expose for this turn.
+
+        If any selected skill declares a ``tools`` attribute (list of tool names),
+        only those specs are included.  Otherwise all registered specs are returned.
+        """
+        skill_tool_names: set[str] = set()
+        for skill in selected_skills:
+            declared = getattr(skill, "tools", None)
+            if declared:
+                skill_tool_names.update(declared)
+
+        if skill_tool_names:
+            return [t for t in self._tools if t.name in skill_tool_names]
+        return list(self._tools)
 
     async def handle_turn(
         self, *, user_id: str, text: str, session_id: str | None = None
@@ -64,7 +83,7 @@ class Orchestrator:
         skills = await self._skills.select(perception)
         skill_prompt = "\n\n".join(s.body for s in skills)
 
-        # 6. Reasoning
+        # 6. Reasoning — include scoped tool specs so the loop can execute tools.
         result = await self._reasoner.generate(
             ReasoningRequest(
                 user_id=user_id,
@@ -72,6 +91,7 @@ class Orchestrator:
                 personalization=personalization,
                 memories=memories,
                 skill_prompt=skill_prompt,
+                tools=self._scoped_tools(skills),
             )
         )
 
@@ -121,6 +141,7 @@ class Orchestrator:
             personalization=personalization,
             memories=memories,
             skill_prompt=skill_prompt,
+            tools=self._scoped_tools(skills),
         )
         chunks: list[str] = []
         async for delta in self._reasoner.stream(request):
