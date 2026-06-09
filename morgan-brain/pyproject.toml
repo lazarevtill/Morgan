@@ -84,4 +84,5 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
     "timeout: mark test with a wall-clock timeout in seconds (requires pytest-timeout; skipped if not installed)",
+    "live: mark test as requiring live external services (Qdrant, Redis); skipped by default",
 ]
