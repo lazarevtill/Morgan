@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     learning_backend: Literal["local", "mlflow"] = "local"
     # SQLite URI for MLflow tracking store (used when learning_backend="mlflow").
     mlflow_tracking_uri: str = "sqlite:///./data/mlflow.db"
+    # Path to the golden evaluation set JSON file.
+    # Empty string → use the packaged default (morgan_brain/eval/data/golden_set.json).
+    eval_golden_path: str = ""
 
     # --- Privacy (Wave 0.5b) ---
     # redact_egress: enable PII redaction on outbound messages to remote providers.

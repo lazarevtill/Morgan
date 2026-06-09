@@ -37,6 +37,7 @@ ENV/
 data/
 # Vendor/seed data bundled with source code (not runtime data) must be tracked.
 !morgan-brain/morgan_brain/providers/data/
+!morgan-brain/morgan_brain/eval/data/
 *.cache
 *.meta
 /morgan-rag/data/cache/
