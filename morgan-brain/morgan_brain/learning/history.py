@@ -82,17 +82,21 @@ class SessionHistoryStore:
         self._conn.commit()
 
     def recent(self, session_id: str, *, limit: int = 10) -> list[Message]:
-        """Return the *limit* most-recent messages for *session_id*, chronological order.
+        """Return the *limit* most-recent messages for *session_id*, in chronological order.
 
+        Fetches the last *limit* rows by insertion order, then re-sorts ascending so
+        callers receive them oldest-first (correct context order for LLM prompts).
         Returns an empty list when no history exists (e.g. first turn).
         """
         rows = self._conn.execute(
             """
-            SELECT user_id, role, content
-            FROM session_history
-            WHERE session_id = ?
-            ORDER BY id ASC
-            LIMIT ?
+            SELECT user_id, role, content FROM (
+                SELECT user_id, role, content, id
+                FROM session_history
+                WHERE session_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+            ) ORDER BY id ASC
             """,
             (session_id, limit),
         ).fetchall()
