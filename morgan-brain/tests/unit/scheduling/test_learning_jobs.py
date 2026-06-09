@@ -15,12 +15,42 @@ from typing import Any
 
 import pytest
 
+from morgan_brain.learning.signals import Thumb
 from morgan_brain.scheduling.cron import CronService, InProcessScheduler
 from morgan_brain.scheduling.learning_jobs import LearningScheduler
 
 # ---------------------------------------------------------------------------
 # Helpers & Fakes
 # ---------------------------------------------------------------------------
+
+
+class _FakeInteractionSignal:
+    """Minimal InteractionSignal-compatible object for _FakeSignalStore.
+
+    mine_examples checks .user_edit and .thumb; providing thumb=UP means it
+    is included as a positive example (value_rank=1).
+    """
+
+    def __init__(
+        self,
+        user_id: str,
+        session_id: str,
+        turn_id: str,
+        query: str,
+        original_reply: str,
+        *,
+        user_edit: str | None = None,
+        thumb: Thumb | None = Thumb.UP,
+    ) -> None:
+        self.user_id = user_id
+        self.session_id = session_id
+        self.turn_id = turn_id
+        self.query = query
+        self.original_reply = original_reply
+        self.context_summary = ""
+        self.user_edit = user_edit
+        self.thumb = thumb
+        self.retried = False
 
 T0 = datetime(2026, 1, 1, 0, 0, 0)
 CONSOLIDATE_INTERVAL = 100.0  # short interval so tests can tick past it easily
@@ -57,15 +87,43 @@ class _FakeTrainer:
 
 
 class _FakeSignalStore:
-    """Spy signal store returning a fixed list of examples."""
+    """Spy signal store compatible with _SignalStore protocol (high_value interface).
+
+    The optimizer job calls mine_examples(store, user_id) which internally calls
+    store.high_value(user_id, min_rank=1, limit=N).  This fake honours that path.
+
+    When constructed without arguments, high_value returns one thumb-up signal for
+    ANY user_id so the optimizer job has an example to work with.  Pass
+    ``examples=[]`` to simulate an empty store.
+    """
 
     def __init__(self, examples: list[Any] | None = None) -> None:
-        self._examples = [{"query": "q1", "good_output": "a1"}] if examples is None else examples
-        self.mine_calls: list[dict[str, Any]] = []
+        self._has_default = examples is None
+        # Store is empty iff explicitly passed examples=[].
+        self._static_examples: list[Any] = [] if examples is not None else []
+        # Sentinel: None means "auto-generate for requested user_id"
+        self._explicit_examples: list[Any] | None = examples
+        self.high_value_calls: list[dict[str, Any]] = []
 
-    def mine_examples(self, user_id: str, *, min_value_rank: int = 2) -> list[Any]:
-        self.mine_calls.append({"user_id": user_id, "min_value_rank": min_value_rank})
-        return self._examples
+    async def high_value(
+        self, user_id: str, *, min_rank: int = 1, limit: int = 50
+    ) -> list[Any]:
+        self.high_value_calls.append({"user_id": user_id, "min_rank": min_rank, "limit": limit})
+        if self._explicit_examples is not None:
+            # Explicit list (possibly empty): return as-is scoped to user_id.
+            return [
+                s for s in self._explicit_examples if getattr(s, "user_id", None) == user_id
+            ]
+        # Auto mode: return one thumb-up signal for the requested user so train() is called.
+        return [
+            _FakeInteractionSignal(
+                user_id=user_id,
+                session_id="s1",
+                turn_id="t1",
+                query="q1",
+                original_reply="a1",
+            )
+        ]
 
 
 def _make_svc(clock_t: datetime = T0) -> tuple[CronService, InProcessScheduler]:
