@@ -35,6 +35,15 @@ class Settings(BaseSettings):
     # --- Event bus ---
     event_bus: Literal["inproc", "redis"] = "inproc"
 
+    # --- Vector backend ---
+    # "memory" → InMemoryVectorIndex (default, no external deps, ephemeral).
+    # "qdrant" → QdrantVectorIndex (persistent, requires Qdrant at qdrant_url).
+    # Production: set MORGAN_VECTOR_BACKEND=qdrant for memory that survives restarts.
+    vector_backend: Literal["memory", "qdrant"] = "memory"
+    # Embedding vector dimension — must match the configured embedding_model output.
+    # qwen3-embedding:4b → 2560; nomic-embed-text → 768; mxbai-embed-large → 1024.
+    embedding_dim: int = 1024
+
     # --- Feature flags ---
     enable_proactivity: bool = False
     enable_scheduling: bool = False

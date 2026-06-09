@@ -27,7 +27,11 @@ from morgan_brain.models.message import Conversation, Message, Role
 from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder, OllamaEmbedder
 from morgan_brain.modules.memory.store import MemoryModule
 from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
-from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex
+from morgan_brain.modules.memory.stores.vector import (
+    InMemoryVectorIndex,
+    QdrantVectorIndex,
+    VectorIndex,
+)
 from morgan_brain.modules.perception.text.analyzer import TextPerception
 from morgan_brain.modules.personalization.adaptive import AdaptivePersonalizer
 from morgan_brain.modules.reasoning.reasoner import ReasoningModule
@@ -52,6 +56,22 @@ from morgan_brain.interfaces.events import EventBus
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _build_vector_index(settings: Settings) -> VectorIndex:
+    """Return the configured vector index backend.
+
+    "memory" → InMemoryVectorIndex (default, ephemeral, no external deps).
+    "qdrant" → QdrantVectorIndex (persistent; requires Qdrant at settings.qdrant_url).
+
+    Production sets MORGAN_VECTOR_BACKEND=qdrant so memories survive restarts.
+    """
+    if settings.vector_backend == "qdrant":
+        return QdrantVectorIndex(
+            url=settings.qdrant_url,
+            dim=settings.embedding_dim,
+        )
+    return InMemoryVectorIndex()
 
 
 def _register_turn_storage(
@@ -146,6 +166,7 @@ def _assemble(
     prompt_registry: LocalPromptRegistry | None = None,
     history_store: "SessionHistoryStore | None" = None,
     bus: EventBus | None = None,
+    vectors: VectorIndex | None = None,
 ) -> tuple[
     Orchestrator,
     MemoryModule,
@@ -156,9 +177,11 @@ def _assemble(
     ConsolidationLearner,
 ]:
     temporal = SqliteTemporalStore(temporal_path)
+    # Use the injected vector index (tests) or build one from settings (production).
+    resolved_vectors: VectorIndex = vectors if vectors is not None else InMemoryVectorIndex()
     memory_module = MemoryModule(
         embedder=embedder,
-        vectors=InMemoryVectorIndex(),
+        vectors=resolved_vectors,
         temporal=temporal,
         clock=clock,
     )
@@ -258,6 +281,7 @@ def build_app_context(settings: Settings | None = None) -> AppContext:
         signal_store_path=signal_path,
         prompt_registry=prom_registry,
         history_store=history_store,
+        vectors=_build_vector_index(settings),
     )
 
     return AppContext(

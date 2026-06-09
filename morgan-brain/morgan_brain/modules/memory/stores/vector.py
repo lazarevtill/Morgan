@@ -4,8 +4,13 @@ QdrantVectorIndex for runtime. Both satisfy the same Protocol."""
 from __future__ import annotations
 
 import math
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
+
+# Stable namespace for UUID5 derivation of Qdrant point ids.
+# Using a fixed, project-specific UUID so ids are deterministic across restarts.
+QDRANT_ID_NAMESPACE = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # UUID_URL namespace
 
 
 @dataclass
@@ -55,16 +60,39 @@ class InMemoryVectorIndex:
 
 class QdrantVectorIndex:
     """Runtime adapter. Uses a single collection with a `user_id` payload filter for scoping.
-    Smoke-tested against a live Qdrant, not in unit tests."""
 
-    def __init__(self, url: str, collection: str = "morgan_memories", dim: int = 1024) -> None:
-        from qdrant_client import AsyncQdrantClient
+    Point ids in Qdrant must be integers or UUIDs. String memory ids are mapped to
+    deterministic UUID5 values (via ``QDRANT_ID_NAMESPACE``) on upsert; the original string
+    id is stored in ``payload["mem_id"]`` so search can return the original value.
+
+    Smoke-tested against a live Qdrant via ``@pytest.mark.live`` tests; unit tests inject
+    a fake client via the ``_client`` constructor parameter.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        collection: str = "morgan_memories",
+        dim: int = 1024,
+        *,
+        _client: Any = None,
+    ) -> None:
         from qdrant_client.http import models as qm
 
-        self._client = AsyncQdrantClient(url=url)
+        if _client is not None:
+            self._client = _client
+        else:
+            from qdrant_client import AsyncQdrantClient
+
+            self._client = AsyncQdrantClient(url=url)
         self._collection = collection
         self._dim = dim
         self._qm = qm
+
+    @staticmethod
+    def _point_id(mem_id: str) -> str:
+        """Derive a stable UUID5 string for *mem_id* (Qdrant-acceptable point id)."""
+        return str(uuid.uuid5(QDRANT_ID_NAMESPACE, mem_id))
 
     async def ensure_collection(self) -> None:
         qm = self._qm
@@ -78,13 +106,19 @@ class QdrantVectorIndex:
 
     async def upsert(self, record: VectorRecord) -> None:
         qm = self._qm
+        point_id = self._point_id(record.id)
         await self._client.upsert(
             collection_name=self._collection,
             points=[
                 qm.PointStruct(
-                    id=record.id,
+                    id=point_id,
                     vector=record.vector,
-                    payload={**record.payload, "user_id": record.user_id},
+                    payload={
+                        **record.payload,
+                        "user_id": record.user_id,
+                        # Store the original string id so search can return it.
+                        "mem_id": record.id,
+                    },
                 )
             ],
         )
@@ -100,6 +134,11 @@ class QdrantVectorIndex:
             ),
         )
         return [
-            VectorHit(id=str(p.id), score=p.score, payload=dict(p.payload or {}))
+            VectorHit(
+                # Return the original string id if stored; fall back to str(point.id).
+                id=dict(p.payload or {}).get("mem_id") or str(p.id),
+                score=p.score,
+                payload=dict(p.payload or {}),
+            )
             for p in res.points
         ]
