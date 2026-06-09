@@ -1,9 +1,10 @@
 """Reasoning module — implements ``interfaces.Reasoner``.
 
-Responsibility: assemble the context window, route to an LLM (fast/strong), optionally
-plan/reflect and call tools/MCP, then generate. A thin pipeline, not a god class.
-Service: brain-api. Phase: 1.
+Responsibility: assemble the context window, route to an LLM via role (fast/strong) through the
+provider seam, run the tool loop, then generate. A thin pipeline, not a god class.
+Service: brain-api — built and wired as the request-path reason step. LLM routing/fallback/
+structured output live behind the provider seam (`morgan_brain.providers`); tools/MCP are invoked
+through the executor and PermissionGate.
 
-Planned files: llm/{router,client,fallback}.py (port from legacy services/llm),
-context/{builder,compactor}.py, planning/{planner,reflection}.py, response/generator.py.
+Files: reasoner.py, context/builder.py.
 """
