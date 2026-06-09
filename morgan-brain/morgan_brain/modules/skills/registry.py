@@ -125,6 +125,10 @@ class SkillRegistry:
     # SkillEngine Protocol
     # ------------------------------------------------------------------
 
+    def list_skills(self) -> list[Skill]:
+        """Return all loaded skills as a flat list, sorted by name."""
+        return [self._skills[name] for name in sorted(self._skills)]
+
     async def select(self, perception: FusedPerception) -> list[Skill]:
         """Return skills whose triggers match the current perception.
 

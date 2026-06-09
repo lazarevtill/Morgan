@@ -10,6 +10,7 @@ mockable. The discipline it enforces:
 
 from __future__ import annotations
 
+import uuid
 from typing import Any, AsyncIterator
 
 from morgan_brain.interfaces.events import Event, EventBus, EventType
@@ -61,9 +62,74 @@ class Orchestrator:
             return [t for t in self._tools if t.name in skill_tool_names]
         return list(self._tools)
 
+    async def handle_turn_with_id(
+        self,
+        *,
+        user_id: str,
+        text: str,
+        session_id: str | None = None,
+        history: list[Any] | None = None,
+    ) -> tuple[ReasoningResult, str]:
+        """Like handle_turn but also returns the turn_id alongside the result."""
+        turn_id = uuid.uuid4().hex
+
+        # 2. Perception
+        perception = await self._perception.analyze(user_id=user_id, text=text)
+        await self._bus.publish(
+            Event(type=EventType.PERCEPTION_COMPLETE, user_id=user_id, payload={"text": text})
+        )
+
+        # 3. Personalization
+        user_model = await self._learner.user_model(user_id)
+        personalization = await self._personalizer.build(
+            user_model=user_model, perception=perception
+        )
+
+        # 4. Memory recall
+        memories = await self._memory.recall(MemoryQuery(user_id=user_id, text=perception.text))
+
+        # 5. Skill selection
+        skills = await self._skills.select(perception)
+        skill_prompt = "\n\n".join(s.body for s in skills)
+
+        # 6. Reasoning
+        result = await self._reasoner.generate(
+            ReasoningRequest(
+                user_id=user_id,
+                perception=perception,
+                personalization=personalization,
+                memories=memories,
+                skill_prompt=skill_prompt,
+                tools=self._scoped_tools(skills),
+                history=history or [],
+            )
+        )
+
+        # 7. Post-turn cold path
+        await self._bus.publish(
+            Event(
+                type=EventType.RESPONSE_GENERATED,
+                user_id=user_id,
+                payload={
+                    "session_id": session_id,
+                    "request": text,
+                    "response": result.text,
+                    "turn_id": turn_id,
+                },
+            )
+        )
+        return result, turn_id
+
     async def handle_turn(
-        self, *, user_id: str, text: str, session_id: str | None = None
+        self,
+        *,
+        user_id: str,
+        text: str,
+        session_id: str | None = None,
+        history: list[Any] | None = None,
     ) -> ReasoningResult:
+        turn_id = uuid.uuid4().hex
+
         # 2. Perception
         perception = await self._perception.analyze(user_id=user_id, text=text)
         await self._bus.publish(
@@ -92,6 +158,7 @@ class Orchestrator:
                 memories=memories,
                 skill_prompt=skill_prompt,
                 tools=self._scoped_tools(skills),
+                history=history or [],
             )
         )
 
@@ -100,13 +167,23 @@ class Orchestrator:
             Event(
                 type=EventType.RESPONSE_GENERATED,
                 user_id=user_id,
-                payload={"session_id": session_id, "request": text, "response": result.text},
+                payload={
+                    "session_id": session_id,
+                    "request": text,
+                    "response": result.text,
+                    "turn_id": turn_id,
+                },
             )
         )
         return result
 
     async def stream_turn(
-        self, *, user_id: str, text: str, session_id: str | None = None
+        self,
+        *,
+        user_id: str,
+        text: str,
+        session_id: str | None = None,
+        history: list[Any] | None = None,
     ) -> AsyncIterator[str]:
         """Streaming variant of handle_turn.
 
@@ -115,6 +192,8 @@ class Orchestrator:
         After the stream is exhausted, publishes RESPONSE_GENERATED so turn-storage and
         learning still fire on the cold path — identical behaviour to handle_turn.
         """
+        turn_id = uuid.uuid4().hex
+
         # 2. Perception
         perception = await self._perception.analyze(user_id=user_id, text=text)
         await self._bus.publish(
@@ -142,6 +221,7 @@ class Orchestrator:
             memories=memories,
             skill_prompt=skill_prompt,
             tools=self._scoped_tools(skills),
+            history=history or [],
         )
         chunks: list[str] = []
         async for delta in self._reasoner.stream(request):
@@ -154,6 +234,11 @@ class Orchestrator:
             Event(
                 type=EventType.RESPONSE_GENERATED,
                 user_id=user_id,
-                payload={"session_id": session_id, "request": text, "response": full_text},
+                payload={
+                    "session_id": session_id,
+                    "request": text,
+                    "response": full_text,
+                    "turn_id": turn_id,
+                },
             )
         )
