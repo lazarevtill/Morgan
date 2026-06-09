@@ -109,8 +109,12 @@ with your own preference probes; any self-learned promotion must beat the curren
   Inbound messages are **per-chat allowlisted** (default-deny) before reaching the assistant.
 
 ## 8. What remains
-- **Voice** (Whisper ASR + Wav2Vec2 emotion + prosody) — the perception seam is ready; it plugs in
-  as the `perception-gpu` service with zero downstream change. Deferred (GPU service).
+- **Voice = NVIDIA PersonaPlex** (full-duplex speech↔speech, Moshi-based). The `VoiceConversation`
+  seam + `voice.persona_bridge` (your learned persona → a PersonaPlex role prompt + voice) are built
+  and tested; the GPU serving + hybrid mode-router + transcript write-back are deferred behind a
+  `[voice]` extra (needs an A100/H100-class GPU). Design: [PersonaPlex decision](superpowers/specs/2026-06-09-personaplex-voice-decision.md).
+  Note: PersonaPlex is the *voice* layer, not the learning engine — Morgan still learns you via the
+  text pipeline, and voice transcripts feed back into it.
 - **LoRA fine-tuning** — deliberately deferred; only build it if the 4-condition escalation test in
   the [self-learning decision](superpowers/specs/2026-06-08-self-learning-decision.md) ever fires.
   RAG + the GEPA-optimized champion preprompt are the default and cover the vast majority of gains.
