@@ -68,9 +68,10 @@ injected every turn so responses adapt.
 - **Per turn (automatic):** the turn is stored as episodic memory off the response path; the
   `AdaptivePersonalizer` injects your compact profile + turn-relevant traits every turn; current
   facts are merged into recall.
-- **Feedback (capture it):** record edits/retries/thumbs against a turn via the `SignalRecorder`
-  (edit = highest-value signal). These feed consolidation + the optimizer. *(A thin HTTP/CLI surface
-  for feedback is part of Phase 4/Wave 6; the `SignalRecorder` API exists now.)*
+- **Feedback (capture it):** every turn returns a `turn_id`. Record feedback via
+  **`POST /api/feedback`** `{turn_id, kind: "edit"|"retry"|"thumb", edited_reply?, thumb?}` — an edit
+  is the highest-value signal. These feed consolidation + the optimizer. A base signal is recorded
+  for every turn automatically.
 - **Consolidation (automated):** with `MORGAN_ENABLE_SCHEDULING=true`, the `learning-worker` runs a
   `LearningScheduler` that fires nightly consolidation — `ConsolidationLearner.consolidate(user_id)`
   turns recent episodics into durable bi-temporal facts (ADD/UPDATE/DELETE/NOOP, contradiction →

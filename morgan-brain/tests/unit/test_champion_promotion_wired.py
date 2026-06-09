@@ -306,7 +306,7 @@ def test_load_champion_override_returns_body_when_champion_exists() -> None:
         v = await registry.register(CHAMPION_PROMPT_NAME, "champion text")
         await registry.set_champion(CHAMPION_PROMPT_NAME, v.version)
 
-    asyncio.get_event_loop().run_until_complete(_setup())
+    asyncio.run(_setup())
 
     result = _load_champion_override(registry)
     assert result == "champion text"
