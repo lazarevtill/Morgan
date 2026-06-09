@@ -50,8 +50,12 @@ async def test_build_learning_scheduler_returns_scheduler_or_none() -> None:
     )
     from morgan_brain.scheduling.learning_jobs import LearningScheduler
 
+    class _FakeLearner:
+        async def consolidate(self, user_id: str) -> None:
+            pass
+
     cron = _build_cron_service()
-    result = _build_learning_scheduler(cron)
+    result = _build_learning_scheduler(cron, _FakeLearner())  # type: ignore[arg-type]
     # Either None (if composition fails) or a LearningScheduler.
     assert result is None or isinstance(result, LearningScheduler)
 
