@@ -2,6 +2,7 @@
 
 All tests are deterministic and pure-Python — no I/O, no network.
 """
+
 from __future__ import annotations
 
 from morgan_brain.modules.skills.frontmatter import parse_frontmatter

@@ -1,4 +1,5 @@
 """Provider-neutral wire types (OpenAI Chat Completions shape). No provider SDK imported here."""
+
 from __future__ import annotations
 import json
 from typing import Any, Literal
@@ -23,8 +24,11 @@ class ChatMessage(BaseModel):
         d: dict[str, Any] = {"role": self.role, "content": self.content}
         if self.tool_calls:
             d["tool_calls"] = [
-                {"id": tc.id, "type": "function",
-                 "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}}
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)},
+                }
                 for tc in self.tool_calls
             ]
         if self.tool_call_id:
@@ -38,8 +42,14 @@ class ToolSpec(BaseModel):
     parameters: dict[str, Any] = Field(default_factory=dict)  # JSON Schema
 
     def to_openai(self) -> dict[str, Any]:
-        return {"type": "function", "function": {"name": self.name,
-                "description": self.description, "parameters": self.parameters}}
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters,
+            },
+        }
 
 
 class Usage(BaseModel):

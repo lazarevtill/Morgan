@@ -29,6 +29,7 @@ Streaming helper::
         out = fn(chunk)     # may be empty if a placeholder straddles the boundary
     out = fn(None)          # flush — returns any buffered remainder
 """
+
 from __future__ import annotations
 
 import re
@@ -59,9 +60,7 @@ _PHONE_RE = re.compile(
 _CARD_RE = re.compile(r"\b(?:\d[ -]?){13,19}\b")
 
 # IPv4 address
-_IP_RE = re.compile(
-    r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b"
-)
+_IP_RE = re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b")
 
 # US SSN: NNN-NN-NNNN (not starting with 000, 666, 9xx)
 _SSN_RE = re.compile(r"\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b")
@@ -137,9 +136,7 @@ class EgressRedactor:
         redacted = self._apply_presidio(redacted)
         # Build snapshot map of only the placeholders that appear in this result
         snapshot: RedactionMap = {
-            ph: orig
-            for ph, orig in self._placeholder_to_span.items()
-            if ph in redacted
+            ph: orig for ph, orig in self._placeholder_to_span.items() if ph in redacted
         }
         return redacted, snapshot
 

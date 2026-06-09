@@ -1,5 +1,6 @@
 """Embedder: text -> vector. OllamaEmbedder hits the OpenAI-compatible /v1/embeddings endpoint;
 FakeEmbedder is a deterministic, dependency-free stand-in for tests."""
+
 from __future__ import annotations
 
 import hashlib

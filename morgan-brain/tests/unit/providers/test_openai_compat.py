@@ -2,6 +2,7 @@
 
 Construction and message/tool translation only — NO network calls.
 """
+
 from __future__ import annotations
 
 from morgan_brain.interfaces.llm import ChatClient

@@ -7,9 +7,11 @@ from morgan_brain.providers.adapters.fake import FakeChatClient, FakeEmbedder
 # FakeChatClient — single reply
 # ---------------------------------------------------------------------------
 
+
 async def test_fake_chat_agenerate_returns_chat_result():
     c = FakeChatClient(reply="hello")
     from morgan_brain.providers.wire import ChatMessage
+
     result = await c.agenerate([ChatMessage(role="user", content="hi")], model="m")
     assert result.text == "hello"
     assert result.model == "m"
@@ -18,6 +20,7 @@ async def test_fake_chat_agenerate_returns_chat_result():
 async def test_fake_chat_records_last_messages_and_model():
     c = FakeChatClient(reply="yo")
     from morgan_brain.providers.wire import ChatMessage
+
     msgs = [ChatMessage(role="user", content="test")]
     await c.agenerate(msgs, model="fast-model")
     assert c.last_model == "fast-model"
@@ -35,6 +38,7 @@ async def test_fake_chat_astream_yields_text_delta_then_finish():
 # ---------------------------------------------------------------------------
 # FakeChatClient — replies queue + calls counter (Task 6 dep)
 # ---------------------------------------------------------------------------
+
 
 async def test_fake_chat_replies_queue_and_calls_counter():
     c = FakeChatClient(replies=["a", "b"])
@@ -63,8 +67,10 @@ async def test_fake_chat_replies_queue_wraps_when_exhausted():
 # FakeChatClient with tool_calls
 # ---------------------------------------------------------------------------
 
+
 async def test_fake_chat_with_tool_calls():
     from morgan_brain.providers.wire import ToolCall
+
     tc = ToolCall(id="t1", name="search", arguments={"q": "test"})
     c = FakeChatClient(reply="", tool_calls=[tc])
     result = await c.agenerate([], model="m")
@@ -74,6 +80,7 @@ async def test_fake_chat_with_tool_calls():
 # ---------------------------------------------------------------------------
 # Protocol satisfaction
 # ---------------------------------------------------------------------------
+
 
 def test_fake_chat_satisfies_chat_client_protocol():
     assert isinstance(FakeChatClient(), ChatClient)
@@ -86,6 +93,7 @@ def test_fake_embedder_satisfies_embedder_protocol():
 # ---------------------------------------------------------------------------
 # FakeEmbedder — deterministic + L2-normalized
 # ---------------------------------------------------------------------------
+
 
 async def test_fake_embedder_returns_correct_dim():
     e = FakeEmbedder(dim=8)
@@ -110,6 +118,7 @@ async def test_fake_embedder_different_texts_differ():
 
 async def test_fake_embedder_is_l2_normalized():
     import math
+
     e = FakeEmbedder(dim=16)
     v = (await e.aembed(["test"]))[0]
     norm = math.sqrt(sum(x * x for x in v))

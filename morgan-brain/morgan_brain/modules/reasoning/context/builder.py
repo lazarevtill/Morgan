@@ -5,6 +5,7 @@ current user turn. Pure and deterministic.
 Uses ``providers.wire.ChatMessage`` (the provider-neutral wire type) so messages can
 be passed directly to any ``ChatClient`` adapter without conversion.
 """
+
 from __future__ import annotations
 
 from morgan_brain.interfaces.reasoning import ReasoningRequest

@@ -3,6 +3,7 @@
 Produced and maintained asynchronously by the Learning subsystem; read (never written) on the
 request path by Personalization. This is the concrete answer to "knows me".
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -30,14 +31,14 @@ class Trait(BaseModel):
 
 class CommunicationPrefs(BaseModel):
     tone: str = "neutral"
-    length: str = "balanced"        # terse | balanced | thorough
+    length: str = "balanced"  # terse | balanced | thorough
     formality: str = "neutral"
     code_vs_prose: str = "balanced"  # code_first | balanced | prose_first
 
 
 class BehavioralPattern(BaseModel):
     description: str
-    cue: str = ""                    # e.g. "weekday 09:00"
+    cue: str = ""  # e.g. "weekday 09:00"
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
 

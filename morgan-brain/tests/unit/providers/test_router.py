@@ -1,4 +1,5 @@
 """Tests for RoleRouter (capability gating) and RoleFallback (event-driven failover)."""
+
 from __future__ import annotations
 
 import pytest

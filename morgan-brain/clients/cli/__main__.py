@@ -2,6 +2,7 @@
 
 Phase 1+ adds: interactive chat, `morgan memory`, `morgan skills`, `morgan workspace`.
 """
+
 from __future__ import annotations
 
 import os

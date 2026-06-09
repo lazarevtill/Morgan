@@ -4,6 +4,7 @@ Recall is multi-signal: vector (semantic) + BM25 (keyword) + entity overlap, com
 reciprocal rank fusion (the single rerank layer). Facts are delegated to the bi-temporal store.
 All access is user-scoped; callers reach it only through the MemoryGate.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -39,10 +40,14 @@ class MemoryModule:
             memory.created_at = self._clock()
         vector = await self._embedder.embed(memory.content)
         memory.embedding = vector
-        await self._vectors.upsert(VectorRecord(
-            id=memory.id, user_id=memory.user_id, vector=vector,
-            payload={"content": memory.content, "user_id": memory.user_id},
-        ))
+        await self._vectors.upsert(
+            VectorRecord(
+                id=memory.id,
+                user_id=memory.user_id,
+                vector=vector,
+                payload={"content": memory.content, "user_id": memory.user_id},
+            )
+        )
         self._bm25.add(memory.id, memory.content)
         self._by_id[memory.id] = memory
         self._entities[memory.id] = {e.name.lower() for e in memory.entities}
@@ -56,13 +61,15 @@ class MemoryModule:
         vector_ranking = [h.id for h in vec_hits]
 
         bm25_ranking = [
-            mid for mid, _ in self._bm25.search(query.text, top_k=query.top_k * 2)
+            mid
+            for mid, _ in self._bm25.search(query.text, top_k=query.top_k * 2)
             if self._owned(mid, query.user_id)
         ]
 
         q_terms = {t.lower() for t in query.text.split()}
         entity_ranking = [
-            mid for mid in self._by_id
+            mid
+            for mid in self._by_id
             if self._owned(mid, query.user_id) and (self._entities.get(mid, set()) & q_terms)
         ]
 

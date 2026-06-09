@@ -17,6 +17,7 @@ message and the call is retried up to *max_reask* times.  When retries are exhau
 Grammar/tool-as-schema tiers are intentionally left as TODO for live adapters — the
 validate-and-re-ask spine already works without them.
 """
+
 from __future__ import annotations
 
 import json

@@ -7,6 +7,7 @@ Contains:
 GPU audio I/O and the actual PersonaPlex/Moshi serving live in
 ``apps.perception_gpu`` (Phase 5-voice, deferred).
 """
+
 from morgan_brain.voice.persona_bridge import build_voice_persona
 
 __all__ = ["build_voice_persona"]

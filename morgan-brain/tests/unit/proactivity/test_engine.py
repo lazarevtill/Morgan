@@ -5,6 +5,7 @@ All tests are deterministic:
   - Injected fake clock.
   - No LLM calls, no network.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -73,9 +74,7 @@ async def test_no_rules_no_suggestions() -> None:
 
 @pytest.mark.asyncio
 async def test_new_stage_user_gets_nothing_even_with_matching_rule() -> None:
-    engine, events = _make_engine(
-        rules=[ConsentRule(kind="reminder", min_stage=FAMILIAR)]
-    )
+    engine, events = _make_engine(rules=[ConsentRule(kind="reminder", min_stage=FAMILIAR)])
     result = await engine.maybe_suggest(
         user_id="alice",
         user_model=_user(NEW),
@@ -87,9 +86,7 @@ async def test_new_stage_user_gets_nothing_even_with_matching_rule() -> None:
 
 @pytest.mark.asyncio
 async def test_familiar_user_allowed_by_familiar_rule() -> None:
-    engine, events = _make_engine(
-        rules=[ConsentRule(kind="reminder", min_stage=FAMILIAR)]
-    )
+    engine, events = _make_engine(rules=[ConsentRule(kind="reminder", min_stage=FAMILIAR)])
     result = await engine.maybe_suggest(
         user_id="alice",
         user_model=_user(FAMILIAR),
@@ -101,9 +98,7 @@ async def test_familiar_user_allowed_by_familiar_rule() -> None:
 
 @pytest.mark.asyncio
 async def test_trusted_user_gets_suggestion() -> None:
-    engine, events = _make_engine(
-        rules=[ConsentRule(kind="suggestion", min_stage=TRUSTED)]
-    )
+    engine, events = _make_engine(rules=[ConsentRule(kind="suggestion", min_stage=TRUSTED)])
     result = await engine.maybe_suggest(
         user_id="alice",
         user_model=_user(TRUSTED),
@@ -118,9 +113,7 @@ async def test_trusted_user_gets_suggestion() -> None:
 
 @pytest.mark.asyncio
 async def test_allowed_suggestion_payload_contains_message_and_evidence() -> None:
-    engine, events = _make_engine(
-        rules=[ConsentRule(kind="summary", min_stage=ACQUAINTED)]
-    )
+    engine, events = _make_engine(rules=[ConsentRule(kind="summary", min_stage=ACQUAINTED)])
     candidate = ProactiveSuggestion(
         kind="summary",
         message="Here's your weekly summary.",
@@ -145,9 +138,9 @@ async def test_mixed_candidates_only_allowed_ones_returned() -> None:
         ]
     )
     candidates = [
-        ProactiveSuggestion(kind="reminder", message="Reminder!"),   # allowed (FAMILIAR >= FAMILIAR)
-        ProactiveSuggestion(kind="summary", message="Summary!"),     # denied (FAMILIAR < TRUSTED)
-        ProactiveSuggestion(kind="unknown", message="Unknown!"),     # denied (no rule)
+        ProactiveSuggestion(kind="reminder", message="Reminder!"),  # allowed (FAMILIAR >= FAMILIAR)
+        ProactiveSuggestion(kind="summary", message="Summary!"),  # denied (FAMILIAR < TRUSTED)
+        ProactiveSuggestion(kind="unknown", message="Unknown!"),  # denied (no rule)
     ]
     result = await engine.maybe_suggest(
         user_id="alice",
@@ -161,9 +154,7 @@ async def test_mixed_candidates_only_allowed_ones_returned() -> None:
 
 @pytest.mark.asyncio
 async def test_empty_candidates_returns_empty() -> None:
-    engine, events = _make_engine(
-        rules=[ConsentRule(kind="reminder", min_stage=NEW)]
-    )
+    engine, events = _make_engine(rules=[ConsentRule(kind="reminder", min_stage=NEW)])
     result = await engine.maybe_suggest(
         user_id="alice",
         user_model=_user(TRUSTED),
@@ -175,12 +166,8 @@ async def test_empty_candidates_returns_empty() -> None:
 
 @pytest.mark.asyncio
 async def test_multiple_suggestions_all_published() -> None:
-    engine, events = _make_engine(
-        rules=[ConsentRule(kind="reminder", min_stage=NEW)]
-    )
-    candidates = [
-        ProactiveSuggestion(kind="reminder", message=f"msg{i}") for i in range(3)
-    ]
+    engine, events = _make_engine(rules=[ConsentRule(kind="reminder", min_stage=NEW)])
+    candidates = [ProactiveSuggestion(kind="reminder", message=f"msg{i}") for i in range(3)]
     result = await engine.maybe_suggest(
         user_id="alice",
         user_model=_user(TRUSTED),
@@ -258,9 +245,7 @@ def test_derive_from_patterns_multiple_patterns() -> None:
 @pytest.mark.asyncio
 async def test_trusted_user_with_plan_pattern_gets_suggestion_event() -> None:
     """Full pipeline: pattern → derive → gate → event published."""
-    engine, events = _make_engine(
-        rules=[ConsentRule(kind="suggestion", min_stage=FAMILIAR)]
-    )
+    engine, events = _make_engine(rules=[ConsentRule(kind="suggestion", min_stage=FAMILIAR)])
     pattern = BehavioralPattern(description="Sunday planning session", cue="Sunday 10:00")
     user = _user(TRUSTED, patterns=[pattern])
     candidates = engine.derive_from_patterns(user)
@@ -276,9 +261,7 @@ async def test_trusted_user_with_plan_pattern_gets_suggestion_event() -> None:
 @pytest.mark.asyncio
 async def test_new_stage_user_with_patterns_gets_no_events() -> None:
     """A NEW user never receives suggestions regardless of patterns."""
-    engine, events = _make_engine(
-        rules=[ConsentRule(kind="suggestion", min_stage=FAMILIAR)]
-    )
+    engine, events = _make_engine(rules=[ConsentRule(kind="suggestion", min_stage=FAMILIAR)])
     pattern = BehavioralPattern(description="Sunday planning session", cue="Sunday 10:00")
     user = _user(NEW, patterns=[pattern])
     candidates = engine.derive_from_patterns(user)

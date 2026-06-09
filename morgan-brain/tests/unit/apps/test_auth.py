@@ -5,6 +5,7 @@ Policy under test:
 * api_key set to any other value → enforce; missing/wrong → 401; correct → 200.
 * /health never requires a key regardless.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -18,6 +19,7 @@ from morgan_brain.config import Settings
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_app(api_key: str) -> tuple[FastAPI, TestClient]:
     """Build a minimal app with a single /api/probe route protected by auth."""
@@ -39,6 +41,7 @@ def _make_app(api_key: str) -> tuple[FastAPI, TestClient]:
 # ---------------------------------------------------------------------------
 # Tests: key enforcement OFF (empty / sentinel)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("api_key", ["", "change-me"])
 def test_open_when_key_not_configured(api_key: str) -> None:

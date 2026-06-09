@@ -3,6 +3,7 @@
 All tests use fake predict_fn + fake judge — NO network.
 Also verifies the eval firewall: harness never mutates any memory state.
 """
+
 from __future__ import annotations
 
 import json

@@ -2,6 +2,7 @@
 
 All tests are deterministic and have no external dependencies.
 """
+
 from __future__ import annotations
 
 

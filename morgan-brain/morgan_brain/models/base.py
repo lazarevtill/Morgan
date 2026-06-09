@@ -1,5 +1,6 @@
 """Base model mixins. Timestamps are passed in, never generated implicitly, so the
 system stays deterministic and testable."""
+
 from __future__ import annotations
 
 from datetime import datetime

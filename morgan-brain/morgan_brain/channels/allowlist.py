@@ -12,6 +12,7 @@ Example::
     al.is_allowed("chat_999")  # False
     ChatAllowlist().is_allowed("chat_123")  # False (empty → deny all)
 """
+
 from __future__ import annotations
 
 

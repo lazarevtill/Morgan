@@ -1,4 +1,5 @@
 """Tests for the structured-output ladder (generate_structured)."""
+
 from __future__ import annotations
 
 import pytest

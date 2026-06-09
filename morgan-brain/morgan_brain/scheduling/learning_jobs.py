@@ -22,6 +22,7 @@ recurring jobs for a given user:
 
 Tests call ``cron.scheduler.tick(now)`` directly — no real sleeping required.
 """
+
 from __future__ import annotations
 
 import logging
@@ -197,9 +198,7 @@ class LearningScheduler:
                     scorer=self._scorer,
                     max_calls=self._max_optimizer_calls,
                 )
-                logger.info(
-                    "LearningScheduler: optimizer for %r — promoted=%s", user_id, promoted
-                )
+                logger.info("LearningScheduler: optimizer for %r — promoted=%s", user_id, promoted)
 
             return asyncio.ensure_future(_run())
 

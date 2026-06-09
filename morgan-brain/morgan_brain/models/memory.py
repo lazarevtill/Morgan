@@ -8,6 +8,7 @@ Two ideas the design hinges on:
   old interval and opens a new one (evolution, not overwrite), so recall is never confidently
   stale and history stays queryable.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -25,8 +26,8 @@ class MemorySource(str, Enum):
 
 
 class MemoryKind(str, Enum):
-    EPISODIC = "episodic"   # what happened, when
-    SEMANTIC = "semantic"   # what's true
+    EPISODIC = "episodic"  # what happened, when
+    SEMANTIC = "semantic"  # what's true
     PROCEDURAL = "procedural"  # how to do something (skills)
 
 
@@ -42,14 +43,14 @@ class Memory(UserScoped):
 class TemporalFact(UserScoped):
     """A semantic fact with a validity interval. Supersession, not deletion."""
 
-    subject: str           # usually an entity name or "user"
-    predicate: str         # e.g. "lives_in", "works_at", "prefers"
-    object: str            # the value
+    subject: str  # usually an entity name or "user"
+    predicate: str  # e.g. "lives_in", "works_at", "prefers"
+    object: str  # the value
     source: MemorySource = MemorySource.USER_STATED
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     valid_from: datetime | None = None
-    valid_to: datetime | None = None         # None = currently valid
-    superseded_by: str | None = None         # id of the fact that replaced this one
+    valid_to: datetime | None = None  # None = currently valid
+    superseded_by: str | None = None  # id of the fact that replaced this one
     last_confirmed: datetime | None = None
 
 

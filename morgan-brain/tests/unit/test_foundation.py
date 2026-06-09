@@ -1,4 +1,5 @@
 """Phase 0 smoke tests — the foundation contracts hold."""
+
 from __future__ import annotations
 
 from morgan_brain.config import Settings

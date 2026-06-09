@@ -2,6 +2,7 @@
 (bus/redis_streams.py) both satisfy this Protocol, so cross-module communication is identical
 whether modules share a process or run as separate services.
 """
+
 from __future__ import annotations
 
 from enum import Enum

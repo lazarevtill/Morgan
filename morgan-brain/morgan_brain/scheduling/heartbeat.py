@@ -10,6 +10,7 @@ Design principles
 * The bus is called with a fully-constructed ``Event``; no knowledge of channel
   routing or delivery (that is Phase 5).
 """
+
 from __future__ import annotations
 
 import itertools

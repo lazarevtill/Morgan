@@ -19,6 +19,7 @@ Results are sorted deterministically by skill name.
 sets it as champion) or, when no registry is wired, replaces the in-memory
 skill directly.
 """
+
 from __future__ import annotations
 
 import re

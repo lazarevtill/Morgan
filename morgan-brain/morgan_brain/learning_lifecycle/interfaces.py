@@ -10,6 +10,7 @@ A "champion" is just a named alias pointing at a specific version number.
 ``set_champion(name, version)`` re-points the alias atomically — passing an older
 version number achieves instant rollback without deleting any history.
 """
+
 from __future__ import annotations
 
 from datetime import datetime

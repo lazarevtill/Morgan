@@ -7,6 +7,7 @@ mockable. The discipline it enforces:
 * steps 2–6 only READ learned knowledge (hot path),
 * step 7 only WRITES and never blocks the response (cold path).
 """
+
 from __future__ import annotations
 
 from typing import AsyncIterator
@@ -57,9 +58,7 @@ class Orchestrator:
         )
 
         # 4. Memory recall (multi-signal, currently-valid facts)
-        memories = await self._memory.recall(
-            MemoryQuery(user_id=user_id, text=perception.text)
-        )
+        memories = await self._memory.recall(MemoryQuery(user_id=user_id, text=perception.text))
 
         # 5. Skill selection
         skills = await self._skills.select(perception)
@@ -109,9 +108,7 @@ class Orchestrator:
         )
 
         # 4. Memory recall
-        memories = await self._memory.recall(
-            MemoryQuery(user_id=user_id, text=perception.text)
-        )
+        memories = await self._memory.recall(MemoryQuery(user_id=user_id, text=perception.text))
 
         # 5. Skill selection
         skills = await self._skills.select(perception)

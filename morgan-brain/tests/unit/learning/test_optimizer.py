@@ -5,6 +5,7 @@ All tests are fully deterministic:
   - Injected clock pins time.
   - Injected scorer maps body → score.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -304,9 +305,7 @@ async def test_reflective_optimizer_returns_prompt_version_candidate() -> None:
 async def test_reflective_optimizer_fallback_role() -> None:
     """If 'reflection' role is missing, optimizer falls back to 'strong'."""
     client = FakeChatClient(replies=["Better body from strong"])
-    reg = CapabilityRegistry.from_seed(
-        {"fake/strong": {"context_window": 8192}}
-    )
+    reg = CapabilityRegistry.from_seed({"fake/strong": {"context_window": 8192}})
     # Only 'strong' role registered, no 'reflection' role.
     router = RoleRouter(
         reg=reg,

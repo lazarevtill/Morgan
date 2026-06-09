@@ -12,6 +12,7 @@ Design constraints
 * Live transport wiring (stdio / SSE / Streamable-HTTP) is a follow-on; this
   commit establishes the seam and the lazy-import pattern.
 """
+
 from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable

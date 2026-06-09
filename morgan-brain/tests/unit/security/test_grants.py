@@ -4,6 +4,7 @@ Covers: default-deny, AUTO back-compat, explicit grant, param guard,
         DENY-override, revoke, TTL expiry.  Clock is injected via
         ``time.monotonic`` monkeypatching to keep tests deterministic.
 """
+
 from __future__ import annotations
 
 import time
@@ -72,7 +73,7 @@ def test_explicit_grant_authorises() -> None:
 def test_grant_with_matching_scope_authorises() -> None:
     gate = _gate()
     gate.grant(Grant(tool="fetcher", scope="execute"))
-    assert gate.check("fetcher", scope="read") is True   # read ≤ execute
+    assert gate.check("fetcher", scope="read") is True  # read ≤ execute
     assert gate.check("fetcher", scope="write") is True  # write ≤ execute
     assert gate.check("fetcher", scope="execute") is True
 

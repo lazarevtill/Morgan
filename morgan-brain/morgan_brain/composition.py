@@ -4,6 +4,7 @@ Also registers the cold-path turn-storage subscriber: on RESPONSE_GENERATED, the
 turn is persisted as episodic memory via the Learner. With the in-process bus this runs after the
 reply is produced; with the Redis bus (later phases) it runs in the learning-worker, off-path.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -141,6 +142,7 @@ class MemoryTestHandle:
 
     async def recall_raw(self, *, user_id: str, text: str) -> list[Memory]:
         from morgan_brain.models.memory import MemoryQuery
+
         return await self._memory_module.recall(MemoryQuery(user_id=user_id, text=text, top_k=10))
 
 
@@ -154,13 +156,15 @@ def build_orchestrator_for_test(
     # Build a RoleRouter backed by FakeChatClient for the test.
     # The fake client is used for both the orchestrator's LLM calls AND consolidation/profile.
     fake_client = FakeChatClient(reply=reply)
-    reg = CapabilityRegistry.from_seed({
-        "fake/test-model": {
-            "supports_tools": True,
-            "json_mode": "json_schema",
-            "context_window": 32768,
+    reg = CapabilityRegistry.from_seed(
+        {
+            "fake/test-model": {
+                "supports_tools": True,
+                "json_mode": "json_schema",
+                "context_window": 32768,
+            }
         }
-    })
+    )
     test_router = RoleRouter(
         reg=reg,
         bindings={"strong": [Binding("fake", "test-model", fake_client)]},
@@ -179,4 +183,4 @@ def build_orchestrator_for_test(
 def _sqlite_path(url: str) -> str:
     """Turn a sqlite:/// URL into a filesystem path; pass through ':memory:'."""
     prefix = "sqlite:///"
-    return url[len(prefix):] if url.startswith(prefix) else url
+    return url[len(prefix) :] if url.startswith(prefix) else url

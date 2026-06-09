@@ -4,6 +4,7 @@ Every store/recall passes through here. It enforces user-scope isolation (the ba
 multi-tenant readiness) and is the one place to add redaction, consent, and audit later.
 Wrapping the MemoryStore means no module can bypass the gate.
 """
+
 from __future__ import annotations
 
 from morgan_brain.interfaces.memory import MemoryStore
@@ -26,7 +27,9 @@ class MemoryGate:
         self._require_scope(fact.user_id)
         return await self._store.upsert_fact(fact)
 
-    async def current_facts(self, *, user_id: str, subject: str | None = None) -> list[TemporalFact]:
+    async def current_facts(
+        self, *, user_id: str, subject: str | None = None
+    ) -> list[TemporalFact]:
         self._require_scope(user_id)
         return await self._store.current_facts(user_id=user_id, subject=subject)
 

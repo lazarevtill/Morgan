@@ -2,6 +2,7 @@
 off the request path. Reads finished sessions, writes the UserModel + facts via the gate.
 Never invoked synchronously during a turn.
 """
+
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable

@@ -2,6 +2,7 @@
 new value for the same (user, subject, predicate) closes the old interval (sets valid_to = now,
 superseded_by = new id) instead of deleting it — so history stays queryable and recall is never
 confidently stale."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -46,11 +47,17 @@ class SqliteTemporalStore:
 
     def _row_to_fact(self, row: sqlite3.Row) -> TemporalFact:
         return TemporalFact(
-            id=row["id"], user_id=row["user_id"], subject=row["subject"],
-            predicate=row["predicate"], object=row["object"],
-            source=MemorySource(row["source"]), confidence=row["confidence"],
-            valid_from=_dt(row["valid_from"]), valid_to=_dt(row["valid_to"]),
-            superseded_by=row["superseded_by"], last_confirmed=_dt(row["last_confirmed"]),
+            id=row["id"],
+            user_id=row["user_id"],
+            subject=row["subject"],
+            predicate=row["predicate"],
+            object=row["object"],
+            source=MemorySource(row["source"]),
+            confidence=row["confidence"],
+            valid_from=_dt(row["valid_from"]),
+            valid_to=_dt(row["valid_to"]),
+            superseded_by=row["superseded_by"],
+            last_confirmed=_dt(row["last_confirmed"]),
         )
 
     async def upsert_fact(self, fact: TemporalFact, *, now: datetime) -> str:
@@ -65,9 +72,19 @@ class SqliteTemporalStore:
         fact.last_confirmed = now
         self._conn.execute(
             "INSERT INTO facts VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (fact.id, fact.user_id, fact.subject, fact.predicate, fact.object,
-             fact.source.value, fact.confidence, _iso(fact.valid_from), _iso(fact.valid_to),
-             fact.superseded_by, _iso(fact.last_confirmed)),
+            (
+                fact.id,
+                fact.user_id,
+                fact.subject,
+                fact.predicate,
+                fact.object,
+                fact.source.value,
+                fact.confidence,
+                _iso(fact.valid_from),
+                _iso(fact.valid_to),
+                fact.superseded_by,
+                _iso(fact.last_confirmed),
+            ),
         )
         for old_id in existing:
             self._conn.execute(
@@ -88,9 +105,7 @@ class SqliteTemporalStore:
         rows = self._conn.execute(sql, params).fetchall()
         return [self._row_to_fact(r) for r in rows]
 
-    async def history(
-        self, *, user_id: str, subject: str, predicate: str
-    ) -> list[TemporalFact]:
+    async def history(self, *, user_id: str, subject: str, predicate: str) -> list[TemporalFact]:
         rows = self._conn.execute(
             "SELECT * FROM facts WHERE user_id=? AND subject=? AND predicate=? ORDER BY valid_from",
             (user_id, subject, predicate),

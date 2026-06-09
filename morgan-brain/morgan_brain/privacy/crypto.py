@@ -33,6 +33,7 @@ Usage pattern (wiring into stores)::
     dek = open_sealed(encrypted_dek, kek)
     plaintext = open_sealed(sealed_payload, dek)
 """
+
 from __future__ import annotations
 
 import os

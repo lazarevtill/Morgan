@@ -17,6 +17,7 @@ the response deltas are rehydrated best-effort per chunk.
 The gate satisfies the ``ChatClient`` Protocol unconditionally so it can be
 dropped in anywhere a ``ChatClient`` is expected.
 """
+
 from __future__ import annotations
 
 from typing import Any, AsyncIterator

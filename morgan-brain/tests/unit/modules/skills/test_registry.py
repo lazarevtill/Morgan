@@ -3,6 +3,7 @@
 All tests are deterministic and in-process — no network, no real filesystem side-effects
 beyond loading the bundled skill files that ship with the package.
 """
+
 from __future__ import annotations
 
 import tempfile
@@ -92,9 +93,7 @@ async def test_select_matches_by_keyword_in_text() -> None:
 async def test_select_matches_by_entity_name() -> None:
     registry = SkillRegistry()
     # "research" trigger is "research"; entity name matches.
-    results = await registry.select(
-        _perception("tell me about X", entities=["research"])
-    )
+    results = await registry.select(_perception("tell me about X", entities=["research"]))
     names = [s.name for s in results]
     assert "research" in names
 
@@ -103,9 +102,7 @@ async def test_select_matches_by_entity_name() -> None:
 async def test_select_non_matching_returns_empty() -> None:
     registry = SkillRegistry()
     # Use a nonsense intent + text that matches no skill triggers.
-    results = await registry.select(
-        _perception("xyzzy quux frobnicate", intent="unknown_intent")
-    )
+    results = await registry.select(_perception("xyzzy quux frobnicate", intent="unknown_intent"))
     assert results == []
 
 
@@ -113,9 +110,7 @@ async def test_select_non_matching_returns_empty() -> None:
 async def test_select_ordering_deterministic() -> None:
     registry = SkillRegistry()
     # A text that matches both "coding" and "planning" triggers.
-    results = await registry.select(
-        _perception("I need to plan the code refactor")
-    )
+    results = await registry.select(_perception("I need to plan the code refactor"))
     names = [s.name for s in results]
     assert names == sorted(names), "Results must be sorted by name"
 

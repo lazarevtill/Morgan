@@ -9,6 +9,7 @@ Verifies:
 - Sets proactive_threshold from relationship_stage (NEW→high; TRUSTED→low).
 - Stateless: no writes occur.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -33,7 +34,9 @@ def _make_um(
     )
 
 
-def _make_perception(text: str, intent: str = "chat", entities: list[str] | None = None) -> FusedPerception:
+def _make_perception(
+    text: str, intent: str = "chat", entities: list[str] | None = None
+) -> FusedPerception:
     ents = [Entity(name=e) for e in (entities or [])]
     return FusedPerception(
         text=text,
@@ -118,9 +121,7 @@ async def test_guardrail_skips_low_confidence_trait() -> None:
 async def test_budget_caps_trait_count() -> None:
     """With a very small budget, only a small number of traits are selected."""
     # Create many relevant traits
-    traits = [
-        Trait(name=f"python_{i}", value="python", confidence=0.9) for i in range(20)
-    ]
+    traits = [Trait(name=f"python_{i}", value="python", confidence=0.9) for i in range(20)]
     um = _make_um(traits=traits)
     perc = _make_perception("python programming help")
 
@@ -132,9 +133,7 @@ async def test_budget_caps_trait_count() -> None:
 @pytest.mark.asyncio
 async def test_budget_default_selects_reasonable_count() -> None:
     """Default budget (0.15) should select at most round(0.15*20)=3 traits."""
-    traits = [
-        Trait(name=f"python_{i}", value="python", confidence=0.9) for i in range(20)
-    ]
+    traits = [Trait(name=f"python_{i}", value="python", confidence=0.9) for i in range(20)]
     um = _make_um(traits=traits)
     perc = _make_perception("python programming")
 
@@ -152,9 +151,7 @@ async def test_budget_default_selects_reasonable_count() -> None:
 async def test_tone_set_from_comm_prefs() -> None:
     """tone should come from user_model.comm_prefs.tone."""
     um = _make_um(comm_prefs=CommunicationPrefs(tone="warm"))
-    ctx = await AdaptivePersonalizer().build(
-        user_model=um, perception=_make_perception("hello")
-    )
+    ctx = await AdaptivePersonalizer().build(user_model=um, perception=_make_perception("hello"))
     assert ctx.tone == "warm"
 
 
@@ -162,9 +159,7 @@ async def test_tone_set_from_comm_prefs() -> None:
 async def test_proactive_threshold_high_for_new_user() -> None:
     """NEW stage → proactive_threshold should be high (less proactive)."""
     um = _make_um(stage=RelationshipStage.NEW)
-    ctx = await AdaptivePersonalizer().build(
-        user_model=um, perception=_make_perception("hi")
-    )
+    ctx = await AdaptivePersonalizer().build(user_model=um, perception=_make_perception("hi"))
     assert ctx.proactive_threshold >= 0.7
 
 
@@ -172,9 +167,7 @@ async def test_proactive_threshold_high_for_new_user() -> None:
 async def test_proactive_threshold_low_for_trusted_user() -> None:
     """TRUSTED stage → proactive_threshold should be lower (more proactive)."""
     um = _make_um(stage=RelationshipStage.TRUSTED)
-    ctx = await AdaptivePersonalizer().build(
-        user_model=um, perception=_make_perception("hi")
-    )
+    ctx = await AdaptivePersonalizer().build(user_model=um, perception=_make_perception("hi"))
     assert ctx.proactive_threshold <= 0.4
 
 

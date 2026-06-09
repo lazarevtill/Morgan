@@ -27,6 +27,7 @@ Hardening applied (in order, per tool)
 6. **Allowlist enforcement** — if a ``ServerAllowlist`` is configured, servers
    not on it are rejected before any connection attempt.
 """
+
 from __future__ import annotations
 
 from typing import Any, Literal

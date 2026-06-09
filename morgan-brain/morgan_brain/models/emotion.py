@@ -1,5 +1,6 @@
 """Shared emotion vocabulary, used by Perception (detect), Learning (track baseline),
 and Personalization (adapt to deltas)."""
+
 from __future__ import annotations
 
 from enum import Enum

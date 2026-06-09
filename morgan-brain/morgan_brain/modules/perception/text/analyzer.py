@@ -3,6 +3,7 @@
 Phase 1 scope: intent classification by simple heuristics and capitalized-token entity
 extraction. Emotion/sentiment remain at defaults until Phase 2; audio/vision are Phase 5.
 """
+
 from __future__ import annotations
 
 import re
@@ -11,8 +12,22 @@ from morgan_brain.models.base import Entity
 from morgan_brain.models.perception import FusedPerception, Intent, Modality
 
 _CAP_TOKEN = re.compile(r"\b([A-Z][a-z]{2,})\b")
-_STOPWORDS = {"The", "What", "When", "Where", "Why", "How", "Remind", "Monday",
-              "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+_STOPWORDS = {
+    "The",
+    "What",
+    "When",
+    "Where",
+    "Why",
+    "How",
+    "Remind",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+}
 
 
 class TextPerception:
@@ -33,7 +48,9 @@ class TextPerception:
                 unique.append(e)
         return FusedPerception(
             text=text,
-            intent=Intent(name=intent_name, confidence=0.6),  # heuristic-only; calibrated in Phase 2
+            intent=Intent(
+                name=intent_name, confidence=0.6
+            ),  # heuristic-only; calibrated in Phase 2
             entities=unique,
             modalities_used=[Modality.TEXT],
         )
@@ -41,8 +58,9 @@ class TextPerception:
     @staticmethod
     def _classify_intent(text: str) -> str:
         stripped = text.strip()
-        if stripped.endswith("?") or re.match(r"^(what|when|where|why|how|who|is|are|do|does)\b",
-                                               stripped, re.IGNORECASE):
+        if stripped.endswith("?") or re.match(
+            r"^(what|when|where|why|how|who|is|are|do|does)\b", stripped, re.IGNORECASE
+        ):
             return "question"
         if re.match(r"^(remind|create|add|delete|set|schedule|run)\b", stripped, re.IGNORECASE):
             return "command"

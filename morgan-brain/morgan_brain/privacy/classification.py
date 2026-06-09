@@ -22,6 +22,7 @@ so the most sensitive match wins.
 Non-English names and informal PII are a known gap; Presidio NER (optional) closes
 most of that gap at the redaction layer (see ``redaction.py``).
 """
+
 from __future__ import annotations
 
 import re
@@ -78,7 +79,7 @@ _SECRET_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\b(?:AKIA|ASIA|AROA|AIPA|ANPA|ANVA|APKA)[A-Z0-9]{16,}\b"),
     # 32–64 hex chars next to a "secret" / "api_key" / "token" / "password" label
     re.compile(
-        r'(?:api[_\s-]?key|api[_\s-]?secret|token|secret|password|passwd|private[_\s-]?key'
+        r"(?:api[_\s-]?key|api[_\s-]?secret|token|secret|password|passwd|private[_\s-]?key"
         r'|auth[_\s-]?key|access[_\s-]?key)\s*[=:"\s]+[A-Za-z0-9+/=_\-]{20,}',
         re.I,
     ),
@@ -86,7 +87,7 @@ _SECRET_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"-----BEGIN\s+(?:RSA |EC |OPENSSH |PGP |DSA )?PRIVATE KEY-----", re.I),
     # Generic long random-looking hex string next to a key-word (conservative — only if labeled)
     re.compile(
-        r'(?:key|token|secret|password)\s*[=:]\s*[0-9a-fA-F]{32,}',
+        r"(?:key|token|secret|password)\s*[=:]\s*[0-9a-fA-F]{32,}",
         re.I,
     ),
     # Bearer token in Authorization header

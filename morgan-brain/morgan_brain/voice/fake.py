@@ -13,6 +13,7 @@ Usage example::
 ``FakeVoiceConversation`` satisfies the ``VoiceConversation`` Protocol at
 runtime (``isinstance(fake, VoiceConversation)`` is ``True``).
 """
+
 from __future__ import annotations
 
 from morgan_brain.interfaces.voice import VoiceConversation, VoicePersona, VoiceTurn

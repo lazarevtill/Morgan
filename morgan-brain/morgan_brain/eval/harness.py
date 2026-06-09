@@ -22,6 +22,7 @@ EvalGate wraps the registry seam: it compares the candidate scorecard to the
 champion's stored metrics, promotes (register + set_champion) only if the gate
 passes, and leaves the champion untouched on failure.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict

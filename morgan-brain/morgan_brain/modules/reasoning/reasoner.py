@@ -7,6 +7,7 @@ The module depends on the provider seam (``RoleRouter``) rather than a concrete
 LLM client, so adapters can be swapped (Ollama, OpenAI, vLLM…) without touching
 this code.
 """
+
 from __future__ import annotations
 
 from typing import AsyncIterator

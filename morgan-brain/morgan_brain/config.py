@@ -3,6 +3,7 @@
 There is exactly one settings object in the system (design principle: one config system).
 Access it via ``get_settings()``.
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -10,7 +11,6 @@ from typing import Any, Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 
 class Settings(BaseSettings):

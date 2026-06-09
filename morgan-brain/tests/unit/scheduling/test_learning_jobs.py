@@ -6,6 +6,7 @@ All tests are deterministic:
   - tick() on InProcessScheduler to advance logical time.
   - No real sleeping, no APScheduler, no LLM calls.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +23,7 @@ from morgan_brain.scheduling.learning_jobs import LearningScheduler
 # ---------------------------------------------------------------------------
 
 T0 = datetime(2026, 1, 1, 0, 0, 0)
-CONSOLIDATE_INTERVAL = 100.0   # short interval so tests can tick past it easily
+CONSOLIDATE_INTERVAL = 100.0  # short interval so tests can tick past it easily
 OPTIMIZE_INTERVAL = 50.0
 
 

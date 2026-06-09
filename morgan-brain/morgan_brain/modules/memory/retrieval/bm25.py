@@ -1,5 +1,6 @@
 """Tiny in-memory BM25. Sufficient for a single user's memory volume in Phase 1; swappable for a
 real index later without touching callers."""
+
 from __future__ import annotations
 
 import math

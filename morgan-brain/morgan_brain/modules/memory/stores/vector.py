@@ -1,5 +1,6 @@
 """VectorIndex: user-scoped vector storage + cosine search. InMemoryVectorIndex for tests;
 QdrantVectorIndex for runtime. Both satisfy the same Protocol."""
+
 from __future__ import annotations
 
 import math
@@ -79,11 +80,13 @@ class QdrantVectorIndex:
         qm = self._qm
         await self._client.upsert(
             collection_name=self._collection,
-            points=[qm.PointStruct(
-                id=record.id,
-                vector=record.vector,
-                payload={**record.payload, "user_id": record.user_id},
-            )],
+            points=[
+                qm.PointStruct(
+                    id=record.id,
+                    vector=record.vector,
+                    payload={**record.payload, "user_id": record.user_id},
+                )
+            ],
         )
 
     async def search(self, *, user_id: str, vector: list[float], top_k: int) -> list[VectorHit]:
@@ -96,4 +99,7 @@ class QdrantVectorIndex:
                 must=[qm.FieldCondition(key="user_id", match=qm.MatchValue(value=user_id))]
             ),
         )
-        return [VectorHit(id=str(p.id), score=p.score, payload=dict(p.payload or {})) for p in res.points]
+        return [
+            VectorHit(id=str(p.id), score=p.score, payload=dict(p.payload or {}))
+            for p in res.points
+        ]

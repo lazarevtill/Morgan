@@ -6,6 +6,7 @@ All tests are deterministic:
   - Fake clock.
   - No network, no LLM, no MLflow.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
