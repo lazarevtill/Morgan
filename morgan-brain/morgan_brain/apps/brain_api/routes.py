@@ -105,7 +105,7 @@ def build_router(
     async def run_tool(name: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         kwargs: dict[str, Any] = body or {}
         result = await executor.execute(name, user_id=settings.owner_user_id, **kwargs)
-        return {"ok": result.ok, "data": result.data, "error": result.error}
+        return {"ok": result.ok, "output": result.output, "error": result.error}
 
     @router.get("/api/skills", dependencies=[_auth])
     async def list_skills() -> list[dict[str, Any]]:
@@ -125,6 +125,7 @@ def build_router(
     async def get_profile(user_id: str | None = None) -> dict[str, Any]:
         uid = user_id or settings.owner_user_id
         model = await learner.user_model(uid)
-        return model.model_dump()
+        result: dict[str, Any] = model.model_dump()
+        return result
 
     return router

@@ -15,7 +15,6 @@ from typing import Any
 import pytest
 
 from morgan_brain.composition import build_orchestrator_for_test_with_signals
-from morgan_brain.learning.signals import SignalStore
 
 CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
 

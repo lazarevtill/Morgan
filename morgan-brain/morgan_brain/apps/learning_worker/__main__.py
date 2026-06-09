@@ -80,15 +80,13 @@ def _build_learning_scheduler(cron: CronService) -> LearningScheduler | None:
             reg=reg,
             bindings={"strong": [Binding("fake", "noop", fake_client)]},
         )
-        _orch, _mem = _assemble(
+        _orch, _mem, _, _, _, _, learner = _assemble(
             embedder=FakeEmbedder(dim=16),
             router=router,
             settings=Settings(),
             clock=_utcnow,
             temporal_path=":memory:",
         )
-        # _orch._learner is the ConsolidationLearner (private attr, accessed intentionally).
-        learner = _orch._learner
 
         ls = LearningScheduler(
             cron=cron,

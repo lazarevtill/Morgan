@@ -364,14 +364,12 @@ def build_orchestrator_for_test_with_signals(
         clock=clock,
         temporal_path=":memory:",
     )
-    # Expose the bus for event subscription in tests
-    bus = orch._bus  # type: ignore[attr-defined]
-    return orch, signal_store, bus
+    # The bus is an InProcessBus — cast to expose subscribe() to test subscribers.
+    extracted_bus = cast(InProcessBus, orch._bus)  # noqa: SLF001
+    return orch, signal_store, extracted_bus
 
 
 def _sqlite_path(url: str) -> str:
     """Turn a sqlite:/// URL into a filesystem path; pass through ':memory:'."""
     prefix = "sqlite:///"
     return url[len(prefix) :] if url.startswith(prefix) else url
-
-
