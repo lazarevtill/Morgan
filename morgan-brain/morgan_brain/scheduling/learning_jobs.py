@@ -63,9 +63,18 @@ class _Trainable(Protocol):
 
 @runtime_checkable
 class _SignalStore(Protocol):
-    """Subset of SignalStore used by LearningScheduler."""
+    """Subset of SignalStore used by LearningScheduler.
 
-    def mine_examples(self, user_id: str, *, min_value_rank: int = 2) -> list[Any]: ...
+    Matches the ``SignalStore.high_value`` interface so that the real
+    :class:`~morgan_brain.learning.signals.SignalStore` satisfies the protocol
+    without modification.  The optimizer job calls the async free function
+    ``mine_examples(store, user_id)`` from ``learning.optimizer`` which in turn
+    calls ``store.high_value``.
+    """
+
+    async def high_value(
+        self, user_id: str, *, min_rank: int = 1, limit: int = 50
+    ) -> list[Any]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -182,10 +191,15 @@ class LearningScheduler:
         def _optimize_fn() -> Any:
             import asyncio
 
+            from morgan_brain.learning.optimizer import mine_examples
+
             async def _run() -> None:
                 assert trainer is not None  # narrowing for mypy
                 assert store is not None
-                examples = store.mine_examples(user_id, min_value_rank=2)
+                # mine_examples is the canonical async free function:
+                #   mine_examples(signals: SignalStore, user_id, *, limit=50)
+                # It calls store.high_value internally and returns Example objects.
+                examples = await mine_examples(store, user_id)  # type: ignore[arg-type]
                 if not examples:
                     logger.debug(
                         "LearningScheduler: no high-value examples for %r; skipping optimize",
