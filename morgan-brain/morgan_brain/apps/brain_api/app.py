@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from morgan_brain import __version__
 from morgan_brain.apps.brain_api.auth import require_api_key
-from morgan_brain.composition import build_orchestrator
+from morgan_brain.composition import build_app_context
 from morgan_brain.config import get_settings
 
 
@@ -28,12 +28,14 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     model_used: str
+    turn_id: str
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="morgan-brain", version=__version__)
-    orchestrator = build_orchestrator(settings)
+    ctx = build_app_context(settings)
+    orchestrator = ctx.orchestrator
     _auth = Depends(require_api_key(settings))
 
     @app.get("/health")
@@ -43,10 +45,11 @@ def create_app() -> FastAPI:
     @app.post("/api/chat", response_model=ChatResponse, dependencies=[_auth])
     async def chat(req: ChatRequest) -> ChatResponse:
         user_id = req.user_id or settings.owner_user_id
-        result = await orchestrator.handle_turn(
-            user_id=user_id, text=req.message, session_id=req.session_id
+        history = ctx.history_store.recent(req.session_id or "default") if ctx.history_store else []
+        result, turn_id = await orchestrator.handle_turn_with_id(
+            user_id=user_id, text=req.message, session_id=req.session_id, history=history
         )
-        return ChatResponse(response=result.text, model_used=result.model_used)
+        return ChatResponse(response=result.text, model_used=result.model_used, turn_id=turn_id)
 
     @app.post("/api/chat/stream", dependencies=[_auth])
     async def chat_stream(req: ChatRequest) -> StreamingResponse:
@@ -59,14 +62,34 @@ def create_app() -> FastAPI:
         user_id = req.user_id or settings.owner_user_id
 
         async def _event_stream() -> AsyncIterator[str]:
+            history = (
+                ctx.history_store.recent(req.session_id or "default") if ctx.history_store else []
+            )
             async for delta in orchestrator.stream_turn(
-                user_id=user_id, text=req.message, session_id=req.session_id
+                user_id=user_id,
+                text=req.message,
+                session_id=req.session_id,
+                history=history,
             ):
                 payload = json.dumps({"delta": delta})
                 yield f"data: {payload}\n\n"
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(_event_stream(), media_type="text/event-stream")
+
+    # Mount the read/feedback router built from the app context
+    from morgan_brain.apps.brain_api.routes import build_router
+
+    app.include_router(
+        build_router(
+            orchestrator=orchestrator,
+            signal_recorder=ctx.signal_recorder,
+            executor=ctx.executor,
+            skills=ctx.skills,
+            learner=ctx.learner,
+            settings=settings,
+        )
+    )
 
     return app
 

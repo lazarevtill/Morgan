@@ -7,6 +7,8 @@ reply is produced; with the Redis bus (later phases) it runs in the learning-wor
 
 from __future__ import annotations
 
+import pathlib
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, cast
 
@@ -17,6 +19,9 @@ from morgan_brain.interfaces.tools import BaseTool
 from morgan_brain.learning.consolidation import MemoryConsolidator
 from morgan_brain.learning.learner import ConsolidationLearner
 from morgan_brain.learning.profile import UserProfileBuilder
+from morgan_brain.learning.history import SessionHistoryStore
+from morgan_brain.learning.recorder import SignalRecorder
+from morgan_brain.learning.signals import SignalStore
 from morgan_brain.models.memory import Memory
 from morgan_brain.models.message import Conversation, Message, Role
 from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder, OllamaEmbedder
@@ -47,18 +52,47 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _register_turn_storage(bus: InProcessBus, learner: ConsolidationLearner) -> None:
+def _register_turn_storage(
+    bus: InProcessBus,
+    learner: ConsolidationLearner,
+    recorder: SignalRecorder,
+    history_store: "SessionHistoryStore | None" = None,
+) -> None:
     async def _store_turn(event: Event) -> None:
         payload = event.payload
+        session_id = payload.get("session_id") or "default"
+        turn_id = payload.get("turn_id") or ""
+        query = payload["request"]
+        reply = payload["response"]
+
         convo = Conversation(
             user_id=event.user_id,
-            session_id=payload.get("session_id") or "default",
+            session_id=session_id,
             messages=[
-                Message(user_id=event.user_id, role=Role.USER, content=payload["request"]),
-                Message(user_id=event.user_id, role=Role.ASSISTANT, content=payload["response"]),
+                Message(user_id=event.user_id, role=Role.USER, content=query),
+                Message(user_id=event.user_id, role=Role.ASSISTANT, content=reply),
             ],
         )
         await learner.process_session(convo)
+
+        # Record the base interaction signal for this turn
+        if turn_id:
+            await recorder.record_turn(
+                user_id=event.user_id,
+                session_id=session_id,
+                turn_id=turn_id,
+                query=query,
+                reply=reply,
+            )
+
+        # Append messages to session history
+        if history_store is not None:
+            history_store.append(
+                session_id, Message(user_id=event.user_id, role=Role.USER, content=query)
+            )
+            history_store.append(
+                session_id, Message(user_id=event.user_id, role=Role.ASSISTANT, content=reply)
+            )
 
     bus.subscribe(EventType.RESPONSE_GENERATED, _store_turn)
 
@@ -106,8 +140,18 @@ def _assemble(
     settings: Settings,
     clock: Callable[[], datetime],
     temporal_path: str,
+    signal_store_path: str = ":memory:",
     prompt_registry: LocalPromptRegistry | None = None,
-) -> tuple[Orchestrator, MemoryModule]:
+    history_store: "SessionHistoryStore | None" = None,
+) -> tuple[
+    Orchestrator,
+    MemoryModule,
+    SignalStore,
+    SignalRecorder,
+    ToolExecutorImpl,
+    SkillRegistry,
+    ConsolidationLearner,
+]:
     temporal = SqliteTemporalStore(temporal_path)
     memory_module = MemoryModule(
         embedder=embedder,
@@ -124,9 +168,11 @@ def _assemble(
         capability_registry=reg,
         clock=clock,
     )
+    signal_store = SignalStore(signal_store_path, clock=clock)
+    recorder = SignalRecorder(store=signal_store, clock=clock)
     profile_builder = UserProfileBuilder(
         gate=gate,
-        signals=None,
+        signals=signal_store,
         router=router,
         capability_registry=reg,
         clock=clock,
@@ -138,7 +184,7 @@ def _assemble(
         profile_builder=profile_builder,
     )
     bus = InProcessBus()
-    _register_turn_storage(bus, learner)
+    _register_turn_storage(bus, learner, recorder, history_store)
     personalizer = AdaptivePersonalizer(
         profile_builder=profile_builder,
         budget=settings.personalization_budget,
@@ -157,29 +203,68 @@ def _assemble(
         bus=bus,
         tools=tool_specs,
     )
-    return orch, memory_module
+    return orch, memory_module, signal_store, recorder, executor, skills, learner
 
 
-def build_orchestrator(settings: Settings | None = None) -> Orchestrator:
-    """Production wiring (Ollama + in-memory vectors for Phase 1; Qdrant swaps in later)."""
-    import pathlib
+@dataclass
+class AppContext:
+    """All handles needed by brain-api create_app + routes."""
 
+    orchestrator: Orchestrator
+    signal_store: SignalStore
+    signal_recorder: SignalRecorder
+    executor: ToolExecutorImpl
+    skills: SkillRegistry
+    learner: ConsolidationLearner
+    history_store: "SessionHistoryStore | None" = field(default=None)
+
+
+def build_app_context(settings: Settings | None = None) -> AppContext:
+    """Production wiring: builds all components and returns an AppContext.
+
+    The AppContext exposes every handle needed by API routes.
+    """
     settings = settings or get_settings()
     temporal_path = _sqlite_path(settings.temporal_db_url)
     if temporal_path != ":memory:":
         pathlib.Path(temporal_path).parent.mkdir(parents=True, exist_ok=True)
+
+    # Derive signals DB path from temporal_db_url (sibling file)
+    if temporal_path == ":memory:":
+        signal_path = ":memory:"
+    else:
+        signal_path = str(pathlib.Path(temporal_path).parent / "signals.db")
+
     embedder = OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
     router = build_router(settings)
     prom_registry = LocalPromptRegistry()
-    orch, _ = _assemble(
+    history_store = SessionHistoryStore()
+
+    orch, _, signal_store, recorder, executor, skills, learner = _assemble(
         embedder=embedder,
         router=router,
         settings=settings,
         clock=_utcnow,
         temporal_path=temporal_path,
+        signal_store_path=signal_path,
         prompt_registry=prom_registry,
+        history_store=history_store,
     )
-    return orch
+
+    return AppContext(
+        orchestrator=orch,
+        signal_store=signal_store,
+        signal_recorder=recorder,
+        executor=executor,
+        skills=skills,
+        learner=learner,
+        history_store=history_store,
+    )
+
+
+def build_orchestrator(settings: Settings | None = None) -> Orchestrator:
+    """Production wiring (Ollama + in-memory vectors for Phase 1; Qdrant swaps in later)."""
+    return build_app_context(settings).orchestrator
 
 
 class MemoryTestHandle:
@@ -232,7 +317,7 @@ def build_orchestrator_for_test(
         bindings={"strong": [Binding("fake", "test-model", fake_client)]},
     )
 
-    orch, memory_module = _assemble(
+    orch, memory_module, _, _, _, _, _ = _assemble(
         embedder=FakeEmbedder(dim=16),
         router=test_router,
         settings=settings,
@@ -242,7 +327,51 @@ def build_orchestrator_for_test(
     return orch, MemoryTestHandle(memory_module)
 
 
+def build_orchestrator_for_test_with_signals(
+    *,
+    reply: str,
+    clock: Callable[[], datetime],
+    chat_results: "list[ChatResult] | None" = None,
+) -> tuple[Orchestrator, SignalStore, InProcessBus]:
+    """Test wiring variant that also returns the SignalStore and InProcessBus.
+
+    Used by tests that assert on signal recording and event payloads.
+    """
+    settings = Settings(llm_model="test-model", llm_fast_model="test-model")
+
+    if chat_results is not None:
+        fake_client: FakeChatClient = FakeChatClient(results=chat_results)
+    else:
+        fake_client = FakeChatClient(reply=reply)
+    reg = CapabilityRegistry.from_seed(
+        {
+            "fake/test-model": {
+                "supports_tools": True,
+                "json_mode": "json_schema",
+                "context_window": 32768,
+            }
+        }
+    )
+    test_router = RoleRouter(
+        reg=reg,
+        bindings={"strong": [Binding("fake", "test-model", fake_client)]},
+    )
+
+    orch, _, signal_store, _, _, _, _ = _assemble(
+        embedder=FakeEmbedder(dim=16),
+        router=test_router,
+        settings=settings,
+        clock=clock,
+        temporal_path=":memory:",
+    )
+    # Expose the bus for event subscription in tests
+    bus = orch._bus  # type: ignore[attr-defined]
+    return orch, signal_store, bus
+
+
 def _sqlite_path(url: str) -> str:
     """Turn a sqlite:/// URL into a filesystem path; pass through ':memory:'."""
     prefix = "sqlite:///"
     return url[len(prefix) :] if url.startswith(prefix) else url
+
+
