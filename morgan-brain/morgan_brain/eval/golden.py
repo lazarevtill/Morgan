@@ -25,6 +25,16 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 
+def default_golden_path() -> Path:
+    """Return the path to the packaged golden set (installed alongside the library).
+
+    Uses ``Path(__file__).parent / "data" / "golden_set.json"`` so it works
+    whether the package is installed as a wheel, an editable install, or run
+    directly from source — no importlib.resources gymnastics required.
+    """
+    return Path(__file__).parent / "data" / "golden_set.json"
+
+
 class ProbeType(str, Enum):
     """Taxonomy of golden-set probe types."""
 
