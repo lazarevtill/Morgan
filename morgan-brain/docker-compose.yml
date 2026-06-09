@@ -10,6 +10,8 @@ services:
       MORGAN_EVENT_BUS: redis
       MORGAN_REDIS_URL: redis://redis:6379/0
       MORGAN_QDRANT_URL: http://qdrant:6333
+      # Shared persistent vector store so brain-api + worker see the same memory.
+      MORGAN_VECTOR_BACKEND: qdrant
     depends_on:
       redis: { condition: service_healthy }
       qdrant: { condition: service_healthy }
@@ -23,6 +25,9 @@ services:
       MORGAN_EVENT_BUS: redis
       MORGAN_REDIS_URL: redis://redis:6379/0
       MORGAN_QDRANT_URL: http://qdrant:6333
+      MORGAN_VECTOR_BACKEND: qdrant
+      # Run the nightly consolidation + eval-gated optimizer loop.
+      MORGAN_ENABLE_SCHEDULING: "true"
     depends_on:
       redis: { condition: service_healthy }
       qdrant: { condition: service_healthy }
