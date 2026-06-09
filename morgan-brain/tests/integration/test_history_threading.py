@@ -14,7 +14,7 @@ from datetime import datetime
 
 import pytest
 
-from morgan_brain.composition import _assemble, SessionHistoryStore
+from morgan_brain.composition import _assemble
 from morgan_brain.config import Settings
 from morgan_brain.learning.history import SessionHistoryStore as _HSS
 from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
