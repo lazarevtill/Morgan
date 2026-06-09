@@ -19,7 +19,11 @@ _BASE_SYSTEM = (
 
 
 def build_messages(request: ReasoningRequest) -> list[ChatMessage]:
-    parts = [_BASE_SYSTEM]
+    # Champion preprompt override is prepended before _BASE_SYSTEM so safety base stays.
+    parts = []
+    if request.system_override:
+        parts.append(request.system_override)
+    parts.append(_BASE_SYSTEM)
     if request.personalization.system_fragment:
         parts.append("About the user: " + request.personalization.system_fragment)
     if request.skill_prompt:

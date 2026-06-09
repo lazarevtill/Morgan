@@ -24,6 +24,7 @@ class ReasoningRequest(BaseModel):
     history: list[Message] = Field(default_factory=list)
     skill_prompt: str = ""
     tools: list[ToolSpec] = Field(default_factory=list)
+    system_override: str = ""
 
 
 class ReasoningResult(BaseModel):
