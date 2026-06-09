@@ -1,7 +1,7 @@
 """Phase 2B/C — ConsolidationLearner.
 
 Implements the ``Learner`` Protocol by combining:
-- Episodic storage from ``MinimalLearner`` (Phase 1 parity for process_session).
+- Episodic storage on process_session (Phase 1 parity for cross-turn recall).
 - Real fact consolidation via ``MemoryConsolidator`` (Phase 2B).
 - Real UserModel derivation via ``UserProfileBuilder`` (Phase 2C, optional).
 """
@@ -58,7 +58,7 @@ class ConsolidationLearner:
     async def process_session(self, conversation: Conversation) -> None:
         """Store each message in *conversation* as an episodic memory.
 
-        Mirrors ``MinimalLearner.process_session`` so Phase 1 recall works
+        Stores each message as an episodic memory so Phase 1 recall works
         across turns while Phase 2B consolidation enriches the fact base.
         """
         for msg in conversation.messages:

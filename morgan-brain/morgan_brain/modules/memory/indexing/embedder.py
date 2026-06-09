@@ -1,5 +1,10 @@
-"""Embedder: text -> vector. OllamaEmbedder hits the OpenAI-compatible /v1/embeddings endpoint;
-FakeEmbedder is a deterministic, dependency-free stand-in for tests."""
+"""Memory-layer Embedder protocol (``embed`` / ``embed_batch`` per-text API).
+
+Used by ``modules.memory.store``, ``composition.py``, and all integration/unit tests
+that need a fake embedding backend (FakeEmbedder).
+Distinct from ``interfaces.embedding.Embedder`` (``aembed`` batch API) used by the
+providers/factory layer.
+"""
 
 from __future__ import annotations
 
