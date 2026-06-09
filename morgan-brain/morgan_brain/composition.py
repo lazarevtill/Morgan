@@ -300,6 +300,59 @@ def build_orchestrator(settings: Settings | None = None) -> Orchestrator:
     return build_app_context(settings).orchestrator
 
 
+@dataclass
+class WorkerContext:
+    """Handles needed by the learning-worker process."""
+
+    learner: ConsolidationLearner
+    signal_store: SignalStore
+    signal_recorder: SignalRecorder
+    bus: EventBus
+
+
+def build_worker_context(settings: Settings | None = None) -> WorkerContext:
+    """Build PRODUCTION learning-worker context over configured backends.
+
+    Shares the same store paths as brain-api (temporal_db_url → signals.db sibling)
+    so both processes read/write the SAME SQLite files. Use a shared Qdrant collection
+    (vector_backend="qdrant") for the vector store in multi-process deployments.
+
+    With ``event_bus="redis"``, the worker subscribes to the Redis stream that
+    brain-api publishes to. With ``event_bus="inproc"`` (dev/test), both processes
+    would share an in-process bus — only useful in single-process mode.
+    """
+    settings = settings or get_settings()
+    temporal_path = _sqlite_path(settings.temporal_db_url)
+    if temporal_path != ":memory:":
+        pathlib.Path(temporal_path).parent.mkdir(parents=True, exist_ok=True)
+
+    if temporal_path == ":memory:":
+        signal_path = ":memory:"
+    else:
+        signal_path = str(pathlib.Path(temporal_path).parent / "signals.db")
+
+    embedder = OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
+    router = build_router(settings)
+
+    _, _, signal_store, recorder, _, _, learner = _assemble(
+        embedder=embedder,
+        router=router,
+        settings=settings,
+        clock=_utcnow,
+        temporal_path=temporal_path,
+        signal_store_path=signal_path,
+        vectors=_build_vector_index(settings),
+    )
+
+    bus = get_event_bus()
+    return WorkerContext(
+        learner=learner,
+        signal_store=signal_store,
+        signal_recorder=recorder,
+        bus=bus,
+    )
+
+
 class MemoryTestHandle:
     """Thin handle exposing raw recall for integration-test assertions."""
 
