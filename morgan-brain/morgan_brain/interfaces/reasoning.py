@@ -13,6 +13,7 @@ from morgan_brain.interfaces.personalization import PersonalizedContext
 from morgan_brain.models.memory import Memory
 from morgan_brain.models.message import Message
 from morgan_brain.models.perception import FusedPerception
+from morgan_brain.providers.wire import ToolSpec
 
 
 class ReasoningRequest(BaseModel):
@@ -22,6 +23,7 @@ class ReasoningRequest(BaseModel):
     memories: list[Memory] = Field(default_factory=list)
     history: list[Message] = Field(default_factory=list)
     skill_prompt: str = ""
+    tools: list[ToolSpec] = Field(default_factory=list)
 
 
 class ReasoningResult(BaseModel):

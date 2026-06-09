@@ -118,3 +118,32 @@ async def test_tools_capable_binding_selected_when_tools_needed():
     result = await reasoner.generate(_request())
     # Without tools, first binding (weak) is selected
     assert result.text == "weak"
+
+
+async def test_reasoning_request_accepts_tools_field():
+    """ReasoningRequest accepts a list of ToolSpecs via the tools field (commit-1 gate)."""
+    from morgan_brain.providers.wire import ToolSpec
+
+    spec = ToolSpec(
+        name="calculator",
+        description="Evaluate arithmetic.",
+        parameters={
+            "type": "object",
+            "properties": {"expression": {"type": "string"}},
+            "required": ["expression"],
+        },
+    )
+    req = ReasoningRequest(
+        user_id="u1",
+        perception=FusedPerception(text="hi"),
+        personalization=PersonalizedContext(),
+        tools=[spec],
+    )
+    assert len(req.tools) == 1
+    assert req.tools[0].name == "calculator"
+
+
+async def test_reasoning_request_tools_defaults_to_empty():
+    """tools field defaults to [] when not provided."""
+    req = _request()
+    assert req.tools == []
