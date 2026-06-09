@@ -10,10 +10,8 @@ All tests are deterministic: fake bus + spy learner, no external services.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
