@@ -4,12 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Morgan is a self-hosted, **self-learning, provider-agnostic, privacy-first personal agent
-platform** — a personal assistant that measurably learns from its owner, built on primitives that
-let it host future agents. The implementation lives under `morgan-brain/` (one package, up to three
-services). **All phases (0–5) + Wave 0.5 + the self-learning engine are built and green** (820
-tests, mypy-strict clean). Deferred by design: the voice GPU serving service and LoRA fine-tuning.
-The previous monolith is archived in the git branch/tag **`legacy/v0.0.3-monolith`**.
+Morgan is a self-hosted, **self-learning, provider-agnostic, privacy-first Personal Agent OS** —
+the kernel that owns its owner's identity, memory, learning, and policy; that any agent can plug
+into; and that provably gets smarter with use. The chat assistant is the first app on the OS, not
+the product. The implementation lives under `morgan-brain/` (one package, up to three services).
+**All phases (0–5) + Wave 0.5 + the self-learning engine are built and green** (820 tests,
+mypy-strict clean). The OS **ports/profiles/replica are committed specs, not code** (H1 not
+started). Deferred by design: the voice GPU serving service and LoRA fine-tuning. The previous
+monolith is archived in the git branch/tag **`legacy/v0.0.3-monolith`**.
 
 **Key principle:** Quality over speed (5–10 s thoughtful responses acceptable). Provider-agnostic,
 runs fully local (Ollama/llama.cpp/vLLM) or against any OpenAI-compatible remote.
@@ -17,9 +19,25 @@ runs fully local (Ollama/llama.cpp/vLLM) or against any OpenAI-compatible remote
 ### Read these first
 - **Status (authoritative):** `docs/ROADMAP.md`
 - **Run guide / endpoints / config:** `docs/WIRING.md`
+- **Strategic authority:** `docs/superpowers/specs/2026-06-09-personal-agent-os-vision.md`
+  (north star, layers, flywheel, success criteria, non-goals) + its companions:
+  `2026-06-09-ports-design.md`, `2026-06-09-deployment-profiles-and-sync-design.md`,
+  `2026-06-09-horizons-roadmap.md`, `2026-06-09-ecosystem-research-2026H1.md`
 - **Design authority:** `docs/superpowers/specs/2026-06-07-morgan-brain-design.md`
 - **Decision records:** `docs/superpowers/specs/2026-06-08-self-learning-decision.md`,
   `…-platform-architecture-decision.md`, `2026-06-09-personaplex-voice-decision.md`
+
+### Current direction (H1)
+The next implementation wave is the **platform foundation + the first ports** per the horizons
+roadmap (H1, to ~2026-09): kernel prerequisites → port audit log → `/v1` OpenAI-compatible
+facade → MCP server port (`morgan_brain/ports/`) → morning brief/routines → Memory Passport v1
+(internal format + lab importers). None of it exists yet — never describe a port/profile/replica
+as implemented. Two **latent bugs** are review-mandated H1 prerequisites:
+1. `stream_turn` has no `system_override` parameter, so `/api/chat/stream` silently drops the
+   learned champion preprompt (`core/orchestrator.py:184-191`, `apps/brain_api/app.py:77-82`).
+2. `SessionHistoryStore` is built `:memory:` and its append subscriber registers only on the
+   in-proc bus — under `MORGAN_EVENT_BUS=redis` it is read but never written
+   (`composition.py:311,229-230`).
 
 ## Architecture (one package, three services)
 
