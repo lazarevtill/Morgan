@@ -6,6 +6,13 @@ How to point Morgan at your own LLM backend(s), run it, and start the learning l
 > Morgan is **provider-agnostic**: any OpenAI-compatible endpoint works (local Ollama / llama.cpp /
 > vLLM / LM Studio, or a remote provider). Ollama is just the easy local default.
 
+> **Coming (spec stage — not in this build):** Morgan is being extended into a **Personal Agent
+> OS** — standardized ports (MCP server, `/v1` OpenAI-compat facade, Memory Passport) and
+> deployment profiles (desktop one-process, phone replica). See the
+> [vision](superpowers/specs/2026-06-09-personal-agent-os-vision.md) and
+> [horizons roadmap](superpowers/specs/2026-06-09-horizons-roadmap.md). **None of that is
+> runnable yet**; this guide describes only what exists on `main` today.
+
 ## 1. Prerequisites
 - Python 3.12, the repo, deps: `cd morgan-brain && pip install -e ".[dev]"`.
 - An **OpenAI-compatible LLM endpoint** + an **embeddings** model. Local example (Ollama):
@@ -93,14 +100,15 @@ injected every turn so responses adapt.
 
 ## 6. Verifying quality (the eval gate)
 The 3-layer eval harness (`morgan_brain/eval/`) + golden set (`tests/eval/golden_set.json`) is the
-"did it learn me / don't regress" gate. Run the suite: `pytest -q` (644 green). Extend the golden set
+"did it learn me / don't regress" gate. Run the suite: `pytest -q` (820 green). Extend the golden set
 with your own preference probes; any self-learned promotion must beat the current champion on it.
 
 ## 7. Remote access (Phase 5)
 - **Run the worker** (automates learning) alongside the API:
   `MORGAN_ENABLE_SCHEDULING=true python -m morgan_brain.apps.learning_worker`.
 - **Streaming:** `POST /api/chat/stream` returns Server-Sent Events (`data: {...}` deltas, terminal
-  `data: [DONE]`).
+  `data: [DONE]`). Known limitation: the streaming path does not yet apply the learned champion
+  preprompt (`stream_turn` lacks `system_override`) — fix scheduled as an H1 prerequisite.
 - **Auth (defense-in-depth):** `/api/*` requires `Authorization: Bearer <MORGAN_API_KEY>` (or
   `X-API-Key`) **when a key is set**. `/health` is open.
   > ⚠️ **Before exposing remotely you MUST set a real `MORGAN_API_KEY`** (the default `change-me`

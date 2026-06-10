@@ -8,6 +8,9 @@
 > Single-owner first, multi-tenant-ready. Quality over speed.
 >
 > Authoritative design: [`docs/superpowers/specs/2026-06-07-morgan-brain-design.md`](superpowers/specs/2026-06-07-morgan-brain-design.md).
+> Direction (2026-06-09): [Personal Agent OS vision](superpowers/specs/2026-06-09-personal-agent-os-vision.md)
+> + [Horizons roadmap](superpowers/specs/2026-06-09-horizons-roadmap.md) — see the
+> [Personal Agent OS chapter](#personal-agent-os--the-next-chapter-decided-2026-06-09) below.
 > Background: [`docs/ARCHITECTURE_V2.md`](ARCHITECTURE_V2.md). Old monolith archived in `legacy/v0.0.3-monolith`.
 
 ## North Star
@@ -126,7 +129,76 @@ Full rationale + citations: [`docs/superpowers/specs/2026-06-08-platform-archite
 | 5 | Self-learning engine | **GEPA preprompt optimizer loop delivered** in Phase 3 (mine signals → reflective/MLflow-GEPA optimize → strict beats-current gate → champion promote/rollback). LoRA pipeline deferred by design (only if the 4-condition escalation test fires). | ✅ done (optimizer); LoRA deferred |
 | 6 | Integration + wiring | E2E suite green (644 tests), eval harness in place, security-hardened (SSRF/DoS/MCP), wiring guide ([`docs/WIRING.md`](WIRING.md)) | ✅ done — voice + LoRA deferred by design |
 
-## Wave plans
+## Personal Agent OS — the next chapter (decided 2026-06-09)
+
+With phases 0–5 + the self-learning engine built and green, Morgan was reframed as a **Personal
+Agent OS**: the chat assistant stops being "the product" and becomes the first app on the OS. The
+product is the **kernel** — the private, auditable, provider-agnostic brain (memory, learning,
+personalization, policy) — exposed through standardized **ports** so any agent, UI, or device
+plugs into and enriches the same brain. This is a reframe, not a rewrite: the kernel is the
+existing `morgan_brain`, every invariant survives unchanged (hot path reads / cold path writes —
+now globally; one `MemoryGate`; facts evolve; actor attribution; eval-gated learning), and ports
+are translation layers that never bypass `MemoryGate`/`PermissionGate`.
+
+Authoritative specs (read in this order):
+- [Vision & reframing](superpowers/specs/2026-06-09-personal-agent-os-vision.md) — layered
+  architecture (apps/shells/ports/kernel/drivers), agents-as-apps, Memory Passport,
+  12-month success criteria, explicit non-goals
+- [Horizons roadmap](superpowers/specs/2026-06-09-horizons-roadmap.md) — H1/H2/H3 sequencing,
+  standards bets, **kill criteria** for every bet
+- [Ports design](superpowers/specs/2026-06-09-ports-design.md) — MCP server, `/v1` facade,
+  SKILL.md I/O, Memory Passport, A2A card
+- [Deployment profiles & device sync](superpowers/specs/2026-06-09-deployment-profiles-and-sync-design.md)
+  — homelab / desktop / phone / hybrid-burst + the read-only memory replica
+
+> **Honesty note:** nothing in this chapter exists in code yet. Every Horizon-1 item below is
+> **spec approved, not started** — do not present any of it as runnable.
+
+### Horizon 1 — "Daily value + the first ports" (now → ~2026-09)
+
+| # | Deliverable | Status |
+|---|-------------|--------|
+| 0 | **Kernel prerequisites:** structured provenance on `Memory`/`TemporalFact` (`source` + `client_id` + `via`, with store migration) + the two latent-bug fixes — thread `system_override` through `stream_turn` (streaming currently drops the champion preprompt) and a persistent `SessionHistoryStore` + redis-bus append path | spec approved, not started |
+| 1 | **Port audit log** + `GET /api/audit` — needed by every port that follows, so it lands first | spec approved, not started |
+| 2 | **`/v1` OpenAI-compatible facade** — any OpenAI-compat UI becomes a Morgan shell (client tool passthrough descoped → H2) | spec approved, not started |
+| 3 | **MCP server port** — memory/profile/skills/`ask_morgan` tools + client registry with identity classes, static-bearer auth, quarantined consolidation tier; the single-user flywheel | spec approved, not started |
+| 4 | **Morning brief + named routines** — scheduling + proactivity wired to channels; digest-first, interrupt-rarely; the retention surface that feeds the signal pipeline | spec approved, not started |
+| 5 | **Memory Passport v1 — internal format + lab importers** (`import --from chatgpt\|claude` through consolidation, export/diff CLI, round-trip test); spec **publication deferred until pulled** | spec approved, not started |
+
+Exit criteria (from the horizons spec): vision success criteria 1–3 + the import half of 4; an
+external MCP client demonstrably writes an episodic that survives consolidation into a fact; the
+owner's morning brief has run 2+ weeks without being disabled.
+
+### Horizon 2 — "The brain leaves the house" (~2026-09 → 2026-12)
+
+Multi-device presence + the proactive/voice experience: Memory Replica v0 + device uplink + a
+reference phone thin client (read-only replica, episodics-only uplink); `hybrid-burst` hardening;
+the one-process `desktop` profile (qdrant-local, no Docker/Redis); SKILL.md conformance + `/v1`
+client tool passthrough; an MCP Apps memory/audit inspector; **voice serving** (`perception-gpu`
+with PersonaPlex behind the existing seam — the Phase-5 deferral lands here, hardware-gated on a
+CUDA box); a signed A2A Agent Card (endpoint deferred).
+
+### Horizon 3 — "The OS thesis pays off" (~2026-12 → 2027-06)
+
+Direction, not commitment — each item gets its own spec when its horizon opens: learning
+observability (champion win-rate dashboard — the public face of "provably gets smarter"); an
+ACE-style playbook tier; consolidation science (forgetting-curve decay + replay); a learned
+proactivity policy; federation v1 on the passport wire format; on-device fallback agents v2;
+**LoRA / test-time-training** — unchanged: only if the 4-condition escalation test fires.
+
+### Deferred-by-design, reconciled
+
+The two long-standing deferrals are unchanged in substance and now live inside the horizon
+framing: **voice GPU serving** is H2 work (hardware-gated; the `VoiceConversation` seam +
+`persona_bridge` are already built and tested), and **LoRA fine-tuning** stays a conditional H3
+escalation behind the same 4-condition gate from the
+[self-learning decision](superpowers/specs/2026-06-08-self-learning-decision.md). Nothing else
+previously deferred changed status.
+
+## Wave plans (completed build record)
+
+All waves below are **complete** (see Status); they are kept as the record of how the platform
+was built. New work is sequenced by the Personal Agent OS horizons above.
 
 Each wave: **research delta → design spec → implementation plan → subagent-driven execution
 (TDD, two-stage review) → verification → finish-branch**. Independent research/audits use
@@ -200,6 +272,10 @@ how the owner points Morgan at their Ollama models, exposes the remote interface
 kicks off the learning loop.
 
 ## Definition of done (the goal)
+
+> **Met (2026-06).** Everything below is delivered (voice GPU serving + LoRA deferred by design).
+> The next bar is the 12-month success criteria in the
+> [Personal Agent OS vision](superpowers/specs/2026-06-09-personal-agent-os-vision.md) §7.
 
 - All phases (0–5) + self-learning engine implemented, each green and shippable.
 - A clear, research-backed self-learning mechanism that measurably improves personalization on a

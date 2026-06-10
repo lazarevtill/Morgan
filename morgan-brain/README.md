@@ -1,11 +1,13 @@
 # morgan-brain
 
 The implementation of Morgan — a self-hosted, self-learning, provider-agnostic, privacy-first
-personal agent platform. One installable package (`morgan_brain`) that runs as up to three services.
+personal agent platform, and (per the 2026-06-09 reframe) the **kernel of a Personal Agent OS**.
+One installable package (`morgan_brain`) that runs as up to three services.
 
 Built on the **MAPLE** decomposition (Memory ≠ Learning ≠ Personalization — three mechanisms on
 three timescales) and **SkillOpt** (skills + champion preprompt as trainable, validation-gated
 state). Design authority: [`docs/superpowers/specs/2026-06-07-morgan-brain-design.md`](../docs/superpowers/specs/2026-06-07-morgan-brain-design.md);
+strategic authority: [`…/2026-06-09-personal-agent-os-vision.md`](../docs/superpowers/specs/2026-06-09-personal-agent-os-vision.md);
 status: [`docs/ROADMAP.md`](../docs/ROADMAP.md); run guide: [`docs/WIRING.md`](../docs/WIRING.md).
 
 > The previous monolithic implementation is archived in the git branch/tag
@@ -104,3 +106,20 @@ pip install -e ".[perception]"   # deferred voice/vision (Whisper, transformers,
 All phases (0–5) + Wave 0.5 + the self-learning engine are built and green: **820 tests pass**
 (11 skipped, 1 xfailed), mypy-strict clean. Deferred by design: the voice GPU serving service and
 LoRA fine-tuning. See [`docs/ROADMAP.md`](../docs/ROADMAP.md).
+
+## OS vocabulary (vision spec stage — ports/profiles are not built yet)
+
+The Personal Agent OS reframe ([vision doc](../docs/superpowers/specs/2026-06-09-personal-agent-os-vision.md) §3)
+maps OS role names onto this package. Package names do not churn; only docs adopt the vocabulary.
+The **Ports row is design-stage only** — `ports/` does not exist; it is the first H1 deliverable
+per the [horizons roadmap](../docs/superpowers/specs/2026-06-09-horizons-roadmap.md) (H1/H2/H3 +
+kill criteria), alongside the [ports design](../docs/superpowers/specs/2026-06-09-ports-design.md)
+and [deployment profiles & sync](../docs/superpowers/specs/2026-06-09-deployment-profiles-and-sync-design.md) specs.
+
+| OS term | What it is in `morgan_brain/` today |
+|---------|--------------------------------------|
+| Kernel  | `core/`, `security/`, `privacy/`, `models/`, `modules/memory`, `learning/`, `modules/personalization`, `providers/` |
+| Drivers | `providers/adapters/`, vector/temporal stores, `bus/` backends, `modules/mcp` (client), `voice/` |
+| Ports   | new `ports/` surface: MCP server, `/v1` facade, passport, SKILL.md I/O (A2A card static) |
+| Shells  | `clients/cli`, `channels/`, any OpenAI-compatible UI via Port 2 |
+| Apps    | the orchestrated assistant; external MCP clients; `proactivity/` routines |
