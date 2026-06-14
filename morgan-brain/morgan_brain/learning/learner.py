@@ -93,3 +93,27 @@ class ConsolidationLearner:
         episodics, proposes fact operations via the LLM, and applies them.
         """
         await self._consolidator.consolidate(user_id)
+
+    async def learn_from_edit(self, *, user_id: str, original: str, edited: str) -> str:
+        """CIPHER: distil a preference from an (original, edited) reply pair and persist
+        it as agent-inferred ``comm_*`` facts, so the next ``user_model`` reflects it.
+
+        This is the loop that makes "edit my reply → future turns change": the LLM only
+        produces the natural-language delta; the mapping to durable facts is deterministic
+        and the facts evolve (upsert = supersede), never overwrite. Returns the delta text
+        (``""`` when no profile builder is wired). Caller treats failure as non-fatal —
+        feedback must never fail because learning did.
+        """
+        if self._profile_builder is None:
+            return ""
+        # Local import avoids a module-level cycle (profile imports nothing from here,
+        # but keeping it lazy mirrors the TYPE_CHECKING-only import above).
+        from morgan_brain.learning.profile import (
+            preference_delta_from_edit,
+            preference_facts_from_delta,
+        )
+
+        delta = await preference_delta_from_edit(self._profile_builder, user_id, original, edited)
+        for fact in preference_facts_from_delta(user_id, delta, self._clock()):
+            await self._gate.upsert_fact(fact)
+        return delta
