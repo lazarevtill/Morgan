@@ -26,7 +26,7 @@ from morgan_brain.learning.consolidation import MemoryConsolidator
 from morgan_brain.learning.learner import ConsolidationLearner
 from morgan_brain.learning.optimizer import AnyScorer, ReflectiveOptimizer
 from morgan_brain.learning.profile import UserProfileBuilder
-from morgan_brain.learning.history import SessionHistoryStore, session_key
+from morgan_brain.learning.history import SessionHistoryStore
 from morgan_brain.learning.recorder import SignalRecorder
 from morgan_brain.learning.signals import SignalStore
 from morgan_brain.learning_lifecycle.factory import build_registry
@@ -89,13 +89,20 @@ def _build_vector_index(settings: Settings) -> VectorIndex:
 def _register_turn_storage(
     bus: EventBus,
     learner: ConsolidationLearner,
-    recorder: SignalRecorder,
-    history_store: "SessionHistoryStore | None" = None,
 ) -> None:
+    """Register the in-process **consolidation** subscriber.
+
+    On RESPONSE_GENERATED, store the turn as episodic memory + run consolidation via the
+    Learner. Registered only for the in-process bus; with the Redis bus the learning-worker
+    subscribes to the same stream and does this off-path. Session history and the base
+    interaction signal are NOT written here — the Orchestrator writes those in-process and
+    synchronously (``_persist_turn``) regardless of bus backend, so the 2-process Redis
+    topology never silently drops them (GAP-2). This subscriber is consolidation only.
+    """
+
     async def _store_turn(event: Event) -> None:
         payload = event.payload
         session_id = payload.get("session_id") or "default"
-        turn_id = payload.get("turn_id") or ""
         query = payload["request"]
         reply = payload["response"]
 
@@ -108,26 +115,6 @@ def _register_turn_storage(
             ],
         )
         await learner.process_session(convo)
-
-        # Record the base interaction signal for this turn
-        if turn_id:
-            await recorder.record_turn(
-                user_id=event.user_id,
-                session_id=session_id,
-                turn_id=turn_id,
-                query=query,
-                reply=reply,
-            )
-
-        # Append messages to session history, keyed per-user (never session_id alone).
-        if history_store is not None:
-            hkey = session_key(event.user_id, session_id)
-            history_store.append(
-                hkey, Message(user_id=event.user_id, role=Role.USER, content=query)
-            )
-            history_store.append(
-                hkey, Message(user_id=event.user_id, role=Role.ASSISTANT, content=reply)
-            )
 
     bus.subscribe(EventType.RESPONSE_GENERATED, _store_turn)
 
@@ -229,7 +216,7 @@ def _assemble(
     # With the Redis bus the learning-worker process subscribes to the same stream and
     # handles turn storage off-path — registering here would double-process every turn.
     if isinstance(resolved_bus, InProcessBus):
-        _register_turn_storage(resolved_bus, learner, recorder, history_store)
+        _register_turn_storage(resolved_bus, learner)
     personalizer = AdaptivePersonalizer(
         profile_builder=profile_builder,
         budget=settings.personalization_budget,
@@ -247,6 +234,8 @@ def _assemble(
         learner=learner,
         bus=resolved_bus,
         tools=tool_specs,
+        recorder=recorder,
+        history_store=history_store,
     )
     return orch, memory_module, signal_store, recorder, executor, skills, learner
 
