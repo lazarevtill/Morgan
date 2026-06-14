@@ -8,9 +8,15 @@ All access is user-scoped; callers reach it only through the MemoryGate.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Callable
+from typing import Any, Callable
 
-from morgan_brain.models.memory import Memory, MemoryKind, MemoryQuery, TemporalFact
+from morgan_brain.models.memory import (
+    Memory,
+    MemoryKind,
+    MemoryQuery,
+    MemorySource,
+    TemporalFact,
+)
 from morgan_brain.modules.memory.indexing.embedder import Embedder
 from morgan_brain.modules.memory.retrieval.bm25 import Bm25Index
 from morgan_brain.modules.memory.retrieval.fusion import reciprocal_rank_fusion
@@ -45,7 +51,15 @@ class MemoryModule:
                 id=memory.id,
                 user_id=memory.user_id,
                 vector=vector,
-                payload={"content": memory.content, "user_id": memory.user_id},
+                # Payload carries enough to fully reconstruct the Memory in another
+                # process (kind + source for faithful attribution), so cross-process
+                # episodic recall doesn't depend on this process's in-memory record set.
+                payload={
+                    "content": memory.content,
+                    "user_id": memory.user_id,
+                    "kind": memory.kind.value,
+                    "source": memory.source.value,
+                },
             )
         )
         self._bm25.add(memory.id, memory.content)
@@ -74,7 +88,16 @@ class MemoryModule:
         ]
 
         fused_ids = reciprocal_rank_fusion([vector_ranking, bm25_ranking, entity_ranking])
-        episodic = [self._by_id[mid] for mid in fused_ids if mid in self._by_id]
+        # Reconstruct hits stored by another process (Redis 2-process topology): they live in
+        # the shared vector index but not this process's `_by_id`. Vector search is already
+        # user-scoped, so foreign hits are safe to surface. Local records win (richer: entities).
+        hit_payloads = {h.id: h.payload for h in vec_hits}
+        episodic: list[Memory] = []
+        for mid in fused_ids:
+            if mid in self._by_id:
+                episodic.append(self._by_id[mid])
+            elif mid in hit_payloads:
+                episodic.append(_memory_from_payload(hit_payloads[mid]))
 
         # Currently-valid facts are authoritative; surface them alongside episodic recall.
         # Phase 1 includes all current facts (volume is small until Phase 2 extraction);
@@ -102,3 +125,20 @@ class MemoryModule:
         self, *, user_id: str, subject: str | None = None
     ) -> list[TemporalFact]:
         return await self._temporal.current_facts(user_id=user_id, subject=subject)
+
+
+def _memory_from_payload(payload: dict[str, Any]) -> Memory:
+    """Reconstruct an episodic ``Memory`` from a vector-index payload.
+
+    Used for cross-process recall: a hit stored by another process is recovered from its
+    payload rather than dropped. Missing ``kind``/``source`` (older payloads) default to
+    episodic / agent_inferred so reconstruction is always safe.
+    """
+    kind = payload.get("kind")
+    source = payload.get("source")
+    return Memory(
+        user_id=payload.get("user_id", ""),
+        kind=MemoryKind(kind) if kind else MemoryKind.EPISODIC,
+        content=payload.get("content", ""),
+        source=MemorySource(source) if source else MemorySource.AGENT_INFERRED,
+    )
