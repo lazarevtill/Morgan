@@ -11,7 +11,7 @@ mockable. The discipline it enforces:
 from __future__ import annotations
 
 import uuid
-from typing import Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from morgan_brain.interfaces.events import Event, EventBus, EventType
 from morgan_brain.interfaces.learning import Learner
@@ -19,9 +19,15 @@ from morgan_brain.interfaces.perception import Perception
 from morgan_brain.interfaces.personalization import Personalizer
 from morgan_brain.interfaces.reasoning import Reasoner, ReasoningRequest, ReasoningResult
 from morgan_brain.interfaces.skills import SkillEngine
+from morgan_brain.learning.history import session_key
 from morgan_brain.models.memory import MemoryQuery
+from morgan_brain.models.message import Message, Role
 from morgan_brain.providers.wire import ToolSpec
 from morgan_brain.security.memory_gate import MemoryGate
+
+if TYPE_CHECKING:
+    from morgan_brain.learning.history import SessionHistoryStore
+    from morgan_brain.learning.recorder import SignalRecorder
 
 
 class Orchestrator:
@@ -36,6 +42,8 @@ class Orchestrator:
         learner: Learner,
         bus: EventBus,
         tools: list[ToolSpec] | None = None,
+        recorder: "SignalRecorder | None" = None,
+        history_store: "SessionHistoryStore | None" = None,
     ) -> None:
         self._perception = perception
         self._personalizer = personalizer
@@ -45,6 +53,36 @@ class Orchestrator:
         self._learner = learner
         self._bus = bus
         self._tools: list[ToolSpec] = tools or []
+        self._recorder = recorder
+        self._history_store = history_store
+
+    async def _persist_turn(
+        self, *, user_id: str, session_id: str | None, turn_id: str, text: str, reply: str
+    ) -> None:
+        """Local, **bus-independent** persistence the next turn depends on.
+
+        Session history (so multi-turn threads) and the base interaction signal (so
+        feedback/learning has a row to attach to) are written **in-process by whichever
+        process served the turn**, synchronously, regardless of the event-bus backend.
+        Consolidation stays on the bus (announced via RESPONSE_GENERATED) and runs in the
+        learning-worker under Redis — but history and the base signal must not depend on a
+        worker consuming an event, or the documented 2-process topology silently degrades
+        every turn to turn 1 (the GAP-2 break). No-ops cleanly when deps aren't injected.
+        """
+        if self._history_store is not None:
+            hkey = session_key(user_id, session_id)
+            self._history_store.append(hkey, Message(user_id=user_id, role=Role.USER, content=text))
+            self._history_store.append(
+                hkey, Message(user_id=user_id, role=Role.ASSISTANT, content=reply)
+            )
+        if self._recorder is not None:
+            await self._recorder.record_turn(
+                user_id=user_id,
+                session_id=session_id or "default",
+                turn_id=turn_id,
+                query=text,
+                reply=reply,
+            )
 
     def _scoped_tools(self, selected_skills: list[Any]) -> list[ToolSpec]:
         """Return the ToolSpec list to expose for this turn.
@@ -107,7 +145,11 @@ class Orchestrator:
             )
         )
 
-        # 7. Post-turn cold path
+        # 7. Post-turn. Local persistence (history + base signal) is written in-process,
+        # synchronously; consolidation is announced on the bus and runs off-path.
+        await self._persist_turn(
+            user_id=user_id, session_id=session_id, turn_id=turn_id, text=text, reply=result.text
+        )
         await self._bus.publish(
             Event(
                 type=EventType.RESPONSE_GENERATED,
@@ -166,7 +208,10 @@ class Orchestrator:
             )
         )
 
-        # 7. Post-turn (cold path): announce; the learning-worker consumes this off-path.
+        # 7. Post-turn. Local persistence in-process; consolidation announced off-path.
+        await self._persist_turn(
+            user_id=user_id, session_id=session_id, turn_id=turn_id, text=text, reply=result.text
+        )
         await self._bus.publish(
             Event(
                 type=EventType.RESPONSE_GENERATED,
@@ -240,6 +285,9 @@ class Orchestrator:
 
         # 7. Post-turn cold path — same as handle_turn.
         full_text = "".join(chunks)
+        await self._persist_turn(
+            user_id=user_id, session_id=session_id, turn_id=turn_id, text=text, reply=full_text
+        )
         await self._bus.publish(
             Event(
                 type=EventType.RESPONSE_GENERATED,
