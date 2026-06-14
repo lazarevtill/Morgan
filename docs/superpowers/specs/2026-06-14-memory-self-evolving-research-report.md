@@ -93,6 +93,26 @@ DEFER  parametric/latent memory · TTRL/RL-memory · LoRA · forgetting-curve re
 This is **Voice A+**: the conservative architecture, upgraded exactly where the evidence is
 strong, with the privacy/auditability constraints doing the deferral filtering.
 
+### Shipped status (2026-06-14)
+Four of the five GRAFT/GUARD items are implemented, tested, and on `main`; the fifth is
+evidence-deferred:
+- ✅ **GUARD — anti-amnesia** (`ca96183`): user-stated facts protected from inferred DELETE +
+  decay floor (importance = source). + `test_anti_amnesia`.
+- ✅ **C — surprise/prediction-error gate** (`ca96183`): deterministic novelty pre-filter before
+  the consolidation LLM call. + `test_surprise_gating`.
+- ✅ **A — ACE delta-playbook** (`e79bf7d`, `01b0cf1`): `curate_playbook` + `ReflectiveOptimizer`
+  now grows the champion by curated deltas (no context-collapse). + `test_curate_playbook`,
+  updated optimizer/promotion tests.
+- ✅ **D — streaming self-evolving benchmark** (`8714d3d`): Evo-Memory-style stream measures
+  distance-independent recall (1.0, past the history window) + mid-stream update propagation
+  (1.0). `tests/e2e/streaming.py`.
+- ⏸️ **B — sleep-time compute**: **deferred on evidence**, not skipped. The benefit is
+  amortising precompute across *related-query reuse*, and Open Question #1 (below) is precisely
+  whether a single owner generates enough reuse to amortise it. Shipping speculative precompute
+  infra before that payoff is demonstrated would violate the "only best solutions / YAGNI" bar.
+  Revisit once usage data shows recurring-context density; the cold-path (learning-worker) seam
+  is ready to host it when justified.
+
 ## 7. Open questions the research could not close
 
 1. Do sleep-time / GEPA efficiency gains transfer from constructed math benchmarks to a *single
