@@ -8,6 +8,7 @@ reply is produced; with the Redis bus (later phases) it runs in the learning-wor
 from __future__ import annotations
 
 import pathlib
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, cast
@@ -285,6 +286,46 @@ def _load_champion_override(registry: PromptRegistry) -> str:
         return version.body if version is not None else ""
     except Exception:
         return ""
+
+
+class ChampionCache:
+    """Live, TTL-cached champion preprompt body.
+
+    The champion is promoted by the learning-worker into the shared PromptRegistry.
+    brain-api read it once at startup, so a freshly promoted champion never reached
+    live traffic without an operator restart. This refreshes on a short TTL (default
+    30s) — at most one cheap SQLite read per window — so a promotion goes live within
+    the TTL with negligible per-turn cost and no restart. The last-known body is kept
+    if a refresh errors, so a transient registry hiccup never blanks the champion.
+    """
+
+    def __init__(
+        self,
+        registry: PromptRegistry,
+        name: str = CHAMPION_PROMPT_NAME,
+        *,
+        ttl_s: float = 30.0,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._registry = registry
+        self._name = name
+        self._ttl = ttl_s
+        self._clock = clock
+        self._body = ""
+        self._expires = 0.0
+        self._loaded = False
+
+    async def body(self) -> str:
+        now = self._clock()
+        if not self._loaded or now >= self._expires:
+            try:
+                version = await self._registry.champion(self._name)
+                self._body = version.body if version is not None else ""
+            except Exception:  # noqa: BLE001 — keep last-known body on transient errors
+                pass
+            self._expires = now + self._ttl
+            self._loaded = True
+        return self._body
 
 
 def build_app_context(settings: Settings | None = None) -> AppContext:

@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from morgan_brain import __version__
 from morgan_brain.apps.brain_api.auth import require_api_key
-from morgan_brain.composition import _load_champion_override, build_app_context
+from morgan_brain.composition import ChampionCache, build_app_context
 from morgan_brain.config import get_settings
 from morgan_brain.learning.history import session_key
 
@@ -39,10 +39,11 @@ def create_app() -> FastAPI:
     orchestrator = ctx.orchestrator
     _auth = Depends(require_api_key(settings))
 
-    # Read the current champion preprompt once at startup (best-effort: "" if none).
-    # The champion is written by the learning-worker and is the gated, eval-validated
-    # system prompt candidate — zero inference-time overhead (just a string prepend).
-    _champion_override: str = _load_champion_override(ctx.prompt_registry)
+    # Live champion preprompt: the learning-worker promotes the gated, eval-validated
+    # system prompt into the shared registry; the cache refreshes on a short TTL so a
+    # promotion reaches live traffic without a brain-api restart (zero inference-time
+    # overhead — just a string prepend, read at most once per TTL).
+    _champion = ChampionCache(ctx.prompt_registry)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -58,7 +59,7 @@ def create_app() -> FastAPI:
             text=req.message,
             session_id=req.session_id,
             history=history,
-            system_override=_champion_override,
+            system_override=await _champion.body(),
         )
         return ChatResponse(response=result.text, model_used=result.model_used, turn_id=turn_id)
 
@@ -76,12 +77,13 @@ def create_app() -> FastAPI:
 
         async def _event_stream() -> AsyncIterator[str]:
             history = ctx.history_store.recent(hkey) if ctx.history_store else []
+            champion = await _champion.body()
             async for delta in orchestrator.stream_turn(
                 user_id=user_id,
                 text=req.message,
                 session_id=req.session_id,
                 history=history,
-                system_override=_champion_override,
+                system_override=champion,
             ):
                 payload = json.dumps({"delta": delta})
                 yield f"data: {payload}\n\n"
