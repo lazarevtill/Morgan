@@ -81,6 +81,7 @@ def create_app() -> FastAPI:
                 text=req.message,
                 session_id=req.session_id,
                 history=history,
+                system_override=_champion_override,
             ):
                 payload = json.dumps({"delta": delta})
                 yield f"data: {payload}\n\n"

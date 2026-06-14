@@ -188,6 +188,7 @@ class Orchestrator:
         text: str,
         session_id: str | None = None,
         history: list[Any] | None = None,
+        system_override: str = "",
     ) -> AsyncIterator[str]:
         """Streaming variant of handle_turn.
 
@@ -195,6 +196,10 @@ class Orchestrator:
         → skill selection) synchronously, then yields LLM token deltas as they arrive.
         After the stream is exhausted, publishes RESPONSE_GENERATED so turn-storage and
         learning still fire on the cold path — identical behaviour to handle_turn.
+
+        ``system_override`` carries the eval-gated champion preprompt; it must be threaded
+        here exactly as in handle_turn or the streamed assistant runs on the base prompt
+        instead of the learned one.
         """
         turn_id = uuid.uuid4().hex
 
@@ -226,6 +231,7 @@ class Orchestrator:
             skill_prompt=skill_prompt,
             tools=self._scoped_tools(skills),
             history=history or [],
+            system_override=system_override,
         )
         chunks: list[str] = []
         async for delta in self._reasoner.stream(request):

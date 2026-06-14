@@ -112,6 +112,9 @@ class FakeChatClient:
         model: str,
         tools: list[ToolSpec] | None = None,
     ) -> AsyncIterator[StreamDelta]:
+        # Record the prompt so tests can assert what reached the model on the
+        # streaming path too (e.g. the champion system_override).
+        self.last_messages = messages
         # Peek at the next reply without consuming the call counter.
         # astream does NOT increment calls — only agenerate does.
         reply = self._last_reply if not self._queue else self._queue[0]
