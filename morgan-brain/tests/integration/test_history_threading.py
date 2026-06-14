@@ -17,6 +17,7 @@ import pytest
 from morgan_brain.composition import _assemble
 from morgan_brain.config import Settings
 from morgan_brain.learning.history import SessionHistoryStore as _HSS
+from morgan_brain.learning.history import session_key
 from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
 from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
@@ -60,9 +61,10 @@ async def test_turn2_history_contains_turn1_exchange() -> None:
 
     session_id = "session-abc"
     user_id = "u1"
+    hkey = session_key(user_id, session_id)  # history is keyed per-user
 
     # Turn 1
-    history1 = history_store.recent(session_id)
+    history1 = history_store.recent(hkey)
     result1 = await orch.handle_turn(
         user_id=user_id, text="My name is Alice", session_id=session_id, history=history1
     )
@@ -70,11 +72,11 @@ async def test_turn2_history_contains_turn1_exchange() -> None:
 
     # After turn 1, the cold-path subscriber should have appended to history_store.
     # Give the in-process bus time to fire (it's synchronous in InProcessBus).
-    history_after_turn1 = history_store.recent(session_id)
+    history_after_turn1 = history_store.recent(hkey)
     assert len(history_after_turn1) == 2  # user + assistant
 
     # Turn 2 — fetch history first (as the API handler does)
-    history2 = history_store.recent(session_id)
+    history2 = history_store.recent(hkey)
     result2 = await orch.handle_turn(
         user_id=user_id, text="What is my name?", session_id=session_id, history=history2
     )

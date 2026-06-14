@@ -20,6 +20,19 @@ from typing import Callable
 
 from morgan_brain.models.message import Message, Role
 
+
+def session_key(user_id: str, session_id: str | None) -> str:
+    """Compose the durable history key from ``(user_id, session_id)``.
+
+    History is keyed per-user so two clients that happen to pick the same
+    ``session_id`` can never see each other's turns. A missing/empty
+    ``session_id`` falls back to a *per-user* ``"<user>:default"`` bucket —
+    never a single global ``"default"`` (that would cross-contaminate memory and
+    learning across users, the one thing the platform must never do).
+    """
+    return f"{user_id}:{session_id or 'default'}"
+
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS session_history (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

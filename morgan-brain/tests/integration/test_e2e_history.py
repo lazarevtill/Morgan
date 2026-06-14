@@ -16,7 +16,7 @@ import pytest
 
 from morgan_brain.composition import _assemble
 from morgan_brain.config import Settings
-from morgan_brain.learning.history import SessionHistoryStore
+from morgan_brain.learning.history import SessionHistoryStore, session_key
 from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
 from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
@@ -60,20 +60,21 @@ async def test_turn2_prompt_contains_turn1_user_and_assistant_messages() -> None
 
     session_id = "sess-history-e2e"
     user_id = "u-history"
+    hkey = session_key(user_id, session_id)
 
     # Turn 1.
-    h1 = history_store.recent(session_id)
+    h1 = history_store.recent(hkey)
     result1 = await orch.handle_turn(
         user_id=user_id, text="I live in Berlin.", session_id=session_id, history=h1
     )
     assert result1.text == "I live in Berlin."
 
     # history_store must now have 2 entries (user + assistant).
-    after_turn1 = history_store.recent(session_id)
+    after_turn1 = history_store.recent(hkey)
     assert len(after_turn1) == 2
 
     # Turn 2.
-    h2 = history_store.recent(session_id)
+    h2 = history_store.recent(hkey)
     result2 = await orch.handle_turn(
         user_id=user_id, text="Where do I live?", session_id=session_id, history=h2
     )
@@ -112,13 +113,13 @@ async def test_history_is_session_scoped_not_cross_session() -> None:
     user_id = "u-scope"
 
     # Session A: turn 1.
-    h_a = history_store.recent("session-a")
+    h_a = history_store.recent(session_key(user_id, "session-a"))
     await orch.handle_turn(
         user_id=user_id, text="My name is Alice.", session_id="session-a", history=h_a
     )
 
     # Session B uses EMPTY history (different session).
-    h_b = history_store.recent("session-b")
+    h_b = history_store.recent(session_key(user_id, "session-b"))
     assert len(h_b) == 0, "Session B should start with empty history"
 
     await orch.handle_turn(
@@ -164,10 +165,11 @@ async def test_history_grows_across_turns() -> None:
 
     session_id = "sess-grow"
     user_id = "u-grow"
+    hkey = session_key(user_id, session_id)
 
     for i in range(3):
-        h = history_store.recent(session_id)
+        h = history_store.recent(hkey)
         await orch.handle_turn(user_id=user_id, text=f"msg {i}", session_id=session_id, history=h)
 
-    entries = history_store.recent(session_id, limit=100)
+    entries = history_store.recent(hkey, limit=100)
     assert len(entries) == 6, f"Expected 6 history entries, got {len(entries)}"
