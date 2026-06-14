@@ -187,14 +187,14 @@ async def test_reflective_optimizer_returns_best_scoring_body() -> None:
     router = _router(replies=[candidate_a, candidate_b])
     optimizer = ReflectiveOptimizer(router=router, role="reflection", char_budget=2000)
 
-    scores: dict[str, float] = {
-        "": 0.3,
-        candidate_a: 0.5,
-        candidate_b: 0.8,
-    }
-
+    # Curate-contract: the proposed bullets are merged into the playbook, so the champion body
+    # CONTAINS the chosen delta rather than equalling it. Score by containment.
     async def scorer(body: str) -> float:
-        return scores.get(body, 0.0)
+        if "Candidate body B" in body:
+            return 0.8
+        if "Candidate body A" in body:
+            return 0.5
+        return 0.3
 
     train = [
         Example(query="q1", good_output="answer1"),
@@ -210,7 +210,7 @@ async def test_reflective_optimizer_returns_best_scoring_body() -> None:
     )
 
     assert isinstance(result, PromptVersion)
-    assert result.body == candidate_b
+    assert "Candidate body B" in result.body  # best delta merged into the playbook
     assert result.metrics["score"] == pytest.approx(0.8)
     assert result.version == 0  # candidate, not yet registered
 
@@ -316,8 +316,8 @@ async def test_reflective_optimizer_fallback_role() -> None:
     )
 
     async def scorer(body: str) -> float:
-        # Current body is empty (score 0.0); proposal scores higher.
-        return 0.8 if body == "Better body from strong" else 0.0
+        # Current body is empty (score 0.0); the curated proposal scores higher.
+        return 0.8 if "Better body from strong" in body else 0.0
 
     result = await optimizer.optimize(
         "fallback-test",
@@ -327,7 +327,7 @@ async def test_reflective_optimizer_fallback_role() -> None:
         current_body="",
     )
 
-    assert result.body == "Better body from strong"
+    assert "Better body from strong" in result.body
 
 
 @pytest.mark.asyncio
@@ -337,7 +337,7 @@ async def test_reflective_optimizer_sync_scorer() -> None:
     optimizer = ReflectiveOptimizer(router=router, role="reflection", char_budget=2000)
 
     def sync_scorer(body: str) -> float:
-        return 0.7 if body == "Nice body" else 0.0
+        return 0.7 if "Nice body" in body else 0.0
 
     result = await optimizer.optimize(
         "sync-test",
@@ -347,4 +347,4 @@ async def test_reflective_optimizer_sync_scorer() -> None:
         current_body="",
     )
 
-    assert result.body == "Nice body"
+    assert "Nice body" in result.body
