@@ -190,6 +190,52 @@ def _format_examples(train: list[Example], n: int = 5) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# ACE-style playbook curation (fixes context-collapse / brevity-bias)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_bullet(line: str) -> str:
+    """Normalised key for dedup: strip bullet markers + whitespace, lowercase, collapse spaces."""
+    return " ".join(line.strip().lstrip("-*•").strip().lower().split())
+
+
+def curate_playbook(current_body: str, additions: list[str], *, char_budget: int) -> str:
+    """Append-then-curate a champion *playbook* (ACE, ICLR 2026).
+
+    Self-improvement via context engineering converged on treating the champion as an evolving
+    *playbook* of strategy bullets that is grown by **incremental delta updates**, not rewritten
+    wholesale — because iterative full-document rewriting causes *brevity bias* (dropping detail
+    for concise summaries) and *context collapse* (detail eroding over rounds). This curator is
+    the deterministic core of that approach:
+
+    * existing bullets are preserved verbatim — never summarised or rewritten,
+    * new bullets are appended,
+    * exact / normalised duplicates are dropped (idempotent),
+    * when over ``char_budget`` whole bullets are dropped **oldest-first** (prioritising the
+      newest learning) — detail is removed wholesale, never compressed.
+
+    Both inputs may use ``-``/``*``/``•`` markers or none; output is a ``-``-bulleted list.
+    """
+    existing = [ln.strip() for ln in current_body.splitlines() if ln.strip()]
+    new = [a.strip() for a in additions if a.strip()]
+
+    merged: list[str] = []
+    seen: set[str] = set()
+    for line in [*existing, *new]:  # existing first (stable order), then the deltas
+        norm = _normalize_bullet(line)
+        if not norm or norm in seen:
+            continue
+        seen.add(norm)
+        merged.append(line if line.lstrip().startswith(("-", "*", "•")) else f"- {line}")
+
+    # Budget cap: drop whole bullets oldest-first (keep the newest learning) until under budget.
+    while len(merged) > 1 and len("\n".join(merged)) > char_budget:
+        merged.pop(0)
+
+    return "\n".join(merged)
+
+
 class ReflectiveOptimizer:
     """Dependency-light optimizer that proposes champion candidates via the LLM.
 
