@@ -196,13 +196,16 @@ async def test_apply_update_closes_old_fact_and_opens_new() -> None:
 async def test_apply_delete_closes_interval_not_hard_delete() -> None:
     consolidator, temporal, gate = _build_stack([], clock=lambda: T1)
 
+    # Agent-inferred so the DELETE is permitted (user-stated facts are protected from inferred
+    # deletion — see test_anti_amnesia). This test pins the "close interval, not hard-delete"
+    # contract for deletable facts.
     await gate.upsert_fact(
         TemporalFact(
             user_id="u1",
             subject="user",
             predicate="prefers",
             object="dark_mode",
-            source=MemorySource.USER_STATED,
+            source=MemorySource.AGENT_INFERRED,
         )
     )
 
