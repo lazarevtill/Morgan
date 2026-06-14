@@ -33,12 +33,17 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
 
 from morgan_brain.learning.optimizer import AnyScorer, Example, _call_scorer
 from morgan_brain.learning_lifecycle.interfaces import Optimizer, PromptRegistry
 
 logger = logging.getLogger(__name__)
+
+
+def _utcnow() -> datetime:
+    """Timezone-aware UTC now (replaces the deprecated ``datetime.utcnow``)."""
+    return datetime.now(timezone.utc)
 
 
 class ChampionTrainer:
@@ -56,7 +61,7 @@ class ChampionTrainer:
         *,
         optimizer: Optimizer,
         registry: PromptRegistry,
-        clock: Callable[[], datetime] = datetime.utcnow,
+        clock: Callable[[], datetime] = _utcnow,
     ) -> None:
         self._optimizer = optimizer
         self._registry = registry

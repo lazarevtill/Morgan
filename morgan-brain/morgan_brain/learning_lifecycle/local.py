@@ -6,7 +6,7 @@ SQLite-backed using stdlib ``sqlite3`` only (no ORM, no async library).  Follows
 same pattern as ``modules/memory/stores/temporal.py``: synchronous SQLite calls wrapped
 in async methods (acceptable because the store is used off the hot request path).
 
-Timestamps are injected via a ``clock`` callable (default ``datetime.utcnow``) so tests
+Timestamps are injected via a ``clock`` callable (default ``_utcnow``) so tests
 can pin time deterministically — matching the project's deterministic-time rule.
 
 NoopOptimizer
@@ -21,10 +21,16 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from morgan_brain.learning_lifecycle.interfaces import Optimizer, PromptRegistry, PromptVersion
+
+
+def _utcnow() -> datetime:
+    """Timezone-aware UTC now (replaces the deprecated ``datetime.utcnow``)."""
+    return datetime.now(timezone.utc)
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS prompt_versions (
@@ -39,7 +45,7 @@ CREATE TABLE IF NOT EXISTS prompt_versions (
 );
 """
 
-_DEFAULT_CLOCK: Callable[[], datetime] = datetime.utcnow
+_DEFAULT_CLOCK: Callable[[], datetime] = _utcnow
 
 
 class LocalPromptRegistry:

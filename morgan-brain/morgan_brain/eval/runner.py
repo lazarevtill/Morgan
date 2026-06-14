@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from morgan_brain.eval.golden import GoldenItem
@@ -45,6 +45,12 @@ logger = logging.getLogger(__name__)
 
 # Dedicated user_id for all eval turns — isolated from any real user data.
 EVAL_USER_ID: str = "__eval__"
+
+
+def _utcnow() -> datetime:
+    """Timezone-aware UTC now (replaces the deprecated ``datetime.utcnow``)."""
+    return datetime.now(timezone.utc)
+
 
 # Scalar key used for the gating metric inside Scorecard.layer2.
 _OVERALL_ACCURACY_KEY = "overall_preference_following_accuracy"
@@ -68,7 +74,7 @@ def _make_scratch_gate(clock: Callable[[], datetime]) -> MemoryGate:
 def make_predict_fn(
     *,
     orchestrator: "Orchestrator",
-    clock: Callable[[], datetime] = datetime.utcnow,
+    clock: Callable[[], datetime] = _utcnow,
 ) -> Callable[[GoldenItem, str], Awaitable[str]]:
     """Return an async predict_fn over the REAL orchestrator.
 

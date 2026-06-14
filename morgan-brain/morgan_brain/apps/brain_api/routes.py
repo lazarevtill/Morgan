@@ -72,7 +72,7 @@ def build_router(
         if kind == "edit":
             if req.edited_reply is None:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="edited_reply required for kind='edit'",
                 )
             await signal_recorder.add_edit(
@@ -96,20 +96,20 @@ def build_router(
         elif kind == "thumb":
             if req.thumb is None:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="thumb required for kind='thumb'",
                 )
             try:
                 thumb_val = Thumb(req.thumb.lower())
             except ValueError:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=f"Invalid thumb value '{req.thumb}'; must be 'up' or 'down'.",
                 )
             await signal_recorder.add_thumb(turn_id=req.turn_id, user_id=user_id, thumb=thumb_val)
         else:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"Unknown feedback kind '{req.kind}'; must be 'edit', 'retry', or 'thumb'.",
             )
         return FeedbackResponse(ok=True)
