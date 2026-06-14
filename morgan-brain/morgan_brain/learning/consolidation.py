@@ -14,6 +14,7 @@ Design invariants:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from enum import Enum
 from typing import Callable
@@ -224,8 +225,17 @@ class MemoryConsolidator:
 
             elif op.op is FactOpKind.DELETE:
                 # Close the currently-valid fact's interval without hard-deleting it.
+                # Anti-amnesia guard: the consolidator (agent-inferred) must NEVER erase a
+                # fact the user explicitly stated — that is exactly the "low-frequency,
+                # high-importance fact silently vanishes" failure the 2026 memory literature
+                # flags (e.g. "never deploy on Friday"). User-stated facts evolve only via a
+                # new user-stated supersession, never an inferred DELETE.
                 matching = [
-                    f for f in current if f.subject == op.subject and f.predicate == op.predicate
+                    f
+                    for f in current
+                    if f.subject == op.subject
+                    and f.predicate == op.predicate
+                    and f.source is not MemorySource.USER_STATED
                 ]
                 for fact in matching:
                     await self._temporal.close_fact(fact.id, now=now)
@@ -251,6 +261,12 @@ class MemoryConsolidator:
 
         existing_facts = await self._temporal.current_facts(user_id=user_id)
 
+        # Surprise-gate: consolidate what the current model did NOT already predict.
+        # Neuro-grounded (the hippocampus preferentially encodes prediction errors): episodics
+        # whose content is already covered by current facts carry little new signal, so we skip
+        # them and focus the LLM call on the surprising remainder — cheaper and better-targeted.
+        episodics = _surprise_filter(episodics, existing_facts)
+
         batch = await self.propose(user_id, episodics, existing_facts)
         return await self.apply(user_id, batch)
 
@@ -265,6 +281,7 @@ class MemoryConsolidator:
         half_life_days: float = 30.0,
         now: datetime,
         stale_threshold: float = 0.2,
+        protected_floor: float = 0.5,
     ) -> list[TemporalFact]:
         """Apply exponential confidence decay based on age since ``last_confirmed``.
 
@@ -314,6 +331,13 @@ class MemoryConsolidator:
             # Clamp to [0, 1].
             decayed = max(0.0, min(1.0, decayed))
 
+            # Importance-weighted retention: a fact the user explicitly stated never decays
+            # below ``protected_floor``, so high-importance / low-frequency user statements are
+            # not silently lost to staleness. Agent-inferred and tool-observed facts decay
+            # freely. This is the retention half of the hoarding-vs-amnesia tradeoff.
+            if fact.source is MemorySource.USER_STATED:
+                decayed = max(decayed, protected_floor)
+
             await self._temporal.set_confidence(fact.id, decayed)
 
             if decayed < stale_threshold:
@@ -337,6 +361,44 @@ class MemoryConsolidator:
 # ---------------------------------------------------------------------------
 # Timezone normalisation helper
 # ---------------------------------------------------------------------------
+
+
+def _tokens(text: str) -> set[str]:
+    """Lowercased alphanumeric word tokens — the unit of the surprise heuristic."""
+    return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def _surprise_filter(
+    episodics: list[Memory],
+    facts: list[TemporalFact],
+    *,
+    min_novelty: float = 0.5,
+    max_keep: int = 30,
+) -> list[Memory]:
+    """Keep only episodics the current fact base did not already predict (surprise-gating).
+
+    ``novelty`` = fraction of an episodic's tokens absent from the union of current-fact
+    tokens. Episodics with ``novelty < min_novelty`` are already-known (low prediction error)
+    and dropped; the rest are returned most-surprising-first, capped at ``max_keep``. At cold
+    start (no facts) every episodic is fully novel, so nothing is dropped. The heuristic is
+    deliberately lexical and conservative — it drops near-duplicates, never borderline-novel
+    content — and adds zero LLM cost.
+    """
+    known: set[str] = set()
+    for f in facts:
+        known |= _tokens(f"{f.subject} {f.predicate} {f.object}")
+
+    scored: list[tuple[float, Memory]] = []
+    for m in episodics:
+        toks = _tokens(m.content)
+        if not toks:
+            continue
+        novelty = len(toks - known) / len(toks)
+        if novelty >= min_novelty:
+            scored.append((novelty, m))
+
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [m for _, m in scored[:max_keep]]
 
 
 def _ensure_comparable(ref: datetime, now: datetime) -> datetime:
