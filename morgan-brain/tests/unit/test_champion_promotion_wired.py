@@ -137,7 +137,9 @@ async def test_better_candidate_is_promoted() -> None:
     async def spy_scorer(body: str) -> float:
         nonlocal call_count
         call_count += 1
-        return 0.8 if body == "new body" else 0.0
+        # Curate-contract: the delta bullet is merged into the playbook, so the champion body
+        # CONTAINS "new body" rather than equalling it.
+        return 0.8 if "new body" in body else 0.0
 
     orch, router = _make_orch_router(
         optimizer_reply="new body",
@@ -156,7 +158,7 @@ async def test_better_candidate_is_promoted() -> None:
     assert promoted is True
     champion = await registry.champion("morgan-system")
     assert champion is not None
-    assert champion.body == "new body"
+    assert "new body" in champion.body
     # scorer must have been called (for both baseline and candidate)
     assert call_count >= 2
 

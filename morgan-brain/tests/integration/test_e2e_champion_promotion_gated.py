@@ -117,7 +117,8 @@ async def test_better_candidate_promoted_in_registry() -> None:
 
     async def spy_scorer(body: str) -> float:
         call_log.append(body)
-        return 0.9 if body == "improved body" else 0.1
+        # Curate-contract: the delta is merged into the playbook, so the body CONTAINS it.
+        return 0.9 if "improved body" in body else 0.1
 
     orch, router = _make_orch_and_router(
         optimizer_reply="improved body",
@@ -131,7 +132,7 @@ async def test_better_candidate_promoted_in_registry() -> None:
     assert promoted is True
     champion = await registry.champion("morgan-system")
     assert champion is not None
-    assert champion.body == "improved body"
+    assert "improved body" in champion.body
     # Scorer must have been called at least twice (current + candidate).
     assert len(call_log) >= 2
 

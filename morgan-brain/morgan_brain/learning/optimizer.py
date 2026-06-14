@@ -159,24 +159,24 @@ async def _call_scorer(scorer: AnyScorer, body: str) -> float:
 # ---------------------------------------------------------------------------
 
 _SYSTEM_PROMPT = """\
-You are a prompt engineer optimizing a champion document (system prompt or skill body).
-Given the CURRENT document and a set of FAILING EXAMPLES where the current document
-produces sub-optimal outputs, propose an IMPROVED document.
+You are improving a champion *playbook* — a bulleted list of durable, generally-applicable
+guidance for an assistant. Given the CURRENT playbook and FAILING EXAMPLES where it produced
+sub-optimal outputs, propose a SMALL set of NEW playbook bullets that would fix those failures.
 
 Rules:
-1. Return ONLY the new document body — no commentary, no markdown fences.
-2. Make bounded, targeted edits — do not rewrite from scratch.
-3. Keep the document concise and focused; anti-bloat is critical.
+1. Return ONLY new bullet lines — one guidance item per line, each prefixed with "- ".
+2. Propose DELTAS: do NOT restate existing bullets and do NOT rewrite the playbook.
+3. Each bullet must be concise, durable, and broadly useful. Anti-bloat is critical.
 """
 
 _USER_TEMPLATE = """\
-CURRENT DOCUMENT:
+CURRENT PLAYBOOK:
 {current_body}
 
 FAILING EXAMPLES (query → expected good output):
 {examples_text}
 
-Propose the improved document:
+Propose new playbook bullets (delta only):
 """
 
 
@@ -347,9 +347,13 @@ class ReflectiveOptimizer:
                 ChatMessage(role="user", content=user_msg),
             ]
             result = await client.agenerate(messages, model=model)
-            candidate_body = result.text.strip()
+            # The reflection model proposes DELTA bullets; curate them into the playbook
+            # (append-then-curate) instead of replacing it wholesale. This is the ACE
+            # anti-context-collapse path: existing learning is preserved, never rewritten away.
+            additions = [ln for ln in result.text.splitlines() if ln.strip()]
+            candidate_body = curate_playbook(best_body, additions, char_budget=self._char_budget)
 
-            # Anti-bloat gate: reject over-budget proposals.
+            # Anti-bloat gate: a single delta too large to curate down is rejected unscored.
             if len(candidate_body) > self._char_budget:
                 logger.debug(
                     "ReflectiveOptimizer: proposal rejected (len=%d > budget=%d)",
