@@ -25,7 +25,7 @@ from morgan_brain.learning.consolidation import MemoryConsolidator
 from morgan_brain.learning.learner import ConsolidationLearner
 from morgan_brain.learning.optimizer import AnyScorer, ReflectiveOptimizer
 from morgan_brain.learning.profile import UserProfileBuilder
-from morgan_brain.learning.history import SessionHistoryStore
+from morgan_brain.learning.history import SessionHistoryStore, session_key
 from morgan_brain.learning.recorder import SignalRecorder
 from morgan_brain.learning.signals import SignalStore
 from morgan_brain.learning_lifecycle.factory import build_registry
@@ -118,13 +118,14 @@ def _register_turn_storage(
                 reply=reply,
             )
 
-        # Append messages to session history
+        # Append messages to session history, keyed per-user (never session_id alone).
         if history_store is not None:
+            hkey = session_key(event.user_id, session_id)
             history_store.append(
-                session_id, Message(user_id=event.user_id, role=Role.USER, content=query)
+                hkey, Message(user_id=event.user_id, role=Role.USER, content=query)
             )
             history_store.append(
-                session_id, Message(user_id=event.user_id, role=Role.ASSISTANT, content=reply)
+                hkey, Message(user_id=event.user_id, role=Role.ASSISTANT, content=reply)
             )
 
     bus.subscribe(EventType.RESPONSE_GENERATED, _store_turn)
@@ -297,18 +298,22 @@ def build_app_context(settings: Settings | None = None) -> AppContext:
     if temporal_path != ":memory:":
         pathlib.Path(temporal_path).parent.mkdir(parents=True, exist_ok=True)
 
-    # Derive signals DB path from temporal_db_url (sibling file)
+    # Derive signals + history DB paths from temporal_db_url (sibling files).
+    # History must be durable: it threads multi-turn context, so an in-memory store
+    # would silently collapse every turn to turn 1 across restarts.
     if temporal_path == ":memory:":
         signal_path = ":memory:"
+        history_path = ":memory:"
     else:
         signal_path = str(pathlib.Path(temporal_path).parent / "signals.db")
+        history_path = str(pathlib.Path(temporal_path).parent / "history.db")
 
     embedder = OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
     router = build_router(settings)
     # Use the persistent registry (same path as the worker) so brain-api reads
     # champions written by the learning-worker.
     prom_registry: PromptRegistry = build_registry(settings)
-    history_store = SessionHistoryStore()
+    history_store = SessionHistoryStore(history_path)
 
     orch, _, signal_store, recorder, executor, skills, learner = _assemble(
         embedder=embedder,

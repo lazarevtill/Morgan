@@ -17,6 +17,7 @@ from morgan_brain import __version__
 from morgan_brain.apps.brain_api.auth import require_api_key
 from morgan_brain.composition import _load_champion_override, build_app_context
 from morgan_brain.config import get_settings
+from morgan_brain.learning.history import session_key
 
 
 class ChatRequest(BaseModel):
@@ -50,7 +51,8 @@ def create_app() -> FastAPI:
     @app.post("/api/chat", response_model=ChatResponse, dependencies=[_auth])
     async def chat(req: ChatRequest) -> ChatResponse:
         user_id = req.user_id or settings.owner_user_id
-        history = ctx.history_store.recent(req.session_id or "default") if ctx.history_store else []
+        hkey = session_key(user_id, req.session_id)
+        history = ctx.history_store.recent(hkey) if ctx.history_store else []
         result, turn_id = await orchestrator.handle_turn_with_id(
             user_id=user_id,
             text=req.message,
@@ -70,10 +72,10 @@ def create_app() -> FastAPI:
         """
         user_id = req.user_id or settings.owner_user_id
 
+        hkey = session_key(user_id, req.session_id)
+
         async def _event_stream() -> AsyncIterator[str]:
-            history = (
-                ctx.history_store.recent(req.session_id or "default") if ctx.history_store else []
-            )
+            history = ctx.history_store.recent(hkey) if ctx.history_store else []
             async for delta in orchestrator.stream_turn(
                 user_id=user_id,
                 text=req.message,
