@@ -18,12 +18,13 @@ by keyword matching.  The LLM only produces the delta text; the merge is pure/de
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Callable
 
 from pydantic import BaseModel
 
-from morgan_brain.models.memory import TemporalFact
+from morgan_brain.models.memory import MemorySource, TemporalFact
 from morgan_brain.models.user import (
     CommunicationPrefs,
     RelationshipStage,
@@ -413,6 +414,57 @@ def apply_edit_delta(user_model: UserModel, delta: str) -> UserModel:
             traits.append(Trait(name="direct", value="direct communication", confidence=0.8))
 
     return user_model.model_copy(update={"comm_prefs": prefs, "traits": traits})
+
+
+def preference_facts_from_delta(user_id: str, delta: str, now: datetime) -> list[TemporalFact]:
+    """Map a CIPHER preference delta to agent-inferred ``comm_*`` facts.
+
+    Reuses ``apply_edit_delta``'s keyword detection but emits durable ``TemporalFact``s
+    (``source=agent_inferred``) instead of mutating a transient ``UserModel`` — so the
+    next ``UserProfileBuilder.build()`` (which reads currently-valid facts) reflects the
+    learned preference. This is the persistence half of "edit → future turns change".
+    Predicates are chosen to match ``build()``'s mapping: ``comm_length`` →
+    ``length``; ``comm_code`` → ``code_vs_prose``; ``comm_tone`` →
+    ``formality``/``tone``.
+    """
+    delta_lower = delta.lower()
+    # Word-boundary tokenisation (robust to commas/periods the LLM emits, e.g.
+    # "prefers concise, code-first" → {prefers, concise, code, first}).
+    tokens = set(re.findall(r"[a-z]+", delta_lower))
+
+    def _fact(predicate: str, obj: str) -> TemporalFact:
+        return TemporalFact(
+            user_id=user_id,
+            subject="user",
+            predicate=predicate,
+            object=obj,
+            source=MemorySource.AGENT_INFERRED,
+            confidence=0.7,
+            valid_from=now,
+            last_confirmed=now,
+            created_at=now,
+        )
+
+    facts: list[TemporalFact] = []
+    if tokens & _LENGTH_TERSE_KEYWORDS or "no hedging" in delta_lower:
+        facts.append(_fact("comm_length", "terse"))
+    elif tokens & _LENGTH_THOROUGH_KEYWORDS:
+        facts.append(_fact("comm_length", "thorough"))
+
+    if tokens & _CODE_FIRST_KEYWORDS:
+        facts.append(_fact("comm_code", "code_first"))
+    elif tokens & _PROSE_FIRST_KEYWORDS:
+        facts.append(_fact("comm_code", "prose_first"))
+
+    if tokens & _FORMAL_KEYWORDS:
+        facts.append(_fact("comm_tone", "formal"))
+    elif tokens & _INFORMAL_KEYWORDS:
+        facts.append(_fact("comm_tone", "casual"))
+
+    if tokens & _WARM_KEYWORDS:
+        facts.append(_fact("comm_tone", "warm"))
+
+    return facts
 
 
 def _provider_for_model(router: RoleRouter, model: str) -> str:

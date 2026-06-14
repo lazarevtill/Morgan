@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
@@ -41,6 +42,9 @@ class FeedbackRequest(BaseModel):
 
 class FeedbackResponse(BaseModel):
     ok: bool
+
+
+_log = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +78,19 @@ def build_router(
             await signal_recorder.add_edit(
                 turn_id=req.turn_id, user_id=user_id, edited_reply=req.edited_reply
             )
+            # Cold-path best-effort: learn a durable preference from this edit so future
+            # turns reflect it (CIPHER → agent-inferred comm_* facts). Learning must never
+            # fail the feedback request.
+            try:
+                original = await signal_recorder.original_reply_for(
+                    user_id=user_id, turn_id=req.turn_id
+                )
+                if original:
+                    await learner.learn_from_edit(
+                        user_id=user_id, original=original, edited=req.edited_reply
+                    )
+            except Exception as exc:  # noqa: BLE001 — best-effort learning hook
+                _log.warning("learn_from_edit_failed", turn_id=req.turn_id, error=str(exc))
         elif kind == "retry":
             await signal_recorder.add_retry(turn_id=req.turn_id, user_id=user_id)
         elif kind == "thumb":

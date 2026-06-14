@@ -12,10 +12,13 @@ from datetime import datetime, timezone
 
 import pytest
 
+from morgan_brain.learning.consolidation import MemoryConsolidator
+from morgan_brain.learning.learner import ConsolidationLearner
 from morgan_brain.learning.profile import (
     UserProfileBuilder,
     apply_edit_delta,
     preference_delta_from_edit,
+    preference_facts_from_delta,
 )
 from morgan_brain.models.memory import MemorySource, TemporalFact
 from morgan_brain.models.user import CommunicationPrefs, RelationshipStage, UserModel
@@ -341,3 +344,65 @@ def test_apply_edit_delta_is_deterministic() -> None:
     r2 = apply_edit_delta(um, "concise code-first")
     assert r1.comm_prefs == r2.comm_prefs
     assert r1.traits == r2.traits
+
+
+# ---------------------------------------------------------------------------
+# learn-from-edits loop — edit → durable facts → next profile reflects it
+# ---------------------------------------------------------------------------
+
+
+def test_preference_facts_from_delta_maps_keywords() -> None:
+    """A delta maps to agent-inferred comm_* facts that build() understands."""
+    facts = preference_facts_from_delta(USER, "prefers concise, code-first", T0)
+    pairs = {(f.predicate, f.object) for f in facts}
+    assert ("comm_length", "terse") in pairs
+    assert ("comm_code", "code_first") in pairs
+    assert all(f.source is MemorySource.AGENT_INFERRED for f in facts)
+    assert all(f.user_id == USER for f in facts)
+
+
+@pytest.mark.asyncio
+async def test_learn_from_edit_persists_facts_that_change_profile() -> None:
+    """The whole loop: an edit distils a preference, persists it as facts, and the NEXT
+    user_model reflects it — i.e. editing a reply actually changes future behaviour."""
+    gate, temporal = _make_gate()
+    delta_payload = json.dumps({"delta": "prefers concise, code-first"})
+    fake_client = FakeChatClient(reply=delta_payload)
+    reg = CapabilityRegistry.from_seed(
+        {
+            "fake/test-model": {
+                "supports_tools": True,
+                "json_mode": "json_schema",
+                "context_window": 32768,
+            }
+        }
+    )
+    router = RoleRouter(reg=reg, bindings={"strong": [Binding("fake", "test-model", fake_client)]})
+    builder = UserProfileBuilder(
+        gate=gate,
+        signals=None,  # type: ignore[arg-type]
+        router=router,
+        capability_registry=reg,
+        clock=lambda: T0,
+    )
+    consolidator = MemoryConsolidator(
+        gate=gate, temporal=temporal, router=router, capability_registry=reg, clock=lambda: T0
+    )
+    learner = ConsolidationLearner(
+        consolidator=consolidator, gate=gate, clock=lambda: T0, profile_builder=builder
+    )
+
+    before = await builder.build(USER)
+    assert before.comm_prefs.length == "balanced"
+    assert before.comm_prefs.code_vs_prose == "balanced"
+
+    delta = await learner.learn_from_edit(
+        user_id=USER,
+        original="Here is a long, detailed, verbose explanation with much background...",
+        edited="Just the code.",
+    )
+    assert "concise" in delta
+
+    after = await builder.build(USER)
+    assert after.comm_prefs.length == "terse"
+    assert after.comm_prefs.code_vs_prose == "code_first"

@@ -101,6 +101,23 @@ class SignalRecorder:
         )
         self._store._conn.commit()  # noqa: SLF001
 
+    async def original_reply_for(self, *, user_id: str, turn_id: str) -> str | None:
+        """Return the base reply recorded for ``(user_id, turn_id)``, or ``None``.
+
+        The edit signal only carries the *edited* text; the learn-from-edits loop needs
+        the ORIGINAL reply (recorded by ``record_turn``) to distil a preference delta.
+        Returns ``None`` when no base signal exists or the reply is empty (e.g. a stub
+        created by feedback that arrived before the turn was recorded).
+        """
+        row = self._store._conn.execute(  # noqa: SLF001  (internal access, same package)
+            "SELECT original_reply FROM interaction_signals WHERE user_id = ? AND turn_id = ?",
+            (user_id, turn_id),
+        ).fetchone()
+        if row is None:
+            return None
+        value: str | None = row[0]
+        return value or None
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
