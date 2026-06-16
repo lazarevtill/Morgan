@@ -2,7 +2,8 @@
 
 make_predict_fn
 ---------------
-Returns an async ``predict_fn(item, *, system_override="") -> str`` that:
+Returns an async ``predict_fn(item, *, system_override="") -> str | (str, float)`` that
+(``with_confidence=True`` appends a calibration confidence to each answer):
 1. Seeds ``item.setup`` strings into a *per-item isolated* MemoryGate (new
    MemoryModule + MemoryGate instantiated fresh for each item call), so eval
    items never pollute each other or the real assistant memory.
@@ -75,12 +76,13 @@ def make_predict_fn(
     *,
     orchestrator: "Orchestrator",
     clock: Callable[[], datetime] = _utcnow,
-) -> Callable[[GoldenItem, str], Awaitable[str]]:
+    with_confidence: bool = False,
+) -> Callable[[GoldenItem, str], Awaitable[str | tuple[str, float]]]:
     """Return an async predict_fn over the REAL orchestrator.
 
     The returned callable signature is:
 
-        async def predict_fn(item: GoldenItem, system_override: str = "") -> str
+        async def predict_fn(item: GoldenItem, system_override: str = "") -> str | (str, float)
 
     The function creates a fresh scratch MemoryGate per item, seeds
     ``item.setup`` into it (unless ``item.should_inject is False``), then
@@ -88,14 +90,19 @@ def make_predict_fn(
     own gate — eval content is completely firewalled.
 
     Args:
-        orchestrator: The real Orchestrator to evaluate.
-        clock:        Deterministic clock (injected for tests).
+        orchestrator:    The real Orchestrator to evaluate.
+        clock:           Deterministic clock (injected for tests).
+        with_confidence: When True, return ``(answer, confidence)`` for calibration scoring;
+                         confidence is the max confidence among the scratch gate's currently-valid
+                         facts (the agent's belief strength behind the answer), or a neutral 0.5
+                         prior when the item relied on no facts. When False (default) returns the
+                         bare answer string — fully back-compatible.
 
     Returns:
-        Async callable ``(item, system_override="") → str``.
+        Async callable ``(item, system_override="") → str | (str, float)``.
     """
 
-    async def predict_fn(item: GoldenItem, system_override: str = "") -> str:
+    async def predict_fn(item: GoldenItem, system_override: str = "") -> str | tuple[str, float]:
         # Build a per-item scratch gate so eval items are isolated.
         scratch_gate = _make_scratch_gate(clock)
 
@@ -131,7 +138,15 @@ def make_predict_fn(
             # FIREWALL: always restore the real gate, even on exception.
             orchestrator._memory = original_memory
 
-        return result.text
+        if not with_confidence:
+            return result.text
+
+        # Calibration confidence = belief strength behind the answer: the max confidence among
+        # the facts the agent held for this item (neutral 0.5 prior when it relied on none).
+        # Reading the scratch gate is firewalled (its own store; never the real one).
+        facts = await scratch_gate.current_facts(user_id=EVAL_USER_ID)
+        confidence = max((f.confidence for f in facts), default=0.5)
+        return result.text, max(0.0, min(1.0, confidence))
 
     return predict_fn
 
@@ -140,7 +155,7 @@ def make_eval_scorer(
     *,
     harness: EvalHarness,
     golden_items: list[GoldenItem],
-    predict_fn: Callable[[GoldenItem, str], Awaitable[str]],
+    predict_fn: Callable[[GoldenItem, str], Awaitable[str | tuple[str, float]]],
 ) -> Callable[[str], Awaitable[float]]:
     """Return an async scorer ``(body: str) -> float`` backed by the eval harness.
 
@@ -159,7 +174,9 @@ def make_eval_scorer(
 
     async def scorer(body: str) -> float:
         # Wrap predict_fn with the body as system_override to match PredictFn signature.
-        async def _item_predict(item: GoldenItem) -> str:
+        # Pass the prediction through verbatim (str or (answer, confidence)) so the harness
+        # can collect calibration when confidence is present.
+        async def _item_predict(item: GoldenItem) -> str | tuple[str, float]:
             return await predict_fn(item, body)
 
         scorecard = await harness.run_l2(golden_items, _item_predict)

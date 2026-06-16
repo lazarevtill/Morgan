@@ -28,11 +28,20 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Awaitable, Callable, Union
 
+import structlog
 from pydantic import BaseModel, Field
 
+from morgan_brain.eval.calibration import (
+    Pair,
+    brier_score,
+    expected_calibration_error,
+    reliability_bins,
+)
 from morgan_brain.eval.golden import GoldenItem, ProbeType
 from morgan_brain.eval.judge import CalibratedJudge, LLMJudge
 from morgan_brain.learning_lifecycle.interfaces import PromptRegistry
+
+_log = structlog.get_logger(__name__)
 
 # Per-probe regression tolerance — small regressions within this band are
 # accepted as noise (the overall gate is the primary signal).
@@ -41,8 +50,10 @@ _EPSILON: float = 0.05
 # The key used for the overall accuracy figure in layer2 / champion metrics.
 _OVERALL_KEY = "overall_preference_following_accuracy"
 
-# A predict_fn takes one GoldenItem and returns the assistant's answer.
-PredictFn = Callable[[GoldenItem], Awaitable[str]]
+# A predict_fn takes one GoldenItem and returns the assistant's answer, optionally paired with a
+# confidence in [0, 1] for calibration scoring. Returning a bare ``str`` (no confidence) is the
+# back-compatible default; ``(answer, confidence)`` opts the item into calibration.
+PredictFn = Callable[[GoldenItem], Awaitable[Union[str, tuple[str, float]]]]
 
 # predict_fn_factory: given a prompt body string, returns a PredictFn.
 PredictFnFactory = Callable[[str], PredictFn]
@@ -66,6 +77,10 @@ class Scorecard(BaseModel):
 
     layer1: dict[str, float] = Field(default_factory=dict)
     layer2: dict[str, float] = Field(default_factory=dict)
+    # L3 calibration metrics ({"brier": .., "ece": ..}) + the reliability-diagram rows.
+    # Empty unless predict_fn supplied per-item confidences (report-only; never gated yet).
+    layer3: dict[str, float] = Field(default_factory=dict)
+    reliability: list[dict[str, float]] = Field(default_factory=list)
     n_items: int = 0
     passed: bool = False
 
@@ -154,10 +169,16 @@ class EvalHarness:
 
         # Per-probe tracking: list of pass/fail booleans.
         probe_results: dict[str, list[bool]] = defaultdict(list)
+        # Calibration pairs: (confidence, correct) for items whose predict_fn supplied confidence.
+        cal_pairs: list[Pair] = []
 
         for item in items:
             # FIREWALL: only read from predict_fn; never write to memory.
-            answer = await predict_fn(item)
+            out = await predict_fn(item)
+            if isinstance(out, tuple):
+                answer, confidence = out
+            else:
+                answer, confidence = out, None
 
             verdict = await self._judge.judge(
                 question=item.query,
@@ -169,8 +190,10 @@ class EvalHarness:
             # is interpreted identically (passed = answer matches expected).
             # No inversion needed — the golden expected encodes the correct behaviour.
             probe_results[item.probe.value].append(verdict.passed)
+            if confidence is not None:
+                cal_pairs.append((confidence, verdict.passed))
 
-        # Aggregate.
+        # Aggregate accuracy (layer2).
         layer2: dict[str, float] = {}
         all_results: list[bool] = []
         for pt in ProbeType:
@@ -183,7 +206,30 @@ class EvalHarness:
         layer2[_OVERALL_KEY] = overall
         passed = overall > 0.0 and any(all_results)
 
-        return Scorecard(layer1={}, layer2=layer2, n_items=len(items), passed=passed)
+        # Aggregate calibration (layer3) — report-only: computed + logged, never gated here.
+        layer3: dict[str, float] = {}
+        reliability: list[dict[str, float]] = []
+        if cal_pairs:
+            layer3 = {
+                "brier": brier_score(cal_pairs),
+                "ece": expected_calibration_error(cal_pairs),
+            }
+            reliability = [b.as_dict() for b in reliability_bins(cal_pairs)]
+            _log.info(
+                "eval_calibration",
+                brier=round(layer3["brier"], 4),
+                ece=round(layer3["ece"], 4),
+                n=len(cal_pairs),
+            )
+
+        return Scorecard(
+            layer1={},
+            layer2=layer2,
+            layer3=layer3,
+            reliability=reliability,
+            n_items=len(items),
+            passed=passed,
+        )
 
 
 # ---------------------------------------------------------------------------
