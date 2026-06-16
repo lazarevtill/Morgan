@@ -439,7 +439,9 @@ def build_worker_context(settings: Settings | None = None) -> WorkerContext:
     golden_items = load_golden_set(golden_path_str if golden_path_str else default_golden_path())
     judge = LLMJudge(router=router, role="judge")
     harness = EvalHarness(judge=judge)
-    predict_fn = make_predict_fn(orchestrator=orch, clock=_utcnow)
+    # with_confidence=True so the eval harness computes + logs calibration (Brier/ECE) on every
+    # worker eval run — report-only (it never gates promotion yet).
+    predict_fn = make_predict_fn(orchestrator=orch, clock=_utcnow, with_confidence=True)
     eval_scorer: AnyScorer = make_eval_scorer(
         harness=harness,
         golden_items=golden_items,
