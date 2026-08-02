@@ -10,7 +10,22 @@
 
 ## Global Constraints
 
-- Python `>=3.12`; line-length 100; `ruff check`, `ruff format --check`, and `mypy morgan_brain` (strict) must pass at every commit.
+- Python `>=3.12`; line-length 100.
+- **Lint gates, stated honestly.** `ruff check .` does **not** currently pass: there are **341
+  pre-existing errors** (137 inside `morgan_brain/`) as of commit `1ad5642`. Cause:
+  `pyproject.toml:28` pins `ruff>=0.7`, an unpinned floor, while the installed ruff is 0.16.1
+  with a much larger default rule set — which also means the CI lint job is failing on `main`.
+  Fixing that baseline is **out of scope for this plan** (it would bury every task's diff).
+  The gates for each task are therefore:
+  - `python -m ruff check . 2>&1 | tail -1` must report a count **≤ the count at the task's base
+    commit**. Never introduce a new error; deleting files may legitimately lower it.
+  - `ruff format --check .` must pass — it currently does (265 files clean). This is a hard gate.
+  - `mypy morgan_brain` must report **0 errors** from Task 3 onward. It reports exactly 1 today
+    (`channels/telegram.py:57`), in a file Task 3 deletes. Hard gate.
+  - `pytest -q` must be green, with any change in counts explained. Baseline at `1ad5642`:
+    **872 passed, 11 skipped, 1 xfailed**.
+- Pinning ruff and clearing the 341-error baseline is real work, but it belongs in its own
+  change, not smuggled into a reshape task. Recorded as a follow-up.
 - All settings are `MORGAN_`-prefixed and read only via `get_settings()`. Never re-read env directly.
 - Everything that persists is `user_id`-keyed (`UserScoped`) **and, after Task 12, `project`-keyed**.
 - All memory access goes through `MemoryGate` — after Task 13 this includes consolidation, history, and signals.
