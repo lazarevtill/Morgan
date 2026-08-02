@@ -177,14 +177,24 @@ git commit -m "build: ship packaged eval and provider data in the wheel"
 
 - [ ] **Step 1: Prove each target has no production importer**
 
+Count importers that live **outside every module being deleted in this task**. A naive
+per-module grep produces false positives, because the deleted modules legitimately import each
+other (`voice/persona_bridge.py` imports `interfaces/voice.py`, and both are going).
+
 ```bash
 cd morgan-brain
+DOOMED='^morgan_brain/(channels|voice|apps/perception_gpu|modules/mcp)/|^morgan_brain/interfaces/(voice|rerank|embedding)\.py|^morgan_brain/providers/resilience\.py'
 for m in channels voice interfaces.voice modules.mcp providers.resilience interfaces.rerank interfaces.embedding; do
   printf '%-28s ' "$m"
-  grep -rn "morgan_brain\.${m}" morgan_brain --include='*.py' | grep -v "^morgan_brain/${m//.//}" | wc -l
+  grep -rn "morgan_brain\.${m}" morgan_brain --include='*.py' | grep -Ev "$DOOMED" | wc -l
 done
 ```
-Expected: `0` for each. **If any line is non-zero, stop and report it** — the plan's premise is wrong for that module.
+
+Expected: `0` for every module except `interfaces.embedding`, which must report exactly `1` —
+`providers/factory.py:14`, removed in Step 3 of this task.
+
+**If any other line is non-zero, stop and report it** — the plan's premise is wrong for that
+module. (Verified by the controller on 2026-08-02: this is the expected output.)
 
 - [ ] **Step 2: Delete the modules and their tests**
 
@@ -197,12 +207,31 @@ git rm -r --quiet tests/unit/voice tests/unit/channels 2>/dev/null || true
 cd .. && git rm -r --quiet clients
 ```
 
-Then remove any remaining test files that import the deleted modules:
+Then remove the remaining test files for deleted modules. **Use this explicit list — do NOT use
+a grep-and-`xargs git rm`.** A dry run of the obvious grep also matches
+`tests/unit/providers/test_factory.py`, `test_router.py`, `test_fake_adapter.py`,
+`test_openai_compat.py`, `test_interfaces.py`, and `tests/unit/test_learning_worker.py` — all of
+which test **kept** code. Deleting them would leave the suite green because the tests were gone.
 
 ```bash
 cd morgan-brain
-grep -rln 'channels\|voice\|modules\.mcp\|resilience\|interfaces\.rerank\|interfaces\.embedding' tests | xargs -r git rm --quiet
+git rm -r --quiet tests/unit/modules/mcp
+git rm --quiet tests/unit/voice/test_fake.py
 ```
+
+(`tests/unit/voice/test_interfaces.py`, `tests/unit/voice/test_persona_bridge.py`, and
+`tests/unit/channels/` are already removed by Step 2's directory deletions.)
+
+Then **edit, do not delete**, the files that merely reference a deleted module:
+
+```bash
+cd morgan-brain
+grep -rln 'resilience\|interfaces\.rerank\|interfaces\.embedding' tests
+```
+
+For each hit, remove only the import and the specific test functions that exercise the deleted
+module; leave every test of kept behaviour intact. `tests/unit/providers/test_factory.py` is the
+expected hit — it tests `build_embedder`, which Step 3 removes.
 
 - [ ] **Step 3: Remove `build_embedder` from the factory**
 
@@ -249,11 +278,22 @@ Unlike Task 3's targets, proactivity **is** wired in production behind a flag (`
 
 - [ ] **Step 1: Delete the modules and their tests**
 
+**Use this explicit list — do NOT use a grep-and-`xargs git rm`.** A dry run of the obvious grep
+also matches `tests/unit/scheduling/test_cron.py` (tests the **kept** `CronService`),
+`tests/live/test_redis_bus_live.py` (kept bus), `tests/unit/test_learning_worker.py`, and
+`tests/unit/test_learning_worker_smoke.py`. Deleting those would hide real regressions.
+
 ```bash
 cd morgan-brain
 git rm -r --quiet morgan_brain/proactivity morgan_brain/modules/proactivity morgan_brain/scheduling/heartbeat.py
-grep -rln 'proactivity\|Proactivity\|heartbeat\|Heartbeat' tests | xargs -r git rm --quiet
+git rm -r --quiet tests/unit/proactivity
+git rm --quiet tests/unit/scheduling/test_heartbeat.py
 ```
+
+Then **edit, do not delete**, the four survivors that reference proactivity or the heartbeat:
+`tests/unit/test_learning_worker.py`, `tests/unit/test_learning_worker_smoke.py`,
+`tests/unit/scheduling/test_cron.py`, `tests/live/test_redis_bus_live.py`. Remove only the
+proactivity/heartbeat imports and the test functions that exercise them.
 
 - [ ] **Step 2: Repair `scheduling/__init__.py`**
 
@@ -400,6 +440,21 @@ Apply each of these:
 - Replace the "Current direction (H1)" section with a pointer to `docs/superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md`.
 - Fix the archive reference: the tag is `legacy-v0.0.3-monolith`; the branch is `origin/legacy/v0.0.3-monolith`.
 
+- [ ] **Step 3a: Delete the dead config fields themselves**
+
+Tasks 3-5 removed the code that read these, but the fields survive in `config.py` and Step 3's
+verification loop below only scans `.env.example` — so it is blind to them. Delete from
+`morgan_brain/config.py`: `enable_channels`, `enable_mcp`, `telegram_token`, `discord_token`,
+and `mcp_servers`. Confirm each has no reader first:
+
+```bash
+cd morgan-brain
+for v in enable_channels enable_mcp telegram_token discord_token mcp_servers; do
+  printf '%-18s %s\n' "$v" "$(grep -rn "settings\.$v\b" morgan_brain --include='*.py' | wc -l)"
+done
+```
+Expected: `0` for every one.
+
 - [ ] **Step 3: Strip dead settings from `.env.example` and `docs/WIRING.md`**
 
 Remove `MORGAN_REDACT_EGRESS`, `MORGAN_ENCRYPTION`, `MORGAN_PASSPHRASE`, `MORGAN_ENABLE_CHANNELS`, `MORGAN_ENABLE_MCP`, `MORGAN_ENABLE_PROACTIVITY`, `MORGAN_TELEGRAM_TOKEN`, `MORGAN_DISCORD_TOKEN`, and `MORGAN_MLFLOW_TRACKING_URI` if `learning_backend` stays `local`.
@@ -451,7 +506,12 @@ git commit -am "docs: correct claims to match the code after the cut"
 
 - [ ] **Step 1: Add the dependency**
 
-In `morgan-brain/pyproject.toml`, add `"sqlite-vec>=0.1.6"` to `[project].dependencies`, and move `redis` and `qdrant-client` out of `dependencies` into a new extra:
+In `morgan-brain/pyproject.toml`, add `"sqlite-vec>=0.1.9"` to `[project].dependencies`, and move `redis` and `qdrant-client` out of `dependencies` into a new extra.
+
+The `>=0.1.9` floor is deliberate: Task 8 depends on vec0 **metadata columns** and
+`distance_metric=cosine`, both verified working on 0.1.9. Earlier releases were not verified to
+support them, and silently losing metadata filtering would reintroduce the crowd-out bug Task 8
+exists to prevent.
 
 ```toml
 scale = ["redis>=5.2", "qdrant-client>=1.12"]
@@ -622,6 +682,23 @@ async def test_upsert_replaces_rather_than_duplicates(tmp_path):
     await idx.upsert(VectorRecord(id="a", user_id="u", vector=[0, 1, 0, 0]))
     hits = await idx.search(user_id="u", vector=[0, 1, 0, 0], top_k=5)
     assert [h.id for h in hits] == ["a"]
+
+
+async def test_scoping_happens_inside_the_knn_not_after(tmp_path):
+    """Regression: post-filtering a global KNN silently drops the caller's own neighbours.
+
+    Two users share the store. u1 owns the exact match AND the second-nearest vector, but
+    u2's identical vector would crowd the top-k of an unscoped query. With top_k=2, a
+    correct implementation returns BOTH of u1's vectors.
+    """
+    idx = _idx(tmp_path)
+    await idx.upsert(VectorRecord(id="u1-exact", user_id="u1", vector=[1, 0, 0, 0]))
+    await idx.upsert(VectorRecord(id="u2-exact", user_id="u2", vector=[1, 0, 0, 0]))
+    await idx.upsert(VectorRecord(id="u1-near", user_id="u1", vector=[0.9, 0.1, 0, 0]))
+    await idx.upsert(VectorRecord(id="u2-near", user_id="u2", vector=[0.9, 0.1, 0, 0]))
+
+    hits = await idx.search(user_id="u1", vector=[1, 0, 0, 0], top_k=2)
+    assert [h.id for h in hits] == ["u1-exact", "u1-near"]
 ```
 
 - [ ] **Step 3: Run and watch it fail**
@@ -634,10 +711,17 @@ Expected: FAIL — module does not exist
 ```python
 """Persistent vector index backed by sqlite-vec, inside the one Morgan database.
 
-Design note: vec0 KNN cannot filter on a joined column, so the query over-fetches
-``top_k * _OVERFETCH`` neighbours and applies the user filter afterwards. At single-user
-corpus sizes this is exact in practice; if it ever is not, the Protocol boundary lets a
-different backend take over.
+Scoping happens **inside** the KNN via vec0 metadata columns, not by over-fetching and
+filtering afterwards. This is not a style choice — post-filtering is incorrect. vec0 selects
+its ``k`` nearest neighbours globally, before any join or WHERE on a joined table, so with
+several users or projects in one store the caller's own near neighbours can be crowded out
+and never returned at all. Verified on sqlite-vec 0.1.9: with two users interleaved and
+``k=2``, an unscoped query returned only the *other* user's rows, while the metadata-scoped
+query returned the correct two.
+
+vec0 also defaults to L2. The index this replaces ranked by cosine (``_cosine`` in vector.py,
+and Qdrant's ``Distance.COSINE``), so ``distance_metric=cosine`` is set explicitly — otherwise
+ranking silently changes for unnormalised llama-server embeddings.
 """
 
 from __future__ import annotations
@@ -647,8 +731,6 @@ import sqlite3
 import struct
 
 from morgan_brain.modules.memory.stores.vector import VectorHit, VectorRecord
-
-_OVERFETCH = 4
 
 
 def _pack(vector: list[float]) -> bytes:
@@ -667,8 +749,11 @@ class SqliteVectorIndex:
                 user_id TEXT NOT NULL,
                 payload TEXT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_vec_meta_user ON vec_meta (user_id);
-            CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(embedding float[{dim}]);
+            CREATE INDEX IF NOT EXISTS idx_vec_meta_id ON vec_meta (id);
+            CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
+                embedding float[{dim}] distance_metric=cosine,
+                user_id TEXT
+            );
             """
         )
         conn.commit()
@@ -695,32 +780,36 @@ class SqliteVectorIndex:
             )
             rowid = int(cur.lastrowid or 0)
         self._conn.execute(
-            "INSERT INTO vec_items (rowid, embedding) VALUES (?, ?)",
-            (rowid, _pack(record.vector)),
+            "INSERT INTO vec_items (rowid, embedding, user_id) VALUES (?, ?, ?)",
+            (rowid, _pack(record.vector), record.user_id),
         )
         self._conn.commit()
 
     async def search(
         self, *, user_id: str, vector: list[float], top_k: int
     ) -> list[VectorHit]:
+        # user_id is a vec0 metadata column, so the filter applies INSIDE the KNN.
         rows = self._conn.execute(
             """
             SELECT m.id AS id, m.payload AS payload, v.distance AS distance
             FROM vec_items v
             JOIN vec_meta m ON m.rowid = v.rowid
-            WHERE v.embedding MATCH ? AND k = ?
+            WHERE v.embedding MATCH ? AND k = ? AND v.user_id = ?
             ORDER BY v.distance
             """,
-            (_pack(vector), max(top_k * _OVERFETCH, top_k)),
+            (_pack(vector), top_k, user_id),
         ).fetchall()
-        hits = [
+        return [
             VectorHit(id=r["id"], score=-float(r["distance"]), payload=json.loads(r["payload"]))
             for r in rows
-            if self._owner(r["id"]) == user_id
         ]
-        return hits[:top_k]
 
     async def delete(self, ids: list[str]) -> None:
+        """Protocol-level delete, for callers outside the single-database path.
+
+        ``forget()`` deletes these rows with plain SQL inside its own transaction instead —
+        see Task 16 — because committing here would break its atomicity.
+        """
         for mid in ids:
             row = self._conn.execute("SELECT rowid FROM vec_meta WHERE id = ?", (mid,)).fetchone()
             if row is None:
@@ -728,12 +817,6 @@ class SqliteVectorIndex:
             self._conn.execute("DELETE FROM vec_items WHERE rowid = ?", (row["rowid"],))
             self._conn.execute("DELETE FROM vec_meta WHERE rowid = ?", (row["rowid"],))
         self._conn.commit()
-
-    def _owner(self, memory_id: str) -> str:
-        row = self._conn.execute(
-            "SELECT user_id FROM vec_meta WHERE id = ?", (memory_id,)
-        ).fetchone()
-        return str(row["user_id"]) if row else ""
 ```
 
 - [ ] **Step 5: Add `delete` to the other two implementations**
@@ -915,14 +998,19 @@ class FtsIndex:
 Run: `cd morgan-brain && pytest tests/unit/memory/test_fts.py -v`
 Expected: PASS (7 tests)
 
-- [ ] **Step 5: Delete the old BM25 module and its tests**
+- [ ] **Step 5: Do NOT delete bm25.py yet**
+
+`modules/memory/store.py:21` still imports `Bm25Index`. Deleting the module here would break
+the package import and leave the Tasks 9 and 10 commits red, violating the global constraint
+that every commit is green. The deletion happens in Task 11, in the same commit that removes
+the import.
+
+Verify the new index coexists with the old one:
 
 ```bash
-cd morgan-brain
-git rm --quiet morgan_brain/modules/memory/retrieval/bm25.py tests/unit/test_bm25.py
-grep -rn 'Bm25Index\|retrieval.bm25' morgan_brain tests
+cd morgan-brain && python -c "import morgan_brain.composition; print('ok')" && pytest -q
 ```
-Expected after Task 11: no output. Until then `store.py` still imports it — leave that import until Task 11 and re-run this check there.
+Expected: import ok, suite green.
 
 - [ ] **Step 6: Commit**
 
@@ -1087,6 +1175,8 @@ This is the task that fixes the headline defect: recall currently loses two of t
 
 ```python
 """Recall must survive a restart on all three signals."""
+import hashlib
+
 import pytest
 from morgan_brain.models.base import Entity
 from morgan_brain.models.memory import Memory, MemoryQuery
@@ -1101,11 +1191,17 @@ from datetime import datetime, timezone
 
 
 class HashEmbedder:
-    """Deterministic 4-d embedder; identical text embeds identically across processes."""
+    """Deterministic 4-d embedder; identical text embeds identically across processes.
+
+    Uses sha256, NOT the builtin ``hash()`` — PYTHONHASHSEED randomises ``hash()`` per
+    process, so a builtin-hash embedder would produce different vectors in the CLI
+    subprocess than in the store, silently breaking cross-process vector recall while the
+    FTS signal masked the failure.
+    """
 
     async def embed(self, text: str) -> list[float]:
-        h = abs(hash(text.lower().strip()))
-        return [float((h >> (8 * i)) & 0xFF) for i in range(4)]
+        digest = hashlib.sha256(text.lower().strip().encode("utf-8")).digest()
+        return [float(digest[i]) for i in range(4)]
 
 
 def _module(path: str) -> MemoryModule:
@@ -1312,14 +1408,37 @@ Replace `__init__`, `store`, `recall`, and `_owned` in `morgan_brain/modules/mem
 Run: `cd morgan-brain && pytest tests/unit/memory/ -v`
 Expected: PASS (4 new tests plus the earlier ones)
 
-- [ ] **Step 6: Verify BM25 is fully gone and the suite still passes**
+- [ ] **Step 6: Delete BM25 and update every construction site**
+
+The constructor signature changed, so every caller breaks. This is the complete list — it is
+**nine files, one of which is production code that appears in no other task**:
+
+Production:
+- `morgan_brain/composition.py:182` — the main assembly
+- `morgan_brain/eval/runner.py:66` — the eval scratch gate. Build its three indexes over
+  `open_db(":memory:")` so eval writes stay isolated.
+
+Tests:
+- `tests/memory_quality/conftest.py:18`
+- `tests/integration/test_cross_process_recall.py:25`
+- `tests/unit/test_memory_module.py:12`
+- `tests/unit/learning/test_anti_amnesia.py:39`
+- `tests/unit/learning/test_profile.py:40`
+- `tests/unit/learning/test_learner.py:41`
+- `tests/unit/learning/test_consolidation.py:53`
+
+Extract a shared `_module(path)` helper into `tests/unit/memory/conftest.py` and reuse it —
+Task 12 references the same helper, and duplicating it nine times guarantees drift.
+
+Now delete the old index in the same commit that removes its import:
 
 ```bash
 cd morgan-brain
+git rm --quiet morgan_brain/modules/memory/retrieval/bm25.py tests/unit/test_bm25.py
 grep -rn 'Bm25Index\|retrieval.bm25' morgan_brain tests
 pytest -q && ruff check . && mypy morgan_brain
 ```
-Expected: no grep output; suite green. Existing `MemoryModule` construction sites in `composition.py` and older tests will fail here — update them to pass the three new arguments.
+Expected: no grep output; suite green.
 
 - [ ] **Step 7: Commit**
 
@@ -1333,8 +1452,16 @@ git commit -m "feat(memory): durable multi-signal recall that survives a restart
 ## Task 12: Add `project` to the domain model and the stores
 
 **Files:**
-- Modify: `morgan_brain/models/memory.py`, `morgan_brain/modules/memory/stores/episodic.py`, `.../stores/temporal.py`, `.../retrieval/fts.py`, `.../retrieval/entities.py`, `.../store.py`
-- Test: `morgan-brain/tests/unit/memory/test_project_scoping.py`
+- Modify: `morgan_brain/models/memory.py`, `morgan_brain/modules/memory/stores/episodic.py`, `.../stores/temporal.py`, `.../stores/sqlite_vector.py`, `.../retrieval/fts.py`, `.../retrieval/entities.py`, `.../store.py`
+- Test: `morgan-brain/tests/unit/memory/test_project_scoping.py`, `morgan-brain/tests/unit/memory/conftest.py`
+
+**Note on `sqlite_vector.py`:** it is in this list deliberately. `project` must become a
+**second vec0 metadata column** alongside `user_id`, and `VectorIndex.search` must take a
+`project: str | None` argument, for the same reason Task 8 scopes on `user_id` inside the KNN —
+filtering afterwards lets another project's vectors crowd out the caller's own. Leaving vectors
+unscoped would also make `test_recall_defaults_to_the_query_project` below fail: the
+cross-project id comes back in the vector ranking and `episodics.get(mid)` resurrects it.
+`MemoryModule.recall` must additionally drop any fused id whose stored project does not match.
 
 **Interfaces:**
 - Consumes: Tasks 8-11
@@ -1544,6 +1671,192 @@ git commit -m "feat(security): route consolidation through MemoryGate with proje
 
 ---
 
+## Task 13A: Wire the durable stack into production composition
+
+**This is the load-bearing task of the whole milestone.** Tasks 7-13 build durable stores that
+nothing constructs. Without this task, `composition.py:81` keeps building
+`InMemoryVectorIndex`, `bus.start()` is never called so consolidation never runs, signals and
+history stay in separate database files (making Task 16's `forget()` impossible), and the
+milestone acceptance test passes on FTS alone while production memory stays exactly as
+ephemeral as the spec's §1 diagnosis says it is.
+
+**Files:**
+- Modify: `morgan_brain/config.py`, `morgan_brain/composition.py` (`_build_vector_index` ~81, `_assemble`, `build_app_context`, `build_worker_context`, the `signals.db`/`history.db` derivation at 338-339 and 415), `morgan_brain/apps/brain_api/app.py`, `morgan_brain/apps/learning_worker/__main__.py`, `morgan_brain/eval/runner.py:66`
+- Test: `morgan-brain/tests/integration/test_composition_durable.py`
+
+**Interfaces:**
+- Consumes: Tasks 7-13
+- Produces: `Settings.data_dir` (`MORGAN_DATA_DIR`, default `./data`); `vector_backend` gains `"sqlite"` **as the default**; one `sqlite3.Connection` per process shared by every store; `bus.start()`/`stop()` bound to the brain-api lifespan
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+"""The assembled app must use durable stores, not in-memory ones."""
+import sqlite3
+from morgan_brain.composition import build_app_context
+from morgan_brain.config import Settings
+from morgan_brain.modules.memory.stores.sqlite_vector import SqliteVectorIndex
+
+
+def test_app_context_uses_the_sqlite_vector_index(tmp_path, monkeypatch):
+    monkeypatch.setenv("MORGAN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
+    ctx = build_app_context(Settings())
+    assert isinstance(ctx.vectors, SqliteVectorIndex), type(ctx.vectors)
+
+
+def test_every_store_shares_one_database_file(tmp_path, monkeypatch):
+    """signals and history must be reachable from the memory connection, or forget() cannot work."""
+    monkeypatch.setenv("MORGAN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
+    build_app_context(Settings())
+    dbs = sorted(p.name for p in tmp_path.glob("*.db"))
+    assert dbs == ["morgan.db"], f"expected one database, found {dbs}"
+
+    conn = sqlite3.connect(tmp_path / "morgan.db")
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert {"memories", "facts", "interaction_signals", "session_history"} <= tables, tables
+
+
+def test_brain_api_starts_and_stops_the_bus(tmp_path, monkeypatch):
+    """Nothing called bus.start() before this task, so queued cold-path work never ran."""
+    from fastapi.testclient import TestClient
+    monkeypatch.setenv("MORGAN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
+    from morgan_brain.apps.brain_api.app import create_app
+
+    app = create_app()
+    with TestClient(app) as client:          # __enter__ runs the lifespan
+        assert client.get("/health").status_code == 200
+        assert app.state.ctx.bus.is_running is True
+    assert app.state.ctx.bus.is_running is False
+```
+
+- [ ] **Step 2: Run and watch it fail**
+
+Run: `cd morgan-brain && pytest tests/integration/test_composition_durable.py -v`
+Expected: FAIL — `InMemoryVectorIndex` is built, three `.db` files appear, no lifespan exists.
+
+- [ ] **Step 3: Add `data_dir` and the sqlite backend to Settings**
+
+```python
+    data_dir: str = "./data"
+    vector_backend: Literal["sqlite", "memory", "qdrant"] = "sqlite"
+```
+
+Derive every store path from `data_dir`. Replace the `signals.db` / `history.db` siblings at
+`composition.py:338-339` and `:415` with the single `data_dir/morgan.db`, and default
+`temporal_db_url` to that same file.
+
+- [ ] **Step 4: Build one connection and share it**
+
+In `_assemble` (and the worker's equivalent), call `open_db` once and pass that connection to
+`SqliteTemporalStore`, `SqliteVectorIndex`, `FtsIndex`, `EntityIndex`, `EpisodicStore`,
+`SignalStore`, and `SessionHistoryStore`. `SignalStore` and `SessionHistoryStore` currently open
+their own files — change their constructors to accept a `sqlite3.Connection` like the others.
+Add `"sqlite"` to `_build_vector_index`.
+
+- [ ] **Step 5: Fix the eval scratch gate**
+
+`eval/runner.py:66` constructs a `MemoryModule` and is production code in no other task's file
+list. Build its three new indexes over `open_db(":memory:")` so the scratch gate still isolates
+eval writes.
+
+- [ ] **Step 6: Wire the bus lifecycle**
+
+Add an `is_running` property to `InProcessBus`. In `apps/brain_api/app.py`, add a FastAPI
+`lifespan` that calls `await ctx.bus.start()` on entry and `await ctx.bus.stop()` on exit, and
+store the context on `app.state.ctx`. Do the same in the worker's `main()`.
+
+- [ ] **Step 7: Run the tests**
+
+```bash
+cd morgan-brain && pytest tests/integration/test_composition_durable.py -v && pytest -q && mypy morgan_brain
+```
+Expected: the three new tests pass; suite green.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add -A
+git commit -m "feat(composition): assemble the durable single-database stack and run the bus"
+```
+
+---
+
+## Task 13B: Thread `project` through every caller
+
+After Task 12 the model carries `project`, but five production sites still build `MemoryQuery`
+without one, so they silently pin to `"default"`. The worst consequence is not the API: nightly
+**consolidation** would only ever consolidate the `default` project, permanently excluding
+everything the CLI writes under a real project name from fact extraction.
+
+**Files:**
+- Modify: `morgan_brain/core/orchestrator.py:128,191,264`, `morgan_brain/learning/consolidation.py:258`, `morgan_brain/modules/tools/builtin/memory_search.py:55`, `morgan_brain/composition.py:472`, `morgan_brain/apps/brain_api/app.py`
+- Test: `morgan-brain/tests/unit/test_project_threading.py`
+
+**Interfaces:**
+- Consumes: Tasks 12, 13, 13A
+- Produces: `project` as a required parameter on `Orchestrator.handle_turn`, `handle_turn_with_id`, and `stream_turn`; a required `project` field on the chat request models
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+import inspect
+from morgan_brain.core.orchestrator import Orchestrator
+
+
+def test_orchestrator_turn_methods_require_a_project():
+    for name in ("handle_turn", "handle_turn_with_id", "stream_turn"):
+        params = inspect.signature(getattr(Orchestrator, name)).parameters
+        assert "project" in params, f"{name} does not accept a project"
+
+
+async def test_consolidation_does_not_hardcode_the_default_project(consolidator, gate):
+    """Regression: consolidating only 'default' would exclude everything the CLI stores."""
+    await gate.store(Memory(user_id="u", project="acme", content="harbor mirror note"))
+    await consolidator.run(user_id="u", project="acme")
+    assert await gate.current_facts(user_id="u", project="acme") != []
+
+
+def test_no_production_site_builds_an_unscoped_MemoryQuery():
+    """Guard against reintroducing the bug."""
+    import pathlib, re
+    root = pathlib.Path(__file__).resolve().parents[2] / "morgan_brain"
+    offenders = []
+    for py in root.rglob("*.py"):
+        for i, line in enumerate(py.read_text(encoding="utf-8").splitlines(), 1):
+            if "MemoryQuery(" in line and "project" not in line and "class " not in line:
+                offenders.append(f"{py.relative_to(root)}:{i}")
+    assert offenders == [], offenders
+```
+
+- [ ] **Step 2: Run and watch it fail**
+
+Run: `cd morgan-brain && pytest tests/unit/test_project_threading.py -v`
+Expected: FAIL — `handle_turn` has no `project`; the scan lists five offenders.
+
+- [ ] **Step 3: Thread it through**
+
+Add `project: str` to the three orchestrator turn methods and pass it into every `MemoryQuery`.
+Add a required `project` field to the chat/stream request models in `apps/brain_api/app.py` and
+pass it down. Give `MemoryConsolidator.run` a `project` parameter and iterate over the distinct
+projects present for the user rather than assuming one.
+
+- [ ] **Step 4: Run the tests**
+
+Run: `cd morgan-brain && pytest -q && mypy morgan_brain`
+Expected: green.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A
+git commit -m "feat(memory): thread project through the orchestrator, API and consolidation"
+```
+
+---
+
 ## Task 14: `forget()` — cascading erasure in one transaction
 
 **Files:**
@@ -1551,8 +1864,8 @@ git commit -m "feat(security): route consolidation through MemoryGate with proje
 - Test: `morgan-brain/tests/unit/memory/test_forget.py`
 
 **Interfaces:**
-- Consumes: Tasks 11-13
-- Produces: `MemoryGate.forget(*, user_id, project, query=None) -> ForgetReport`, where `ForgetReport` is a dataclass with `memories: int`, `facts: int`, `signals: int`, `history: int`, `champions_flagged: list[str]`
+- Consumes: Tasks 11-13, and **Task 13A** (which puts signals and history in the same database — without it this task cannot work)
+- Produces: `MemoryGate.forget(*, user_id: str, project: str) -> ForgetReport`, and `ForgetReport` as a dataclass with `memories: int`, `facts: int`, `signals: int`, `history: int`, `champions_flagged: list[str]`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1604,47 +1917,92 @@ Expected: FAIL — `MemoryModule` has no `forget`
 
 Collect the affected memory ids first, then delete from `memories`, `vec_items`/`vec_meta`, `fts_memories`, `memory_entities`, `facts`, `signals`, and `history` inside a single `BEGIN IMMEDIATE` transaction, commit, then `VACUUM` (which cannot run inside a transaction). Return the counts.
 
+Four things in this implementation are easy to get wrong, and all four were wrong in the first
+draft of this plan:
+
+1. **The table names are `interaction_signals` and `session_history`**, not `signals`/`history`
+   (`learning/signals.py:63`, `learning/history.py:37`). The wrong names fail at first run.
+2. **Those tables must already live in the same database** — Task 13A moves them. Without that
+   prerequisite no single-connection DELETE can reach them.
+3. **Vector rows are deleted with plain SQL inside the transaction.** Calling
+   `self._vectors.delete()` would commit separately and break atomicity — the point of choosing
+   one engine.
+4. `EpisodicStore`'s attribute is `_conn`, not `conn`.
+
+First define the report type in the same module:
+
+```python
+from dataclasses import dataclass, field
+
+
+@dataclass
+class ForgetReport:
+    memories: int = 0
+    facts: int = 0
+    signals: int = 0
+    history: int = 0
+    champions_flagged: list[str] = field(default_factory=list)
+```
+
 ```python
     async def forget(self, *, user_id: str, project: str) -> ForgetReport:
-        conn = self._episodics.conn
-        rows = conn.execute(
-            "SELECT id FROM memories WHERE user_id = ? AND project = ?", (user_id, project)
-        ).fetchall()
-        ids = [str(r["id"]) for r in rows]
+        """Erase everything this user stored under this project, in one transaction.
+
+        Champion preprompts are NOT erased: a promoted champion may embed text mined from a
+        forgotten conversation and cannot be un-learned, only rolled back. Affected versions
+        are returned in ``champions_flagged`` for the owner to review.
+        """
+        conn = self._episodics._conn
+        ids = [
+            str(r["id"])
+            for r in conn.execute(
+                "SELECT id FROM memories WHERE user_id = ? AND project = ?", (user_id, project)
+            )
+        ]
+        report = ForgetReport(memories=len(ids))
+        placeholders = ",".join("?" * len(ids))
+
         conn.execute("BEGIN IMMEDIATE")
         try:
-            for table in ("memories", "fts_memories", "memory_entities"):
-                key = "memory_id" if table != "memories" else "id"
+            if ids:
+                conn.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", ids)
+                conn.execute(f"DELETE FROM fts_memories WHERE memory_id IN ({placeholders})", ids)
                 conn.execute(
-                    f"DELETE FROM {table} WHERE {key} IN "
-                    f"({','.join('?' * len(ids))})" if ids else f"DELETE FROM {table} WHERE 0",
+                    f"DELETE FROM memory_entities WHERE memory_id IN ({placeholders})", ids
+                )
+                # Vectors live in this same database, so they go inside the transaction.
+                conn.execute(
+                    f"DELETE FROM vec_items WHERE rowid IN "
+                    f"(SELECT rowid FROM vec_meta WHERE id IN ({placeholders}))",
                     ids,
                 )
-            facts = conn.execute(
+                conn.execute(f"DELETE FROM vec_meta WHERE id IN ({placeholders})", ids)
+            report.facts = conn.execute(
                 "DELETE FROM facts WHERE user_id = ? AND project = ?", (user_id, project)
             ).rowcount
-            signals = conn.execute(
-                "DELETE FROM signals WHERE user_id = ? AND project = ?", (user_id, project)
+            report.signals = conn.execute(
+                "DELETE FROM interaction_signals WHERE user_id = ? AND project = ?",
+                (user_id, project),
             ).rowcount
-            history = conn.execute(
-                "DELETE FROM history WHERE user_id = ? AND project = ?", (user_id, project)
+            report.history = conn.execute(
+                "DELETE FROM session_history WHERE user_id = ? AND project = ?",
+                (user_id, project),
             ).rowcount
             conn.commit()
         except Exception:
             conn.rollback()
             raise
-        await self._vectors.delete(ids)
-        conn.execute("VACUUM")
-        return ForgetReport(
-            memories=len(ids),
-            facts=facts,
-            signals=signals,
-            history=history,
-            champions_flagged=self._flag_champions(user_id, project),
-        )
+
+        conn.execute("VACUUM")  # cannot run inside a transaction
+        return report
 ```
 
-`_flag_champions` returns the ids of champion versions promoted after the earliest deleted memory's `created_at` — they may embed forgotten text and cannot be un-learned, only rolled back. Document that in the method's docstring.
+`champions_flagged` stays empty in this task. Flagging requires the `PromptRegistry`, which
+`MemoryModule` does not hold and no task wires in; promising it here and returning nothing would
+be worse than scoping it out. Record it in the ledger as deferred, and say so in the docstring.
+
+The gate method takes no `query` parameter — erasure is per (user, project). Update the
+Interfaces block above accordingly.
 
 - [ ] **Step 4: Add `project` to the signals and history schemas**
 
@@ -1684,7 +2042,8 @@ from morgan_brain.bus.inproc import InProcessBus
 from morgan_brain.interfaces.events import Event, EventType
 
 
-async def test_publish_does_not_await_the_handler():
+async def test_publish_returns_while_the_handler_is_still_running():
+    """Against the old inline bus, `publish` would not return until `slow` finished."""
     bus = InProcessBus()
     started = asyncio.Event()
     release = asyncio.Event()
@@ -1695,9 +2054,14 @@ async def test_publish_does_not_await_the_handler():
 
     bus.subscribe(EventType.RESPONSE_GENERATED, slow)
     await bus.start()
-    await bus.publish(Event(type=EventType.RESPONSE_GENERATED, user_id="u", payload={}))
-    # publish returned while the handler is still blocked
-    assert not release.is_set()
+
+    # A timeout, not a bare assert: the old bus HANGS here rather than failing cleanly.
+    await asyncio.wait_for(
+        bus.publish(Event(type=EventType.RESPONSE_GENERATED, user_id="u", payload={})),
+        timeout=1.0,
+    )
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    assert not release.is_set()          # handler is genuinely still blocked
     release.set()
     await bus.drain()
     await bus.stop()
@@ -1705,8 +2069,12 @@ async def test_publish_does_not_await_the_handler():
 
 async def test_drain_runs_every_queued_handler():
     bus = InProcessBus()
-    seen = []
-    bus.subscribe(EventType.RESPONSE_GENERATED, lambda e: seen.append(e) or asyncio.sleep(0))
+    seen: list[Event] = []
+
+    async def collect(event):
+        seen.append(event)
+
+    bus.subscribe(EventType.RESPONSE_GENERATED, collect)
     await bus.start()
     for _ in range(3):
         await bus.publish(Event(type=EventType.RESPONSE_GENERATED, user_id="u", payload={}))
@@ -1716,10 +2084,26 @@ async def test_drain_runs_every_queued_handler():
 
 
 async def test_full_queue_drops_rather_than_blocks():
+    """Back-pressure must never block the request path, even when the drain stalls."""
     bus = InProcessBus(queue_size=1)
+    gate = asyncio.Event()
+
+    async def stalled(_event):
+        await gate.wait()
+
+    bus.subscribe(EventType.RESPONSE_GENERATED, stalled)
     await bus.start()
-    # with the drain task paused, a second publish must not block
-    ...
+
+    for _ in range(5):
+        await asyncio.wait_for(
+            bus.publish(Event(type=EventType.RESPONSE_GENERATED, user_id="u", payload={})),
+            timeout=1.0,
+        )
+    assert bus.dropped > 0, "a full queue must drop and count, not block"
+
+    gate.set()
+    await bus.drain()
+    await bus.stop()
 ```
 
 - [ ] **Step 2: Run and watch it fail**
@@ -1778,10 +2162,25 @@ def test_promotion_is_disarmed_by_default():
     assert Settings().enable_champion_promotion is False
 
 
-def test_embedding_dim_matches_the_default_embedding_model():
-    s = Settings()
-    assert s.embedding_dim == 1024  # the default model must emit 1024
+def test_hash_backend_is_stable_across_processes():
+    """PYTHONHASHSEED randomises builtin hash(); the stub must not use it."""
+    import subprocess, sys, json
+    code = (
+        "import asyncio,json;"
+        "from morgan_brain.providers.factory import build_hash_embedder;"
+        "print(json.dumps(asyncio.run(build_hash_embedder().embed('harbor'))))"
+    )
+    runs = [
+        json.loads(subprocess.run([sys.executable, "-c", code], capture_output=True,
+                                  text=True, check=True).stdout)
+        for _ in range(2)
+    ]
+    assert runs[0] == runs[1]
 ```
+
+Note what is deliberately **not** here: an assertion that `Settings().embedding_dim == 1024`.
+That compares a constant to itself and proves nothing about the model. The real check is the
+startup probe in Step 5, which asks the live provider for a vector and measures it.
 
 - [ ] **Step 2: Run and watch it fail**
 
@@ -1808,9 +2207,17 @@ In `providers/factory.py`, replace the `provider == "ollama"` branch with `"llam
 
 In `champion_trainer.py`, delete the unconditional first-candidate branch at lines 123-127 so a missing champion no longer auto-promotes, and in `apps/learning_worker/__main__.py` register the optimize job only when `settings.enable_champion_promotion` is true. Add a startup log line stating the flag's state.
 
-- [ ] **Step 5: Add the dimension assertion**
+- [ ] **Step 5: Add the dimension probe**
 
-In `composition.py`, after the embedder is built, assert its reported dimension equals `settings.embedding_dim` and raise a `RuntimeError` naming both values if not.
+The embedder exposes no dimension property, so "reported dimension" needs a mechanism. In
+`composition.py`, after the embedder is built, embed the single token `"probe"` once and compare
+`len(vector)` against `settings.embedding_dim`; raise `RuntimeError` naming both values on
+mismatch. Skip the probe when `embedding_backend == "hash"` (no provider to ask) and when the
+provider endpoint is unreachable — a startup probe must not turn a temporarily-down model server
+into a crash loop; log a warning instead.
+
+This is what actually catches the shipped default being wrong: `embedding_model` currently
+defaults to a model emitting 2560 while `embedding_dim` says 1024.
 
 - [ ] **Step 6: Run the tests**
 
@@ -1904,7 +2311,27 @@ def detect_project(cwd: Path | None = None) -> str:
 
 - [ ] **Step 4: Implement the commands**
 
-`argparse` with one subparser per command. Every command resolves `--project` (default `detect_project()`), builds the gate from `composition`, and prints either human text or `--json`. `doctor` checks: the database opens, `vec_version()` resolves, FTS5 is compiled in, the provider endpoint answers, and the provider's embedding dimension matches `embedding_dim`.
+`argparse` with one subparser per command. Every command resolves `--project` (default
+`detect_project()`), builds the gate from `composition`, and prints either human text or `--json`.
+
+`doctor --json` must emit at least these keys, because Task 18 asserts on them:
+
+```json
+{
+  "database": "/abs/path/to/morgan.db",
+  "sqlite_vec": "v0.1.9",
+  "fts5": true,
+  "provider": "reachable" ,
+  "embedding_dim": 1024,
+  "vector_rows": 12,
+  "memory_rows": 12,
+  "fts_rows": 12
+}
+```
+
+`vector_rows` is `SELECT count(*) FROM vec_meta`. It is the check that catches an unwired vector
+store — the failure mode where recall still works via FTS and nobody notices the vectors were
+never persisted.
 
 - [ ] **Step 5: Register the entry point**
 
@@ -1975,6 +2402,48 @@ def test_cross_repo_recall_after_restart(tmp_path):
     assert results[0]["project"] == "acme"
 
 
+def test_vectors_are_actually_persisted_not_just_fts(tmp_path):
+    """Without this, the whole suite passes on the FTS signal alone.
+
+    Under the hash embedder there is no semantic similarity, so a recall assertion cannot
+    distinguish "vectors work" from "vectors are unwired and FTS carried it" — which is exactly
+    how a milestone declares itself done while production memory stays ephemeral. Assert the
+    rows exist on disk instead.
+    """
+    data = tmp_path / "brain"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    _morgan(["remember", "the Harbor mirror blocked the deploy"], cwd=repo, data_dir=data)
+
+    doctor = json.loads(_morgan(["doctor", "--json"], cwd=repo, data_dir=data).stdout)
+    assert doctor["vector_rows"] > 0, doctor
+    assert doctor["database"].endswith("morgan.db"), doctor
+
+
+@pytest.mark.live
+def test_real_embedder_round_trip(tmp_path):
+    """The spec's acceptance says 'with a real embedder'. The hash stub does not satisfy that.
+
+    Skipped by default; run with a live llama-server on MORGAN_LLM_ENDPOINT.
+    """
+    data = tmp_path / "brain"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    env_real = {**os.environ, "MORGAN_DATA_DIR": str(data)}  # no hash backend
+    subprocess.run(
+        [sys.executable, "-m", "morgan_brain.cli", "remember", "the deploy was blocked by the registry mirror"],
+        cwd=repo, env=env_real, check=True, capture_output=True,
+    )
+    out = subprocess.run(
+        [sys.executable, "-m", "morgan_brain.cli", "recall", "what stopped the release?", "--json"],
+        cwd=repo, env=env_real, capture_output=True, text=True, check=True,
+    )
+    # A semantic match with no shared keywords — only a real embedder can do this.
+    assert "registry mirror" in out.stdout
+
+
 def test_cyrillic_survives_the_same_round_trip(tmp_path):
     data = tmp_path / "brain"
     repo = tmp_path / "repo"
@@ -2036,6 +2505,38 @@ git commit -am "docs: describe the delivered local-first brain"
 
 ## Self-review notes
 
-**Spec coverage.** §4.1 → Tasks 7-11; §4.2 → Task 16; §4.3 → Tasks 12-13; §4.4 → Task 14; §3.1 → Task 15; §6 → Tasks 3-6; §7 M0 → Tasks 1-6; §7 M1 → Tasks 7-19; §8 → Tasks 2, 11, 18. §4.5 (ChatGPT import) and §5 (learning gate) are milestone 2/3 and deliberately out of this plan.
+**Spec coverage.** §4.1 → Tasks 7-11 + 13A; §4.2 → Task 16; §4.3 → Tasks 12, 13, 13B; §4.4 →
+Task 14; §3.1 → Tasks 15 + 13A (the queue is useless until something starts the bus); §6 →
+Tasks 3-6; §7 M0 → Tasks 1-6; §7 M1 → Tasks 7-19; §8 → Tasks 2, 11, 18. §4.5 (ChatGPT import)
+and §5 (learning gate) are milestone 2/3 and deliberately out of this plan.
 
-**Known follow-ups, not gaps.** The `Embedder` used in tests is a deterministic hash stub; `MORGAN_EMBEDDING_BACKEND=hash` must exist for the CLI tests in Tasks 17-18 — add it in Task 16 alongside the other settings. `QdrantVectorIndex.delete` (Task 8, Step 5) is exercised only by the existing skipped live test.
+**Execution order.** 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → **13A** → **13B**
+→ 14 → 15 → 16 → 17 → 18 → 19. Task 13A must precede Task 14: `forget()` cannot delete from
+`interaction_signals` and `session_history` until 13A moves them into the same database.
+
+**Corrections applied after adversarial review (2026-08-02).** The first revision of this plan
+would have gone green without delivering the milestone. Recorded here so the same holes are not
+reintroduced:
+
+- No task wired the durable stores into `composition.py`, so production would have kept using
+  `InMemoryVectorIndex` while Task 18 passed → **Task 13A**.
+- `forget()` targeted tables named `signals` and `history`. The real names are
+  `interaction_signals` and `session_history`, and they lived in **separate database files**.
+- Nothing called `bus.start()`; `apps/brain_api/app.py` has no lifespan hook, so every queued
+  cold-path event would have sat unprocessed forever.
+- Vector search was scoped by over-fetching and post-filtering. Proven wrong on sqlite-vec
+  0.1.9: with two users interleaved and `k=2`, the unscoped query returns the *other* user's
+  rows and the caller's own second-nearest never appears. vec0 metadata columns fix it.
+- Two `grep | xargs git rm` steps would have deleted tests for **kept** code — the entire
+  provider suite, `test_cron.py`, `test_redis_bus_live.py`, both learning-worker tests — leaving
+  the suite green because the tests were gone. Both replaced with explicit reviewed lists.
+- `project` never reached the orchestrator, the API, `memory_search`, or consolidation, so
+  nightly consolidation would only ever have consolidated the `default` project → **Task 13B**.
+
+**Known follow-ups, not gaps.**
+- `ForgetReport.champions_flagged` always returns empty in Task 14. Flagging needs the
+  `PromptRegistry`, which `MemoryModule` does not hold. Scoped out deliberately rather than
+  promised and stubbed.
+- `QdrantVectorIndex.delete` (Task 8, Step 5) is exercised only by the existing skipped live test.
+- The real-embedder half of the spec's acceptance criterion is covered by one
+  `@pytest.mark.live` test that needs a running llama-server; it does not run in CI.
