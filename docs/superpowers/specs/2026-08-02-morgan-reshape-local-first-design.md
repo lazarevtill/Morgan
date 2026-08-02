@@ -134,7 +134,28 @@ Contract changes required (contract-first, per repo rule):
 a production call site. A startup assertion fails loudly when the provider's reported embedding
 dimension disagrees with the store's.
 
-### 4.2 llama.cpp as the default provider
+### 4.2 llama.cpp as the default provider — remote first, local as fallback
+
+**The baseline topology is remote.** `llama-server` runs on the homelab GPU box; the three
+laptops reach it over the NetBird overlay. A laptop running its own `llama-server` is the
+fallback, for offline work or development. Both are the same OpenAI-compatible protocol, so the
+difference is only the endpoint URL plus what a network hop demands:
+
+- **Outbound auth.** `llama-server --api-key` is supported, so Morgan needs a setting for the key
+  it *presents to the model server*. This is distinct from `MORGAN_API_KEY`, which is the key
+  *clients present to Morgan* — the two point in opposite directions and must not be conflated.
+- **Timeouts assume a network.** A 24 GB GPU generating a long completion across NetBird has a
+  different latency profile than a loopback socket. The request timeout is configurable, with a
+  default sane for a remote box under load.
+- **Unreachable is normal, not fatal.** A laptop off the network or a rebooting homelab must not
+  crash-loop the service. The startup probe raises on a *dimension mismatch* but only warns on an
+  *unreachable host*, naming the endpoint.
+- **No hardcoded hostname.** The endpoint comes from env, per the project's config rule. A
+  localhost default exists so a fresh clone runs with zero configuration; it is a development
+  convenience, not the expected production value.
+- **`morgan doctor` reports the endpoint and whether it answers** — the first question anyone asks
+  when this breaks is which server they are actually talking to.
+
 
 Remove the hardcoded `"ollama"` from `config.py:106-117` and `providers/factory.py:29-30,83-85`, and
 replace the direct `OllamaEmbedder` construction at `composition.py:341` with a routed embedder.
