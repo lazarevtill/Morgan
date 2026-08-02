@@ -1,7 +1,7 @@
 """Smoke tests for the learning-worker app (Phase 4, commit 4).
 
-Verifies that the worker module is importable and that the scheduler + proactivity
-engine are built + wired when the corresponding feature flags are enabled.
+Verifies that the worker module is importable and that the scheduler is built
++ wired when the corresponding feature flag is enabled.
 
 No real event-loop running: we just confirm the build path is reachable without
 exceptions and that the right types are registered.
@@ -61,42 +61,6 @@ async def test_build_learning_scheduler_returns_scheduler_or_none() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Proactivity build: enable_proactivity=True produces an engine
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_build_proactivity_engine_returns_engine() -> None:
-    from morgan_brain.apps.learning_worker.__main__ import _build_proactivity_engine
-    from morgan_brain.proactivity.engine import ProactivityEngine
-    from morgan_brain.bus.inproc import InProcessBus
-
-    bus = InProcessBus()
-    engine = _build_proactivity_engine(bus)
-    assert isinstance(engine, ProactivityEngine)
-
-
-@pytest.mark.asyncio
-async def test_register_proactivity_handler_subscribes_to_heartbeat() -> None:
-    """After registration, a HEARTBEAT event triggers the handler without errors."""
-    from morgan_brain.apps.learning_worker.__main__ import (
-        _build_proactivity_engine,
-        _register_proactivity_handler,
-    )
-    from morgan_brain.bus.inproc import InProcessBus
-    from morgan_brain.interfaces.events import Event, EventType
-
-    bus = InProcessBus()
-    engine = _build_proactivity_engine(bus)
-    assert engine is not None
-    _register_proactivity_handler(bus, engine)
-
-    # Publish a HEARTBEAT — handler should run without raising.
-    event = Event(type=EventType.HEARTBEAT, user_id="system", payload={})
-    await bus.publish(event)  # If handler raises, test fails.
-
-
-# ---------------------------------------------------------------------------
 # Flag-gating: default flags=False → scheduler not started
 # ---------------------------------------------------------------------------
 
@@ -105,7 +69,7 @@ async def test_register_proactivity_handler_subscribes_to_heartbeat() -> None:
 async def test_worker_run_with_flags_off_does_not_start_cron(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """With both flags False, run() sets up the bus but no CronService is started."""
+    """With the flag False, run() sets up the bus but no CronService is started."""
     import morgan_brain.apps.learning_worker.__main__ as worker_mod
 
     cron_starts: list[str] = []
@@ -119,12 +83,11 @@ async def test_worker_run_with_flags_off_does_not_start_cron(
 
     from morgan_brain.config import Settings
 
-    # Custom settings with both flags off.
+    # Custom settings with the flag off.
     settings = Settings(
         llm_model="test",
         llm_fast_model="test",
         enable_scheduling=False,
-        enable_proactivity=False,
     )
 
     # Run for one very short cycle then cancel.

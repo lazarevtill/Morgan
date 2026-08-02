@@ -45,7 +45,6 @@ class Settings(BaseSettings):
     embedding_dim: int = 1024
 
     # --- Feature flags ---
-    enable_proactivity: bool = False
     enable_scheduling: bool = False
     enable_channels: bool = False
     enable_mcp: bool = False

@@ -1,4 +1,4 @@
-"""Scheduling package — CronService, InProcessScheduler, HeartbeatManager.
+"""Scheduling package — CronService and InProcessScheduler.
 
 APScheduler is entirely optional; if absent (or ``enable_scheduling=False``),
 :class:`InProcessScheduler` is used instead.  Tests always use
@@ -11,12 +11,10 @@ from morgan_brain.scheduling.cron import (
     Job,
     Scheduler,
 )
-from morgan_brain.scheduling.heartbeat import HeartbeatManager
 from morgan_brain.scheduling.learning_jobs import LearningScheduler
 
 __all__ = [
     "CronService",
-    "HeartbeatManager",
     "InProcessScheduler",
     "Job",
     "LearningScheduler",
