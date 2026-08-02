@@ -1949,8 +1949,30 @@ Expected: FAIL — `handle_turn` has no `project`; the scan lists five offenders
 
 Add `project: str` to the three orchestrator turn methods and pass it into every `MemoryQuery`.
 Add a required `project` field to the chat/stream request models in `apps/brain_api/app.py` and
-pass it down. Give `MemoryConsolidator.run` a `project` parameter and iterate over the distinct
-projects present for the user rather than assuming one.
+pass it down.
+
+**Consolidation — the exact sites.** There is no `run` method; do not look for one. Task 13
+routed the consolidator through the gate but hardcoded `DEFAULT_PROJECT` at every call, because
+threading it belongs here. As of commit `6db1318` the hardcoded sites are:
+
+- `learning/consolidation.py:187` — `current_facts` inside `apply`
+- `learning/consolidation.py:244` — `close_fact` inside `apply`
+- `learning/consolidation.py:266` — `current_facts` inside `consolidate`
+- `learning/consolidation.py:318` — `current_facts` inside `decay_confidence`
+- `learning/consolidation.py:346` — `set_confidence` inside `decay_confidence`
+
+Add a `project: str` parameter to the public methods that need it — `apply(user_id, batch)`,
+`consolidate(user_id)`, and `decay_confidence(...)` — and thread it to those five calls. Then, at
+the scheduling layer that invokes consolidation, **iterate over the distinct projects present for
+the user** rather than consolidating one. Verify the count afterwards:
+
+```bash
+cd morgan-brain && grep -c 'DEFAULT_PROJECT' morgan_brain/learning/consolidation.py
+```
+Expected: 0 remaining hardcoded uses (the import may also go).
+
+Until this lands, nightly consolidation only ever consolidates the `default` project, so anything
+the CLI writes under a real project name is excluded from fact extraction entirely.
 
 - [ ] **Step 4: Run the tests**
 
