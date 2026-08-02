@@ -27,8 +27,11 @@ CONSOLIDATE_INTERVAL = 1000.0  # large so only the optimize job fires in these t
 
 
 class _FakeLearner:
-    async def consolidate(self, user_id: str) -> None:
+    async def consolidate(self, user_id: str, *, project: str = "default") -> None:
         pass
+
+    async def projects_for_user(self, user_id: str) -> list[str]:
+        return ["default"]
 
 
 class _SpyTrainer:

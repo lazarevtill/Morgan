@@ -83,3 +83,11 @@ class EpisodicStore:
         for mid in ids:
             self._conn.execute("DELETE FROM memories WHERE id = ?", (mid,))
         self._conn.commit()
+
+    def distinct_projects(self, user_id: str) -> list[str]:
+        """Return the distinct project names *user_id* has stored memories under."""
+        rows = self._conn.execute(
+            "SELECT DISTINCT project FROM memories WHERE user_id = ? ORDER BY project",
+            (user_id,),
+        ).fetchall()
+        return [r["project"] for r in rows]

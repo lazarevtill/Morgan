@@ -23,6 +23,7 @@ from morgan_brain.learning.history import session_key
 
 class ChatRequest(BaseModel):
     message: str
+    project: str
     session_id: str | None = None
     user_id: str | None = None
 
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
         history = ctx.history_store.recent(hkey) if ctx.history_store else []
         result, turn_id = await orchestrator.handle_turn_with_id(
             user_id=user_id,
+            project=req.project,
             text=req.message,
             session_id=req.session_id,
             history=history,
@@ -98,6 +100,7 @@ def create_app() -> FastAPI:
             champion = await _champion.body()
             async for delta in orchestrator.stream_turn(
                 user_id=user_id,
+                project=req.project,
                 text=req.message,
                 session_id=req.session_id,
                 history=history,

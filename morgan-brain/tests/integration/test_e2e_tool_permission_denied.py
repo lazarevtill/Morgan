@@ -71,7 +71,9 @@ async def test_permission_denied_tool_returns_error_and_loop_terminates() -> Non
     # Also replace the gate inside the orchestrator's reasoner's executor.
     orch._reasoner._executor._gate = deny_gate  # type: ignore[attr-defined]  # noqa: SLF001
 
-    result = await orch.handle_turn(user_id="u1", text="What is 1+1?", session_id="s1")
+    result = await orch.handle_turn(
+        user_id="u1", project="default", text="What is 1+1?", session_id="s1"
+    )
 
     # Loop terminated without hanging; final text is returned.
     assert result.text == "I could not compute that."

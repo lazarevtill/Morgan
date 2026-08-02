@@ -12,7 +12,10 @@ Architecture
 recurring jobs for a given user:
 
 1. **consolidate** (nightly, ~86400 s interval): calls
-   ``learner.consolidate(user_id)`` to run bi-temporal fact consolidation.
+   ``learner.projects_for_user(user_id)`` to discover every project the user has written
+   memories under, then ``learner.consolidate(user_id, project=...)`` once per project --
+   consolidating only a single (e.g. default) project would silently exclude everything
+   written under any other project name.
 
 2. **optimize** (configurable interval, default ~3600 s / idle): if both
    ``champion_trainer`` and ``signal_store`` are provided, mines interaction
@@ -44,7 +47,13 @@ logger = logging.getLogger(__name__)
 class _Consolidatable(Protocol):
     """Subset of ConsolidationLearner used by LearningScheduler."""
 
-    async def consolidate(self, user_id: str) -> None: ...
+    async def consolidate(self, user_id: str, *, project: str = ...) -> None: ...
+
+    async def projects_for_user(self, user_id: str) -> list[str]:
+        """Distinct projects *user_id* has memories under -- drives the per-project
+        consolidation fan-out below (consolidating only one project would silently
+        exclude everything written under any other project name)."""
+        ...
 
 
 @runtime_checkable
@@ -163,7 +172,15 @@ class LearningScheduler:
         def _consolidate_fn() -> Any:
             import asyncio
 
-            return asyncio.ensure_future(self._learner.consolidate(user_id))
+            async def _run() -> None:
+                # Fan out across every project the user actually has -- a single
+                # (e.g. default-only) call would silently exclude anything written
+                # under a real project name.
+                projects = await self._learner.projects_for_user(user_id)
+                for project in projects:
+                    await self._learner.consolidate(user_id, project=project)
+
+            return asyncio.ensure_future(_run())
 
         self._cron.register(
             Job(name=consolidate_name, interval_seconds=self._consolidate_interval),

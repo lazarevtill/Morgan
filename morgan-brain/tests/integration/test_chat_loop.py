@@ -8,7 +8,9 @@ async def test_chat_loop_generates_and_recalls():
         reply="Nice to meet you!", clock=lambda: datetime(2026, 1, 1)
     )
 
-    first = await orch.handle_turn(user_id="u1", text="My name is Sam", session_id="s1")
+    first = await orch.handle_turn(
+        user_id="u1", project="default", text="My name is Sam", session_id="s1"
+    )
     assert first.text == "Nice to meet you!"
 
     hits = await mem.recall_raw(user_id="u1", text="Sam")
@@ -17,6 +19,6 @@ async def test_chat_loop_generates_and_recalls():
 
 async def test_chat_loop_is_user_scoped():
     orch, mem = build_orchestrator_for_test(reply="ok", clock=lambda: datetime(2026, 1, 1))
-    await orch.handle_turn(user_id="u1", text="secret for u1", session_id="s1")
+    await orch.handle_turn(user_id="u1", project="default", text="secret for u1", session_id="s1")
     other = await mem.recall_raw(user_id="u2", text="secret")
     assert other == []

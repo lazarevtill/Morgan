@@ -141,6 +141,7 @@ async def test_learn_preference_then_recall_in_turn2() -> None:
     # Turn 1: user states preference.
     result1 = await orch.handle_turn(
         user_id=USER_ID,
+        project="default",
         text=f"I prefer {user_pref}.",
         session_id=SESSION_ID,
     )
@@ -153,6 +154,7 @@ async def test_learn_preference_then_recall_in_turn2() -> None:
     # Turn 2: ask a related question. The consolidated fact should be in recall.
     result2 = await orch.handle_turn(
         user_id=USER_ID,
+        project="default",
         text="Show me how to reverse a list in Python.",
         session_id=SESSION_ID,
     )
@@ -211,6 +213,7 @@ async def test_learn_location_then_visible_in_memories() -> None:
     # Turn 1: user states location.
     result1 = await orch.handle_turn(
         user_id=USER_ID,
+        project="default",
         text="I live in Berlin.",
         session_id=SESSION_ID,
     )

@@ -9,8 +9,8 @@ Returns an async ``predict_fn(item, *, system_override="") -> str | (str, float)
    items never pollute each other or the real assistant memory.
 2. Honours ``item.should_inject``: for OVER_PERSONALIZATION_NEGATIVE items
    with should_inject=False, the stale preference is NOT seeded.
-3. Calls ``orchestrator.handle_turn(user_id=EVAL_USER_ID, text=item.query,
-   system_override=system_override)`` and returns ``result.text``.
+3. Calls ``orchestrator.handle_turn(user_id=EVAL_USER_ID, project=DEFAULT_PROJECT,
+   text=item.query, system_override=system_override)`` and returns ``result.text``.
 
 FIREWALL: eval content is written only to a scratch MemoryGate that is
 discarded after each item.  The real orchestrator's MemoryGate is NEVER
@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING
 
 from morgan_brain.eval.golden import GoldenItem
 from morgan_brain.eval.harness import EvalHarness
-from morgan_brain.models.memory import Memory, MemoryKind, MemorySource
+from morgan_brain.models.memory import DEFAULT_PROJECT, Memory, MemoryKind, MemorySource
 from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
 from morgan_brain.modules.memory.retrieval.entities import EntityIndex
 from morgan_brain.modules.memory.retrieval.fts import FtsIndex
@@ -142,6 +142,7 @@ def make_predict_fn(
         try:
             result = await orchestrator.handle_turn(
                 user_id=EVAL_USER_ID,
+                project=DEFAULT_PROJECT,
                 text=item.query,
                 system_override=system_override,
             )

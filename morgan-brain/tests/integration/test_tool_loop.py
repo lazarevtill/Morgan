@@ -28,7 +28,9 @@ async def test_tool_loop_calculator_executes_in_handle_turn():
         chat_results=results,
     )
 
-    result = await orch.handle_turn(user_id="u1", text="What is 12 * 12?", session_id="s1")
+    result = await orch.handle_turn(
+        user_id="u1", project="default", text="What is 12 * 12?", session_id="s1"
+    )
 
     assert result.text == "12 × 12 = 144."
     assert "calculator" in result.tools_invoked
@@ -38,7 +40,9 @@ async def test_tool_loop_plain_turn_still_works():
     """Existing plain turns (no tool calls scripted) continue to work after wiring."""
     orch, mem = build_orchestrator_for_test(reply="Hello!", clock=lambda: datetime(2026, 1, 1))
 
-    result = await orch.handle_turn(user_id="u1", text="Hi there", session_id="s1")
+    result = await orch.handle_turn(
+        user_id="u1", project="default", text="Hi there", session_id="s1"
+    )
 
     assert result.text == "Hello!"
     assert result.tools_invoked == []

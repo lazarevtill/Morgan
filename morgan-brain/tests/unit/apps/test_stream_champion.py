@@ -47,7 +47,9 @@ async def test_stream_turn_applies_champion_system_override() -> None:
         temporal_path=":memory:",
     )
 
-    async for _ in orch.stream_turn(user_id="u1", text="hello", system_override=CHAMPION):
+    async for _ in orch.stream_turn(
+        user_id="u1", project="default", text="hello", system_override=CHAMPION
+    ):
         pass
 
     full_prompt = " ".join(m.content for m in fake.last_messages)
@@ -68,7 +70,7 @@ async def test_stream_turn_without_override_has_no_champion() -> None:
         temporal_path=":memory:",
     )
 
-    async for _ in orch.stream_turn(user_id="u1", text="hello"):
+    async for _ in orch.stream_turn(user_id="u1", project="default", text="hello"):
         pass
 
     full_prompt = " ".join(m.content for m in fake.last_messages)

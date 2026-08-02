@@ -54,6 +54,10 @@ class MemoryGate:
         self._require_scope(user_id, project)
         await self._store.set_confidence(fact_id, user_id=user_id, project=project, value=value)
 
+    async def distinct_projects(self, user_id: str) -> list[str]:
+        self._require_scope(user_id)
+        return await self._store.distinct_projects(user_id)
+
     @staticmethod
     def _require_scope(user_id: str, project: str | None = None) -> None:
         if not user_id:

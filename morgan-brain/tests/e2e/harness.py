@@ -182,12 +182,15 @@ class ConversationHarness:
         self.memory_module = memory_module
         self.learner: ConsolidationLearner = learner
 
-    async def say(self, *, user_id: str, text: str, session_id: str) -> tuple[str, float]:
+    async def say(
+        self, *, user_id: str, text: str, session_id: str, project: str = "default"
+    ) -> tuple[str, float]:
         """Run one turn; return (reply_text, latency_ms)."""
         history = self._history.recent(session_id)
         t0 = time.perf_counter()
         result = await self.orchestrator.handle_turn(
             user_id=user_id,
+            project=project,
             text=text,
             session_id=session_id,
             history=history,
@@ -196,12 +199,15 @@ class ConversationHarness:
         latency_ms = (time.perf_counter() - t0) * 1000.0
         return result.text, latency_ms
 
-    async def say_full(self, *, user_id: str, text: str, session_id: str) -> tuple[Any, float]:
+    async def say_full(
+        self, *, user_id: str, text: str, session_id: str, project: str = "default"
+    ) -> tuple[Any, float]:
         """Like :meth:`say` but returns the full ReasoningResult (for tools_invoked)."""
         history = self._history.recent(session_id)
         t0 = time.perf_counter()
         result = await self.orchestrator.handle_turn(
             user_id=user_id,
+            project=project,
             text=text,
             session_id=session_id,
             history=history,
@@ -210,8 +216,8 @@ class ConversationHarness:
         latency_ms = (time.perf_counter() - t0) * 1000.0
         return result, latency_ms
 
-    async def consolidate(self, user_id: str) -> None:
-        await self.learner.consolidate(user_id)
+    async def consolidate(self, user_id: str, *, project: str = "default") -> None:
+        await self.learner.consolidate(user_id, project=project)
 
     def last_prompt_text(self) -> str:
         """Concatenated content of the last LLM call's messages (deterministic only)."""

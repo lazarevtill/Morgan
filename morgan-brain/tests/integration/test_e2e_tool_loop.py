@@ -41,7 +41,9 @@ async def test_tool_loop_calculator_executes_and_result_in_prompt() -> None:
     # We reach it through the reasoner's router, which holds the binding.
     fake_client = orch._reasoner._router._bindings["strong"][0].client  # type: ignore[attr-defined]  # noqa: SLF001
 
-    result = await orch.handle_turn(user_id="u1", text="What is 6 * 7?", session_id="s1")
+    result = await orch.handle_turn(
+        user_id="u1", project="default", text="What is 6 * 7?", session_id="s1"
+    )
 
     # Final text is the second scripted reply.
     assert result.text == "6 × 7 = 42."
@@ -64,7 +66,9 @@ async def test_tool_loop_plain_turn_has_no_tool_messages() -> None:
     orch, _ = build_orchestrator_for_test(reply="Hello!", clock=lambda: datetime(2026, 1, 1))
     fake_client = orch._reasoner._router._bindings["strong"][0].client  # type: ignore[attr-defined]  # noqa: SLF001
 
-    result = await orch.handle_turn(user_id="u1", text="Hi there", session_id="s1")
+    result = await orch.handle_turn(
+        user_id="u1", project="default", text="Hi there", session_id="s1"
+    )
 
     assert result.text == "Hello!"
     assert result.tools_invoked == []
@@ -90,7 +94,9 @@ async def test_tool_loop_multiple_tool_calls_all_invoked() -> None:
         chat_results=results,
     )
 
-    result = await orch.handle_turn(user_id="u1", text="What time and 2+2?", session_id="s1")
+    result = await orch.handle_turn(
+        user_id="u1", project="default", text="What time and 2+2?", session_id="s1"
+    )
 
     assert result.text == "Done."
     assert "calculator" in result.tools_invoked
