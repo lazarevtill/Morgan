@@ -2498,6 +2498,130 @@ git commit -m "feat(cli): morgan remember, recall, facts, forget, ask and doctor
 
 ---
 
+## Task 17A: The MCP server — the second way to use Morgan
+
+The CLI makes Morgan usable by a human at a terminal. This makes it usable by every AI tool the
+owner already runs. Both are thin surfaces over the same library facade — if this task ends up
+duplicating logic from the CLI rather than calling the same functions, it has gone wrong.
+
+**Files:**
+- Create: `morgan_brain/ports/__init__.py`, `morgan_brain/ports/mcp_server.py`
+- Modify: `morgan-brain/pyproject.toml` (an `mcp` extra and a console script)
+- Test: `morgan-brain/tests/integration/test_mcp_server.py`
+
+**Interfaces:**
+- Consumes: the same `MemoryGate` + composition path the CLI uses (Task 17)
+- Produces: `morgan-mcp` entry point exposing five tools
+
+**Note:** Task 3 deleted `modules/mcp/` — that was the MCP **host/client** (Morgan calling *out*
+to other servers), an unfinished stub whose `connect()` was a TODO. This is the **server**
+(other tools calling *in* to Morgan). Opposite direction; do not resurrect the old package.
+
+### The five tools
+
+| Tool | Purpose |
+|---|---|
+| `remember` | store a memory in a project |
+| `recall` | multi-signal retrieval, project-scoped, `all_projects` opt-in |
+| `facts` | currently-valid temporal facts for a project |
+| `forget` | cascading erasure, returning the same honest report the CLI prints |
+| `ask_morgan` | a full turn through the orchestrator |
+
+Cap it there. Every extra tool costs context window in every client that connects, on every
+request — a five-tool server that gets used beats a fifteen-tool server that gets disabled.
+
+### Transport — both, because the deployment is remote-first
+
+- **stdio** for a client on the same machine as the brain (a laptop running its own instance).
+- **streamable-HTTP with a bearer token** for the normal case: laptops reaching the homelab over
+  NetBird. Reuse `MORGAN_API_KEY` — the inbound key clients present to Morgan. Do NOT invent a
+  second inbound key, and do not confuse it with `MORGAN_LLM_API_KEY`, which is outbound to
+  llama-server.
+
+### Project scoping
+
+An MCP client is usually working inside a repository. Take the project from an explicit `project`
+argument when given; otherwise fall back to the server's configured default. Do **not** try to
+infer it from the server's own cwd — the server is a long-lived daemon in the homelab and its cwd
+is meaningless to a client on another machine. This is the one place the CLI's git-root detection
+must NOT be copied.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+"""The MCP server must expose Morgan's memory to an external client."""
+import json
+import pytest
+
+from morgan_brain.ports.mcp_server import build_server, TOOL_NAMES
+
+
+def test_exposes_exactly_the_five_tools():
+    assert sorted(TOOL_NAMES) == ["ask_morgan", "facts", "forget", "recall", "remember"]
+
+
+async def test_remember_then_recall_through_the_server(tmp_path, monkeypatch):
+    monkeypatch.setenv("MORGAN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
+    server = build_server()
+
+    await server.call_tool("remember", {"text": "the Harbor mirror blocked the deploy",
+                                        "project": "plata"})
+    out = await server.call_tool("recall", {"query": "harbor", "project": "plata"})
+    assert "Harbor mirror" in json.dumps(out)
+
+
+async def test_recall_is_project_scoped(tmp_path, monkeypatch):
+    monkeypatch.setenv("MORGAN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
+    server = build_server()
+    await server.call_tool("remember", {"text": "company secret", "project": "plata"})
+    out = await server.call_tool("recall", {"query": "secret", "project": "personal"})
+    assert "company secret" not in json.dumps(out)
+
+
+async def test_writes_survive_a_new_server_instance(tmp_path, monkeypatch):
+    """A daemon restart must not lose what a client stored."""
+    monkeypatch.setenv("MORGAN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
+    await build_server().call_tool("remember", {"text": "survives", "project": "p"})
+    out = await build_server().call_tool("recall", {"query": "survives", "project": "p"})
+    assert "survives" in json.dumps(out)
+```
+
+- [ ] **Step 2: Run and watch it fail**
+
+Run: `cd morgan-brain && pytest tests/integration/test_mcp_server.py -v`
+Expected: FAIL — `morgan_brain.ports` does not exist.
+
+- [ ] **Step 3: Add the dependency and entry point**
+
+`mcp = ["mcp>=1.0"]` in `[project.optional-dependencies]`, and
+`morgan-mcp = "morgan_brain.ports.mcp_server:main"` under `[project.scripts]`.
+
+- [ ] **Step 4: Implement the server over the existing gate**
+
+Each tool is a thin adapter: parse arguments, call the same `MemoryGate` method the CLI calls,
+return JSON. No business logic here. `forget` returns the honest report from Task 17 — including
+which tables were skipped — because an MCP client deserves the same truth a terminal user gets.
+
+- [ ] **Step 5: Run the tests**
+
+Run: `cd morgan-brain && pytest tests/integration/test_mcp_server.py -v && pytest -q`
+
+- [ ] **Step 6: Write the client configuration into `docs/OPERATIONS.md`**
+
+A copy-pasteable block for Claude Code and one for a remote HTTP client, showing where the bearer
+token goes. Untested instructions are how this surface goes unused.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git commit -m "feat(ports): MCP server exposing memory to any MCP client" -- <paths>
+```
+
+---
+
 ## Task 18: The milestone acceptance test
 
 **Files:**
