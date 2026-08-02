@@ -1,6 +1,7 @@
 """The assembled app must use durable stores, not in-memory ones."""
 
 import sqlite3
+
 from morgan_brain.composition import build_app_context
 from morgan_brain.config import Settings
 from morgan_brain.modules.memory.stores.sqlite_vector import SqliteVectorIndex
