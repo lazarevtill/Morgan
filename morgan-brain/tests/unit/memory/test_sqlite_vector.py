@@ -1,3 +1,5 @@
+import pytest
+
 from morgan_brain.modules.memory.stores.db import open_db
 from morgan_brain.modules.memory.stores.sqlite_vector import SqliteVectorIndex
 from morgan_brain.modules.memory.stores.vector import VectorRecord
@@ -64,3 +66,22 @@ async def test_scoping_happens_inside_the_knn_not_after(tmp_path):
 
     hits = await idx.search(user_id="u1", vector=[1, 0, 0, 0], top_k=2)
     assert [h.id for h in hits] == ["u1-exact", "u1-near"]
+
+
+async def test_score_is_cosine_similarity_not_raw_distance(tmp_path):
+    """Pins the SCALE, not just the ordering.
+
+    sqlite-vec reports cosine *distance* (1 - similarity, range 0..2). The score must be
+    converted back to true cosine similarity on -1..1, matching InMemoryVectorIndex and
+    QdrantVectorIndex, so an exact match scores ~1.0 and an orthogonal vector scores ~0.0.
+    Negating distance (-distance) would instead yield -0.0 and -1.0 here — this test fails
+    against that.
+    """
+    idx = _idx(tmp_path)
+    await idx.upsert(VectorRecord(id="exact", user_id="u", vector=[1, 0, 0, 0]))
+    await idx.upsert(VectorRecord(id="orthogonal", user_id="u", vector=[0, 1, 0, 0]))
+
+    hits = await idx.search(user_id="u", vector=[1, 0, 0, 0], top_k=2)
+    scores = {h.id: h.score for h in hits}
+    assert scores["exact"] == pytest.approx(1.0)
+    assert scores["orthogonal"] == pytest.approx(0.0)

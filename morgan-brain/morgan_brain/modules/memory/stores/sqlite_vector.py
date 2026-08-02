@@ -86,8 +86,13 @@ class SqliteVectorIndex:
             """,
             (_pack(vector), top_k, user_id),
         ).fetchall()
+        # vec0's cosine distance is (1 - cosine_similarity), on 0..2. Convert back to
+        # similarity on -1..1 so the score scale matches InMemoryVectorIndex (_cosine) and
+        # QdrantVectorIndex (Qdrant's own cosine score) — negating distance would give -2..0.
         return [
-            VectorHit(id=r["id"], score=-float(r["distance"]), payload=json.loads(r["payload"]))
+            VectorHit(
+                id=r["id"], score=1.0 - float(r["distance"]), payload=json.loads(r["payload"])
+            )
             for r in rows
         ]
 
