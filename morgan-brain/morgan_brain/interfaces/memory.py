@@ -22,6 +22,16 @@ class ForgetReport:
     ``MemoryModule`` does not hold and no caller currently wires in. An empty list here is
     honest scope, not a broken feature -- until that wiring exists, a champion can only be
     reviewed and rolled back by hand.
+
+    ``signals``/``history`` are ``0`` for two different reasons that used to be
+    indistinguishable: the table exists and genuinely had nothing under this project, or the
+    table was never created at all (no ``SignalStore``/``SessionHistoryStore`` has opened on
+    this connection yet, or -- for vectors -- ``vector_backend`` isn't ``sqlite``). Since the
+    ``morgan forget`` CLI (Task 17) is the first caller to show this report to a human,
+    conflating the two would tell an owner "signals were erased" when in fact the table
+    backing signals never existed. ``tables_skipped`` names every table that was absent (and
+    therefore not touched) so a caller can print "N/A / not tracked here" instead of a false
+    "0 erased".
     """
 
     memories: int = 0
@@ -29,6 +39,7 @@ class ForgetReport:
     signals: int = 0
     history: int = 0
     champions_flagged: list[str] = field(default_factory=list)
+    tables_skipped: list[str] = field(default_factory=list)
 
 
 @runtime_checkable

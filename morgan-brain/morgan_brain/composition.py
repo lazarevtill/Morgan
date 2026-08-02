@@ -462,6 +462,59 @@ def build_orchestrator(settings: Settings | None = None) -> Orchestrator:
 
 
 @dataclass
+class MemoryContext:
+    """Direct memory-subsystem handles for callers that only do memory reads/writes and don't
+    need an LLM router, event bus, or Orchestrator -- the ``morgan`` CLI (Task 17) being the
+    first one. Shares the exact same database file, vector backend, and embedder construction
+    as build_app_context/build_worker_context, so a value written here is visible to brain-api
+    and the learning-worker and vice versa.
+    """
+
+    gate: MemoryGate
+    conn: sqlite3.Connection
+    vectors: VectorIndex
+    embedder: Embedder
+    settings: Settings
+
+
+def build_memory_context(settings: Settings | None = None) -> MemoryContext:
+    """Build a MemoryGate over the real database without a router/bus/Orchestrator.
+
+    remember/recall/facts/forget are direct memory operations, not chat turns, and must not
+    require a reachable LLM chat endpoint to run -- only the embedder is exercised (skipped
+    entirely for ``embedding_backend="hash"``, the CLI's own default test/no-model-server path).
+    """
+    settings = settings or get_settings()
+    temporal_path = _sqlite_path(settings.temporal_db_url)
+    if temporal_path != ":memory:":
+        pathlib.Path(temporal_path).parent.mkdir(parents=True, exist_ok=True)
+
+    # Same shared connection every other production caller uses -- required for a
+    # single-transaction forget() and for restart survival.
+    conn = open_db(temporal_path)
+    vectors = _build_vector_index(settings, conn)
+    embedder = build_embedder(settings)
+    _probe_embedding_dim(embedder, settings)
+
+    memory_module = MemoryModule(
+        embedder=embedder,
+        vectors=vectors,
+        temporal=SqliteTemporalStore(conn=conn),
+        clock=_utcnow,
+        fts=FtsIndex(conn),
+        entities=EntityIndex(conn),
+        episodics=EpisodicStore(conn),
+    )
+    return MemoryContext(
+        gate=MemoryGate(memory_module),
+        conn=conn,
+        vectors=vectors,
+        embedder=embedder,
+        settings=settings,
+    )
+
+
+@dataclass
 class WorkerContext:
     """Handles needed by the learning-worker process."""
 

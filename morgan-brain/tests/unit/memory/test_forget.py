@@ -68,6 +68,42 @@ async def test_forget_is_idempotent(tmp_path):
     assert second.memories == 0
 
 
+async def test_forget_reports_absent_tables_as_skipped_not_zero(tmp_path):
+    """A table that never existed (no SignalStore/SessionHistoryStore opened on this
+    connection, and the sqlite vector backend never used) must be distinguishable from a
+    table that existed and was already empty -- see the Task 14 review / Task 17 brief.
+    ``signals`` and ``history`` stay 0 (honest: nothing was erased) AND the table names show
+    up in ``tables_skipped`` (honest: there was nothing to erase FROM, because it never
+    existed)."""
+    path = str(tmp_path / "m.db")
+    m = _module(path)
+    await m.store(Memory(user_id="u", project="p", content="harbor"))
+    report = await m.forget(user_id="u", project="p")
+    assert report.signals == 0
+    assert report.history == 0
+    assert "interaction_signals" in report.tables_skipped
+    assert "session_history" in report.tables_skipped
+    # vec_items/vec_meta DO exist here (SqliteVectorIndex backs conftest's build_memory_module),
+    # so they must NOT be reported as skipped.
+    assert "vec_items" not in report.tables_skipped
+
+
+async def test_forget_does_not_report_present_tables_as_skipped(tmp_path):
+    """Once a SignalStore/SessionHistoryStore has opened on the shared connection, the tables
+    exist -- forgetting a project with no signals/history in it must report a real 0, not a
+    skip, because the table is present and genuinely empty for this project."""
+    path = str(tmp_path / "m.db")
+    m = _module(path)
+    conn = m._episodics._conn  # test-only introspection
+    SignalStore(conn, clock=lambda: datetime.now(UTC))  # creates interaction_signals
+    SessionHistoryStore(conn, clock=lambda: datetime.now(UTC))  # creates session_history
+    await m.store(Memory(user_id="u", project="p", content="harbor"))
+    report = await m.forget(user_id="u", project="p")
+    assert report.signals == 0
+    assert report.history == 0
+    assert report.tables_skipped == []
+
+
 async def test_forget_champions_flagged_is_empty_by_design(tmp_path):
     """No PromptRegistry is wired into MemoryModule, so this stays empty rather than
     inventing a half-mechanism -- see the forget() docstring for why."""

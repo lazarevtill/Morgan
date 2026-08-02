@@ -178,6 +178,8 @@ class MemoryModule:
         ``SessionHistoryStore`` has opened on this same connection) are each optional parts
         of the shared database -- deleted when present, skipped (not an error) when not,
         since there is nothing under *project* to forget from a table that was never created.
+        Every table skipped this way is named in ``report.tables_skipped`` so a caller can
+        tell "erased zero" apart from "nothing to erase from" (see ``ForgetReport``).
         """
         conn = self._episodics._conn  # forget() owns the whole database
         ids = [
@@ -191,6 +193,12 @@ class MemoryModule:
         has_vectors = _table_exists(conn, "vec_items") and _table_exists(conn, "vec_meta")
         has_signals = _table_exists(conn, "interaction_signals")
         has_history = _table_exists(conn, "session_history")
+        if not has_vectors:
+            report.tables_skipped.append("vec_items")
+        if not has_signals:
+            report.tables_skipped.append("interaction_signals")
+        if not has_history:
+            report.tables_skipped.append("session_history")
 
         conn.execute("BEGIN IMMEDIATE")
         try:
