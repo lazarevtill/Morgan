@@ -122,6 +122,7 @@ def make_predict_fn(
             for fact_text in item.setup:
                 mem = Memory(
                     user_id=EVAL_USER_ID,
+                    project=DEFAULT_PROJECT,
                     kind=MemoryKind.SEMANTIC,
                     content=fact_text,
                     source=MemorySource.USER_STATED,

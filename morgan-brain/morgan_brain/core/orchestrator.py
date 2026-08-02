@@ -179,6 +179,7 @@ class Orchestrator:
                 user_id=user_id,
                 payload={
                     "session_id": session_id,
+                    "project": project,
                     "request": text,
                     "response": result.text,
                     "turn_id": turn_id,
@@ -249,6 +250,7 @@ class Orchestrator:
                 user_id=user_id,
                 payload={
                     "session_id": session_id,
+                    "project": project,
                     "request": text,
                     "response": result.text,
                     "turn_id": turn_id,
@@ -333,6 +335,7 @@ class Orchestrator:
                 user_id=user_id,
                 payload={
                     "session_id": session_id,
+                    "project": project,
                     "request": text,
                     "response": full_text,
                     "turn_id": turn_id,

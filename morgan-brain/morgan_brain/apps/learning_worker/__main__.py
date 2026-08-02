@@ -31,6 +31,7 @@ import structlog
 from morgan_brain.bus import get_event_bus
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.interfaces.events import Event, EventType, Handler
+from morgan_brain.models.memory import DEFAULT_PROJECT
 from morgan_brain.models.message import Conversation, Message, Role
 
 if TYPE_CHECKING:
@@ -72,15 +73,22 @@ def _make_response_handler(
         try:
             payload = event.payload
             session_id = payload.get("session_id") or "default"
+            project = payload.get("project") or DEFAULT_PROJECT
             query = payload.get("request", "")
             reply = payload.get("response", "")
 
             convo = Conversation(
                 user_id=event.user_id,
+                project=project,
                 session_id=session_id,
                 messages=[
-                    Message(user_id=event.user_id, role=Role.USER, content=query),
-                    Message(user_id=event.user_id, role=Role.ASSISTANT, content=reply),
+                    Message(user_id=event.user_id, project=project, role=Role.USER, content=query),
+                    Message(
+                        user_id=event.user_id,
+                        project=project,
+                        role=Role.ASSISTANT,
+                        content=reply,
+                    ),
                 ],
             )
             await _learner.process_session(convo)
