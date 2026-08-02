@@ -24,7 +24,7 @@ from typing import Callable
 
 from pydantic import BaseModel
 
-from morgan_brain.models.memory import DEFAULT_PROJECT, MemorySource, TemporalFact
+from morgan_brain.models.memory import MemorySource, TemporalFact
 from morgan_brain.models.user import (
     CommunicationPrefs,
     RelationshipStage,
@@ -417,7 +417,7 @@ def apply_edit_delta(user_model: UserModel, delta: str) -> UserModel:
 
 
 def preference_facts_from_delta(
-    user_id: str, delta: str, now: datetime, *, project: str = DEFAULT_PROJECT
+    user_id: str, delta: str, now: datetime, *, project: str
 ) -> list[TemporalFact]:
     """Map a CIPHER preference delta to agent-inferred ``comm_*`` facts.
 

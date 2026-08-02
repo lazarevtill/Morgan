@@ -34,6 +34,7 @@ from morgan_brain.modules.skills.registry import SkillRegistry
 
 class FeedbackRequest(BaseModel):
     turn_id: str
+    project: str
     user_id: str | None = None
     kind: str  # "edit" | "retry" | "thumb"
     edited_reply: str | None = None
@@ -87,7 +88,10 @@ def build_router(
                 )
                 if original:
                     await learner.learn_from_edit(
-                        user_id=user_id, original=original, edited=req.edited_reply
+                        user_id=user_id,
+                        project=req.project,
+                        original=original,
+                        edited=req.edited_reply,
                     )
             except Exception as exc:  # noqa: BLE001 — best-effort learning hook
                 _log.warning("learn_from_edit_failed", turn_id=req.turn_id, error=str(exc))

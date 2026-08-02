@@ -361,7 +361,7 @@ def test_apply_edit_delta_is_deterministic() -> None:
 
 def test_preference_facts_from_delta_maps_keywords() -> None:
     """A delta maps to agent-inferred comm_* facts that build() understands."""
-    facts = preference_facts_from_delta(USER, "prefers concise, code-first", T0)
+    facts = preference_facts_from_delta(USER, "prefers concise, code-first", T0, project="default")
     pairs = {(f.predicate, f.object) for f in facts}
     assert ("comm_length", "terse") in pairs
     assert ("comm_code", "code_first") in pairs
@@ -406,6 +406,7 @@ async def test_learn_from_edit_persists_facts_that_change_profile() -> None:
 
     delta = await learner.learn_from_edit(
         user_id=USER,
+        project="default",
         original="Here is a long, detailed, verbose explanation with much background...",
         edited="Just the code.",
     )
