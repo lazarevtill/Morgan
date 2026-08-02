@@ -235,8 +235,9 @@ no third party to redact for) and `privacy/crypto.py` are removed. Field-level e
 incompatible with the FTS5 keyword index of §4.1 — you cannot full-text index ciphertext — and
 would not have covered vectors anyway. At-rest protection is therefore **volume-level encryption on
 the homelab host**, which covers the entire database including vectors and signals, costs no code,
-and is documented in the operations guide. Transport protection is a bearer token over Tailscale or
-TLS. Shipping an advertised but unreachable security control is worse than shipping none.
+and is documented in the operations guide. Transport protection is a bearer token over the
+**NetBird** overlay network (self-hostable WireGuard, already in use across the owner's machines)
+or TLS at a reverse proxy. Shipping an advertised but unreachable security control is worse than shipping none.
 
 A docs truth pass lands in the same commits: the six dead settings, the false test and mypy counts,
 the two already-fixed "latent bugs", and the word "bi-temporal" — the schema carries valid time only
