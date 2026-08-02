@@ -113,7 +113,8 @@ with your own preference probes; any self-learned promotion must beat the curren
   `X-API-Key`) **when a key is set**. `/health` is open.
   > ⚠️ **Before exposing remotely you MUST set a real `MORGAN_API_KEY`** (the default `change-me`
   > leaves `/api/*` open for local dev). Primary control per the architecture is **network posture**:
-  > run behind a **Tailscale tailnet with no public ports** — do not bind `0.0.0.0` to the internet.
+  > run behind the **NetBird overlay network with no public ports** — do not bind `0.0.0.0` to the
+  > internet.
 - **Channels:** set `MORGAN_ENABLE_CHANNELS=true` + `MORGAN_TELEGRAM_TOKEN` (needs `[channels]`).
   Inbound messages are **per-chat allowlisted** (default-deny) before reaching the assistant.
 

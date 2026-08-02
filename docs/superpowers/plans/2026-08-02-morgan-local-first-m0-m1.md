@@ -402,8 +402,8 @@ covers the entire database, including vectors and signal text.
 ## Transport protection
 
 The homelab instance is reachable from three laptops. All `/api/*` routes require
-`Authorization: Bearer $MORGAN_API_KEY`. Expose the service over Tailscale, or terminate TLS at
-a reverse proxy. Never expose it on a public interface with the default key.
+`Authorization: Bearer $MORGAN_API_KEY`. Reach the service over the NetBird overlay network, or
+terminate TLS at a reverse proxy. Never expose it on a public interface with the default key.
 
 ## Backups
 
