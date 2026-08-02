@@ -52,8 +52,11 @@ class SessionHistoryStore:
 
     Parameters
     ----------
-    path:
-        SQLite file path.  Defaults to ``:memory:`` for tests.
+    conn:
+        A shared :class:`sqlite3.Connection`, e.g. from
+        :func:`morgan_brain.modules.memory.stores.db.open_db`, so history lives in the
+        same database file as every other store (required for a single-transaction
+        ``forget()``). Defaults to a private ``:memory:`` connection for tests.
     clock:
         Optional injected callable returning the current :class:`datetime`.
         When ``None``, ``created_at`` is stored as ``None`` and ordering is by
@@ -62,12 +65,14 @@ class SessionHistoryStore:
 
     def __init__(
         self,
-        path: str = ":memory:",
+        conn: sqlite3.Connection | None = None,
         *,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._clock = clock
-        self._conn = sqlite3.connect(path, check_same_thread=False)
+        self._conn = (
+            conn if conn is not None else sqlite3.connect(":memory:", check_same_thread=False)
+        )
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
         self._conn.commit()

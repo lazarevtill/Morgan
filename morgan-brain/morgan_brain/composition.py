@@ -8,6 +8,7 @@ reply is produced; with the Redis bus (later phases) it runs in the learning-wor
 from __future__ import annotations
 
 import pathlib
+import sqlite3
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -39,6 +40,7 @@ from morgan_brain.modules.memory.retrieval.fts import FtsIndex
 from morgan_brain.modules.memory.store import MemoryModule
 from morgan_brain.modules.memory.stores.db import open_db
 from morgan_brain.modules.memory.stores.episodic import EpisodicStore
+from morgan_brain.modules.memory.stores.sqlite_vector import SqliteVectorIndex
 from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
 from morgan_brain.modules.memory.stores.vector import (
     InMemoryVectorIndex,
@@ -74,20 +76,21 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _build_vector_index(settings: Settings) -> VectorIndex:
+def _build_vector_index(settings: Settings, conn: sqlite3.Connection) -> VectorIndex:
     """Return the configured vector index backend.
 
-    "memory" → InMemoryVectorIndex (default, ephemeral, no external deps).
+    "sqlite" → SqliteVectorIndex (default; persistent, shares *conn* with every other store).
+    "memory" → InMemoryVectorIndex (ephemeral; tests/scratch use only).
     "qdrant" → QdrantVectorIndex (persistent; requires Qdrant at settings.qdrant_url).
-
-    Production sets MORGAN_VECTOR_BACKEND=qdrant so memories survive restarts.
     """
     if settings.vector_backend == "qdrant":
         return QdrantVectorIndex(
             url=settings.qdrant_url,
             dim=settings.embedding_dim,
         )
-    return InMemoryVectorIndex()
+    if settings.vector_backend == "memory":
+        return InMemoryVectorIndex()
+    return SqliteVectorIndex(conn, dim=settings.embedding_dim)
 
 
 def _register_turn_storage(
@@ -165,8 +168,8 @@ def _assemble(
     router: RoleRouter,
     settings: Settings,
     clock: Callable[[], datetime],
-    temporal_path: str,
-    signal_store_path: str = ":memory:",
+    conn: sqlite3.Connection | None = None,
+    temporal_path: str = ":memory:",
     prompt_registry: LocalPromptRegistry | None = None,
     history_store: "SessionHistoryStore | None" = None,
     bus: EventBus | None = None,
@@ -180,22 +183,27 @@ def _assemble(
     SkillRegistry,
     ConsolidationLearner,
 ]:
-    temporal = SqliteTemporalStore(temporal_path)
-    # Use the injected vector index (tests) or build one from settings (production).
+    # One connection, shared by every store below (temporal, vectors, FTS, entities, episodics,
+    # signals, history) -- required for a single-transaction forget() and for restart survival.
+    # Production callers (build_app_context/build_worker_context) open this once over the real
+    # data file and pass it in; callers that don't (test helpers) fall back to a private
+    # ":memory:" connection so each test stays isolated.
+    resolved_conn = conn if conn is not None else open_db(temporal_path)
+    temporal = SqliteTemporalStore(conn=resolved_conn)
+    # Use the injected vector index -- production callers (build_app_context/build_worker_context)
+    # always pass one built from settings via _build_vector_index; test callers that don't care
+    # about the vector backend fall back to an ephemeral InMemoryVectorIndex so a FakeEmbedder's
+    # low dimensionality never collides with the real embedding_dim a SqliteVectorIndex would
+    # enforce.
     resolved_vectors: VectorIndex = vectors if vectors is not None else InMemoryVectorIndex()
-    # FTS/entity/episodic indexes are process-local (":memory:") until the durable stack is
-    # wired into composition (a separate task, tracked as "wire the durable stack into
-    # composition"): today's behaviour is unchanged, not regressed -- these three signals were
-    # already process-local dicts before this module was rewired onto the durable stores.
-    mem_conn = open_db(":memory:")
     memory_module = MemoryModule(
         embedder=embedder,
         vectors=resolved_vectors,
         temporal=temporal,
         clock=clock,
-        fts=FtsIndex(mem_conn),
-        entities=EntityIndex(mem_conn),
-        episodics=EpisodicStore(mem_conn),
+        fts=FtsIndex(resolved_conn),
+        entities=EntityIndex(resolved_conn),
+        episodics=EpisodicStore(resolved_conn),
     )
     gate = MemoryGate(memory_module)
     reg = CapabilityRegistry.from_packaged()
@@ -205,7 +213,7 @@ def _assemble(
         capability_registry=reg,
         clock=clock,
     )
-    signal_store = SignalStore(signal_store_path, clock=clock)
+    signal_store = SignalStore(resolved_conn, clock=clock)
     recorder = SignalRecorder(store=signal_store, clock=clock)
     profile_builder = UserProfileBuilder(
         gate=gate,
@@ -262,6 +270,8 @@ class AppContext:
     skills: SkillRegistry
     learner: ConsolidationLearner
     prompt_registry: PromptRegistry
+    bus: EventBus
+    vectors: VectorIndex
     history_store: "SessionHistoryStore | None" = field(default=None)
 
 
@@ -339,33 +349,32 @@ def build_app_context(settings: Settings | None = None) -> AppContext:
     if temporal_path != ":memory:":
         pathlib.Path(temporal_path).parent.mkdir(parents=True, exist_ok=True)
 
-    # Derive signals + history DB paths from temporal_db_url (sibling files).
-    # History must be durable: it threads multi-turn context, so an in-memory store
-    # would silently collapse every turn to turn 1 across restarts.
-    if temporal_path == ":memory:":
-        signal_path = ":memory:"
-        history_path = ":memory:"
-    else:
-        signal_path = str(pathlib.Path(temporal_path).parent / "signals.db")
-        history_path = str(pathlib.Path(temporal_path).parent / "history.db")
+    # One connection for the whole process: facts, vectors, FTS, entities, episodics, signals
+    # and session history all live in this single database file (required for a
+    # single-transaction forget() and for restart survival).
+    conn = open_db(temporal_path)
+    vectors = _build_vector_index(settings, conn)
 
     embedder = OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
     router = build_router(settings)
     # Use the persistent registry (same path as the worker) so brain-api reads
     # champions written by the learning-worker.
     prom_registry: PromptRegistry = build_registry(settings)
-    history_store = SessionHistoryStore(history_path)
+    # History must be durable: it threads multi-turn context, so an in-memory store would
+    # silently collapse every turn to turn 1 across restarts.
+    history_store = SessionHistoryStore(conn, clock=_utcnow)
+    bus = get_event_bus()
 
     orch, _, signal_store, recorder, executor, skills, learner = _assemble(
         embedder=embedder,
         router=router,
         settings=settings,
         clock=_utcnow,
-        temporal_path=temporal_path,
-        signal_store_path=signal_path,
+        conn=conn,
         prompt_registry=prom_registry if isinstance(prom_registry, LocalPromptRegistry) else None,
         history_store=history_store,
-        vectors=_build_vector_index(settings),
+        bus=bus,
+        vectors=vectors,
     )
 
     return AppContext(
@@ -374,6 +383,8 @@ def build_app_context(settings: Settings | None = None) -> AppContext:
         signal_recorder=recorder,
         executor=executor,
         skills=skills,
+        bus=bus,
+        vectors=vectors,
         learner=learner,
         prompt_registry=prom_registry,
         history_store=history_store,
@@ -401,8 +412,8 @@ class WorkerContext:
 def build_worker_context(settings: Settings | None = None) -> WorkerContext:
     """Build PRODUCTION learning-worker context over configured backends.
 
-    Shares the same store paths as brain-api (temporal_db_url → signals.db sibling)
-    so both processes read/write the SAME SQLite files. Use a shared Qdrant collection
+    Shares the same database file as brain-api (settings.temporal_db_url / data_dir) so both
+    processes read/write the SAME SQLite database. Use a shared Qdrant collection
     (vector_backend="qdrant") for the vector store in multi-process deployments.
 
     With ``event_bus="redis"``, the worker subscribes to the Redis stream that
@@ -420,22 +431,22 @@ def build_worker_context(settings: Settings | None = None) -> WorkerContext:
     if temporal_path != ":memory:":
         pathlib.Path(temporal_path).parent.mkdir(parents=True, exist_ok=True)
 
-    if temporal_path == ":memory:":
-        signal_path = ":memory:"
-    else:
-        signal_path = str(pathlib.Path(temporal_path).parent / "signals.db")
+    # One connection for the whole process, same as build_app_context.
+    conn = open_db(temporal_path)
+    vectors = _build_vector_index(settings, conn)
 
     embedder = OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
     router = build_router(settings)
+    bus = get_event_bus()
 
     orch, _, signal_store, recorder, _, _, learner = _assemble(
         embedder=embedder,
         router=router,
         settings=settings,
         clock=_utcnow,
-        temporal_path=temporal_path,
-        signal_store_path=signal_path,
-        vectors=_build_vector_index(settings),
+        conn=conn,
+        bus=bus,
+        vectors=vectors,
     )
 
     # Persistent registry — same file as brain-api reads.
@@ -459,7 +470,6 @@ def build_worker_context(settings: Settings | None = None) -> WorkerContext:
         predict_fn=predict_fn,
     )
 
-    bus = get_event_bus()
     return WorkerContext(
         learner=learner,
         signal_store=signal_store,

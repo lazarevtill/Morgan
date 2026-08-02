@@ -67,11 +67,14 @@ def _make_scratch_gate(clock: Callable[[], datetime]) -> MemoryGate:
     Uses FakeEmbedder (no network) and InMemoryVectorIndex + in-memory SQLite,
     so it is entirely self-contained and discarded after the item run.
     """
+    # Deliberately ":memory:" and process-local — the eval scratch gate must stay isolated
+    # from the durable stack, never the shared production database (FIREWALL, see module
+    # docstring). All four indexes share this one connection, same as production.
     conn = open_db(":memory:")
     module = MemoryModule(
         embedder=FakeEmbedder(dim=16),
         vectors=InMemoryVectorIndex(),
-        temporal=SqliteTemporalStore(":memory:"),
+        temporal=SqliteTemporalStore(conn=conn),
         clock=clock,
         fts=FtsIndex(conn),
         entities=EntityIndex(conn),

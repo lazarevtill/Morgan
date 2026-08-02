@@ -7,6 +7,7 @@ Phase 5: /api/chat/stream (SSE) streams token deltas with a terminal [DONE] sent
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import Depends, FastAPI
@@ -15,7 +16,7 @@ from pydantic import BaseModel
 
 from morgan_brain import __version__
 from morgan_brain.apps.brain_api.auth import require_api_key
-from morgan_brain.composition import ChampionCache, build_app_context
+from morgan_brain.composition import AppContext, ChampionCache, build_app_context
 from morgan_brain.config import get_settings
 from morgan_brain.learning.history import session_key
 
@@ -32,10 +33,27 @@ class ChatResponse(BaseModel):
     turn_id: str
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Start the event bus on entry, stop it on exit.
+
+    Before this, nothing called ``bus.start()`` anywhere in the API process, so queued
+    cold-path work (consolidation, signal mining) would never run even though every
+    subscriber was registered.
+    """
+    ctx: AppContext = app.state.ctx
+    await ctx.bus.start()
+    try:
+        yield
+    finally:
+        await ctx.bus.stop()
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="morgan-brain", version=__version__)
     ctx = build_app_context(settings)
+    app = FastAPI(title="morgan-brain", version=__version__, lifespan=_lifespan)
+    app.state.ctx = ctx
     orchestrator = ctx.orchestrator
     _auth = Depends(require_api_key(settings))
 
