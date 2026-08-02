@@ -373,7 +373,7 @@ def test_preference_facts_from_delta_maps_keywords() -> None:
 async def test_learn_from_edit_persists_facts_that_change_profile() -> None:
     """The whole loop: an edit distils a preference, persists it as facts, and the NEXT
     user_model reflects it — i.e. editing a reply actually changes future behaviour."""
-    gate, temporal = _make_gate()
+    gate, _ = _make_gate()
     delta_payload = json.dumps({"delta": "prefers concise, code-first"})
     fake_client = FakeChatClient(reply=delta_payload)
     reg = CapabilityRegistry.from_seed(
@@ -394,7 +394,7 @@ async def test_learn_from_edit_persists_facts_that_change_profile() -> None:
         clock=lambda: T0,
     )
     consolidator = MemoryConsolidator(
-        gate=gate, temporal=temporal, router=router, capability_registry=reg, clock=lambda: T0
+        gate=gate, router=router, capability_registry=reg, clock=lambda: T0
     )
     learner = ConsolidationLearner(
         consolidator=consolidator, gate=gate, clock=lambda: T0, profile_builder=builder

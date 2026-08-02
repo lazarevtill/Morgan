@@ -158,10 +158,10 @@ async def test_learn_preference_then_recall_in_turn2() -> None:
     )
     assert result2.text == "Here is the code."
 
-    # Verify the fact is now stored (via the temporal store / memory gate).
-    # We access the learner's consolidator → temporal to check current facts.
-    temporal = learner._consolidator._temporal  # type: ignore[attr-defined]  # noqa: SLF001
-    facts = await temporal.current_facts(user_id=USER_ID)
+    # Verify the fact is now stored (via the memory gate).
+    # We access the learner's consolidator → gate to check current facts.
+    gate = learner._consolidator._gate  # type: ignore[attr-defined]  # noqa: SLF001
+    facts = await gate.current_facts(user_id=USER_ID)
     matching = [
         f
         for f in facts
@@ -219,8 +219,8 @@ async def test_learn_location_then_visible_in_memories() -> None:
     # Consolidate.
     await learner.consolidate(USER_ID)
 
-    # Check the temporal store directly.
-    temporal = learner._consolidator._temporal  # type: ignore[attr-defined]  # noqa: SLF001
-    facts = await temporal.current_facts(user_id=USER_ID)
+    # Check the fact store via the gate.
+    gate = learner._consolidator._gate  # type: ignore[attr-defined]  # noqa: SLF001
+    facts = await gate.current_facts(user_id=USER_ID)
     berlin_facts = [f for f in facts if "Berlin" in f.object]
     assert len(berlin_facts) >= 1, f"Expected Berlin fact in temporal store. Got: {facts}"

@@ -63,9 +63,7 @@ def _consolidator() -> tuple[MemoryConsolidator, MemoryGate, SqliteTemporalStore
     router = RoleRouter(
         reg=reg, bindings={"strong": [Binding("fake", "test-model", FakeChatClient(reply="{}"))]}
     )
-    cons = MemoryConsolidator(
-        gate=gate, temporal=temporal, router=router, capability_registry=reg, clock=lambda: T0
-    )
+    cons = MemoryConsolidator(gate=gate, router=router, capability_registry=reg, clock=lambda: T0)
     return cons, gate, temporal
 
 

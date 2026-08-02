@@ -201,7 +201,6 @@ def _assemble(
     reg = CapabilityRegistry.from_packaged()
     consolidator = MemoryConsolidator(
         gate=gate,
-        temporal=temporal,
         router=router,
         capability_registry=reg,
         clock=clock,

@@ -70,7 +70,6 @@ def _build_learner(
     )
     consolidator = MemoryConsolidator(
         gate=gate,
-        temporal=temporal,
         router=router,
         capability_registry=reg,
         clock=lambda: T0,
