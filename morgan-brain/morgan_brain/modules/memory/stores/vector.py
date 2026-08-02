@@ -32,6 +32,7 @@ class VectorHit:
 class VectorIndex(Protocol):
     async def upsert(self, record: VectorRecord) -> None: ...
     async def search(self, *, user_id: str, vector: list[float], top_k: int) -> list[VectorHit]: ...
+    async def delete(self, ids: list[str]) -> None: ...
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -56,6 +57,10 @@ class InMemoryVectorIndex:
         ]
         scored.sort(key=lambda h: h.score, reverse=True)
         return scored[:top_k]
+
+    async def delete(self, ids: list[str]) -> None:
+        for mid in ids:
+            self._records.pop(mid, None)
 
 
 class QdrantVectorIndex:
@@ -142,3 +147,11 @@ class QdrantVectorIndex:
             )
             for p in res.points
         ]
+
+    async def delete(self, ids: list[str]) -> None:
+        qm = self._qm
+        point_ids = [self._point_id(mid) for mid in ids]
+        await self._client.delete(
+            collection_name=self._collection,
+            points_selector=qm.PointIdsList(points=point_ids),
+        )
