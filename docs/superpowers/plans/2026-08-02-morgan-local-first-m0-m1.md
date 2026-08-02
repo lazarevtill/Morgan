@@ -2464,6 +2464,19 @@ def detect_project(cwd: Path | None = None) -> str:
 store — the failure mode where recall still works via FTS and nobody notices the vectors were
 never persisted.
 
+**Carried from the Task 14 review — required before `forget` becomes user-facing.** This task is
+what first exposes `forget()` to a human, so `ForgetReport` must stop conflating two different
+outcomes. Today an absent table and a present-but-empty table both report `0`, because
+`forget()` skips absent tables via a `_table_exists()` guard and still reports success. That is
+correct for `vector_backend=memory`/`qdrant`, where the tables legitimately do not exist — but it
+means a broken wiring that never created `interaction_signals` would tell the owner their signals
+were erased.
+
+Change `ForgetReport` so the two are distinguishable — either `int | None` per field (None =
+table absent) or a `tables_skipped: list[str]`. The CLI must then print skipped tables plainly
+rather than reporting a clean sweep. Also state in `morgan forget`'s output that vectors are NOT
+erased under `vector_backend=qdrant`, which the Task 14 review confirmed is a real gap.
+
 - [ ] **Step 5: Register the entry point**
 
 ```toml
