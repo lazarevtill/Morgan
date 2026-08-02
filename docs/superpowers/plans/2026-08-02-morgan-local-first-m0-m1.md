@@ -430,8 +430,14 @@ git commit -am "refactor: replace the privacy layer with host-level at-rest encr
 ## Task 6: Docs truth pass
 
 **Files:**
-- Modify: `CLAUDE.md`, `README.md`, `docs/ROADMAP.md`, `docs/WIRING.md`, `morgan-brain/.env.example`
+- Modify: `CLAUDE.md`, `README.md`, **`morgan-brain/README.md`**, `docs/ROADMAP.md`, `docs/WIRING.md`, `morgan-brain/.env.example`, `docs/OPERATIONS.md`
 - Delete: `docs/ARCHITECTURE_V2.md`
+
+**Carried from the Task 5 review:** `morgan-brain/README.md` still documents the deleted privacy
+layer in four places — line 3 ("privacy-first"), line 38 (a `privacy/` package-map row), line 97
+(`pip install -e ".[privacy]"`, an extra that no longer exists), and line 121 (a kernel-layer
+list including `privacy/`). Line 97 is the worst of them: it tells a reader to install an extra
+that was removed, which fails outright.
 
 **Interfaces:**
 - Consumes: the deletions from Tasks 3-5
