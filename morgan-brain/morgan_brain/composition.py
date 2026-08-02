@@ -32,7 +32,7 @@ from morgan_brain.learning.recorder import SignalRecorder
 from morgan_brain.learning.signals import SignalStore
 from morgan_brain.learning_lifecycle.factory import build_registry
 from morgan_brain.learning_lifecycle.interfaces import PromptRegistry
-from morgan_brain.models.memory import Memory
+from morgan_brain.models.memory import DEFAULT_PROJECT, Memory
 from morgan_brain.models.message import Conversation, Message, Role
 from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder, OllamaEmbedder
 from morgan_brain.modules.memory.retrieval.entities import EntityIndex
@@ -110,15 +110,17 @@ def _register_turn_storage(
     async def _store_turn(event: Event) -> None:
         payload = event.payload
         session_id = payload.get("session_id") or "default"
+        project = payload.get("project") or DEFAULT_PROJECT
         query = payload["request"]
         reply = payload["response"]
 
         convo = Conversation(
             user_id=event.user_id,
+            project=project,
             session_id=session_id,
             messages=[
-                Message(user_id=event.user_id, role=Role.USER, content=query),
-                Message(user_id=event.user_id, role=Role.ASSISTANT, content=reply),
+                Message(user_id=event.user_id, project=project, role=Role.USER, content=query),
+                Message(user_id=event.user_id, project=project, role=Role.ASSISTANT, content=reply),
             ],
         )
         await learner.process_session(convo)

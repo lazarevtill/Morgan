@@ -60,6 +60,8 @@ class ConsolidationLearner:
 
         Stores each message as an episodic memory so Phase 1 recall works
         across turns while Phase 2B consolidation enriches the fact base.
+        Scoped to ``conversation.project`` so a turn served under a real project name
+        (e.g. from the CLI) lands where consolidation and recall will actually find it.
         """
         for msg in conversation.messages:
             source = (
@@ -68,6 +70,7 @@ class ConsolidationLearner:
             await self._gate.store(
                 Memory(
                     user_id=conversation.user_id,
+                    project=conversation.project,
                     kind=MemoryKind.EPISODIC,
                     content=msg.content,
                     source=source,
@@ -104,7 +107,9 @@ class ConsolidationLearner:
         """
         return await self._gate.distinct_projects(user_id)
 
-    async def learn_from_edit(self, *, user_id: str, original: str, edited: str) -> str:
+    async def learn_from_edit(
+        self, *, user_id: str, project: str = DEFAULT_PROJECT, original: str, edited: str
+    ) -> str:
         """CIPHER: distil a preference from an (original, edited) reply pair and persist
         it as agent-inferred ``comm_*`` facts, so the next ``user_model`` reflects it.
 
@@ -124,6 +129,6 @@ class ConsolidationLearner:
         )
 
         delta = await preference_delta_from_edit(self._profile_builder, user_id, original, edited)
-        for fact in preference_facts_from_delta(user_id, delta, self._clock()):
+        for fact in preference_facts_from_delta(user_id, delta, self._clock(), project=project):
             await self._gate.upsert_fact(fact)
         return delta
