@@ -45,13 +45,18 @@ async def test_stream_turn_yields_non_empty_chunks() -> None:
 async def test_stream_turn_stores_turn_in_memory() -> None:
     """After stream_turn completes, RESPONSE_GENERATED fires and the turn is stored."""
     orch, mem = build_orchestrator_for_test(reply="Streaming reply", clock=_CLOCK)
+    await mem.bus.start()
     async for _ in orch.stream_turn(
         user_id="u1", project="default", text="My name is Alice", session_id="s1"
     ):
         pass  # consume entire stream
 
+    # publish() now enqueues rather than running the storage subscriber inline (Task 15) —
+    # drain the bus before asserting on what it stored.
+    await mem.bus.drain()
     hits = await mem.recall_raw(user_id="u1", text="Alice")
     assert any("Alice" in h.content for h in hits)
+    await mem.bus.stop()
 
 
 @pytest.mark.asyncio

@@ -100,6 +100,7 @@ async def test_cross_process_handler_called_on_response_generated() -> None:
         temporal_path=":memory:",
         bus=shared_bus,
     )
+    await shared_bus.start()
 
     # Simulate brain-api serving a request.
     result = await orch.handle_turn(
@@ -108,6 +109,11 @@ async def test_cross_process_handler_called_on_response_generated() -> None:
         text="What is the capital of France?",
         session_id="sess-cross",
     )
+
+    # publish() now enqueues rather than running subscribers inline (Task 15) — drain the
+    # bus before asserting on what the worker handler did.
+    await shared_bus.drain()
+    await shared_bus.stop()
 
     assert result.text == "worker should see this"
 
@@ -154,6 +160,7 @@ async def test_cross_process_multiple_turns_all_processed() -> None:
         temporal_path=":memory:",
         bus=shared_bus,
     )
+    await shared_bus.start()
 
     for i in range(3):
         await orch.handle_turn(
@@ -162,6 +169,11 @@ async def test_cross_process_multiple_turns_all_processed() -> None:
             text=f"turn {i}",
             session_id="sess-multi",
         )
+
+    # publish() now enqueues rather than running subscribers inline (Task 15) — drain the
+    # bus before asserting on what the worker handler did.
+    await shared_bus.drain()
+    await shared_bus.stop()
 
     # Worker handler should have been called 3 times (once per RESPONSE_GENERATED).
     assert len(spy.sessions) == 3
@@ -179,6 +191,7 @@ async def test_cross_process_worker_handler_spy_via_direct_publish() -> None:
 
     handler = _make_response_handler(spy, clock=CLOCK)
     bus.subscribe(EventType.RESPONSE_GENERATED, handler)
+    await bus.start()
 
     event = Event(
         type=EventType.RESPONSE_GENERATED,
@@ -191,6 +204,8 @@ async def test_cross_process_worker_handler_spy_via_direct_publish() -> None:
         },
     )
     await bus.publish(event)
+    await bus.drain()
+    await bus.stop()
 
     assert len(spy.sessions) == 1
     convo = spy.sessions[0]

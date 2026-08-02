@@ -39,8 +39,14 @@ async def test_response_generated_carries_turn_id() -> None:
         events_payloads.append(event.payload)
 
     bus.subscribe(EventType.RESPONSE_GENERATED, _capture)
+    await bus.start()
 
     await orch.handle_turn(user_id="u1", project="default", text="hello", session_id="s1")
+
+    # publish() now enqueues rather than running subscribers inline (Task 15) — drain before
+    # asserting on what was captured.
+    await bus.drain()
+    await bus.stop()
 
     assert len(events_payloads) >= 1
     payload = events_payloads[0]
