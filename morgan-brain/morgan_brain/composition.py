@@ -34,7 +34,11 @@ from morgan_brain.learning_lifecycle.interfaces import PromptRegistry
 from morgan_brain.models.memory import Memory
 from morgan_brain.models.message import Conversation, Message, Role
 from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder, OllamaEmbedder
+from morgan_brain.modules.memory.retrieval.entities import EntityIndex
+from morgan_brain.modules.memory.retrieval.fts import FtsIndex
 from morgan_brain.modules.memory.store import MemoryModule
+from morgan_brain.modules.memory.stores.db import open_db
+from morgan_brain.modules.memory.stores.episodic import EpisodicStore
 from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
 from morgan_brain.modules.memory.stores.vector import (
     InMemoryVectorIndex,
@@ -179,11 +183,19 @@ def _assemble(
     temporal = SqliteTemporalStore(temporal_path)
     # Use the injected vector index (tests) or build one from settings (production).
     resolved_vectors: VectorIndex = vectors if vectors is not None else InMemoryVectorIndex()
+    # FTS/entity/episodic indexes are process-local (":memory:") until the durable stack is
+    # wired into composition (a separate task, tracked as "wire the durable stack into
+    # composition"): today's behaviour is unchanged, not regressed -- these three signals were
+    # already process-local dicts before this module was rewired onto the durable stores.
+    mem_conn = open_db(":memory:")
     memory_module = MemoryModule(
         embedder=embedder,
         vectors=resolved_vectors,
         temporal=temporal,
         clock=clock,
+        fts=FtsIndex(mem_conn),
+        entities=EntityIndex(mem_conn),
+        episodics=EpisodicStore(mem_conn),
     )
     gate = MemoryGate(memory_module)
     reg = CapabilityRegistry.from_packaged()

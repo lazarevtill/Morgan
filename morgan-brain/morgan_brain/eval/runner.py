@@ -34,7 +34,11 @@ from morgan_brain.eval.golden import GoldenItem
 from morgan_brain.eval.harness import EvalHarness
 from morgan_brain.models.memory import Memory, MemoryKind, MemorySource
 from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
+from morgan_brain.modules.memory.retrieval.entities import EntityIndex
+from morgan_brain.modules.memory.retrieval.fts import FtsIndex
 from morgan_brain.modules.memory.store import MemoryModule
+from morgan_brain.modules.memory.stores.db import open_db
+from morgan_brain.modules.memory.stores.episodic import EpisodicStore
 from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
 from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex
 from morgan_brain.security.memory_gate import MemoryGate
@@ -63,11 +67,15 @@ def _make_scratch_gate(clock: Callable[[], datetime]) -> MemoryGate:
     Uses FakeEmbedder (no network) and InMemoryVectorIndex + in-memory SQLite,
     so it is entirely self-contained and discarded after the item run.
     """
+    conn = open_db(":memory:")
     module = MemoryModule(
         embedder=FakeEmbedder(dim=16),
         vectors=InMemoryVectorIndex(),
         temporal=SqliteTemporalStore(":memory:"),
         clock=clock,
+        fts=FtsIndex(conn),
+        entities=EntityIndex(conn),
+        episodics=EpisodicStore(conn),
     )
     return MemoryGate(module)
 

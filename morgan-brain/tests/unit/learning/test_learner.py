@@ -20,7 +20,11 @@ from morgan_brain.models.memory import Memory, MemoryKind, MemoryQuery, MemorySo
 from morgan_brain.models.message import Conversation, Message, Role
 from morgan_brain.models.user import RelationshipStage
 from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
+from morgan_brain.modules.memory.retrieval.entities import EntityIndex
+from morgan_brain.modules.memory.retrieval.fts import FtsIndex
 from morgan_brain.modules.memory.store import MemoryModule
+from morgan_brain.modules.memory.stores.db import open_db
+from morgan_brain.modules.memory.stores.episodic import EpisodicStore
 from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
 from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex
 from morgan_brain.providers.adapters.fake import FakeChatClient
@@ -38,11 +42,15 @@ def _build_learner(
     temporal = SqliteTemporalStore(":memory:")
     embedder = FakeEmbedder(dim=16)
     vector_index = InMemoryVectorIndex()
+    conn = open_db(":memory:")
     memory_module = MemoryModule(
         embedder=embedder,
         vectors=vector_index,
         temporal=temporal,
         clock=lambda: T0,
+        fts=FtsIndex(conn),
+        entities=EntityIndex(conn),
+        episodics=EpisodicStore(conn),
     )
     gate = MemoryGate(memory_module)
 
