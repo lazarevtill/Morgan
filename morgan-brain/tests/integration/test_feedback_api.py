@@ -113,7 +113,7 @@ def test_feedback_thumb_up_returns_ok() -> None:
     # Step 2: send thumb-up feedback
     fb_resp = client.post(
         "/api/feedback",
-        json={"turn_id": turn_id, "kind": "thumb", "thumb": "up"},
+        json={"turn_id": turn_id, "project": "default", "kind": "thumb", "thumb": "up"},
         headers=_AUTH_HEADERS,
     )
     assert fb_resp.status_code == 200
@@ -136,7 +136,7 @@ async def test_feedback_thumb_up_updates_signal_store() -> None:
     # Send feedback
     client.post(
         "/api/feedback",
-        json={"turn_id": turn_id, "kind": "thumb", "thumb": "up"},
+        json={"turn_id": turn_id, "project": "default", "kind": "thumb", "thumb": "up"},
         headers=_AUTH_HEADERS,
     )
 
@@ -156,7 +156,12 @@ def test_feedback_edit_returns_ok() -> None:
 
     fb_resp = client.post(
         "/api/feedback",
-        json={"turn_id": turn_id, "kind": "edit", "edited_reply": "better reply"},
+        json={
+            "turn_id": turn_id,
+            "project": "default",
+            "kind": "edit",
+            "edited_reply": "better reply",
+        },
         headers=_AUTH_HEADERS,
     )
     assert fb_resp.status_code == 200
@@ -172,7 +177,7 @@ def test_feedback_retry_returns_ok() -> None:
 
     fb_resp = client.post(
         "/api/feedback",
-        json={"turn_id": turn_id, "kind": "retry"},
+        json={"turn_id": turn_id, "project": "default", "kind": "retry"},
         headers=_AUTH_HEADERS,
     )
     assert fb_resp.status_code == 200
@@ -182,7 +187,7 @@ def test_feedback_requires_auth() -> None:
     _, client, _ = _build_test_app()
     resp = client.post(
         "/api/feedback",
-        json={"turn_id": "x", "kind": "thumb", "thumb": "up"},
+        json={"turn_id": "x", "project": "default", "kind": "thumb", "thumb": "up"},
         # No auth header
     )
     assert resp.status_code == 401
@@ -192,7 +197,7 @@ def test_feedback_invalid_kind_returns_422() -> None:
     _, client, _ = _build_test_app()
     resp = client.post(
         "/api/feedback",
-        json={"turn_id": "x", "kind": "unknown"},
+        json={"turn_id": "x", "project": "default", "kind": "unknown"},
         headers=_AUTH_HEADERS,
     )
     assert resp.status_code == 422

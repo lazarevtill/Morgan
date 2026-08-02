@@ -108,10 +108,15 @@ class ConsolidationLearner:
         return await self._gate.distinct_projects(user_id)
 
     async def learn_from_edit(
-        self, *, user_id: str, project: str = DEFAULT_PROJECT, original: str, edited: str
+        self, *, user_id: str, project: str, original: str, edited: str
     ) -> str:
         """CIPHER: distil a preference from an (original, edited) reply pair and persist
         it as agent-inferred ``comm_*`` facts, so the next ``user_model`` reflects it.
+
+        ``project`` is required (no default): the caller is ``/api/feedback``, and a
+        preference learned from an edit must land in the same project as the turn it
+        corrects -- a default here is exactly what let this collapse into
+        ``DEFAULT_PROJECT`` unnoticed (fix round 2).
 
         This is the loop that makes "edit my reply → future turns change": the LLM only
         produces the natural-language delta; the mapping to durable facts is deterministic

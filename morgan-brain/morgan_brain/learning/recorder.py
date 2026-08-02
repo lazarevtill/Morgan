@@ -59,6 +59,15 @@ class SignalRecorder:
 
     # ------------------------------------------------------------------
     # Feedback accumulation helpers
+    #
+    # None of add_edit/add_retry/add_thumb take a ``project`` -- they UPDATE the existing
+    # row keyed by (user_id, turn_id) that ``record_turn`` already wrote (synchronously, with
+    # the real project, from the orchestrator's hot path) rather than constructing a new row.
+    # The row's project is therefore already correct and untouched by these calls. The one
+    # exception is the stub _ensure_signal creates for a turn_id with no matching base row
+    # (a forged/garbage turn_id, since a real one always has its base row by the time the
+    # client can call /api/feedback) -- that stub falls back to DEFAULT_PROJECT, which is
+    # the only sane choice for a turn that was never actually served (fix round 2 audit).
     # ------------------------------------------------------------------
 
     async def add_edit(self, *, turn_id: str, user_id: str, edited_reply: str) -> None:

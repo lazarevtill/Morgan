@@ -116,7 +116,7 @@ async def test_feedback_thumb_up_via_async_client() -> None:
         # Step 2: send thumb-up feedback.
         fb = await c.post(
             "/api/feedback",
-            json={"turn_id": turn_id, "kind": "thumb", "thumb": "up"},
+            json={"turn_id": turn_id, "project": "default", "kind": "thumb", "thumb": "up"},
             headers=AUTH_HEADERS,
         )
         assert fb.status_code == 200
@@ -137,7 +137,7 @@ async def test_feedback_thumb_up_persisted_in_signal_store() -> None:
 
         await c.post(
             "/api/feedback",
-            json={"turn_id": turn_id, "kind": "thumb", "thumb": "up"},
+            json={"turn_id": turn_id, "project": "default", "kind": "thumb", "thumb": "up"},
             headers=AUTH_HEADERS,
         )
 
@@ -154,7 +154,7 @@ async def test_feedback_missing_key_returns_401() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
             "/api/feedback",
-            json={"turn_id": "x", "kind": "thumb", "thumb": "up"},
+            json={"turn_id": "x", "project": "default", "kind": "thumb", "thumb": "up"},
             # No auth header
         )
     assert resp.status_code == 401
@@ -174,7 +174,12 @@ async def test_feedback_edit_updates_signal() -> None:
 
         fb = await c.post(
             "/api/feedback",
-            json={"turn_id": turn_id, "kind": "edit", "edited_reply": "better answer"},
+            json={
+                "turn_id": turn_id,
+                "project": "default",
+                "kind": "edit",
+                "edited_reply": "better answer",
+            },
             headers=AUTH_HEADERS,
         )
         assert fb.status_code == 200
@@ -200,7 +205,7 @@ async def test_feedback_retry_updates_signal() -> None:
 
         await c.post(
             "/api/feedback",
-            json={"turn_id": turn_id, "kind": "retry"},
+            json={"turn_id": turn_id, "project": "default", "kind": "retry"},
             headers=AUTH_HEADERS,
         )
 
