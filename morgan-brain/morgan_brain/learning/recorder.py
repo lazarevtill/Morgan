@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Callable
 
 from morgan_brain.learning.signals import InteractionSignal, SignalStore, Thumb
+from morgan_brain.models.memory import DEFAULT_PROJECT
 
 
 class SignalRecorder:
@@ -40,11 +41,13 @@ class SignalRecorder:
         turn_id: str,
         query: str,
         reply: str,
+        project: str = DEFAULT_PROJECT,
         context_summary: str = "",
     ) -> str:
         """Log the base signal for a completed turn.  Returns the signal id."""
         sig = InteractionSignal(
             user_id=user_id,
+            project=project,
             session_id=session_id,
             turn_id=turn_id,
             query=query,
