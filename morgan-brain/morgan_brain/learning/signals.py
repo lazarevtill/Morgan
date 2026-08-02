@@ -98,8 +98,11 @@ class SignalStore:
 
     Parameters
     ----------
-    path:
-        SQLite path.  Defaults to ``:memory:`` for tests.
+    conn:
+        A shared :class:`sqlite3.Connection`, e.g. from
+        :func:`morgan_brain.modules.memory.stores.db.open_db`, so signals live in the
+        same database file as every other store (required for a single-transaction
+        ``forget()``). Defaults to a private ``:memory:`` connection for tests.
     clock:
         Injected callable that returns the current :class:`datetime`.
         Never calls ``datetime.now()`` directly — keeps the store deterministic.
@@ -107,12 +110,14 @@ class SignalStore:
 
     def __init__(
         self,
-        path: str = ":memory:",
+        conn: sqlite3.Connection | None = None,
         *,
         clock: Callable[[], datetime],
     ) -> None:
         self._clock = clock
-        self._conn = sqlite3.connect(path, check_same_thread=False)
+        self._conn = (
+            conn if conn is not None else sqlite3.connect(":memory:", check_same_thread=False)
+        )
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
         self._conn.commit()

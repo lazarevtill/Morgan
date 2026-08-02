@@ -46,9 +46,13 @@ def _dt(s: str | None) -> datetime | None:
 
 
 class SqliteTemporalStore:
-    def __init__(self, path: str = ":memory:") -> None:
+    def __init__(self, path: str = ":memory:", *, conn: sqlite3.Connection | None = None) -> None:
+        """Build the store over *conn* (a shared connection, e.g. from ``open_db``) when given,
+        so facts live in the same database file as every other store; otherwise opens its own
+        connection at *path* (``:memory:`` default) for isolated/test use.
+        """
         # check_same_thread=False so it can be used from the async server's threadpool.
-        self._conn = sqlite3.connect(path, check_same_thread=False)
+        self._conn = conn if conn is not None else sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
         self._conn.commit()

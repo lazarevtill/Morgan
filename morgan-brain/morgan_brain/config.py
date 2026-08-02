@@ -27,19 +27,24 @@ class Settings(BaseSettings):
     embedding_model: str = "qwen3-embedding:4b"
 
     # --- Stores ---
+    # data_dir is the single directory every durable store derives its path from: the shared
+    # SQLite database (temporal facts, vectors, FTS, entities, episodics, signals, history) lives
+    # at ``{data_dir}/morgan.db`` unless temporal_db_url is overridden explicitly.
+    data_dir: str = "./data"
     qdrant_url: str = "http://localhost:6333"
     redis_url: str = "redis://localhost:6379/0"
-    temporal_db_url: str = "sqlite:///./data/morgan.db"
+    # "" → derived from data_dir (sqlite:///{data_dir}/morgan.db); see _fill_data_dir_defaults.
+    temporal_db_url: str = ""
     workspace_path: str = "./data/workspace"
 
     # --- Event bus ---
     event_bus: Literal["inproc", "redis"] = "inproc"
 
     # --- Vector backend ---
-    # "memory" → InMemoryVectorIndex (default, no external deps, ephemeral).
+    # "sqlite" → SqliteVectorIndex (default; persistent, no external deps, shares morgan.db).
+    # "memory" → InMemoryVectorIndex (ephemeral; tests and scratch use only).
     # "qdrant" → QdrantVectorIndex (persistent, requires Qdrant at qdrant_url).
-    # Production: set MORGAN_VECTOR_BACKEND=qdrant for memory that survives restarts.
-    vector_backend: Literal["memory", "qdrant"] = "memory"
+    vector_backend: Literal["sqlite", "memory", "qdrant"] = "sqlite"
     # Embedding vector dimension — must match the configured embedding_model output.
     # qwen3-embedding:4b → 2560; nomic-embed-text → 768; mxbai-embed-large → 1024.
     embedding_dim: int = 1024
@@ -72,6 +77,13 @@ class Settings(BaseSettings):
     # Path to the golden evaluation set JSON file.
     # Empty string → use the packaged default (morgan_brain/eval/data/golden_set.json).
     eval_golden_path: str = ""
+
+    @model_validator(mode="after")
+    def _fill_data_dir_defaults(self) -> "Settings":
+        """Derive temporal_db_url from data_dir when not explicitly overridden."""
+        if not self.temporal_db_url:
+            self.temporal_db_url = f"sqlite:///{self.data_dir}/morgan.db"
+        return self
 
     @model_validator(mode="after")
     def _fill_provider_defaults(self) -> "Settings":
