@@ -11,11 +11,6 @@ Builds a :class:`CronService` + :class:`LearningScheduler` over the REAL
 :class:`ConsolidationLearner` from :func:`build_worker_context`, then registers
 nightly consolidation (and optional optimizer if ChampionTrainer is wired).
 
-Proactivity path (enable_proactivity=True)
-------------------------------------------
-On every ``HEARTBEAT`` event, loads the current :class:`UserModel` via
-``learner.user_model(user_id)`` and derives + publishes consent-gated suggestions.
-
 Bus wiring
 ----------
 With ``event_bus="redis"`` the worker subscribes to brain-api's Redis stream and
@@ -35,7 +30,7 @@ import structlog
 
 from morgan_brain.bus import get_event_bus
 from morgan_brain.config import Settings, get_settings
-from morgan_brain.interfaces.events import Event, EventBus, EventType, Handler
+from morgan_brain.interfaces.events import Event, EventType, Handler
 from morgan_brain.models.message import Conversation, Message, Role
 
 if TYPE_CHECKING:
@@ -44,7 +39,6 @@ if TYPE_CHECKING:
     from morgan_brain.learning.learner import ConsolidationLearner
     from morgan_brain.scheduling.cron import CronService
     from morgan_brain.scheduling.learning_jobs import LearningScheduler
-    from morgan_brain.proactivity.engine import ProactivityEngine
 
 log = structlog.get_logger("learning-worker")
 _logger = logging.getLogger(__name__)
@@ -149,67 +143,6 @@ def _build_learning_scheduler(
 
 
 # ---------------------------------------------------------------------------
-# Proactivity helpers
-# ---------------------------------------------------------------------------
-
-
-def _build_proactivity_engine(bus: EventBus) -> "ProactivityEngine | None":
-    try:
-        from morgan_brain.proactivity.consent import ConsentGate, ConsentRule
-        from morgan_brain.proactivity.engine import ProactivityEngine
-        from morgan_brain.models.user import RelationshipStage
-
-        gate = ConsentGate(
-            rules=[
-                ConsentRule(kind="reminder", min_stage=RelationshipStage.FAMILIAR),
-                ConsentRule(kind="suggestion", min_stage=RelationshipStage.FAMILIAR),
-                ConsentRule(kind="summary", min_stage=RelationshipStage.TRUSTED),
-            ]
-        )
-        engine = ProactivityEngine(gate=gate, bus=bus, clock=_utcnow)
-        log.info("proactivity-engine.built")
-        return engine
-    except Exception:
-        log.exception("proactivity-engine.build-failed")
-        return None
-
-
-def _register_proactivity_handler(
-    bus: EventBus,
-    engine: "ProactivityEngine",
-    learner: "ConsolidationLearner | None" = None,
-) -> None:
-    """Subscribe to HEARTBEAT; derive + consent-gate + publish suggestions.
-
-    When a real *learner* is provided, loads the persisted :class:`UserModel` via
-    ``learner.user_model(user_id)``.  Falls back to a default model otherwise.
-    """
-    _engine = engine
-    _learner = learner
-
-    async def _on_heartbeat(event: Event) -> None:
-        try:
-            if _learner is not None:
-                user_model = await _learner.user_model(event.user_id)
-            else:
-                from morgan_brain.models.user import UserModel
-
-                user_model = UserModel(user_id=event.user_id)
-            candidates = _engine.derive_from_patterns(user_model)
-            if candidates:
-                await _engine.maybe_suggest(
-                    user_id=event.user_id,
-                    user_model=user_model,
-                    candidates=candidates,
-                )
-        except Exception:
-            log.exception("proactivity.heartbeat-handler-failed", user_id=event.user_id)
-
-    bus.subscribe(EventType.HEARTBEAT, _on_heartbeat)
-    log.info("proactivity-handler.registered")
-
-
-# ---------------------------------------------------------------------------
 # Main run loop
 # ---------------------------------------------------------------------------
 
@@ -270,11 +203,6 @@ async def run(settings: Settings | None = None) -> None:
         log.info("learning-scheduler.started")
     elif _settings.enable_scheduling:
         log.warning("learning-scheduler.skipped (no learner context)")
-
-    if _settings.enable_proactivity:
-        engine = _build_proactivity_engine(bus)
-        if engine is not None:
-            _register_proactivity_handler(bus, engine, learner)
 
     try:
         while True:

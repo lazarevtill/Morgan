@@ -53,7 +53,6 @@ def _make_fake_settings(**kwargs: Any) -> Settings:
         llm_model="test",
         llm_fast_model="test",
         enable_scheduling=False,
-        enable_proactivity=False,
         **kwargs,
     )
 
