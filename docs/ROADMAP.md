@@ -11,7 +11,8 @@
 > Direction (2026-06-09): [Personal Agent OS vision](superpowers/specs/2026-06-09-personal-agent-os-vision.md)
 > + [Horizons roadmap](superpowers/specs/2026-06-09-horizons-roadmap.md) — see the
 > [Personal Agent OS chapter](#personal-agent-os--the-next-chapter-decided-2026-06-09) below.
-> Background: [`docs/ARCHITECTURE_V2.md`](ARCHITECTURE_V2.md). Old monolith archived in `legacy/v0.0.3-monolith`.
+> Background: [the local-first reshape design](superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md).
+> Old monolith archived in tag `legacy-v0.0.3-monolith` (branch `origin/legacy/v0.0.3-monolith`).
 
 ## North Star
 
@@ -23,7 +24,7 @@ learns from them continuously and safely.
 ## Principles (carried from the design spec)
 
 1. **Memory ≠ Learning ≠ Personalization** (MAPLE) — three subsystems, three timescales.
-2. **Knowledge evolves, never overwrites** — bi-temporal facts.
+2. **Knowledge evolves, never overwrites** — valid-time facts.
 3. **Skills are trainable state** (SkillOpt) — validation-gated, zero inference cost.
 4. **The seam is the contract** — modules reachable only via typed Protocols + events.
 5. **Proactive but consent-gated.**
@@ -51,7 +52,7 @@ data early for LoRA to win, LoRA causes catastrophic forgetting, and it bakes pe
 *irreversibly* into weights (destroys "forget me"). So:
 
 1. **Substrate 1 — Memory as the primary learning lever.** Every preference/fact/correction is an
-   editable, retrievable **bi-temporal row** (Qdrant + SQLite, already built). Instant update,
+   editable, retrievable **valid-time row** (Qdrant + SQLite, already built). Instant update,
    fully reversible, zero training compute, best privacy hygiene. Consolidated by an async nightly
    "sleep" worker (Mem0 ADD/UPDATE/DELETE/NOOP, contradiction → `invalid_at` not delete, bounded
    forgetting).
@@ -122,7 +123,7 @@ Full rationale + citations: [`docs/superpowers/specs/2026-06-08-platform-archite
 | — | 1 Memory + Reasoning | working text assistant w/ cross-turn recall (vector+BM25+entity, temporal facts) | ✅ done (44 tests, mypy-strict clean) |
 | 0 | Research + roadmap | self-learning + platform decisions + roadmap | ✅ done |
 | 0.5 | Provider Seam + Privacy Foundation | provider Protocols + role router + capability descriptors + structured-output ladder; encryption + classification + egress redaction; `schema_version` on events; learning-lifecycle seam + MLflow scaffold | ✅ done (204 tests, mypy-strict clean) |
-| 1 | 2 Learning + Personalization | signal capture + bi-temporal consolidation worker + adaptive personalization (profile injected every turn, learn-from-edits) + the 3-layer eval gate | ✅ done (350 tests, mypy-strict clean) |
+| 1 | 2 Learning + Personalization | signal capture + valid-time consolidation worker + adaptive personalization (profile injected every turn, learn-from-edits) + the 3-layer eval gate | ✅ done (350 tests, mypy-strict clean) |
 | 2 | 3 Skills + Tools + MCP | tools (permission-gated, SSRF/DoS-hardened) + skills (trigger-matched, champion-versioned) + hardened MCP host (sanitize/pin/allowlist/default-deny) + **GEPA champion-preprompt optimizer** on the eval gate | ✅ done (542 tests, mypy-strict clean) |
 | 3 | 4 Proactivity | CronService + HeartbeatManager (APScheduler optional) + **LearningScheduler** (automates nightly consolidation + optimizer) + consent-gated ProactivityEngine; wired into the learning-worker | ✅ done (615 tests, mypy-strict clean) |
 | 4 | 5 Perception/voice + remote | **remote gateway** (API-key auth on /api/*, SSE streaming `/api/chat/stream`, channel gateway + per-chat allowlist + Telegram seam). **Voice = NVIDIA PersonaPlex** (full-duplex), hybrid design + `VoiceConversation` seam + `persona_bridge` (learned persona → role prompt + voice) **built & tested**; GPU serving + transcript write-back deferred (`[voice]` extra). See [decision](superpowers/specs/2026-06-09-personaplex-voice-decision.md). | ✅ done (688 tests) — voice GPU service deferred |

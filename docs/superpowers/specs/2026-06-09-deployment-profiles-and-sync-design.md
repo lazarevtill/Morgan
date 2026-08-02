@@ -1,5 +1,9 @@
 # Deployment Profiles & Device Sync (2026-06-09)
 
+> **Superseded** by [the local-first reshape](2026-08-02-morgan-reshape-local-first-design.md)
+> (2026-08-02). Device sync, the memory replica, the phone client, deployment profiles, and the
+> `/v1` facade are out of scope.
+
 **Status:** DRAFT — under owner review
 **Parent:** [Personal Agent OS vision](2026-06-09-personal-agent-os-vision.md)
 **Scope:** the four first-class deployment targets and the A+B-blended sync model (read-only

@@ -1,7 +1,7 @@
 """Perception contract — turns raw input into a modality-agnostic ``FusedPerception``.
 
-The text implementation runs inline in brain-api. The future audio/vision implementation lives
-in the ``perception-gpu`` service and satisfies this exact Protocol, so nothing downstream changes.
+The text implementation runs inline in brain-api. A future audio/vision implementation would
+satisfy this exact Protocol, so nothing downstream changes.
 """
 
 from __future__ import annotations

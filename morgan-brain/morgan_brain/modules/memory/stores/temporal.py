@@ -1,4 +1,4 @@
-"""Bi-temporal fact store (SQLite). A fact is currently valid when valid_to IS NULL. Asserting a
+"""Valid-time fact store (SQLite). A fact is currently valid when valid_to IS NULL. Asserting a
 new value for the same (user, subject, predicate) closes the old interval (sets valid_to = now,
 superseded_by = new id) instead of deleting it — so history stays queryable and recall is never
 confidently stale."""

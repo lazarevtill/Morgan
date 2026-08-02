@@ -1,5 +1,5 @@
-"""Redis Streams event bus — cross-service backend (brain-api ↔ learning-worker ↔
-perception-gpu). Same EventBus Protocol as the in-process bus.
+"""Redis Streams event bus — cross-service backend (brain-api ↔ learning-worker).
+Same EventBus Protocol as the in-process bus.
 
 Publish: ``xadd`` the whole :class:`~morgan_brain.interfaces.events.Event` as a
 single ``data`` JSON field.

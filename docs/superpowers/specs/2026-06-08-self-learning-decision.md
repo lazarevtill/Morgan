@@ -91,8 +91,9 @@ budget) · premature LoRA (the 4-condition test) · local-LLM date hallucination
   the eval harness existing.
 - **Add a dedicated eval module** (`tests/eval/` / `morgan-eval`) — currently absent.
 - **Reframe** "skills are the trainable state": memory/RAG primary, optimized skill-doc secondary,
-  QLoRA conditional. (`ARCHITECTURE_V2.md` is background and superseded by this record + the design
-  spec; its `pip install skillopt` row is void.)
+  QLoRA conditional. (`ARCHITECTURE_V2.md` is deleted; superseded by this record, the design spec,
+  and [the local-first reshape design](2026-08-02-morgan-reshape-local-first-design.md); its
+  `pip install skillopt` row is void.)
 - **Add** anti-sycophancy / over-personalization guardrails as first-class in Personalization &
   Proactivity, and the typed edit-capture signal layer.
 

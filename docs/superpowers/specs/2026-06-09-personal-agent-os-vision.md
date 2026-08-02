@@ -1,5 +1,9 @@
 # Morgan as a Personal Agent OS — Vision & Reframing (2026-06-09)
 
+> **Superseded** by [the local-first reshape](2026-08-02-morgan-reshape-local-first-design.md)
+> (2026-08-02). Device sync, the memory replica, the phone client, deployment profiles, and the
+> `/v1` facade are out of scope.
+
 **Status:** DRAFT — under owner review
 **Decides:** what Morgan *is* for the next 6–12 months, and the architecture frame every
 subsequent design plugs into.
