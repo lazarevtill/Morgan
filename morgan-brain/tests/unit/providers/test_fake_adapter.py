@@ -1,5 +1,4 @@
 from morgan_brain.interfaces.llm import ChatClient
-from morgan_brain.interfaces.embedding import Embedder
 from morgan_brain.providers.adapters.fake import FakeChatClient, FakeEmbedder
 
 
@@ -84,10 +83,6 @@ async def test_fake_chat_with_tool_calls():
 
 def test_fake_chat_satisfies_chat_client_protocol():
     assert isinstance(FakeChatClient(), ChatClient)
-
-
-def test_fake_embedder_satisfies_embedder_protocol():
-    assert isinstance(FakeEmbedder(), Embedder)
 
 
 # ---------------------------------------------------------------------------

@@ -1,8 +1,8 @@
-"""Factory functions — build a ``RoleRouter`` or ``Embedder`` from ``Settings``.
+"""Factory functions — build a ``RoleRouter`` from ``Settings``.
 
 This is the only place that translates Settings values into concrete adapters.
-Everything above this layer depends on the seam types (``ChatClient``, ``Embedder``,
-``RoleRouter``) rather than concrete adapters or SDKs.
+Everything above this layer depends on the seam types (``ChatClient``, ``RoleRouter``)
+rather than concrete adapters or SDKs.
 """
 
 from __future__ import annotations
@@ -11,12 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from morgan_brain.config import Settings
-from morgan_brain.interfaces.embedding import Embedder
 from morgan_brain.providers.adapters.ollama import OllamaAdapter
-from morgan_brain.providers.adapters.openai_compat import (
-    OpenAICompatAdapter,
-    OpenAICompatEmbedder,
-)
+from morgan_brain.providers.adapters.openai_compat import OpenAICompatAdapter
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import Binding, RoleRouter
 
@@ -72,20 +68,6 @@ def build_router(settings: Settings) -> RoleRouter:
             bindings[role] = role_bindings
 
     return RoleRouter(reg=reg, bindings=bindings)
-
-
-def build_embedder(settings: Settings) -> Embedder:
-    """Build an ``Embedder`` from ``Settings``.
-
-    Uses the Ollama embedding endpoint by default.  If the ``ollama`` provider
-    config overrides the base_url, that URL is used.
-    """
-    ollama_cfg = settings.providers.get("ollama", {})
-    base_url: str = ollama_cfg.get("base_url", settings.llm_endpoint)
-    api_key: str = ollama_cfg.get("api_key", "ollama")
-    model: str = settings.embedding_model
-
-    return OpenAICompatEmbedder(base_url=base_url, api_key=api_key, model=model)
 
 
 def _apply_yaml_overrides(reg: CapabilityRegistry, yaml_path: str) -> None:

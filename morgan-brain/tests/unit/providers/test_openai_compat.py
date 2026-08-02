@@ -6,10 +6,8 @@ Construction and message/tool translation only — NO network calls.
 from __future__ import annotations
 
 from morgan_brain.interfaces.llm import ChatClient
-from morgan_brain.interfaces.embedding import Embedder
 from morgan_brain.providers.adapters.openai_compat import (
     OpenAICompatAdapter,
-    OpenAICompatEmbedder,
     _to_openai_messages,
     _to_openai_tools,
     _from_openai_tool_calls,
@@ -38,20 +36,6 @@ def test_openai_compat_adapter_is_chat_client():
     assert isinstance(adapter, ChatClient)
 
 
-def test_openai_compat_adapter_is_embedder():
-    adapter = OpenAICompatAdapter(base_url="http://x/v1", api_key="k", provider="p")
-    assert isinstance(adapter, Embedder)
-
-
-def test_openai_compat_embedder_constructs():
-    emb = OpenAICompatEmbedder(
-        base_url="http://x/v1",
-        api_key="k",
-        model="text-embedding-3-small",
-    )
-    assert isinstance(emb, Embedder)
-
-
 # ---------------------------------------------------------------------------
 # OllamaAdapter
 # ---------------------------------------------------------------------------
@@ -71,11 +55,6 @@ def test_ollama_adapter_custom_base_url():
 def test_ollama_adapter_is_chat_client():
     adapter = OllamaAdapter()
     assert isinstance(adapter, ChatClient)
-
-
-def test_ollama_adapter_is_embedder():
-    adapter = OllamaAdapter()
-    assert isinstance(adapter, Embedder)
 
 
 # ---------------------------------------------------------------------------
