@@ -23,7 +23,11 @@ from morgan_brain.learning.profile import (
 from morgan_brain.models.memory import MemorySource, TemporalFact
 from morgan_brain.models.user import CommunicationPrefs, RelationshipStage, UserModel
 from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
+from morgan_brain.modules.memory.retrieval.entities import EntityIndex
+from morgan_brain.modules.memory.retrieval.fts import FtsIndex
 from morgan_brain.modules.memory.store import MemoryModule
+from morgan_brain.modules.memory.stores.db import open_db
+from morgan_brain.modules.memory.stores.episodic import EpisodicStore
 from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
 from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex
 from morgan_brain.providers.adapters.fake import FakeChatClient
@@ -37,11 +41,15 @@ USER = "u1"
 
 def _make_gate(facts: list[TemporalFact] | None = None) -> tuple[MemoryGate, SqliteTemporalStore]:
     temporal = SqliteTemporalStore(":memory:")
+    conn = open_db(":memory:")
     mm = MemoryModule(
         embedder=FakeEmbedder(dim=16),
         vectors=InMemoryVectorIndex(),
         temporal=temporal,
         clock=lambda: T0,
+        fts=FtsIndex(conn),
+        entities=EntityIndex(conn),
+        episodics=EpisodicStore(conn),
     )
     gate = MemoryGate(mm)
     return gate, temporal
