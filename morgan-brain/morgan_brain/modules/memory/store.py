@@ -125,5 +125,20 @@ class MemoryModule:
         user_id: str,
         subject: str | None = None,
         project: str | None = DEFAULT_PROJECT,
+        all_projects: bool = False,
     ) -> list[TemporalFact]:
-        return await self._temporal.current_facts(user_id=user_id, subject=subject, project=project)
+        resolved_project = None if all_projects else project
+        return await self._temporal.current_facts(
+            user_id=user_id, subject=subject, project=resolved_project
+        )
+
+    async def close_fact(
+        self, fact_id: str, *, user_id: str, project: str, now: datetime | None = None
+    ) -> None:
+        resolved_now = now if now is not None else self._clock()
+        await self._temporal.close_fact(fact_id, user_id=user_id, project=project, now=resolved_now)
+
+    async def set_confidence(
+        self, fact_id: str, *, user_id: str, project: str, value: float
+    ) -> None:
+        await self._temporal.set_confidence(fact_id, user_id=user_id, project=project, value=value)

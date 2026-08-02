@@ -82,7 +82,6 @@ def _build_stack(
     )
     consolidator = MemoryConsolidator(
         gate=gate,
-        temporal=temporal,
         router=router,
         capability_registry=reg,
         clock=clock,  # type: ignore[arg-type]

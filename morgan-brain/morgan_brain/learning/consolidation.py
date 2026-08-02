@@ -21,8 +21,14 @@ from typing import Callable
 
 from pydantic import BaseModel, Field
 
-from morgan_brain.models.memory import Memory, MemoryKind, MemoryQuery, MemorySource, TemporalFact
-from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
+from morgan_brain.models.memory import (
+    DEFAULT_PROJECT,
+    Memory,
+    MemoryKind,
+    MemoryQuery,
+    MemorySource,
+    TemporalFact,
+)
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import RoleRouter
 from morgan_brain.providers.structured import generate_structured
@@ -70,10 +76,8 @@ class MemoryConsolidator:
     Parameters
     ----------
     gate:
-        The MemoryGate (all reads/writes pass through here).
-    temporal:
-        Direct reference to the SqliteTemporalStore for low-level operations
-        (``close_fact``, ``set_confidence``) not exposed on the gate.
+        The MemoryGate (all reads and writes, including ``close_fact`` and
+        ``set_confidence``, pass through here — the consolidator holds no raw store).
     router:
         RoleRouter for LLM dispatch.
     capability_registry:
@@ -90,14 +94,12 @@ class MemoryConsolidator:
         self,
         *,
         gate: MemoryGate,
-        temporal: SqliteTemporalStore,
         router: RoleRouter,
         capability_registry: CapabilityRegistry,
         clock: Callable[[], datetime],
         role: str = "strong",
     ) -> None:
         self._gate = gate
-        self._temporal = temporal
         self._router = router
         self._reg = capability_registry
         self._clock = clock
@@ -182,7 +184,7 @@ class MemoryConsolidator:
         deduped ADDs).
         """
         now = self._clock()
-        current = await self._temporal.current_facts(user_id=user_id)
+        current = await self._gate.current_facts(user_id=user_id, project=DEFAULT_PROJECT)
         current_set = {(f.subject, f.predicate, f.object) for f in current}
 
         applied: list[FactOp] = []
@@ -238,7 +240,9 @@ class MemoryConsolidator:
                     and f.source is not MemorySource.USER_STATED
                 ]
                 for fact in matching:
-                    await self._temporal.close_fact(fact.id, now=now)
+                    await self._gate.close_fact(
+                        fact.id, user_id=user_id, project=DEFAULT_PROJECT, now=now
+                    )
                 if matching:
                     applied.append(op)
 
@@ -259,7 +263,7 @@ class MemoryConsolidator:
         # Filter to episodic kind only (fact_memories are also returned by recall).
         episodics = [m for m in episodics if m.kind is MemoryKind.EPISODIC]
 
-        existing_facts = await self._temporal.current_facts(user_id=user_id)
+        existing_facts = await self._gate.current_facts(user_id=user_id, project=DEFAULT_PROJECT)
 
         # Surprise-gate: consolidate what the current model did NOT already predict.
         # Neuro-grounded (the hippocampus preferentially encodes prediction errors): episodics
@@ -291,7 +295,7 @@ class MemoryConsolidator:
 
         Facts whose decayed confidence falls below *stale_threshold* are returned
         as the "stale" list for re-confirmation.  All updates are persisted via
-        ``SqliteTemporalStore.set_confidence``.
+        ``MemoryGate.set_confidence``.
 
         Parameters
         ----------
@@ -311,7 +315,7 @@ class MemoryConsolidator:
             (the fact objects reflect the *pre-decay* state; callers should
             re-query for the updated confidence).
         """
-        facts = await self._temporal.current_facts(user_id=user_id)
+        facts = await self._gate.current_facts(user_id=user_id, project=DEFAULT_PROJECT)
         stale: list[TemporalFact] = []
 
         for fact in facts:
@@ -338,7 +342,9 @@ class MemoryConsolidator:
             if fact.source is MemorySource.USER_STATED:
                 decayed = max(decayed, protected_floor)
 
-            await self._temporal.set_confidence(fact.id, decayed)
+            await self._gate.set_confidence(
+                fact.id, user_id=user_id, project=DEFAULT_PROJECT, value=decayed
+            )
 
             if decayed < stale_threshold:
                 stale.append(fact)

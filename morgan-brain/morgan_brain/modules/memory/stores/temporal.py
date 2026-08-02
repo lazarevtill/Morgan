@@ -145,26 +145,31 @@ class SqliteTemporalStore:
         ).fetchall()
         return [self._row_to_fact(r) for r in rows]
 
-    async def close_fact(self, fact_id: str, *, now: datetime) -> None:
+    async def close_fact(self, fact_id: str, *, user_id: str, project: str, now: datetime) -> None:
         """Close a fact's validity interval by setting ``valid_to = now``.
 
         This is the "soft delete" operation — the fact is retained in history
         with its interval closed, but will no longer appear in ``current_facts``.
-        If no fact with *fact_id* exists, this is a no-op.
+        Scoped to *user_id* + *project*: a fact belonging to another user or another
+        project is left untouched even if its id is known, so this is a no-op (not an
+        error) both when *fact_id* doesn't exist and when it exists but is out of scope.
         """
         self._conn.execute(
-            "UPDATE facts SET valid_to=? WHERE id=? AND valid_to IS NULL",
-            (_iso(now), fact_id),
+            "UPDATE facts SET valid_to=? WHERE id=? AND user_id=? AND project=? "
+            "AND valid_to IS NULL",
+            (_iso(now), fact_id, user_id, project),
         )
         self._conn.commit()
 
-    async def set_confidence(self, fact_id: str, confidence: float) -> None:
-        """Overwrite the ``confidence`` for *fact_id* in-place.
+    async def set_confidence(
+        self, fact_id: str, *, user_id: str, project: str, value: float
+    ) -> None:
+        """Overwrite the ``confidence`` for *fact_id* in-place, scoped to *user_id* + *project*.
 
         Used by the decay worker to persist decayed confidence scores.
         """
         self._conn.execute(
-            "UPDATE facts SET confidence=? WHERE id=?",
-            (confidence, fact_id),
+            "UPDATE facts SET confidence=? WHERE id=? AND user_id=? AND project=?",
+            (value, fact_id, user_id, project),
         )
         self._conn.commit()

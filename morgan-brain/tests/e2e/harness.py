@@ -487,7 +487,7 @@ async def scenario_temporal_update(live: bool) -> ScenarioResult:
     await h.consolidate(user)
     _c, l3 = await h.say(user_id=user, text="Where do I live now?", session_id=session)
 
-    facts = await h.learner._consolidator._temporal.current_facts(  # noqa: SLF001
+    facts = await h.learner._consolidator._gate.current_facts(  # noqa: SLF001
         user_id=user, subject="user"
     )
     lives_in = {f.object for f in facts if f.predicate == "lives_in"}
