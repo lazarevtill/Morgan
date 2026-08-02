@@ -1,0 +1,489 @@
+"""``morgan`` -- the terminal client over the local memory + reasoning stack.
+
+remember/recall/facts/forget/doctor are direct memory operations: they go through
+``composition.build_memory_context`` (a MemoryGate over the real database, no LLM router
+required) so they work with no model server running (``MORGAN_EMBEDDING_BACKEND=hash``).
+``ask`` is a full chat turn: it goes through ``composition.build_app_context``, the same
+production wiring brain-api uses, so it does need a reachable LLM endpoint.
+
+Every command accepts ``--project`` (default: the current git repository's directory name,
+via ``cli.project.detect_project``), ``--all-projects`` (the explicit cross-project escape
+hatch, where it makes sense), and ``--json`` (machine-readable output for scripting).
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import sqlite3
+import sys
+from pathlib import Path
+from typing import Any
+
+from morgan_brain.cli.project import detect_project
+from morgan_brain.composition import (
+    CHAMPION_PROMPT_NAME,
+    _build_vector_index,
+    _sqlite_path,
+    build_app_context,
+    build_memory_context,
+)
+from morgan_brain.config import Settings, get_settings
+from morgan_brain.interfaces.memory import ForgetReport
+from morgan_brain.learning.history import session_key
+from morgan_brain.models.memory import Memory, MemoryQuery, MemorySource, TemporalFact
+from morgan_brain.modules.memory.retrieval.entities import EntityIndex
+from morgan_brain.modules.memory.retrieval.fts import FtsIndex
+from morgan_brain.modules.memory.stores.db import open_db
+from morgan_brain.modules.memory.stores.episodic import EpisodicStore
+from morgan_brain.providers.factory import check_llm_reachable
+
+# ---------------------------------------------------------------------------
+# Serialization helpers
+# ---------------------------------------------------------------------------
+
+
+def _memory_to_dict(m: Memory) -> dict[str, Any]:
+    return {
+        "id": m.id,
+        "project": m.project,
+        "kind": m.kind.value,
+        "content": m.content,
+        "source": m.source.value,
+        "importance": m.importance,
+        "created_at": m.created_at.isoformat() if m.created_at else None,
+    }
+
+
+def _fact_to_dict(f: TemporalFact) -> dict[str, Any]:
+    return {
+        "id": f.id,
+        "project": f.project,
+        "subject": f.subject,
+        "predicate": f.predicate,
+        "object": f.object,
+        "confidence": f.confidence,
+        "source": f.source.value,
+        "valid_from": f.valid_from.isoformat() if f.valid_from else None,
+        "last_confirmed": f.last_confirmed.isoformat() if f.last_confirmed else None,
+    }
+
+
+def _merge_forget_reports(reports: list[ForgetReport]) -> ForgetReport:
+    """Sum ``--all-projects`` forget() reports into one honest total.
+
+    ``tables_skipped`` is deduplicated (the same optional table is either present or absent
+    for the whole database, not per project) rather than repeated once per project.
+    """
+    merged = ForgetReport()
+    skipped: set[str] = set()
+    for r in reports:
+        merged.memories += r.memories
+        merged.facts += r.facts
+        merged.signals += r.signals
+        merged.history += r.history
+        merged.champions_flagged.extend(r.champions_flagged)
+        skipped.update(r.tables_skipped)
+    merged.tables_skipped = sorted(skipped)
+    return merged
+
+
+def _forget_result(
+    report: ForgetReport, settings: Settings, *, project: str, all_projects: bool
+) -> dict[str, Any]:
+    """Turn a ``ForgetReport`` into the CLI's output shape -- the one place that must not
+    lie: a skipped table prints as "not present", never as a silent 0, and a non-sqlite
+    vector backend prints its known gap (vectors are NOT erased under qdrant -- Task 14
+    review) instead of implying a clean sweep."""
+    vectors_erased = settings.vector_backend != "qdrant"
+    warnings: list[str] = []
+    if report.tables_skipped:
+        warnings.append(
+            "not present in this database, so nothing was erased from (not an error): "
+            + ", ".join(report.tables_skipped)
+        )
+    if not vectors_erased:
+        warnings.append(
+            f"vector_backend={settings.vector_backend!r}: vectors are NOT erased by forget() "
+            "here -- they must be removed from Qdrant separately (known gap)."
+        )
+    return {
+        "project": project,
+        "all_projects": all_projects,
+        "memories": report.memories,
+        "facts": report.facts,
+        "signals": report.signals,
+        "history": report.history,
+        "tables_skipped": list(report.tables_skipped),
+        "champions_flagged": list(report.champions_flagged),
+        "vector_backend": settings.vector_backend,
+        "vectors_erased": vectors_erased,
+        "warnings": warnings,
+    }
+
+
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    return (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
+        ).fetchone()
+        is not None
+    )
+
+
+# ---------------------------------------------------------------------------
+# doctor
+# ---------------------------------------------------------------------------
+
+
+async def build_doctor_report(
+    settings: Settings, *, project: str, all_projects: bool
+) -> dict[str, Any]:
+    """Build the ``doctor`` report. Every probe is independently caught so one broken
+    subsystem (e.g. FTS5 genuinely unavailable) reports its own failure instead of aborting
+    every other check -- "genuinely diagnostic, not decorative" is the whole point.
+    """
+    db_path = _sqlite_path(settings.temporal_db_url)
+    report: dict[str, Any] = {
+        "database": db_path if db_path == ":memory:" else str(Path(db_path).resolve()),
+        "project": project,
+        "all_projects": all_projects,
+        "embedding_backend": settings.embedding_backend,
+        "embedding_dim": settings.embedding_dim,
+        "vector_backend": settings.vector_backend,
+        "llm_endpoint": settings.llm_endpoint,
+        "sqlite_vec": None,
+        "fts5": False,
+        "provider": "unreachable",
+        "vector_rows": None,
+        "memory_rows": None,
+        "fts_rows": None,
+    }
+
+    if db_path != ":memory:":
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        conn = open_db(db_path)
+    except Exception as exc:  # noqa: BLE001 -- report, don't crash the diagnostic tool
+        report["error"] = f"failed to open database: {exc}"
+        return report
+
+    try:
+        row = conn.execute("SELECT vec_version()").fetchone()
+        report["sqlite_vec"] = row[0] if row else None
+    except Exception as exc:  # noqa: BLE001
+        report["sqlite_vec_error"] = str(exc)
+
+    try:
+        conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS __morgan_fts5_probe USING fts5(x)")
+        conn.execute("DROP TABLE IF EXISTS __morgan_fts5_probe")
+        report["fts5"] = True
+    except sqlite3.OperationalError:
+        report["fts5"] = False
+
+    report["provider"] = "reachable" if await check_llm_reachable(settings) else "unreachable"
+
+    # Build the real schema (idempotent CREATE ... IF NOT EXISTS) so row counts are always
+    # meaningful -- 0 on a fresh install rather than "table doesn't exist yet".
+    try:
+        FtsIndex(conn)
+        EntityIndex(conn)
+        EpisodicStore(conn)
+        if settings.vector_backend == "sqlite":
+            _build_vector_index(settings, conn)
+    except Exception as exc:  # noqa: BLE001
+        report["schema_error"] = str(exc)
+
+    where = "user_id = ?"
+    params: list[object] = [settings.owner_user_id]
+    if not all_projects:
+        where += " AND project = ?"
+        params.append(project)
+
+    def _count(table: str) -> int | None:
+        if not _table_exists(conn, table):
+            return None
+        row = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}", params).fetchone()
+        return int(row[0])
+
+    report["memory_rows"] = _count("memories")
+    report["fts_rows"] = _count("fts_memories")
+    # vec_meta only exists for the sqlite vector backend -- under qdrant/memory, vectors
+    # aren't tracked in this database at all, so counting here would be misleading.
+    report["vector_rows"] = _count("vec_meta") if settings.vector_backend == "sqlite" else None
+
+    conn.close()
+    return report
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+
+async def cmd_remember(
+    args: argparse.Namespace, settings: Settings, project: str
+) -> dict[str, Any]:
+    ctx = build_memory_context(settings)
+    try:
+        memory = Memory(
+            user_id=settings.owner_user_id,
+            project=project,
+            content=args.text,
+            source=MemorySource.USER_STATED,
+        )
+        memory_id = await ctx.gate.store(memory)
+    finally:
+        ctx.conn.close()
+    return {"stored": True, "id": memory_id, "project": project, "content": args.text}
+
+
+async def cmd_recall(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
+    ctx = build_memory_context(settings)
+    try:
+        results = await ctx.gate.recall(
+            MemoryQuery(
+                user_id=settings.owner_user_id,
+                project=project,
+                all_projects=args.all_projects,
+                text=args.query,
+                top_k=args.top_k,
+            )
+        )
+    finally:
+        ctx.conn.close()
+    return {
+        "project": project,
+        "all_projects": args.all_projects,
+        "results": [_memory_to_dict(m) for m in results],
+    }
+
+
+async def cmd_facts(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
+    ctx = build_memory_context(settings)
+    try:
+        facts = await ctx.gate.current_facts(
+            user_id=settings.owner_user_id,
+            subject=args.subject,
+            project=project,
+            all_projects=args.all_projects,
+        )
+    finally:
+        ctx.conn.close()
+    return {
+        "project": project,
+        "all_projects": args.all_projects,
+        "facts": [_fact_to_dict(f) for f in facts],
+    }
+
+
+async def cmd_forget(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
+    ctx = build_memory_context(settings)
+    try:
+        if args.all_projects:
+            projects = await ctx.gate.distinct_projects(settings.owner_user_id)
+            if not projects:
+                projects = [project]
+            reports = [
+                await ctx.gate.forget(user_id=settings.owner_user_id, project=p) for p in projects
+            ]
+            report = _merge_forget_reports(reports)
+        else:
+            projects = [project]
+            report = await ctx.gate.forget(user_id=settings.owner_user_id, project=project)
+    finally:
+        ctx.conn.close()
+    result = _forget_result(report, settings, project=project, all_projects=args.all_projects)
+    result["projects"] = projects
+    return result
+
+
+async def cmd_ask(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
+    ctx = build_app_context(settings)
+    await ctx.bus.start()
+    try:
+        user_id = settings.owner_user_id
+        hkey = session_key(user_id, None)
+        history = ctx.history_store.recent(hkey) if ctx.history_store else []
+        champion = await ctx.prompt_registry.champion(CHAMPION_PROMPT_NAME)
+        system_override = champion.body if champion is not None else ""
+        result, turn_id = await ctx.orchestrator.handle_turn_with_id(
+            user_id=user_id,
+            project=project,
+            text=args.text,
+            session_id=None,
+            history=history,
+            system_override=system_override,
+        )
+    finally:
+        await ctx.bus.stop()
+    return {
+        "project": project,
+        "response": result.text,
+        "model_used": result.model_used,
+        "turn_id": turn_id,
+    }
+
+
+async def cmd_doctor(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
+    return await build_doctor_report(settings, project=project, all_projects=args.all_projects)
+
+
+# ---------------------------------------------------------------------------
+# Human-readable rendering
+# ---------------------------------------------------------------------------
+
+
+def _render_remember(data: dict[str, Any]) -> str:
+    return f"Stored memory {data['id']} in project {data['project']!r}."
+
+
+def _render_recall(data: dict[str, Any]) -> str:
+    if not data["results"]:
+        return (
+            f"No memories found (project={data['project']!r}, all_projects={data['all_projects']})."
+        )
+    lines = [
+        f"{i + 1}. [{r['kind']}/{r['project']}] {r['content']}"
+        for i, r in enumerate(data["results"])
+    ]
+    return "\n".join(lines)
+
+
+def _render_facts(data: dict[str, Any]) -> str:
+    if not data["facts"]:
+        return f"No currently-valid facts (project={data['project']!r}, all_projects={data['all_projects']})."
+    lines = [
+        f"{f['subject']} {f['predicate']} {f['object']} (confidence={f['confidence']:.2f}, "
+        f"project={f['project']})"
+        for f in data["facts"]
+    ]
+    return "\n".join(lines)
+
+
+def _render_forget(data: dict[str, Any]) -> str:
+    scope = "all projects" if data["all_projects"] else f"project {data['project']!r}"
+    summary = (
+        f"Forgot {scope}: memories={data['memories']} facts={data['facts']} "
+        f"signals={data['signals']} history={data['history']}"
+    )
+    lines = [summary]
+    for w in data["warnings"]:
+        lines.append(f"WARNING: {w}")
+    return "\n".join(lines)
+
+
+def _render_ask(data: dict[str, Any]) -> str:
+    return str(data["response"])
+
+
+def _render_doctor(data: dict[str, Any]) -> str:
+    return "\n".join(f"{k}: {v}" for k, v in data.items())
+
+
+_RENDERERS = {
+    "remember": (cmd_remember, _render_remember),
+    "recall": (cmd_recall, _render_recall),
+    "facts": (cmd_facts, _render_facts),
+    "forget": (cmd_forget, _render_forget),
+    "ask": (cmd_ask, _render_ask),
+    "doctor": (cmd_doctor, _render_doctor),
+}
+
+# Commands where --all-projects is meaningless: a write or a single chat turn always
+# targets exactly one project.
+_SINGLE_PROJECT_ONLY = {"remember", "ask"}
+
+
+# ---------------------------------------------------------------------------
+# argparse
+# ---------------------------------------------------------------------------
+
+
+def _add_common(sp: argparse.ArgumentParser) -> None:
+    sp.add_argument(
+        "--project",
+        default=None,
+        help="Project to scope this command to (default: the current git repository's "
+        "directory name; DEFAULT_PROJECT outside a repo).",
+    )
+    sp.add_argument(
+        "--all-projects",
+        action="store_true",
+        help="Cross every project the owner has stored data under, instead of just --project.",
+    )
+    sp.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON instead of human text."
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="morgan", description="Talk to your local Morgan brain.")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_remember = sub.add_parser("remember", help="Store a memory.")
+    p_remember.add_argument("text", help="What to remember.")
+    _add_common(p_remember)
+
+    p_recall = sub.add_parser("recall", help="Search memory (vector + keyword + entity).")
+    p_recall.add_argument("query", help="Search text.")
+    p_recall.add_argument("--top-k", type=int, default=8, help="Maximum results to return.")
+    _add_common(p_recall)
+
+    p_facts = sub.add_parser("facts", help="List currently-valid facts.")
+    p_facts.add_argument("--subject", default=None, help="Filter to facts about this subject.")
+    _add_common(p_facts)
+
+    p_forget = sub.add_parser("forget", help="Erase everything stored under a project.")
+    _add_common(p_forget)
+
+    p_ask = sub.add_parser(
+        "ask", help="Ask the assistant (a full chat turn; needs a reachable LLM)."
+    )
+    p_ask.add_argument("text", help="Your message.")
+    _add_common(p_ask)
+
+    p_doctor = sub.add_parser("doctor", help="Diagnose the local Morgan installation.")
+    _add_common(p_doctor)
+
+    return parser
+
+
+async def _dispatch(args: argparse.Namespace, settings: Settings, project: str) -> int:
+    if args.command in _SINGLE_PROJECT_ONLY and args.all_projects:
+        print(
+            f"morgan {args.command}: --all-projects is not valid here "
+            "(a write / chat turn always targets exactly one project).",
+            file=sys.stderr,
+        )
+        return 2
+
+    handler, renderer = _RENDERERS[args.command]
+    try:
+        data = await handler(args, settings, project)
+    except Exception as exc:  # noqa: BLE001 -- a CLI user gets a clean message, not a traceback
+        if args.json:
+            print(json.dumps({"error": str(exc)}))
+        else:
+            print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps(data, indent=2, sort_keys=False, default=str))
+    else:
+        print(renderer(data))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    settings = get_settings()
+    project = args.project or detect_project(Path.cwd())
+    return asyncio.run(_dispatch(args, settings, project))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

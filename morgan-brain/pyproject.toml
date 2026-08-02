@@ -38,6 +38,9 @@ learning = ["mlflow>=3.4"]
 # Slim tracing-only package for the hot-path service layer (much smaller than full mlflow).
 tracing = ["mlflow-tracing"]
 
+[project.scripts]
+morgan = "morgan_brain.cli.__main__:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["morgan_brain"]
 artifacts = [
