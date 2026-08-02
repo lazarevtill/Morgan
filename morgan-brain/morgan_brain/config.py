@@ -21,10 +21,13 @@ class Settings(BaseSettings):
     api_key: str = "change-me"
 
     # --- LLM ---
-    llm_endpoint: str = "http://localhost:11434/v1"
+    # Default provider is llama-server's OpenAI-compatible port (llama.cpp), not Ollama.
+    # "ollama" remains a fully supported provider key — set MORGAN_PROVIDERS /
+    # MORGAN_ROLE_BINDINGS explicitly to switch back.
+    llm_endpoint: str = "http://localhost:8081/v1"
     llm_model: str = "qwen2.5:7b"
     llm_fast_model: str = "qwen2.5:7b"
-    embedding_model: str = "qwen3-embedding:4b"
+    embedding_model: str = "mxbai-embed-large"
 
     # --- Stores ---
     # data_dir is the single directory every durable store derives its path from: the shared
@@ -46,11 +49,20 @@ class Settings(BaseSettings):
     # "qdrant" → QdrantVectorIndex (persistent, requires Qdrant at qdrant_url).
     vector_backend: Literal["sqlite", "memory", "qdrant"] = "sqlite"
     # Embedding vector dimension — must match the configured embedding_model output.
-    # qwen3-embedding:4b → 2560; nomic-embed-text → 768; mxbai-embed-large → 1024.
+    # mxbai-embed-large → 1024; qwen3-embedding:4b → 2560; nomic-embed-text → 768.
+    # composition.py probes this against a live embed() call at startup.
     embedding_dim: int = 1024
+    # "provider" → call the configured embedding provider. "hash" → deterministic sha256 stub
+    # (FakeEmbedder), for the CLI and acceptance tests to run without a live model.
+    embedding_backend: Literal["provider", "hash"] = "provider"
 
     # --- Feature flags ---
     enable_scheduling: bool = False
+    # Champion-preprompt self-modification gate. OFF by default: the current promotion logic
+    # auto-promotes the first candidate unconditionally and thereafter uses a bare `>` on a
+    # single run over a small golden set — too noisy to trust unattended. Flip only once that
+    # gate has real statistical backing.
+    enable_champion_promotion: bool = False
 
     # --- Personalization budget (fraction of context window for injected traits) ---
     personalization_budget: float = Field(default=0.15, ge=0.0, le=1.0)
@@ -88,19 +100,23 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _fill_provider_defaults(self) -> "Settings":
         """Populate role_bindings and providers from legacy llm_* fields if not set."""
-        # providers: ensure ollama entry exists
-        if "ollama" not in self.providers:
+        # providers: ensure the default llamacpp entry exists
+        if "llamacpp" not in self.providers:
             self.providers = dict(self.providers)
-            self.providers["ollama"] = {
+            self.providers["llamacpp"] = {
                 "base_url": self.llm_endpoint,
-                "api_key": "ollama",
+                "api_key": "llamacpp",
             }
 
-        # role_bindings: derive from llm_model / llm_fast_model if not set
+        # role_bindings: derive from llm_model / llm_fast_model if not set.
+        # All four roles must be bound — judge and reflection back the eval-gated optimize
+        # loop (learning-worker); an unbound role makes RoleRouter.chat_for raise LookupError.
         if not self.role_bindings:
             self.role_bindings = {
-                "strong": [f"ollama:{self.llm_model}"],
-                "fast": [f"ollama:{self.llm_fast_model}"],
+                "strong": [f"llamacpp:{self.llm_model}"],
+                "fast": [f"llamacpp:{self.llm_fast_model}"],
+                "judge": [f"llamacpp:{self.llm_model}"],
+                "reflection": [f"llamacpp:{self.llm_model}"],
             }
 
         return self

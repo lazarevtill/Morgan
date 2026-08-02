@@ -198,11 +198,13 @@ async def test_worse_candidate_is_rejected() -> None:
 
 @pytest.mark.asyncio
 async def test_first_candidate_promoted_when_no_champion() -> None:
-    """When no champion exists, any candidate is promoted."""
+    """No champion yet: the "current" body is the empty-string baseline, scored like any
+    other candidate. A candidate that genuinely beats that baseline is promoted — but,
+    unlike the old unconditional-first-candidate branch, it must actually earn it."""
     registry = LocalPromptRegistry(":memory:", clock=CLOCK)
 
     async def const_scorer(body: str) -> float:
-        return 0.5
+        return 0.0 if body == "" else 0.5
 
     orch, router = _make_orch_router(
         optimizer_reply="first body",

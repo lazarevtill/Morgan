@@ -13,9 +13,14 @@ Orchestrates the champion-preprompt improvement loop:
 3. Scores both the candidate and the current champion with the injected scorer.
 4. Applies the **strict gate**: promotes ONLY if ``candidate_score > champion_score``.
    - Ties do NOT promote (equal score = no improvement).
-   - No champion → any candidate is accepted.
+   - No champion → the empty-string body is scored as the baseline; a candidate still has
+     to strictly beat it. There is no unconditional first-candidate promotion.
 5. On promotion: registers the candidate body + sets it as champion.
 6. On rejection: the registry is unchanged.
+
+This offline loop only ever runs when ``settings.enable_champion_promotion`` is true (see
+``config.py``) — disarmed by default because the current gate is a single scored run over a
+small golden set, which is too noisy to trust unattended.
 
 Offline contract
 ----------------
@@ -119,12 +124,12 @@ class ChampionTrainer:
         # Step 4: score the candidate.
         candidate_score = await _call_scorer(scorer, candidate_body)
 
-        # Step 5: strict gate — must STRICTLY improve.
-        if existing_champion is None:
-            # No champion yet: accept any candidate.
-            should_promote = True
-        else:
-            should_promote = candidate_score > champion_score
+        # Step 5: strict gate — must STRICTLY improve, always, including when there is no
+        # existing champion (scored as the empty-body baseline above). A missing champion is
+        # not a free pass: an unconditional first-candidate promotion is how an unvalidated
+        # prompt reaches production the moment the judge/reflection roles first become
+        # reachable — see the enable_champion_promotion flag in config.py.
+        should_promote = candidate_score > champion_score
 
         if not should_promote:
             logger.debug(

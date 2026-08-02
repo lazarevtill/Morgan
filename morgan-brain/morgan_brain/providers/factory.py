@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from morgan_brain.config import Settings
+from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder, OllamaEmbedder
 from morgan_brain.providers.adapters.ollama import OllamaAdapter
 from morgan_brain.providers.adapters.openai_compat import OpenAICompatAdapter
 from morgan_brain.providers.capability import CapabilityRegistry
@@ -19,13 +20,36 @@ from morgan_brain.providers.router import Binding, RoleRouter
 
 def _make_chat_adapter(provider: str, provider_cfg: dict[str, Any]) -> OpenAICompatAdapter:
     """Instantiate the right chat adapter for a provider name."""
-    base_url: str = provider_cfg.get("base_url", "http://localhost:11434/v1")
+    base_url: str = provider_cfg.get("base_url", "http://localhost:8081/v1")
     api_key: str = provider_cfg.get("api_key", "")
 
     if provider == "ollama":
+        # Still supported as a non-default key for owners who haven't moved to llama.cpp.
         return OllamaAdapter(base_url=base_url, api_key=api_key or "ollama")
-    # For all other OpenAI-compatible providers (openai, vllm, llamacpp, openrouter…)
+    # For all other OpenAI-compatible providers (llamacpp — the default, openai, vllm,
+    # openrouter…)
     return OpenAICompatAdapter(base_url=base_url, api_key=api_key, provider=provider)
+
+
+def build_hash_embedder(dim: int = 1024) -> Embedder:
+    """Build the deterministic sha256-hash embedder stub (``embedding_backend="hash"``).
+
+    Reuses ``FakeEmbedder`` rather than a second implementation. Unlike a builtin-``hash()``
+    stub, sha256 is stable across processes regardless of ``PYTHONHASHSEED`` — required for the
+    CLI (a subprocess) and the store to agree on vectors for the same text.
+    """
+    return FakeEmbedder(dim=dim)
+
+
+def build_embedder(settings: Settings) -> Embedder:
+    """Build the configured ``Embedder`` (provider or hash) from Settings.
+
+    The single place that decides live-provider vs. deterministic stub — composition.py must
+    not construct an embedder directly, so switching backends stays a config change.
+    """
+    if settings.embedding_backend == "hash":
+        return build_hash_embedder(dim=settings.embedding_dim)
+    return OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
 
 
 def build_router(settings: Settings) -> RoleRouter:
