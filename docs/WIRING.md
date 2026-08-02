@@ -6,12 +6,11 @@ How to point Morgan at your own LLM backend(s), run it, and start the learning l
 > Morgan is **provider-agnostic**: any OpenAI-compatible endpoint works (local Ollama / llama.cpp /
 > vLLM / LM Studio, or a remote provider). Ollama is just the easy local default.
 
-> **Coming (spec stage — not in this build):** Morgan is being extended into a **Personal Agent
-> OS** — standardized ports (MCP server, `/v1` OpenAI-compat facade, Memory Passport) and
-> deployment profiles (desktop one-process, phone replica). See the
-> [vision](superpowers/specs/2026-06-09-personal-agent-os-vision.md) and
-> [horizons roadmap](superpowers/specs/2026-06-09-horizons-roadmap.md). **None of that is
-> runnable yet**; this guide describes only what exists on `main` today.
+> **Coming (design stage — not in this build):** Morgan is mid-reshape toward a local-first,
+> durable, project-scoped memory kernel — one SQLite database, llama.cpp as the default provider,
+> and a `morgan` CLI + MCP server + Python library as first-class surfaces. See
+> [the reshape design spec](superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md).
+> **None of that is runnable yet**; this guide describes only what exists on `main` today.
 
 ## 1. Prerequisites
 - Python 3.12, the repo, deps: `cd morgan-brain && pip install -e ".[dev]"`.
@@ -20,8 +19,8 @@ How to point Morgan at your own LLM backend(s), run it, and start the learning l
   `http://localhost:11434/v1`.
 - **Qdrant** + **Redis** (for vectors / event bus when running multi-process):
   `docker compose up -d redis qdrant`.
-- Optional extras: `pip install -e ".[learning]"` (MLflow GEPA), `".[mcp]"` (MCP servers),
-  `".[privacy]"` (Presidio + encryption), `".[scheduling]"` (cron — Phase 4).
+- Optional extras: `pip install -e ".[learning]"` (MLflow GEPA), `".[scheduling]"` (cron for
+  nightly consolidation).
 
 ## 2. Configure (`.env`, all `MORGAN_`-prefixed)
 Copy `morgan-brain/.env.example` → `.env` and set:
@@ -43,11 +42,6 @@ MORGAN_TEMPORAL_DB_URL=sqlite:///./data/morgan.db
 
 # Learning lifecycle (champion prompt registry + optimizer)
 MORGAN_LEARNING_BACKEND=local        # 'local' (SQLite, dependency-light) or 'mlflow'
-MORGAN_MLFLOW_TRACKING_URI=sqlite:///./data/mlflow.db
-
-# Privacy (opt-in)
-MORGAN_REDACT_EGRESS=false           # true → redact PII before REMOTE providers (local passes through)
-MORGAN_ENCRYPTION=false              # true → SQLCipher + envelope encryption (needs [privacy] + passphrase)
 ```
 **Provider-agnostic routing (advanced):** `MORGAN_ROLE_BINDINGS` maps logical roles to backends, e.g.
 `{"strong": ["ollama:qwen2.5:7b"], "fast": ["ollama:qwen2.5:7b"], "reflection": ["ollama:qwen2.5:32b"]}`
@@ -81,7 +75,7 @@ injected every turn so responses adapt.
   for every turn automatically.
 - **Consolidation (automated):** with `MORGAN_ENABLE_SCHEDULING=true`, the `learning-worker` runs a
   `LearningScheduler` that fires nightly consolidation — `ConsolidationLearner.consolidate(user_id)`
-  turns recent episodics into durable bi-temporal facts (ADD/UPDATE/DELETE/NOOP, contradiction →
+  turns recent episodics into durable valid-time facts (ADD/UPDATE/DELETE/NOOP, contradiction →
   supersede, confidence decay). (APScheduler optional; an in-process scheduler is the default.)
 - **Self-optimization (offline, gated):** `ChampionTrainer.train(...)` mines positive examples from
   your high-value signals, asks the **reflection** model to propose an improved champion preprompt,
@@ -93,38 +87,25 @@ injected every turn so responses adapt.
   (default-deny for side-effecting). Register your own `BaseTool`s.
 - **Skills:** drop markdown+frontmatter skills in a skills dir; trigger-matched, champion-versioned
   (they participate in the optimizer loop).
-- **MCP servers:** add to `MORGAN_MCP_SERVERS` (needs `[mcp]`). Tool descriptions are sanitized +
-  **fingerprint-pinned** (rug-pull defense), allowlisted, and **default-deny** until you grant them.
-- **Privacy:** set `MORGAN_REDACT_EGRESS=true` to redact PII before any *remote* provider (local
-  models get full context); `MORGAN_ENCRYPTION=true` (+ `[privacy]` + passphrase) for at-rest encryption.
 
 ## 6. Verifying quality (the eval gate)
 The 3-layer eval harness (`morgan_brain/eval/`) + golden set (`tests/eval/golden_set.json`) is the
-"did it learn me / don't regress" gate. Run the suite: `pytest -q` (820 green). Extend the golden set
-with your own preference probes; any self-learned promotion must beat the current champion on it.
+"did it learn me / don't regress" gate. Run the suite: `pytest -q`. Extend the golden set with your
+own preference probes; any self-learned promotion must beat the current champion on it.
 
-## 7. Remote access (Phase 5)
+## 7. Remote access
 - **Run the worker** (automates learning) alongside the API:
   `MORGAN_ENABLE_SCHEDULING=true python -m morgan_brain.apps.learning_worker`.
 - **Streaming:** `POST /api/chat/stream` returns Server-Sent Events (`data: {...}` deltas, terminal
-  `data: [DONE]`). Known limitation: the streaming path does not yet apply the learned champion
-  preprompt (`stream_turn` lacks `system_override`) — fix scheduled as an H1 prerequisite.
+  `data: [DONE]`).
 - **Auth (defense-in-depth):** `/api/*` requires `Authorization: Bearer <MORGAN_API_KEY>` (or
   `X-API-Key`) **when a key is set**. `/health` is open.
   > ⚠️ **Before exposing remotely you MUST set a real `MORGAN_API_KEY`** (the default `change-me`
   > leaves `/api/*` open for local dev). Primary control per the architecture is **network posture**:
   > run behind the **NetBird overlay network with no public ports** — do not bind `0.0.0.0` to the
-  > internet.
-- **Channels:** set `MORGAN_ENABLE_CHANNELS=true` + `MORGAN_TELEGRAM_TOKEN` (needs `[channels]`).
-  Inbound messages are **per-chat allowlisted** (default-deny) before reaching the assistant.
+  > internet. See [`docs/OPERATIONS.md`](OPERATIONS.md).
 
 ## 8. What remains
-- **Voice = NVIDIA PersonaPlex** (full-duplex speech↔speech, Moshi-based). The `VoiceConversation`
-  seam + `voice.persona_bridge` (your learned persona → a PersonaPlex role prompt + voice) are built
-  and tested; the GPU serving + hybrid mode-router + transcript write-back are deferred behind a
-  `[voice]` extra (needs an A100/H100-class GPU). Design: [PersonaPlex decision](superpowers/specs/2026-06-09-personaplex-voice-decision.md).
-  Note: PersonaPlex is the *voice* layer, not the learning engine — Morgan still learns you via the
-  text pipeline, and voice transcripts feed back into it.
 - **LoRA fine-tuning** — deliberately deferred; only build it if the 4-condition escalation test in
   the [self-learning decision](superpowers/specs/2026-06-08-self-learning-decision.md) ever fires.
   RAG + the GEPA-optimized champion preprompt are the default and cover the vast majority of gains.

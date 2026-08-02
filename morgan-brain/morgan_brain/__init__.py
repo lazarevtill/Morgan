@@ -7,9 +7,9 @@ Package structure:
     bus         — event bus (in-proc + Redis Streams, one interface)
     security    — MemoryGate + unified permissions
     modules     — perception, memory, learning, personalization, reasoning,
-                  skills, tools, mcp, proactivity
+                  skills, tools
     core        — thin cognitive-loop orchestrator
-    apps        — brain_api, learning_worker, perception_gpu entrypoints
+    apps        — brain_api, learning_worker entrypoints
 """
 
 __version__ = "0.1.0"

@@ -2,8 +2,9 @@
 
 **Date:** 2026-06-07
 **Status:** Approved (conversation), pending written review
-**Supersedes:** `docs/ARCHITECTURE_V2.md` (kept as background; this spec is the authority)
-**Predecessor codebase:** archived in git branch/tag `legacy/v0.0.3-monolith`
+**Supersedes:** `docs/ARCHITECTURE_V2.md` (deleted 2026-08-02; see
+[the local-first reshape design](2026-08-02-morgan-reshape-local-first-design.md))
+**Predecessor codebase:** archived in git tag `legacy-v0.0.3-monolith` (branch `origin/legacy/v0.0.3-monolith`)
 
 ---
 
