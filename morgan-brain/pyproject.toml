@@ -57,7 +57,11 @@ privacy = [
 morgan = "clients.cli.__main__:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["morgan_brain", "clients"]
+packages = ["morgan_brain"]
+artifacts = [
+    "morgan_brain/eval/data/*.json",
+    "morgan_brain/providers/data/*.json",
+]
 
 [tool.black]
 line-length = 100
