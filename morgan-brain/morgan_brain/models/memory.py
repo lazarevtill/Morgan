@@ -18,6 +18,11 @@ from pydantic import BaseModel, Field
 
 from morgan_brain.models.base import Entity, UserScoped
 
+# The implicit project every memory belongs to unless the caller names another one. Keeps
+# single-project callers (most of the codebase, for now) working without threading a project
+# through every call site -- see task-12 brief.
+DEFAULT_PROJECT = "default"
+
 
 class MemorySource(str, Enum):
     USER_STATED = "user_stated"
@@ -32,6 +37,7 @@ class MemoryKind(str, Enum):
 
 
 class Memory(UserScoped):
+    project: str = Field(default=DEFAULT_PROJECT, min_length=1)
     kind: MemoryKind = MemoryKind.EPISODIC
     content: str
     source: MemorySource = MemorySource.USER_STATED
@@ -43,6 +49,7 @@ class Memory(UserScoped):
 class TemporalFact(UserScoped):
     """A semantic fact with a validity interval. Supersession, not deletion."""
 
+    project: str = Field(default=DEFAULT_PROJECT, min_length=1)
     subject: str  # usually an entity name or "user"
     predicate: str  # e.g. "lives_in", "works_at", "prefers"
     object: str  # the value
@@ -58,6 +65,8 @@ class MemoryQuery(BaseModel):
     """A recall request. Defaults to currently-valid facts via multi-signal retrieval."""
 
     user_id: str
+    project: str = DEFAULT_PROJECT
+    all_projects: bool = False
     text: str
     top_k: int = 8
     kinds: list[MemoryKind] | None = None

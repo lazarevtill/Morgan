@@ -12,7 +12,7 @@ import sqlite3
 from datetime import datetime
 
 from morgan_brain.models.base import Entity
-from morgan_brain.models.memory import Memory, MemoryKind, MemorySource
+from morgan_brain.models.memory import DEFAULT_PROJECT, Memory, MemoryKind, MemorySource
 
 
 class EpisodicStore:
@@ -23,6 +23,7 @@ class EpisodicStore:
             CREATE TABLE IF NOT EXISTS memories (
                 id         TEXT PRIMARY KEY,
                 user_id    TEXT NOT NULL,
+                project    TEXT NOT NULL DEFAULT 'default',
                 kind       TEXT NOT NULL,
                 source     TEXT NOT NULL,
                 content    TEXT NOT NULL,
@@ -34,17 +35,24 @@ class EpisodicStore:
             """
         )
         conn.commit()
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(memories)")}
+        if "project" not in cols:
+            conn.execute(
+                f"ALTER TABLE memories ADD COLUMN project TEXT NOT NULL DEFAULT '{DEFAULT_PROJECT}'"
+            )
+            conn.commit()
 
     def put(self, memory: Memory) -> None:
         self._conn.execute(
             """
             INSERT OR REPLACE INTO memories
-                (id, user_id, kind, source, content, importance, entities, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (id, user_id, project, kind, source, content, importance, entities, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 memory.id,
                 memory.user_id,
+                memory.project,
                 memory.kind.value,
                 memory.source.value,
                 memory.content,
@@ -62,6 +70,7 @@ class EpisodicStore:
         return Memory(
             id=row["id"],
             user_id=row["user_id"],
+            project=row["project"],
             kind=MemoryKind(row["kind"]),
             source=MemorySource(row["source"]),
             content=row["content"],

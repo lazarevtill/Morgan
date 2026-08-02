@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 import sqlite3
 
+from morgan_brain.models.memory import DEFAULT_PROJECT
+
 _TOKEN = re.compile(r"\w+", re.UNICODE)
 
 
@@ -35,34 +37,77 @@ class FtsIndex:
             CREATE VIRTUAL TABLE IF NOT EXISTS fts_memories USING fts5(
                 memory_id UNINDEXED,
                 user_id   UNINDEXED,
+                project   UNINDEXED,
                 content,
                 tokenize = 'unicode61 remove_diacritics 2'
             );
             """
         )
         conn.commit()
+        self._migrate_project_column()
 
-    def add(self, memory_id: str, content: str, *, user_id: str) -> None:
+    def _migrate_project_column(self) -> None:
+        """Idempotent upgrade for a database written before project scoping existed.
+
+        FTS5 virtual tables cannot be ``ALTER``ed, so ``fts_memories`` is self-contained
+        (it carries its own ``content`` column, not an external-content reference) -- its
+        existing rows are read out, the table is dropped and recreated with the ``project``
+        column, and the rows are reinserted with ``DEFAULT_PROJECT`` backfilled.
+        """
+        cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(fts_memories)")}
+        if "project" not in cols:
+            rows = self._conn.execute(
+                "SELECT memory_id, user_id, content FROM fts_memories"
+            ).fetchall()
+            self._conn.execute("DROP TABLE fts_memories")
+            self._conn.execute(
+                """
+                CREATE VIRTUAL TABLE fts_memories USING fts5(
+                    memory_id UNINDEXED,
+                    user_id   UNINDEXED,
+                    project   UNINDEXED,
+                    content,
+                    tokenize = 'unicode61 remove_diacritics 2'
+                )
+                """
+            )
+            for r in rows:
+                self._conn.execute(
+                    "INSERT INTO fts_memories (memory_id, user_id, project, content) "
+                    "VALUES (?, ?, ?, ?)",
+                    (r["memory_id"], r["user_id"], DEFAULT_PROJECT, r["content"]),
+                )
+            self._conn.commit()
+
+    def add(
+        self, memory_id: str, content: str, *, user_id: str, project: str = DEFAULT_PROJECT
+    ) -> None:
         self._conn.execute("DELETE FROM fts_memories WHERE memory_id = ?", (memory_id,))
         self._conn.execute(
-            "INSERT INTO fts_memories (memory_id, user_id, content) VALUES (?, ?, ?)",
-            (memory_id, user_id, content),
+            "INSERT INTO fts_memories (memory_id, user_id, project, content) VALUES (?, ?, ?, ?)",
+            (memory_id, user_id, project, content),
         )
         self._conn.commit()
 
-    def search(self, text: str, *, user_id: str, top_k: int) -> list[str]:
+    def search(
+        self,
+        text: str,
+        *,
+        user_id: str,
+        top_k: int,
+        project: str | None = DEFAULT_PROJECT,
+    ) -> list[str]:
         match = to_match_query(text)
         if not match:
             return []
-        rows = self._conn.execute(
-            """
-            SELECT memory_id FROM fts_memories
-            WHERE fts_memories MATCH ? AND user_id = ?
-            ORDER BY rank
-            LIMIT ?
-            """,
-            (match, user_id, top_k),
-        ).fetchall()
+        sql = "SELECT memory_id FROM fts_memories WHERE fts_memories MATCH ? AND user_id = ?"
+        params: list[object] = [match, user_id]
+        if project is not None:
+            sql += " AND project = ?"
+            params.append(project)
+        sql += " ORDER BY rank LIMIT ?"
+        params.append(top_k)
+        rows = self._conn.execute(sql, params).fetchall()
         return [str(r["memory_id"]) for r in rows]
 
     def delete(self, ids: list[str]) -> None:

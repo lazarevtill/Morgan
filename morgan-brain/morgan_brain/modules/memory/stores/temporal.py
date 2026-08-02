@@ -8,12 +8,17 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 
-from morgan_brain.models.memory import MemorySource, TemporalFact
+from morgan_brain.models.memory import DEFAULT_PROJECT, MemorySource, TemporalFact
 
+# The index is created separately, after the project-column migration below runs -- for a
+# pre-existing database the `facts` table exists without `project` at this point, and a
+# CREATE INDEX referencing that column here would fail before the ALTER TABLE gets a chance to
+# add it.
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS facts (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
+    project TEXT NOT NULL DEFAULT 'default',
     subject TEXT NOT NULL,
     predicate TEXT NOT NULL,
     object TEXT NOT NULL,
@@ -24,8 +29,11 @@ CREATE TABLE IF NOT EXISTS facts (
     superseded_by TEXT,
     last_confirmed TEXT
 );
+"""
+
+_INDEX_SCHEMA = """
 CREATE INDEX IF NOT EXISTS idx_facts_current
-    ON facts (user_id, subject, predicate) WHERE valid_to IS NULL;
+    ON facts (user_id, project, subject, predicate) WHERE valid_to IS NULL;
 """
 
 
@@ -44,11 +52,27 @@ class SqliteTemporalStore:
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
+        self._migrate_project_column()
+        self._conn.executescript(_INDEX_SCHEMA)
+        self._conn.commit()
+
+    def _migrate_project_column(self) -> None:
+        """Idempotent upgrade for a database written before project scoping existed."""
+        cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(facts)")}
+        if "project" not in cols:
+            self._conn.execute(
+                f"ALTER TABLE facts ADD COLUMN project TEXT NOT NULL DEFAULT '{DEFAULT_PROJECT}'"
+            )
+            # The old index doesn't cover `project`; drop it so the index script below (run
+            # after this migration) recreates it with the new column.
+            self._conn.execute("DROP INDEX IF EXISTS idx_facts_current")
+            self._conn.commit()
 
     def _row_to_fact(self, row: sqlite3.Row) -> TemporalFact:
         return TemporalFact(
             id=row["id"],
             user_id=row["user_id"],
+            project=row["project"],
             subject=row["subject"],
             predicate=row["predicate"],
             object=row["object"],
@@ -62,8 +86,9 @@ class SqliteTemporalStore:
 
     async def upsert_fact(self, fact: TemporalFact, *, now: datetime) -> str:
         cur = self._conn.execute(
-            "SELECT id FROM facts WHERE user_id=? AND subject=? AND predicate=? AND valid_to IS NULL",
-            (fact.user_id, fact.subject, fact.predicate),
+            "SELECT id FROM facts WHERE user_id=? AND project=? AND subject=? AND predicate=? "
+            "AND valid_to IS NULL",
+            (fact.user_id, fact.project, fact.subject, fact.predicate),
         )
         existing = [r["id"] for r in cur.fetchall()]
         fact = fact.model_copy(deep=True)
@@ -71,10 +96,11 @@ class SqliteTemporalStore:
             fact.valid_from = now
         fact.last_confirmed = now
         self._conn.execute(
-            "INSERT INTO facts VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO facts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 fact.id,
                 fact.user_id,
+                fact.project,
                 fact.subject,
                 fact.predicate,
                 fact.object,
@@ -95,10 +121,17 @@ class SqliteTemporalStore:
         return fact.id
 
     async def current_facts(
-        self, *, user_id: str, subject: str | None = None
+        self,
+        *,
+        user_id: str,
+        subject: str | None = None,
+        project: str | None = DEFAULT_PROJECT,
     ) -> list[TemporalFact]:
         sql = "SELECT * FROM facts WHERE user_id=? AND valid_to IS NULL"
         params: list[object] = [user_id]
+        if project is not None:
+            sql += " AND project=?"
+            params.append(project)
         if subject is not None:
             sql += " AND subject=?"
             params.append(subject)
