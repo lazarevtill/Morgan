@@ -4,7 +4,7 @@ Usage::
 
     reg = CapabilityRegistry.from_packaged()
     router = RoleRouter(reg=reg, bindings={
-        "strong": [Binding("ollama", "qwen2.5:7b", client)],
+        "strong": [Binding("llamacpp", "qwen2.5:7b", client)],
     })
     client, model = router.chat_for("strong", needs_tools=True)
 """
