@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from morgan_brain.interfaces.memory import MemoryStore
+from morgan_brain.interfaces.memory import ForgetReport, MemoryStore
 from morgan_brain.models.memory import DEFAULT_PROJECT, Memory, MemoryQuery, TemporalFact
 
 
@@ -57,6 +57,10 @@ class MemoryGate:
     async def distinct_projects(self, user_id: str) -> list[str]:
         self._require_scope(user_id)
         return await self._store.distinct_projects(user_id)
+
+    async def forget(self, *, user_id: str, project: str) -> ForgetReport:
+        self._require_scope(user_id, project)
+        return await self._store.forget(user_id=user_id, project=project)
 
     @staticmethod
     def _require_scope(user_id: str, project: str | None = None) -> None:

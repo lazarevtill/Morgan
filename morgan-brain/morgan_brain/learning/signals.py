@@ -14,6 +14,7 @@ from enum import Enum
 from typing import Callable
 
 from morgan_brain.models.base import UserScoped
+from morgan_brain.models.memory import DEFAULT_PROJECT
 
 # ---------------------------------------------------------------------------
 # Domain types
@@ -35,6 +36,7 @@ class InteractionSignal(UserScoped):
       0 — no feedback
     """
 
+    project: str = DEFAULT_PROJECT
     session_id: str
     turn_id: str
     context_summary: str = ""
@@ -63,6 +65,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS interaction_signals (
     id          TEXT PRIMARY KEY,
     user_id     TEXT NOT NULL,
+    project     TEXT NOT NULL DEFAULT 'default',
     session_id  TEXT NOT NULL,
     turn_id     TEXT NOT NULL,
     context_summary TEXT NOT NULL DEFAULT '',
@@ -121,6 +124,18 @@ class SignalStore:
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
+        self._migrate_project_column()
+
+    def _migrate_project_column(self) -> None:
+        """Idempotent upgrade for a database written before project scoping existed --
+        required for forget() to filter interaction_signals by (user_id, project)."""
+        cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(interaction_signals)")}
+        if "project" not in cols:
+            self._conn.execute(
+                f"ALTER TABLE interaction_signals ADD COLUMN project TEXT NOT NULL "
+                f"DEFAULT '{DEFAULT_PROJECT}'"
+            )
+            self._conn.commit()
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -131,6 +146,7 @@ class SignalStore:
         return InteractionSignal(
             id=row["id"],
             user_id=row["user_id"],
+            project=row["project"],
             session_id=row["session_id"],
             turn_id=row["turn_id"],
             context_summary=row["context_summary"],
@@ -157,13 +173,14 @@ class SignalStore:
         self._conn.execute(
             """
             INSERT INTO interaction_signals
-                (id, user_id, session_id, turn_id, context_summary,
+                (id, user_id, project, session_id, turn_id, context_summary,
                  query, original_reply, user_edit, retried, thumb, consumed, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,0,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?)
             """,
             (
                 signal.id,
                 signal.user_id,
+                signal.project,
                 signal.session_id,
                 signal.turn_id,
                 signal.context_summary,

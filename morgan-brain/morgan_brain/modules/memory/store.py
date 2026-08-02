@@ -12,9 +12,11 @@ payload -- so a memory recovered after a restart is exactly the one that was sto
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 from typing import Callable
 
+from morgan_brain.interfaces.memory import ForgetReport
 from morgan_brain.models.memory import (
     DEFAULT_PROJECT,
     Memory,
@@ -29,6 +31,15 @@ from morgan_brain.modules.memory.retrieval.fusion import reciprocal_rank_fusion
 from morgan_brain.modules.memory.stores.episodic import EpisodicStore
 from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
 from morgan_brain.modules.memory.stores.vector import VectorIndex, VectorRecord
+
+
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    return (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
+        ).fetchone()
+        is not None
+    )
 
 
 class MemoryModule:
@@ -146,3 +157,74 @@ class MemoryModule:
     async def distinct_projects(self, user_id: str) -> list[str]:
         """Return the distinct project names *user_id* has stored memories under."""
         return self._episodics.distinct_projects(user_id)
+
+    async def forget(self, *, user_id: str, project: str) -> ForgetReport:
+        """Erase everything *user_id* stored under *project*, in one transaction.
+
+        Every durable index lives in the same SQLite database (the point of Task 7/13A), so
+        the affected memory ids are collected first and every dependent row is deleted with
+        plain SQL inside a single ``BEGIN IMMEDIATE`` -- including the vector rows, which are
+        NOT erased via ``self._vectors.delete()`` because that call commits on its own and
+        would break the atomicity a single connection exists to provide.
+
+        Champion preprompts are NOT erased: a promoted champion may embed text mined from a
+        forgotten conversation and cannot be un-learned, only rolled back. Flagging affected
+        versions requires the ``PromptRegistry``, which this module does not hold and no
+        caller wires in, so ``champions_flagged`` stays empty -- for the owner to review by
+        hand until that wiring exists.
+
+        ``vec_items``/``vec_meta`` (only present with the sqlite vector backend) and
+        ``interaction_signals``/``session_history`` (only present once a ``SignalStore`` or
+        ``SessionHistoryStore`` has opened on this same connection) are each optional parts
+        of the shared database -- deleted when present, skipped (not an error) when not,
+        since there is nothing under *project* to forget from a table that was never created.
+        """
+        conn = self._episodics._conn  # forget() owns the whole database
+        ids = [
+            str(r["id"])
+            for r in conn.execute(
+                "SELECT id FROM memories WHERE user_id = ? AND project = ?", (user_id, project)
+            )
+        ]
+        report = ForgetReport(memories=len(ids))
+        placeholders = ",".join("?" * len(ids))
+        has_vectors = _table_exists(conn, "vec_items") and _table_exists(conn, "vec_meta")
+        has_signals = _table_exists(conn, "interaction_signals")
+        has_history = _table_exists(conn, "session_history")
+
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if ids:
+                conn.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", ids)
+                conn.execute(f"DELETE FROM fts_memories WHERE memory_id IN ({placeholders})", ids)
+                conn.execute(
+                    f"DELETE FROM memory_entities WHERE memory_id IN ({placeholders})", ids
+                )
+                if has_vectors:
+                    # Vectors live in this same database, so they go inside the transaction.
+                    conn.execute(
+                        f"DELETE FROM vec_items WHERE rowid IN "
+                        f"(SELECT rowid FROM vec_meta WHERE id IN ({placeholders}))",
+                        ids,
+                    )
+                    conn.execute(f"DELETE FROM vec_meta WHERE id IN ({placeholders})", ids)
+            report.facts = conn.execute(
+                "DELETE FROM facts WHERE user_id = ? AND project = ?", (user_id, project)
+            ).rowcount
+            if has_signals:
+                report.signals = conn.execute(
+                    "DELETE FROM interaction_signals WHERE user_id = ? AND project = ?",
+                    (user_id, project),
+                ).rowcount
+            if has_history:
+                report.history = conn.execute(
+                    "DELETE FROM session_history WHERE user_id = ? AND project = ?",
+                    (user_id, project),
+                ).rowcount
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+        conn.execute("VACUUM")  # cannot run inside a transaction
+        return report

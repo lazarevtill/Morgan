@@ -18,6 +18,7 @@ import sqlite3
 from datetime import datetime
 from typing import Callable
 
+from morgan_brain.models.memory import DEFAULT_PROJECT
 from morgan_brain.models.message import Message, Role
 
 
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS session_history (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id  TEXT NOT NULL,
     user_id     TEXT NOT NULL,
+    project     TEXT NOT NULL DEFAULT 'default',
     role        TEXT NOT NULL,
     content     TEXT NOT NULL,
     created_at  TEXT
@@ -76,8 +78,20 @@ class SessionHistoryStore:
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
+        self._migrate_project_column()
 
-    def append(self, session_id: str, message: Message) -> None:
+    def _migrate_project_column(self) -> None:
+        """Idempotent upgrade for a database written before project scoping existed --
+        required for forget() to filter session_history by (user_id, project)."""
+        cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(session_history)")}
+        if "project" not in cols:
+            self._conn.execute(
+                f"ALTER TABLE session_history ADD COLUMN project TEXT NOT NULL "
+                f"DEFAULT '{DEFAULT_PROJECT}'"
+            )
+            self._conn.commit()
+
+    def append(self, session_id: str, message: Message, *, project: str = DEFAULT_PROJECT) -> None:
         """Append *message* to the history for *session_id*.
 
         Synchronous — intended for the cold-path turn-storage subscriber which
@@ -86,12 +100,13 @@ class SessionHistoryStore:
         created_at = self._clock().isoformat() if self._clock else None
         self._conn.execute(
             """
-            INSERT INTO session_history (session_id, user_id, role, content, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO session_history (session_id, user_id, project, role, content, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 session_id,
                 message.user_id,
+                project,
                 message.role.value,
                 message.content,
                 created_at,

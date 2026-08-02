@@ -57,7 +57,14 @@ class Orchestrator:
         self._history_store = history_store
 
     async def _persist_turn(
-        self, *, user_id: str, session_id: str | None, turn_id: str, text: str, reply: str
+        self,
+        *,
+        user_id: str,
+        project: str,
+        session_id: str | None,
+        turn_id: str,
+        text: str,
+        reply: str,
     ) -> None:
         """Local, **bus-independent** persistence the next turn depends on.
 
@@ -68,16 +75,24 @@ class Orchestrator:
         learning-worker under Redis — but history and the base signal must not depend on a
         worker consuming an event, or the documented 2-process topology silently degrades
         every turn to turn 1 (the GAP-2 break). No-ops cleanly when deps aren't injected.
+
+        ``project`` is threaded through so ``forget()`` can later erase these rows per
+        project instead of only per user — see task-14.
         """
         if self._history_store is not None:
             hkey = session_key(user_id, session_id)
-            self._history_store.append(hkey, Message(user_id=user_id, role=Role.USER, content=text))
             self._history_store.append(
-                hkey, Message(user_id=user_id, role=Role.ASSISTANT, content=reply)
+                hkey, Message(user_id=user_id, role=Role.USER, content=text), project=project
+            )
+            self._history_store.append(
+                hkey,
+                Message(user_id=user_id, role=Role.ASSISTANT, content=reply),
+                project=project,
             )
         if self._recorder is not None:
             await self._recorder.record_turn(
                 user_id=user_id,
+                project=project,
                 session_id=session_id or "default",
                 turn_id=turn_id,
                 query=text,
@@ -151,7 +166,12 @@ class Orchestrator:
         # 7. Post-turn. Local persistence (history + base signal) is written in-process,
         # synchronously; consolidation is announced on the bus and runs off-path.
         await self._persist_turn(
-            user_id=user_id, session_id=session_id, turn_id=turn_id, text=text, reply=result.text
+            user_id=user_id,
+            project=project,
+            session_id=session_id,
+            turn_id=turn_id,
+            text=text,
+            reply=result.text,
         )
         await self._bus.publish(
             Event(
@@ -216,7 +236,12 @@ class Orchestrator:
 
         # 7. Post-turn. Local persistence in-process; consolidation announced off-path.
         await self._persist_turn(
-            user_id=user_id, session_id=session_id, turn_id=turn_id, text=text, reply=result.text
+            user_id=user_id,
+            project=project,
+            session_id=session_id,
+            turn_id=turn_id,
+            text=text,
+            reply=result.text,
         )
         await self._bus.publish(
             Event(
@@ -295,7 +320,12 @@ class Orchestrator:
         # 7. Post-turn cold path — same as handle_turn.
         full_text = "".join(chunks)
         await self._persist_turn(
-            user_id=user_id, session_id=session_id, turn_id=turn_id, text=text, reply=full_text
+            user_id=user_id,
+            project=project,
+            session_id=session_id,
+            turn_id=turn_id,
+            text=text,
+            reply=full_text,
         )
         await self._bus.publish(
             Event(

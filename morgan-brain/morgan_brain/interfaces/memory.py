@@ -6,10 +6,29 @@ All access is user-scoped and must go through the MemoryGate (see security/).
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 from morgan_brain.models.memory import DEFAULT_PROJECT, Memory, MemoryQuery, TemporalFact
+
+
+@dataclass
+class ForgetReport:
+    """What a single ``forget()`` call erased.
+
+    ``champions_flagged`` stays empty: flagging a promoted champion preprompt that may embed
+    text mined from this project's conversations requires the ``PromptRegistry``, which
+    ``MemoryModule`` does not hold and no caller currently wires in. An empty list here is
+    honest scope, not a broken feature -- until that wiring exists, a champion can only be
+    reviewed and rolled back by hand.
+    """
+
+    memories: int = 0
+    facts: int = 0
+    signals: int = 0
+    history: int = 0
+    champions_flagged: list[str] = field(default_factory=list)
 
 
 @runtime_checkable
@@ -59,4 +78,10 @@ class MemoryStore(Protocol):
 
         Used to fan a per-user operation (e.g. nightly consolidation) out across every
         project the user actually has, instead of assuming a single project."""
+        ...
+
+    async def forget(self, *, user_id: str, project: str) -> ForgetReport:
+        """Erase everything *user_id* stored under *project*, across every index, in one
+        transaction. Idempotent -- forgetting an already-empty project returns an
+        all-zero report rather than raising."""
         ...
