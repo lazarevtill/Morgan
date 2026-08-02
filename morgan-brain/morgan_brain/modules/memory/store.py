@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Callable
 
 from morgan_brain.models.memory import (
+    DEFAULT_PROJECT,
     Memory,
     MemoryKind,
     MemoryQuery,
@@ -60,35 +61,53 @@ class MemoryModule:
             VectorRecord(
                 id=memory.id,
                 user_id=memory.user_id,
+                project=memory.project,
                 vector=vector,
                 payload={"content": memory.content, "user_id": memory.user_id},
             )
         )
-        self._fts.add(memory.id, memory.content, user_id=memory.user_id)
-        self._entities.add(memory.id, [e.name for e in memory.entities], user_id=memory.user_id)
+        self._fts.add(memory.id, memory.content, user_id=memory.user_id, project=memory.project)
+        self._entities.add(
+            memory.id,
+            [e.name for e in memory.entities],
+            user_id=memory.user_id,
+            project=memory.project,
+        )
         return memory.id
 
     async def recall(self, query: MemoryQuery) -> list[Memory]:
+        # None means "no project filter" at the store layer -- the cross-project escape hatch.
+        project = None if query.all_projects else query.project
         q_vector = await self._embedder.embed(query.text)
         vec_hits = await self._vectors.search(
-            user_id=query.user_id, vector=q_vector, top_k=query.top_k * 2
+            user_id=query.user_id, vector=q_vector, top_k=query.top_k * 2, project=project
         )
         vector_ranking = [h.id for h in vec_hits]
-        fts_ranking = self._fts.search(query.text, user_id=query.user_id, top_k=query.top_k * 2)
+        fts_ranking = self._fts.search(
+            query.text, user_id=query.user_id, top_k=query.top_k * 2, project=project
+        )
         entity_ranking = self._entities.search(
-            {t for t in query.text.split()}, user_id=query.user_id, top_k=query.top_k * 2
+            {t for t in query.text.split()},
+            user_id=query.user_id,
+            top_k=query.top_k * 2,
+            project=project,
         )
 
         fused_ids = reciprocal_rank_fusion([vector_ranking, fts_ranking, entity_ranking])
         episodic = [m for m in (self._episodics.get(mid) for mid in fused_ids) if m is not None]
+        # Defense in depth: every signal above is already project-scoped, but fusion resolves
+        # ids through episodic rehydration, which isn't -- drop anything that slipped through.
+        if not query.all_projects:
+            episodic = [m for m in episodic if m.project == query.project]
 
         # Currently-valid facts are authoritative; surface them alongside episodic recall.
         # Phase 1 includes all current facts (volume is small until Phase 2 extraction);
         # relevance-ranking of facts is a Phase 2 concern.
-        facts = await self._temporal.current_facts(user_id=query.user_id)
+        facts = await self._temporal.current_facts(user_id=query.user_id, project=project)
         fact_memories = [
             Memory(
                 user_id=query.user_id,
+                project=f.project,
                 kind=MemoryKind.SEMANTIC,
                 content=f"{f.subject} {f.predicate} {f.object}".replace("_", " "),
                 source=f.source,
@@ -101,6 +120,10 @@ class MemoryModule:
         return await self._temporal.upsert_fact(fact, now=self._clock())
 
     async def current_facts(
-        self, *, user_id: str, subject: str | None = None
+        self,
+        *,
+        user_id: str,
+        subject: str | None = None,
+        project: str | None = DEFAULT_PROJECT,
     ) -> list[TemporalFact]:
-        return await self._temporal.current_facts(user_id=user_id, subject=subject)
+        return await self._temporal.current_facts(user_id=user_id, subject=subject, project=project)

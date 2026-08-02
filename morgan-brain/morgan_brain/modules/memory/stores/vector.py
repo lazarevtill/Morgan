@@ -8,6 +8,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
+from morgan_brain.models.memory import DEFAULT_PROJECT
+
 # Stable namespace for UUID5 derivation of Qdrant point ids.
 # Using a fixed, project-specific UUID so ids are deterministic across restarts.
 QDRANT_ID_NAMESPACE = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # UUID_URL namespace
@@ -18,6 +20,7 @@ class VectorRecord:
     id: str
     user_id: str
     vector: list[float]
+    project: str = DEFAULT_PROJECT
     payload: dict[str, Any] = field(default_factory=dict)
 
 
@@ -31,7 +34,14 @@ class VectorHit:
 @runtime_checkable
 class VectorIndex(Protocol):
     async def upsert(self, record: VectorRecord) -> None: ...
-    async def search(self, *, user_id: str, vector: list[float], top_k: int) -> list[VectorHit]: ...
+    async def search(
+        self,
+        *,
+        user_id: str,
+        vector: list[float],
+        top_k: int,
+        project: str | None = DEFAULT_PROJECT,
+    ) -> list[VectorHit]: ...
     async def delete(self, ids: list[str]) -> None: ...
 
 
@@ -49,11 +59,18 @@ class InMemoryVectorIndex:
     async def upsert(self, record: VectorRecord) -> None:
         self._records[record.id] = record
 
-    async def search(self, *, user_id: str, vector: list[float], top_k: int) -> list[VectorHit]:
+    async def search(
+        self,
+        *,
+        user_id: str,
+        vector: list[float],
+        top_k: int,
+        project: str | None = DEFAULT_PROJECT,
+    ) -> list[VectorHit]:
         scored = [
             VectorHit(id=r.id, score=_cosine(vector, r.vector), payload=r.payload)
             for r in self._records.values()
-            if r.user_id == user_id
+            if r.user_id == user_id and (project is None or r.project == project)
         ]
         scored.sort(key=lambda h: h.score, reverse=True)
         return scored[:top_k]
@@ -121,6 +138,7 @@ class QdrantVectorIndex:
                     payload={
                         **record.payload,
                         "user_id": record.user_id,
+                        "project": record.project,
                         # Store the original string id so search can return it.
                         "mem_id": record.id,
                     },
@@ -128,15 +146,23 @@ class QdrantVectorIndex:
             ],
         )
 
-    async def search(self, *, user_id: str, vector: list[float], top_k: int) -> list[VectorHit]:
+    async def search(
+        self,
+        *,
+        user_id: str,
+        vector: list[float],
+        top_k: int,
+        project: str | None = DEFAULT_PROJECT,
+    ) -> list[VectorHit]:
         qm = self._qm
+        must = [qm.FieldCondition(key="user_id", match=qm.MatchValue(value=user_id))]
+        if project is not None:
+            must.append(qm.FieldCondition(key="project", match=qm.MatchValue(value=project)))
         res = await self._client.query_points(
             collection_name=self._collection,
             query=vector,
             limit=top_k,
-            query_filter=qm.Filter(
-                must=[qm.FieldCondition(key="user_id", match=qm.MatchValue(value=user_id))]
-            ),
+            query_filter=qm.Filter(must=must),
         )
         return [
             VectorHit(

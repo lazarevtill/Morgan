@@ -19,6 +19,7 @@ import json
 import sqlite3
 import struct
 
+from morgan_brain.models.memory import DEFAULT_PROJECT
 from morgan_brain.modules.memory.stores.vector import VectorHit, VectorRecord
 
 
@@ -41,11 +42,49 @@ class SqliteVectorIndex:
             CREATE INDEX IF NOT EXISTS idx_vec_meta_id ON vec_meta (id);
             CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 embedding float[{dim}] distance_metric=cosine,
-                user_id TEXT
+                user_id TEXT,
+                project TEXT
             );
             """
         )
         conn.commit()
+        self._migrate_project_column(dim)
+
+    def _migrate_project_column(self, dim: int) -> None:
+        """Idempotent upgrade for a database written before project scoping existed.
+
+        ``vec_meta`` is a regular table, so a plain ``ALTER TABLE`` covers it. ``vec_items`` is
+        a vec0 virtual table -- like FTS5, it cannot be ``ALTER``ed -- so its rows (the packed
+        embedding blobs, which have no other source of truth) are read out, the table is
+        dropped and recreated with the ``project`` metadata column, and the rows are
+        reinserted with ``DEFAULT_PROJECT`` backfilled.
+        """
+        meta_cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(vec_meta)")}
+        if "project" not in meta_cols:
+            self._conn.execute(
+                f"ALTER TABLE vec_meta ADD COLUMN project TEXT NOT NULL DEFAULT '{DEFAULT_PROJECT}'"
+            )
+            self._conn.commit()
+
+        item_cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(vec_items)")}
+        if "project" not in item_cols:
+            rows = self._conn.execute("SELECT rowid, embedding, user_id FROM vec_items").fetchall()
+            self._conn.execute("DROP TABLE vec_items")
+            self._conn.execute(
+                f"""
+                CREATE VIRTUAL TABLE vec_items USING vec0(
+                    embedding float[{dim}] distance_metric=cosine,
+                    user_id TEXT,
+                    project TEXT
+                )
+                """
+            )
+            for r in rows:
+                self._conn.execute(
+                    "INSERT INTO vec_items (rowid, embedding, user_id, project) VALUES (?, ?, ?, ?)",
+                    (r["rowid"], r["embedding"], r["user_id"], DEFAULT_PROJECT),
+                )
+            self._conn.commit()
 
     async def upsert(self, record: VectorRecord) -> None:
         if len(record.vector) != self._dim:
@@ -59,33 +98,43 @@ class SqliteVectorIndex:
             rowid = row["rowid"]
             self._conn.execute("DELETE FROM vec_items WHERE rowid = ?", (rowid,))
             self._conn.execute(
-                "UPDATE vec_meta SET user_id = ?, payload = ? WHERE rowid = ?",
-                (record.user_id, json.dumps(record.payload), rowid),
+                "UPDATE vec_meta SET user_id = ?, project = ?, payload = ? WHERE rowid = ?",
+                (record.user_id, record.project, json.dumps(record.payload), rowid),
             )
         else:
             cur = self._conn.execute(
-                "INSERT INTO vec_meta (id, user_id, payload) VALUES (?, ?, ?)",
-                (record.id, record.user_id, json.dumps(record.payload)),
+                "INSERT INTO vec_meta (id, user_id, project, payload) VALUES (?, ?, ?, ?)",
+                (record.id, record.user_id, record.project, json.dumps(record.payload)),
             )
             rowid = int(cur.lastrowid or 0)
         self._conn.execute(
-            "INSERT INTO vec_items (rowid, embedding, user_id) VALUES (?, ?, ?)",
-            (rowid, _pack(record.vector), record.user_id),
+            "INSERT INTO vec_items (rowid, embedding, user_id, project) VALUES (?, ?, ?, ?)",
+            (rowid, _pack(record.vector), record.user_id, record.project),
         )
         self._conn.commit()
 
-    async def search(self, *, user_id: str, vector: list[float], top_k: int) -> list[VectorHit]:
-        # user_id is a vec0 metadata column, so the filter applies INSIDE the KNN.
-        rows = self._conn.execute(
-            """
+    async def search(
+        self,
+        *,
+        user_id: str,
+        vector: list[float],
+        top_k: int,
+        project: str | None = DEFAULT_PROJECT,
+    ) -> list[VectorHit]:
+        # user_id and project are both vec0 metadata columns, so the filter applies INSIDE the
+        # KNN -- see the module docstring for why post-filtering would silently drop results.
+        sql = """
             SELECT m.id AS id, m.payload AS payload, v.distance AS distance
             FROM vec_items v
             JOIN vec_meta m ON m.rowid = v.rowid
             WHERE v.embedding MATCH ? AND k = ? AND v.user_id = ?
-            ORDER BY v.distance
-            """,
-            (_pack(vector), top_k, user_id),
-        ).fetchall()
+            """
+        params: list[object] = [_pack(vector), top_k, user_id]
+        if project is not None:
+            sql += " AND v.project = ?"
+            params.append(project)
+        sql += " ORDER BY v.distance"
+        rows = self._conn.execute(sql, params).fetchall()
         # vec0's cosine distance is (1 - cosine_similarity), on 0..2. Convert back to
         # similarity on -1..1 so the score scale matches InMemoryVectorIndex (_cosine) and
         # QdrantVectorIndex (Qdrant's own cosine score) — negating distance would give -2..0.
