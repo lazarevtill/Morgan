@@ -53,3 +53,10 @@ class MemoryStore(Protocol):
     ) -> None:
         """Overwrite a fact's confidence in place. Scoped to *user_id* + *project*."""
         ...
+
+    async def distinct_projects(self, user_id: str) -> list[str]:
+        """Return the distinct project names *user_id* has stored memories under.
+
+        Used to fan a per-user operation (e.g. nightly consolidation) out across every
+        project the user actually has, instead of assuming a single project."""
+        ...

@@ -142,3 +142,7 @@ class MemoryModule:
         self, fact_id: str, *, user_id: str, project: str, value: float
     ) -> None:
         await self._temporal.set_confidence(fact_id, user_id=user_id, project=project, value=value)
+
+    async def distinct_projects(self, user_id: str) -> list[str]:
+        """Return the distinct project names *user_id* has stored memories under."""
+        return self._episodics.distinct_projects(user_id)

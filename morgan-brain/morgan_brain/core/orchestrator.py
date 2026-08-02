@@ -104,6 +104,7 @@ class Orchestrator:
         self,
         *,
         user_id: str,
+        project: str,
         text: str,
         session_id: str | None = None,
         history: list[Any] | None = None,
@@ -125,7 +126,9 @@ class Orchestrator:
         )
 
         # 4. Memory recall
-        memories = await self._memory.recall(MemoryQuery(user_id=user_id, text=perception.text))
+        memories = await self._memory.recall(
+            MemoryQuery(user_id=user_id, project=project, text=perception.text)
+        )
 
         # 5. Skill selection
         skills = await self._skills.select(perception)
@@ -168,6 +171,7 @@ class Orchestrator:
         self,
         *,
         user_id: str,
+        project: str,
         text: str,
         session_id: str | None = None,
         history: list[Any] | None = None,
@@ -188,7 +192,9 @@ class Orchestrator:
         )
 
         # 4. Memory recall (multi-signal, currently-valid facts)
-        memories = await self._memory.recall(MemoryQuery(user_id=user_id, text=perception.text))
+        memories = await self._memory.recall(
+            MemoryQuery(user_id=user_id, project=project, text=perception.text)
+        )
 
         # 5. Skill selection
         skills = await self._skills.select(perception)
@@ -230,6 +236,7 @@ class Orchestrator:
         self,
         *,
         user_id: str,
+        project: str,
         text: str,
         session_id: str | None = None,
         history: list[Any] | None = None,
@@ -261,7 +268,9 @@ class Orchestrator:
         )
 
         # 4. Memory recall
-        memories = await self._memory.recall(MemoryQuery(user_id=user_id, text=perception.text))
+        memories = await self._memory.recall(
+            MemoryQuery(user_id=user_id, project=project, text=perception.text)
+        )
 
         # 5. Skill selection
         skills = await self._skills.select(perception)

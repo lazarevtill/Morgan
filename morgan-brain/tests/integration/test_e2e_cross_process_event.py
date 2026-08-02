@@ -104,6 +104,7 @@ async def test_cross_process_handler_called_on_response_generated() -> None:
     # Simulate brain-api serving a request.
     result = await orch.handle_turn(
         user_id="alice",
+        project="default",
         text="What is the capital of France?",
         session_id="sess-cross",
     )
@@ -157,6 +158,7 @@ async def test_cross_process_multiple_turns_all_processed() -> None:
     for i in range(3):
         await orch.handle_turn(
             user_id="bob",
+            project="default",
             text=f"turn {i}",
             session_id="sess-multi",
         )

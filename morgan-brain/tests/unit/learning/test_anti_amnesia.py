@@ -99,6 +99,7 @@ async def test_inferred_delete_cannot_erase_user_stated_fact() -> None:
     await cons.apply(
         USER,
         FactOpBatch(ops=[FactOp(op=FactOpKind.DELETE, subject="user", predicate="deploy_policy")]),
+        project="default",
     )
 
     facts = await temporal.current_facts(user_id=USER)
@@ -115,6 +116,7 @@ async def test_inferred_delete_still_removes_agent_inferred_fact() -> None:
     await cons.apply(
         USER,
         FactOpBatch(ops=[FactOp(op=FactOpKind.DELETE, subject="user", predicate="likes")]),
+        project="default",
     )
 
     facts = await temporal.current_facts(user_id=USER)
@@ -130,7 +132,9 @@ async def test_user_stated_facts_resist_decay_floor() -> None:
     await _seed(gate, "mood", "happy", MemorySource.AGENT_INFERRED, conf=1.0)
 
     later = T0 + timedelta(days=365)  # a year of aggressive decay
-    await cons.decay_confidence(USER, now=later, half_life_days=30.0, protected_floor=0.5)
+    await cons.decay_confidence(
+        USER, project="default", now=later, half_life_days=30.0, protected_floor=0.5
+    )
 
     conf = {f.predicate: f.confidence for f in await temporal.current_facts(user_id=USER)}
     assert conf["allergy"] >= 0.5, "user-stated fact decayed below the protected floor"

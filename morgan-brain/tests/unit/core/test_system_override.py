@@ -95,6 +95,7 @@ async def test_handle_turn_system_override_in_system_message() -> None:
 
     result = await orch2.handle_turn(
         user_id="u1",
+        project="default",
         text="hello",
         system_override=override_text,
     )
@@ -157,7 +158,9 @@ async def test_handle_turn_no_override_no_sentinel() -> None:
 
     orch, _ = _build_orch_with_inspectable_client(sentinel, fake_client, s, bus)
 
-    result = await orch.handle_turn(user_id="u1", text="hello")  # type: ignore[union-attr]
+    result = await orch.handle_turn(  # type: ignore[union-attr]
+        user_id="u1", project="default", text="hello"
+    )
     assert result.text == "answer"
     system_msg = fake_client.last_messages[0]
     assert sentinel not in system_msg.content
@@ -179,6 +182,7 @@ async def test_handle_turn_with_id_system_override() -> None:
 
     result, turn_id = await orch.handle_turn_with_id(  # type: ignore[union-attr]
         user_id="u1",
+        project="default",
         text="hello",
         system_override=sentinel,
     )

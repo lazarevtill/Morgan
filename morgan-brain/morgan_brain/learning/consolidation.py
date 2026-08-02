@@ -22,7 +22,6 @@ from typing import Callable
 from pydantic import BaseModel, Field
 
 from morgan_brain.models.memory import (
-    DEFAULT_PROJECT,
     Memory,
     MemoryKind,
     MemoryQuery,
@@ -174,8 +173,8 @@ class MemoryConsolidator:
     # apply
     # ------------------------------------------------------------------
 
-    async def apply(self, user_id: str, batch: FactOpBatch) -> list[FactOp]:
-        """Apply a batch of fact operations.
+    async def apply(self, user_id: str, batch: FactOpBatch, *, project: str) -> list[FactOp]:
+        """Apply a batch of fact operations, scoped to *project*.
 
         Dedup pre-filter: an ADD whose (subject, predicate, object) exactly
         matches a currently-valid fact is silently dropped (treated as NOOP).
@@ -184,7 +183,7 @@ class MemoryConsolidator:
         deduped ADDs).
         """
         now = self._clock()
-        current = await self._gate.current_facts(user_id=user_id, project=DEFAULT_PROJECT)
+        current = await self._gate.current_facts(user_id=user_id, project=project)
         current_set = {(f.subject, f.predicate, f.object) for f in current}
 
         applied: list[FactOp] = []
@@ -201,6 +200,7 @@ class MemoryConsolidator:
                 await self._gate.upsert_fact(
                     TemporalFact(
                         user_id=user_id,
+                        project=project,
                         subject=op.subject,
                         predicate=op.predicate,
                         object=op.object,
@@ -216,6 +216,7 @@ class MemoryConsolidator:
                 await self._gate.upsert_fact(
                     TemporalFact(
                         user_id=user_id,
+                        project=project,
                         subject=op.subject,
                         predicate=op.predicate,
                         object=op.object,
@@ -240,9 +241,7 @@ class MemoryConsolidator:
                     and f.source is not MemorySource.USER_STATED
                 ]
                 for fact in matching:
-                    await self._gate.close_fact(
-                        fact.id, user_id=user_id, project=DEFAULT_PROJECT, now=now
-                    )
+                    await self._gate.close_fact(fact.id, user_id=user_id, project=project, now=now)
                 if matching:
                     applied.append(op)
 
@@ -252,18 +251,20 @@ class MemoryConsolidator:
     # consolidate
     # ------------------------------------------------------------------
 
-    async def consolidate(self, user_id: str) -> list[FactOp]:
-        """Orchestrate propose → apply for *user_id*.
+    async def consolidate(self, user_id: str, *, project: str) -> list[FactOp]:
+        """Orchestrate propose → apply for *user_id*, scoped to *project*.
 
         Pulls recent episodics via the gate and current facts from the temporal
         store, then runs propose + apply.
         """
         # Recall recent episodics (up to 50).
-        episodics = await self._gate.recall(MemoryQuery(user_id=user_id, text="", top_k=50))
+        episodics = await self._gate.recall(
+            MemoryQuery(user_id=user_id, project=project, text="", top_k=50)
+        )
         # Filter to episodic kind only (fact_memories are also returned by recall).
         episodics = [m for m in episodics if m.kind is MemoryKind.EPISODIC]
 
-        existing_facts = await self._gate.current_facts(user_id=user_id, project=DEFAULT_PROJECT)
+        existing_facts = await self._gate.current_facts(user_id=user_id, project=project)
 
         # Surprise-gate: consolidate what the current model did NOT already predict.
         # Neuro-grounded (the hippocampus preferentially encodes prediction errors): episodics
@@ -272,7 +273,7 @@ class MemoryConsolidator:
         episodics = _surprise_filter(episodics, existing_facts)
 
         batch = await self.propose(user_id, episodics, existing_facts)
-        return await self.apply(user_id, batch)
+        return await self.apply(user_id, batch, project=project)
 
     # ------------------------------------------------------------------
     # decay_confidence
@@ -282,6 +283,7 @@ class MemoryConsolidator:
         self,
         user_id: str,
         *,
+        project: str,
         half_life_days: float = 30.0,
         now: datetime,
         stale_threshold: float = 0.2,
@@ -301,6 +303,8 @@ class MemoryConsolidator:
         ----------
         user_id:
             User whose facts to decay.
+        project:
+            Project to scope the decay to.
         half_life_days:
             Half-life for exponential decay (default 30 days).
         now:
@@ -315,7 +319,7 @@ class MemoryConsolidator:
             (the fact objects reflect the *pre-decay* state; callers should
             re-query for the updated confidence).
         """
-        facts = await self._gate.current_facts(user_id=user_id, project=DEFAULT_PROJECT)
+        facts = await self._gate.current_facts(user_id=user_id, project=project)
         stale: list[TemporalFact] = []
 
         for fact in facts:
@@ -343,7 +347,7 @@ class MemoryConsolidator:
                 decayed = max(decayed, protected_floor)
 
             await self._gate.set_confidence(
-                fact.id, user_id=user_id, project=DEFAULT_PROJECT, value=decayed
+                fact.id, user_id=user_id, project=project, value=decayed
             )
 
             if decayed < stale_threshold:

@@ -66,7 +66,11 @@ async def test_turn2_history_contains_turn1_exchange() -> None:
     # Turn 1
     history1 = history_store.recent(hkey)
     result1 = await orch.handle_turn(
-        user_id=user_id, text="My name is Alice", session_id=session_id, history=history1
+        user_id=user_id,
+        project="default",
+        text="My name is Alice",
+        session_id=session_id,
+        history=history1,
     )
     assert result1.text == "Got it."
 
@@ -78,7 +82,11 @@ async def test_turn2_history_contains_turn1_exchange() -> None:
     # Turn 2 — fetch history first (as the API handler does)
     history2 = history_store.recent(hkey)
     result2 = await orch.handle_turn(
-        user_id=user_id, text="What is my name?", session_id=session_id, history=history2
+        user_id=user_id,
+        project="default",
+        text="What is my name?",
+        session_id=session_id,
+        history=history2,
     )
     assert result2.text == "You are Alice."
 

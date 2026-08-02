@@ -487,10 +487,14 @@ class MemoryTestHandle:
     def __init__(self, memory_module: MemoryModule) -> None:
         self._memory_module = memory_module
 
-    async def recall_raw(self, *, user_id: str, text: str) -> list[Memory]:
+    async def recall_raw(
+        self, *, user_id: str, text: str, project: str = "default"
+    ) -> list[Memory]:
         from morgan_brain.models.memory import MemoryQuery
 
-        return await self._memory_module.recall(MemoryQuery(user_id=user_id, text=text, top_k=10))
+        return await self._memory_module.recall(
+            MemoryQuery(user_id=user_id, project=project, text=text, top_k=10)
+        )
 
 
 def build_orchestrator_for_test(

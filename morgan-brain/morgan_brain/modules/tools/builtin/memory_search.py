@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from morgan_brain.interfaces.tools import ToolResult
-from morgan_brain.models.memory import MemoryQuery
+from morgan_brain.models.memory import DEFAULT_PROJECT, MemoryQuery
 from morgan_brain.security.memory_gate import MemoryGate
 
 
@@ -50,7 +50,10 @@ class MemorySearchTool:
         user_id: str,
         query: str,
         top_k: int = 5,
+        project: str = DEFAULT_PROJECT,
         **_: Any,
     ) -> ToolResult:
-        memories = await self._gate.recall(MemoryQuery(user_id=user_id, text=query, top_k=top_k))
+        memories = await self._gate.recall(
+            MemoryQuery(user_id=user_id, project=project, text=query, top_k=top_k)
+        )
         return ToolResult(ok=True, output=[m.content for m in memories])

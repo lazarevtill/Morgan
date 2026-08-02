@@ -65,7 +65,11 @@ async def test_turn2_prompt_contains_turn1_user_and_assistant_messages() -> None
     # Turn 1.
     h1 = history_store.recent(hkey)
     result1 = await orch.handle_turn(
-        user_id=user_id, text="I live in Berlin.", session_id=session_id, history=h1
+        user_id=user_id,
+        project="default",
+        text="I live in Berlin.",
+        session_id=session_id,
+        history=h1,
     )
     assert result1.text == "I live in Berlin."
 
@@ -76,7 +80,11 @@ async def test_turn2_prompt_contains_turn1_user_and_assistant_messages() -> None
     # Turn 2.
     h2 = history_store.recent(hkey)
     result2 = await orch.handle_turn(
-        user_id=user_id, text="Where do I live?", session_id=session_id, history=h2
+        user_id=user_id,
+        project="default",
+        text="Where do I live?",
+        session_id=session_id,
+        history=h2,
     )
     assert result2.text == "You said you live in Berlin."
 
@@ -115,7 +123,11 @@ async def test_history_is_session_scoped_not_cross_session() -> None:
     # Session A: turn 1.
     h_a = history_store.recent(session_key(user_id, "session-a"))
     await orch.handle_turn(
-        user_id=user_id, text="My name is Alice.", session_id="session-a", history=h_a
+        user_id=user_id,
+        project="default",
+        text="My name is Alice.",
+        session_id="session-a",
+        history=h_a,
     )
 
     # Session B uses EMPTY history (different session).
@@ -123,7 +135,11 @@ async def test_history_is_session_scoped_not_cross_session() -> None:
     assert len(h_b) == 0, "Session B should start with empty history"
 
     await orch.handle_turn(
-        user_id=user_id, text="What is my name?", session_id="session-b", history=h_b
+        user_id=user_id,
+        project="default",
+        text="What is my name?",
+        session_id="session-b",
+        history=h_b,
     )
 
     # last_messages for session B must NOT include the session-A history messages
@@ -169,7 +185,9 @@ async def test_history_grows_across_turns() -> None:
 
     for i in range(3):
         h = history_store.recent(hkey)
-        await orch.handle_turn(user_id=user_id, text=f"msg {i}", session_id=session_id, history=h)
+        await orch.handle_turn(
+            user_id=user_id, project="default", text=f"msg {i}", session_id=session_id, history=h
+        )
 
     entries = history_store.recent(hkey, limit=100)
     assert len(entries) == 6, f"Expected 6 history entries, got {len(entries)}"

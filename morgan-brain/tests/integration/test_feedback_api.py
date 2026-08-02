@@ -65,7 +65,11 @@ def _build_test_app() -> tuple[FastAPI, TestClient, object]:  # (app, client, si
         user_id = req.user_id or settings.owner_user_id
         history = history_store.recent(req.session_id or "default")
         result, turn_id = await orch.handle_turn_with_id(
-            user_id=user_id, text=req.message, session_id=req.session_id, history=history
+            user_id=user_id,
+            project=req.project,
+            text=req.message,
+            session_id=req.session_id,
+            history=history,
         )
         return ChatResponse(response=result.text, model_used=result.model_used, turn_id=turn_id)
 
@@ -98,7 +102,9 @@ def test_feedback_thumb_up_returns_ok() -> None:
 
     # Step 1: post a chat turn to get a turn_id
     resp = client.post(
-        "/api/chat", json={"message": "hello", "session_id": "s1"}, headers=_AUTH_HEADERS
+        "/api/chat",
+        json={"message": "hello", "project": "default", "session_id": "s1"},
+        headers=_AUTH_HEADERS,
     )
     assert resp.status_code == 200
     turn_id = resp.json()["turn_id"]
@@ -120,7 +126,9 @@ async def test_feedback_thumb_up_updates_signal_store() -> None:
     _, client, signal_store = _build_test_app()
 
     resp = client.post(
-        "/api/chat", json={"message": "ping", "session_id": "s1"}, headers=_AUTH_HEADERS
+        "/api/chat",
+        json={"message": "ping", "project": "default", "session_id": "s1"},
+        headers=_AUTH_HEADERS,
     )
     assert resp.status_code == 200
     turn_id = resp.json()["turn_id"]
@@ -141,7 +149,9 @@ async def test_feedback_thumb_up_updates_signal_store() -> None:
 
 def test_feedback_edit_returns_ok() -> None:
     _, client, _ = _build_test_app()
-    resp = client.post("/api/chat", json={"message": "hello"}, headers=_AUTH_HEADERS)
+    resp = client.post(
+        "/api/chat", json={"message": "hello", "project": "default"}, headers=_AUTH_HEADERS
+    )
     turn_id = resp.json()["turn_id"]
 
     fb_resp = client.post(
@@ -155,7 +165,9 @@ def test_feedback_edit_returns_ok() -> None:
 
 def test_feedback_retry_returns_ok() -> None:
     _, client, _ = _build_test_app()
-    resp = client.post("/api/chat", json={"message": "hello"}, headers=_AUTH_HEADERS)
+    resp = client.post(
+        "/api/chat", json={"message": "hello", "project": "default"}, headers=_AUTH_HEADERS
+    )
     turn_id = resp.json()["turn_id"]
 
     fb_resp = client.post(

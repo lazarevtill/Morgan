@@ -28,14 +28,16 @@ _CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
 @pytest.mark.asyncio
 async def test_stream_turn_yields_reply_text() -> None:
     orch, _ = build_orchestrator_for_test(reply="Hello streaming!", clock=_CLOCK)
-    chunks = [chunk async for chunk in orch.stream_turn(user_id="u1", text="hi")]
+    chunks = [chunk async for chunk in orch.stream_turn(user_id="u1", project="default", text="hi")]
     assert chunks == ["Hello streaming!"]
 
 
 @pytest.mark.asyncio
 async def test_stream_turn_yields_non_empty_chunks() -> None:
     orch, _ = build_orchestrator_for_test(reply="chunk1", clock=_CLOCK)
-    chunks = [chunk async for chunk in orch.stream_turn(user_id="u1", text="test")]
+    chunks = [
+        chunk async for chunk in orch.stream_turn(user_id="u1", project="default", text="test")
+    ]
     assert all(isinstance(c, str) and c for c in chunks)
 
 
@@ -43,7 +45,9 @@ async def test_stream_turn_yields_non_empty_chunks() -> None:
 async def test_stream_turn_stores_turn_in_memory() -> None:
     """After stream_turn completes, RESPONSE_GENERATED fires and the turn is stored."""
     orch, mem = build_orchestrator_for_test(reply="Streaming reply", clock=_CLOCK)
-    async for _ in orch.stream_turn(user_id="u1", text="My name is Alice", session_id="s1"):
+    async for _ in orch.stream_turn(
+        user_id="u1", project="default", text="My name is Alice", session_id="s1"
+    ):
         pass  # consume entire stream
 
     hits = await mem.recall_raw(user_id="u1", text="Alice")
@@ -53,7 +57,9 @@ async def test_stream_turn_stores_turn_in_memory() -> None:
 @pytest.mark.asyncio
 async def test_stream_turn_is_user_scoped() -> None:
     orch, mem = build_orchestrator_for_test(reply="ok", clock=_CLOCK)
-    async for _ in orch.stream_turn(user_id="u1", text="secret for u1", session_id="s1"):
+    async for _ in orch.stream_turn(
+        user_id="u1", project="default", text="secret for u1", session_id="s1"
+    ):
         pass
 
     other = await mem.recall_raw(user_id="u2", text="secret")
@@ -87,6 +93,7 @@ def _sse_app(api_key: str = "") -> tuple[FastAPI, Settings, TestClient]:
         async def _event_stream() -> AsyncIterator[str]:
             async for delta in orch.stream_turn(
                 user_id=req.user_id or settings.owner_user_id,
+                project=req.project,
                 text=req.message,
                 session_id=req.session_id,
             ):
@@ -100,7 +107,7 @@ def _sse_app(api_key: str = "") -> tuple[FastAPI, Settings, TestClient]:
 
 def test_sse_endpoint_streams_data_lines() -> None:
     _, _, client = _sse_app()
-    resp = client.post("/api/chat/stream", json={"message": "hello"})
+    resp = client.post("/api/chat/stream", json={"message": "hello", "project": "default"})
     assert resp.status_code == 200
     assert "text/event-stream" in resp.headers["content-type"]
 
@@ -110,14 +117,14 @@ def test_sse_endpoint_streams_data_lines() -> None:
 
 def test_sse_endpoint_ends_with_done() -> None:
     _, _, client = _sse_app()
-    resp = client.post("/api/chat/stream", json={"message": "hello"})
+    resp = client.post("/api/chat/stream", json={"message": "hello", "project": "default"})
     data_lines = [line for line in resp.text.splitlines() if line.startswith("data:")]
     assert data_lines[-1] == "data: [DONE]"
 
 
 def test_sse_endpoint_delta_json_well_formed() -> None:
     _, _, client = _sse_app()
-    resp = client.post("/api/chat/stream", json={"message": "hello"})
+    resp = client.post("/api/chat/stream", json={"message": "hello", "project": "default"})
     data_lines = [line for line in resp.text.splitlines() if line.startswith("data:")]
     token_lines = [ln for ln in data_lines if ln != "data: [DONE]"]
     for line in token_lines:
@@ -129,7 +136,7 @@ def test_sse_endpoint_delta_json_well_formed() -> None:
 def test_sse_endpoint_enforces_auth() -> None:
     KEY = "test-stream-key"
     _, _, client = _sse_app(api_key=KEY)
-    resp = client.post("/api/chat/stream", json={"message": "hello"})
+    resp = client.post("/api/chat/stream", json={"message": "hello", "project": "default"})
     assert resp.status_code == 401
 
 
@@ -138,7 +145,7 @@ def test_sse_endpoint_passes_with_correct_key() -> None:
     _, _, client = _sse_app(api_key=KEY)
     resp = client.post(
         "/api/chat/stream",
-        json={"message": "hello"},
+        json={"message": "hello", "project": "default"},
         headers={"Authorization": f"Bearer {KEY}"},
     )
     assert resp.status_code == 200

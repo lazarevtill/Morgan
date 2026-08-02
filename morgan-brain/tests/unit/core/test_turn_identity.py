@@ -22,7 +22,7 @@ CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
 @pytest.mark.asyncio
 async def test_handle_turn_returns_result() -> None:
     orch, _, _ = build_orchestrator_for_test_with_signals(reply="hello", clock=CLOCK)
-    result = await orch.handle_turn(user_id="u1", text="hi", session_id="s1")
+    result = await orch.handle_turn(user_id="u1", project="default", text="hi", session_id="s1")
     assert result.text == "hello"
 
 
@@ -40,7 +40,7 @@ async def test_response_generated_carries_turn_id() -> None:
 
     bus.subscribe(EventType.RESPONSE_GENERATED, _capture)
 
-    await orch.handle_turn(user_id="u1", text="hello", session_id="s1")
+    await orch.handle_turn(user_id="u1", project="default", text="hello", session_id="s1")
 
     assert len(events_payloads) >= 1
     payload = events_payloads[0]
@@ -54,7 +54,7 @@ async def test_signal_recorded_after_handle_turn() -> None:
     """After a turn, the SignalStore has exactly one base signal for that turn."""
     orch, signal_store, _ = build_orchestrator_for_test_with_signals(reply="pong", clock=CLOCK)
 
-    await orch.handle_turn(user_id="u1", text="ping", session_id="sess1")
+    await orch.handle_turn(user_id="u1", project="default", text="ping", session_id="sess1")
 
     signals = await signal_store.for_user("u1")
     assert len(signals) == 1

@@ -68,6 +68,7 @@ def _build_app() -> tuple[FastAPI, object]:
         hist = history_store.recent(req.session_id or "default")
         result, turn_id = await orch.handle_turn_with_id(
             user_id=uid,
+            project=req.project,
             text=req.message,
             session_id=req.session_id,
             history=hist,
@@ -101,7 +102,7 @@ async def test_feedback_thumb_up_via_async_client() -> None:
         # Step 1: chat to get a turn_id.
         resp = await c.post(
             "/api/chat",
-            json={"message": "hello", "session_id": "s1"},
+            json={"message": "hello", "project": "default", "session_id": "s1"},
             headers=AUTH_HEADERS,
         )
         assert resp.status_code == 200
@@ -129,7 +130,7 @@ async def test_feedback_thumb_up_persisted_in_signal_store() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
             "/api/chat",
-            json={"message": "ping"},
+            json={"message": "ping", "project": "default"},
             headers=AUTH_HEADERS,
         )
         turn_id = resp.json()["turn_id"]
@@ -166,7 +167,7 @@ async def test_feedback_edit_updates_signal() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
             "/api/chat",
-            json={"message": "help"},
+            json={"message": "help", "project": "default"},
             headers=AUTH_HEADERS,
         )
         turn_id = resp.json()["turn_id"]
@@ -192,7 +193,7 @@ async def test_feedback_retry_updates_signal() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
             "/api/chat",
-            json={"message": "retry me"},
+            json={"message": "retry me", "project": "default"},
             headers=AUTH_HEADERS,
         )
         turn_id = resp.json()["turn_id"]

@@ -61,11 +61,15 @@ OPTIMIZE_INTERVAL = 50.0
 class _FakeLearner:
     """Spy consolidation learner."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, projects: list[str] | None = None) -> None:
         self.consolidate_calls: list[str] = []
+        self._projects = projects if projects is not None else ["default"]
 
-    async def consolidate(self, user_id: str) -> None:
+    async def consolidate(self, user_id: str, *, project: str = "default") -> None:
         self.consolidate_calls.append(user_id)
+
+    async def projects_for_user(self, user_id: str) -> list[str]:
+        return self._projects
 
 
 class _FakeTrainer:

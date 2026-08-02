@@ -71,7 +71,7 @@ async def test_history_and_signal_persist_under_non_inproc_bus() -> None:
     )
 
     _, turn_id = await orch.handle_turn_with_id(
-        user_id="u1", text="My name is Sam", session_id="s1"
+        user_id="u1", project="default", text="My name is Sam", session_id="s1"
     )
 
     # History written in-process despite the non-inproc bus (the GAP-2 break is closed).

@@ -77,6 +77,7 @@ def _build_app(reply: str = "hello from fake") -> FastAPI:
         hist = history_store.recent(req.session_id or "default")
         result, turn_id = await orch.handle_turn_with_id(
             user_id=uid,
+            project=req.project,
             text=req.message,
             session_id=req.session_id,
             history=hist,
@@ -91,6 +92,7 @@ def _build_app(reply: str = "hello from fake") -> FastAPI:
             hist = history_store.recent(req.session_id or "default")
             async for delta in orch.stream_turn(
                 user_id=uid,
+                project=req.project,
                 text=req.message,
                 session_id=req.session_id,
                 history=hist,
@@ -127,7 +129,7 @@ async def test_chat_returns_200_with_response_model_used_turn_id() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
             "/api/chat",
-            json={"message": "What is 2+2?", "session_id": "s1"},
+            json={"message": "What is 2+2?", "project": "default", "session_id": "s1"},
             headers=AUTH_HEADERS,
         )
 
@@ -146,7 +148,7 @@ async def test_chat_stream_yields_sse_lines_ending_with_done() -> None:
         async with c.stream(
             "POST",
             "/api/chat/stream",
-            json={"message": "stream me", "session_id": "s1"},
+            json={"message": "stream me", "project": "default", "session_id": "s1"},
             headers=AUTH_HEADERS,
         ) as resp:
             assert resp.status_code == 200
@@ -177,7 +179,7 @@ async def test_chat_missing_auth_returns_401() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
             "/api/chat",
-            json={"message": "hello"},
+            json={"message": "hello", "project": "default"},
             # No auth header
         )
     assert resp.status_code == 401
@@ -190,7 +192,7 @@ async def test_chat_wrong_key_returns_401() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
             "/api/chat",
-            json={"message": "hello"},
+            json={"message": "hello", "project": "default"},
             headers={"Authorization": "Bearer wrong-key"},
         )
     assert resp.status_code == 401
@@ -217,7 +219,7 @@ async def test_chat_returns_unique_turn_ids_per_request() -> None:
         for _ in range(3):
             resp = await c.post(
                 "/api/chat",
-                json={"message": "hi"},
+                json={"message": "hi", "project": "default"},
                 headers=AUTH_HEADERS,
             )
             turn_ids.append(resp.json()["turn_id"])

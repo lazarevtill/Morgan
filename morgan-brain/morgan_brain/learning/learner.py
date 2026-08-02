@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Callable
 
 from morgan_brain.learning.consolidation import MemoryConsolidator
-from morgan_brain.models.memory import Memory, MemoryKind, MemorySource
+from morgan_brain.models.memory import DEFAULT_PROJECT, Memory, MemoryKind, MemorySource
 from morgan_brain.models.message import Conversation, Role
 from morgan_brain.models.user import UserModel
 from morgan_brain.security.memory_gate import MemoryGate
@@ -86,13 +86,23 @@ class ConsolidationLearner:
             return await self._profile_builder.build(user_id)
         return UserModel(user_id=user_id)
 
-    async def consolidate(self, user_id: str) -> None:
-        """Run bi-temporal fact consolidation for *user_id*.
+    async def consolidate(self, user_id: str, *, project: str = DEFAULT_PROJECT) -> None:
+        """Run bi-temporal fact consolidation for *user_id*, scoped to *project*.
 
         Delegates to ``MemoryConsolidator.consolidate``, which pulls recent
         episodics, proposes fact operations via the LLM, and applies them.
         """
-        await self._consolidator.consolidate(user_id)
+        await self._consolidator.consolidate(user_id, project=project)
+
+    async def projects_for_user(self, user_id: str) -> list[str]:
+        """Distinct projects *user_id* has written memories under.
+
+        Used by :class:`~morgan_brain.scheduling.learning_jobs.LearningScheduler` to fan
+        nightly consolidation out across every project the user actually has, instead of
+        the single ``DEFAULT_PROJECT`` bucket -- so anything written under a real project
+        name (e.g. by the CLI) is still consolidated.
+        """
+        return await self._gate.distinct_projects(user_id)
 
     async def learn_from_edit(self, *, user_id: str, original: str, edited: str) -> str:
         """CIPHER: distil a preference from an (original, edited) reply pair and persist
