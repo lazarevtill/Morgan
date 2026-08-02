@@ -2631,10 +2631,18 @@ git commit -m "test(integration): cross-repo recall after restart"
 
 Reflect: one SQLite database, the four surfaces, `MemoryGate` covering the cold path, project scoping, `forget()`, llama-server defaults, and the promotion flag. Replace the old build/run commands with the CLI.
 
-- [ ] **Step 1a: Purge the stale Ollama examples**
+- [x] **Step 1a: Purge the stale Ollama examples — DONE in commit `31cf864`, no action needed**
 
-Carried from Task 16, which was asked for these and missed them. The default provider key is now
-`llamacpp`, so these read as instructions to configure a provider that is no longer the default:
+Task 16 completed this in a follow-up commit: `router.py`'s docstring example now uses
+`Binding("llamacpp", ...)`, and `.env.example` was rewritten with `llamacpp` role bindings for all
+four roles, the corrected endpoint and embedding model, and the previously-undocumented
+`MORGAN_LLM_API_KEY` / `MORGAN_LLM_TIMEOUT_SECONDS` / `MORGAN_EMBEDDING_BACKEND` /
+`MORGAN_ENABLE_CHAMPION_PROMOTION` settings. One deliberate mention of Ollama survives as an
+explicit "still supported as a non-default provider key" note, which is correct and should stay.
+Verify only; do not redo.
+
+Original scope, kept for the record — the default provider key is now `llamacpp`, so these read
+as instructions to configure a provider that is no longer the default:
 
 - `morgan_brain/providers/router.py:7` — the module docstring's usage example still shows
   `Binding("ollama", "qwen2.5:7b", client)`. This docstring is the first thing anyone reads to
