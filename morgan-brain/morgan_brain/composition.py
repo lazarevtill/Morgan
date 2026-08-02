@@ -113,20 +113,26 @@ def _probe_embedding_dim(embedder: Embedder, settings: Settings) -> None:
     Catches the class of bug where ``embedding_model`` and ``embedding_dim`` disagree (the
     vector store is created with a fixed ``dim`` up front — a mismatch fails silently at
     insert time otherwise, deep in the request path). Skipped for the hash backend (no
-    provider to ask) and made non-fatal when the endpoint is unreachable — a startup probe
-    must not turn a temporarily-down model server into a crash loop.
+    provider to ask) and made non-fatal when the endpoint is unreachable — with the default
+    topology being a REMOTE llama-server over an overlay network, "unreachable right now" is
+    a normal transient (laptop off the network, homelab rebooting), not a crash condition. A
+    DIMENSION mismatch still raises; an unreachable HOST does not.
     """
     if settings.embedding_backend == "hash":
         return
     try:
         vector = _run_coro_isolated(embedder.embed("probe"))
     except Exception as exc:  # noqa: BLE001 — unreachable/misconfigured endpoint, not fatal
-        log.warning("embedding-dim-probe.unreachable", error=str(exc))
+        log.warning(
+            "embedding-dim-probe.unreachable",
+            endpoint=settings.llm_endpoint,
+            error=str(exc),
+        )
         return
     if len(vector) != settings.embedding_dim:
         raise RuntimeError(
-            f"embedding_model {settings.embedding_model!r} returned a "
-            f"{len(vector)}-dimensional vector but settings.embedding_dim="
+            f"embedding_model {settings.embedding_model!r} at {settings.llm_endpoint!r} "
+            f"returned a {len(vector)}-dimensional vector but settings.embedding_dim="
             f"{settings.embedding_dim}; the two must agree "
             "(set MORGAN_EMBEDDING_DIM to match the model, or vice versa)."
         )

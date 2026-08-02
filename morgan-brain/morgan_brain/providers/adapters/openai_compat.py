@@ -50,9 +50,11 @@ class OpenAICompatAdapter:
     """ChatClient + Embedder over the OpenAI-compatible REST API.
 
     Args:
-        base_url: Base URL of the OpenAI-compatible endpoint (e.g. ``http://localhost:11434/v1``).
-        api_key:  API key; use any non-empty string for local servers.
-        provider: Provider name for capability registry lookups (e.g. ``"ollama"``).
+        base_url: Base URL of the OpenAI-compatible endpoint (e.g. ``http://localhost:8081/v1``).
+        api_key:  API key; use any non-empty string for servers that don't enforce one.
+        provider: Provider name for capability registry lookups (e.g. ``"llamacpp"``).
+        timeout:  Request timeout in seconds. Default is sized for a remote server reached
+                  over a network (a homelab GPU box under load), not a loopback socket.
     """
 
     def __init__(
@@ -60,6 +62,7 @@ class OpenAICompatAdapter:
         base_url: str,
         api_key: str,
         provider: str,
+        timeout: float = 120.0,
     ) -> None:
         # Import here so that the openai SDK is only required if this adapter is used.
         import openai
@@ -70,6 +73,7 @@ class OpenAICompatAdapter:
             base_url=base_url,
             api_key=api_key,
             max_retries=0,
+            timeout=timeout,
         )
 
     # ------------------------------------------------------------------

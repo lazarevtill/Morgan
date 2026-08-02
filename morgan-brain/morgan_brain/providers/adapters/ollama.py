@@ -32,11 +32,13 @@ class OllamaAdapter(OpenAICompatAdapter):
     Args:
         base_url: Override the Ollama base URL (default: ``http://localhost:11434/v1``).
         api_key:  Override the API key (default: ``"ollama"``).
+        timeout:  Request timeout in seconds (default: 120.0 — see OpenAICompatAdapter).
     """
 
     def __init__(
         self,
         base_url: str = _DEFAULT_BASE_URL,
         api_key: str = _DEFAULT_API_KEY,
+        timeout: float = 120.0,
     ) -> None:
-        super().__init__(base_url=base_url, api_key=api_key, provider=_PROVIDER)
+        super().__init__(base_url=base_url, api_key=api_key, provider=_PROVIDER, timeout=timeout)
