@@ -187,3 +187,77 @@ def test_learning_worker_exposes_build_worker_context() -> None:
     from morgan_brain.composition import build_worker_context
 
     assert callable(build_worker_context)
+
+
+# ---------------------------------------------------------------------------
+# Tests: run() must use build_worker_context's own bus, not a second one
+# ---------------------------------------------------------------------------
+
+
+class _SpyBus:
+    """Records subscribe/start/stop calls without doing any real dispatch."""
+
+    def __init__(self) -> None:
+        self.subscribed: list[EventType] = []
+        self.start_calls = 0
+        self.stop_calls = 0
+
+    def subscribe(self, event_type: EventType, handler: Any) -> None:
+        self.subscribed.append(event_type)
+
+    async def publish(self, event: Event) -> None:  # pragma: no cover - unused here
+        raise AssertionError("publish() should not be called in this test")
+
+    async def start(self) -> None:
+        self.start_calls += 1
+
+    async def stop(self) -> None:
+        self.stop_calls += 1
+
+
+@pytest.mark.asyncio
+async def test_run_subscribes_and_starts_ctx_bus_not_a_second_one(monkeypatch: Any) -> None:
+    """run() must subscribe/start/stop the SAME bus build_worker_context resolved.
+
+    Regression test for: get_event_bus() constructs a new instance on every call (it is
+    NOT a singleton), so a stray second call in run() silently produced a bus that was
+    started and subscribed to, while the one _assemble() actually registered the
+    turn-storage subscriber on (ctx.bus) was never started at all.
+    """
+    import asyncio
+
+    import morgan_brain.apps.learning_worker.__main__ as mod
+    from morgan_brain.composition import WorkerContext
+
+    ctx_bus = _SpyBus()
+    decoy_bus = _SpyBus()  # stands in for what a stray get_event_bus() call would return
+
+    fake_ctx = WorkerContext(
+        learner=_SpyLearner(),
+        signal_store=None,  # type: ignore[arg-type]
+        signal_recorder=None,  # type: ignore[arg-type]
+        bus=ctx_bus,  # type: ignore[arg-type]
+        champion_trainer=None,  # type: ignore[arg-type]
+        prompt_registry=None,  # type: ignore[arg-type]
+        eval_scorer=None,  # type: ignore[arg-type]
+    )
+
+    monkeypatch.setattr("morgan_brain.composition.build_worker_context", lambda settings: fake_ctx)
+    monkeypatch.setattr(mod, "get_event_bus", lambda: decoy_bus)
+
+    async def _boom_sleep(*args: Any, **kwargs: Any) -> None:
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(mod.asyncio, "sleep", _boom_sleep)
+
+    with pytest.raises(asyncio.CancelledError):
+        await mod.run(_make_fake_settings())
+
+    assert ctx_bus.start_calls == 1
+    assert ctx_bus.stop_calls == 1
+    assert EventType.RESPONSE_GENERATED in ctx_bus.subscribed
+    assert EventType.SESSION_END in ctx_bus.subscribed
+
+    assert decoy_bus.start_calls == 0
+    assert decoy_bus.stop_calls == 0
+    assert decoy_bus.subscribed == []

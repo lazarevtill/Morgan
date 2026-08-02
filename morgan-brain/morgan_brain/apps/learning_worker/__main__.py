@@ -36,6 +36,7 @@ from morgan_brain.models.message import Conversation, Message, Role
 if TYPE_CHECKING:
     from typing import Any
 
+    from morgan_brain.interfaces.events import EventBus
     from morgan_brain.learning.learner import ConsolidationLearner
     from morgan_brain.scheduling.cron import CronService
     from morgan_brain.scheduling.learning_jobs import LearningScheduler
@@ -159,6 +160,7 @@ async def run(settings: Settings | None = None) -> None:
     champion_trainer: Any | None = None
     signal_store_for_sched: Any | None = None
     eval_scorer: Any | None = None
+    bus: EventBus | None = None
     try:
         from morgan_brain.composition import build_worker_context
 
@@ -167,12 +169,19 @@ async def run(settings: Settings | None = None) -> None:
         champion_trainer = ctx.champion_trainer
         signal_store_for_sched = ctx.signal_store
         eval_scorer = ctx.eval_scorer
+        bus = ctx.bus
         log.info("worker-context.built")
     except Exception:
         log.exception("worker-context.build-failed; starting with no-op learner")
 
-    # Obtain and start the configured event bus.
-    bus = get_event_bus()
+    # Use the context's bus -- the SAME instance build_worker_context resolved and shared with
+    # _assemble -- so subscribe()/start()/stop() below act on the bus turn-storage registration
+    # (and, when Redis, the real stream) actually runs on. get_event_bus() is NOT a singleton
+    # (see its docstring): calling it again here would silently create a second, disconnected
+    # bus that never receives what _assemble subscribed. Only fall back to a fresh one when the
+    # context itself failed to build (graceful degradation path below).
+    if bus is None:
+        bus = get_event_bus()
 
     if learner is not None:
         handler = _make_response_handler(learner, clock=_utcnow)
