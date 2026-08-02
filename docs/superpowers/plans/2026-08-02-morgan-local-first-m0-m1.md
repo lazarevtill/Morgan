@@ -2631,6 +2631,28 @@ git commit -m "test(integration): cross-repo recall after restart"
 
 Reflect: one SQLite database, the four surfaces, `MemoryGate` covering the cold path, project scoping, `forget()`, llama-server defaults, and the promotion flag. Replace the old build/run commands with the CLI.
 
+- [ ] **Step 1a: Purge the stale Ollama examples**
+
+Carried from Task 16, which was asked for these and missed them. The default provider key is now
+`llamacpp`, so these read as instructions to configure a provider that is no longer the default:
+
+- `morgan_brain/providers/router.py:7` — the module docstring's usage example still shows
+  `Binding("ollama", "qwen2.5:7b", client)`. This docstring is the first thing anyone reads to
+  understand role bindings, so it is the worst place to leave a stale example.
+- `morgan-brain/.env.example:20-21` — the commented `MORGAN_ROLE_BINDINGS` and `MORGAN_PROVIDERS`
+  examples both use `ollama:` keys and an Ollama base URL.
+
+Rewrite both against `llamacpp`, and make the `.env.example` block show the **remote** case as the
+normal one (a homelab endpoint reached over the overlay network, with `MORGAN_LLM_API_KEY` set),
+with localhost noted as the offline/dev fallback. Ollama remains a supported non-default provider
+key — do not delete the capability, just stop presenting it as the example.
+
+```bash
+cd morgan-brain && grep -rn 'ollama' morgan_brain/providers/router.py .env.example
+```
+Expected after the edit: no output, or only an explicit "Ollama is still supported as a
+non-default provider" note.
+
 - [ ] **Step 2: Rewrite `docs/WIRING.md` for llama-server**
 
 Document starting `llama-server` with chat, embedding, and rerank models, the `MORGAN_ROLE_BINDINGS` shape for all four roles, and `morgan doctor` as the verification step.
