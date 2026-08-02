@@ -76,6 +76,7 @@ async def test_response_generated_triggers_learner_process_session() -> None:
 
     handler = _make_response_handler(spy, clock=_fake_clock)
     bus.subscribe(EventType.RESPONSE_GENERATED, handler)
+    await bus.start()
 
     event = Event(
         type=EventType.RESPONSE_GENERATED,
@@ -88,6 +89,8 @@ async def test_response_generated_triggers_learner_process_session() -> None:
         },
     )
     await bus.publish(event)
+    await bus.drain()
+    await bus.stop()
 
     assert len(spy.sessions) == 1, "process_session must be called exactly once"
     convo = spy.sessions[0]
@@ -108,6 +111,7 @@ async def test_handler_uses_default_session_id_when_missing() -> None:
 
     handler = _make_response_handler(spy, clock=_fake_clock)
     bus.subscribe(EventType.RESPONSE_GENERATED, handler)
+    await bus.start()
 
     event = Event(
         type=EventType.RESPONSE_GENERATED,
@@ -118,6 +122,8 @@ async def test_handler_uses_default_session_id_when_missing() -> None:
         },
     )
     await bus.publish(event)
+    await bus.drain()
+    await bus.stop()
 
     assert spy.sessions[0].session_id == "default"
 
@@ -154,6 +160,7 @@ async def test_multiple_events_each_trigger_session() -> None:
 
     handler = _make_response_handler(spy, clock=_fake_clock)
     bus.subscribe(EventType.RESPONSE_GENERATED, handler)
+    await bus.start()
 
     for i in range(3):
         event = Event(
@@ -166,6 +173,9 @@ async def test_multiple_events_each_trigger_session() -> None:
             },
         )
         await bus.publish(event)
+
+    await bus.drain()
+    await bus.stop()
 
     assert len(spy.sessions) == 3
 

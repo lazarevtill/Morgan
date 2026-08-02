@@ -188,11 +188,14 @@ async def test_execute_emits_tool_invoked_event() -> None:
         captured.append(event)
 
     bus.subscribe(EventType.TOOL_INVOKED, _capture)
+    await bus.start()
 
     reg = ToolRegistry()
     reg.register(_EchoTool())  # type: ignore[arg-type]
     executor = ToolExecutorImpl(registry=reg, gate=_auto_gate(), bus=bus)
     await executor.execute("echo", user_id="u1", message="ping")
+    await bus.drain()
+    await bus.stop()
 
     assert len(captured) == 1
     evt = captured[0]
@@ -211,11 +214,14 @@ async def test_execute_denied_emits_tool_invoked_event_with_ok_false() -> None:
         captured.append(event)
 
     bus.subscribe(EventType.TOOL_INVOKED, _capture)
+    await bus.start()
 
     reg = ToolRegistry()
     reg.register(_EchoTool())  # type: ignore[arg-type]
     executor = ToolExecutorImpl(registry=reg, gate=_deny_gate(), bus=bus)
     await executor.execute("echo", user_id="u1")
+    await bus.drain()
+    await bus.stop()
 
     assert len(captured) == 1
     assert captured[0].payload["ok"] is False

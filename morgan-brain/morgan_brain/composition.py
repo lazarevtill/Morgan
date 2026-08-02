@@ -484,10 +484,18 @@ def build_worker_context(settings: Settings | None = None) -> WorkerContext:
 
 
 class MemoryTestHandle:
-    """Thin handle exposing raw recall for integration-test assertions."""
+    """Thin handle exposing raw recall for integration-test assertions.
 
-    def __init__(self, memory_module: MemoryModule) -> None:
+    Also exposes the orchestrator's ``InProcessBus`` (``.bus``): since Task 15 made
+    ``publish()`` enqueue rather than run handlers inline, a test that writes a turn and then
+    immediately recalls it must ``await handle.bus.start()`` before the turn and
+    ``await handle.bus.drain()`` before recalling, or the cold-path storage subscriber won't
+    have run yet.
+    """
+
+    def __init__(self, memory_module: MemoryModule, bus: InProcessBus) -> None:
         self._memory_module = memory_module
+        self.bus = bus
 
     async def recall_raw(
         self, *, user_id: str, text: str, project: str = "default"
@@ -546,7 +554,7 @@ def build_orchestrator_for_test(
         temporal_path=":memory:",
         bus=test_bus,
     )
-    return orch, MemoryTestHandle(memory_module)
+    return orch, MemoryTestHandle(memory_module, test_bus)
 
 
 def build_orchestrator_for_test_with_signals(

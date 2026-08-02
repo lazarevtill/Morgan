@@ -181,7 +181,12 @@ async def test_handle_turn_writes_land_in_the_requested_project() -> None:
         bus=bus,
     )
 
+    await bus.start()
     await orch.handle_turn(user_id="u-acme", project="acme", text="Ship the Q3 report.")
+    # publish() now enqueues rather than running the storage subscriber inline (Task 15) —
+    # drain the bus before asserting on what it stored.
+    await bus.drain()
+    await bus.stop()
 
     projects = await learner._gate.distinct_projects("u-acme")  # type: ignore[attr-defined]
     assert "acme" in projects, f"expected 'acme' in distinct_projects, got {projects}"
