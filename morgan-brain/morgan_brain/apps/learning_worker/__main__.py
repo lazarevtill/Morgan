@@ -9,7 +9,8 @@ Scheduler path (enable_scheduling=True)
 ---------------------------------------
 Builds a :class:`CronService` + :class:`LearningScheduler` over the REAL
 :class:`ConsolidationLearner` from :func:`build_worker_context`, then registers
-nightly consolidation (and optional optimizer if ChampionTrainer is wired).
+nightly consolidation always, and the eval-gated optimizer job only when
+``settings.enable_champion_promotion`` is true (disarmed by default — see config.py).
 
 Bus wiring
 ----------
@@ -123,10 +124,20 @@ def _build_learning_scheduler(
 ) -> "LearningScheduler | None":
     """Build a :class:`LearningScheduler` over the real learner from the worker context.
 
-    Registers nightly consolidation + the eval-gated optimizer job when
-    ``champion_trainer``, ``signal_store``, and ``eval_scorer`` are all provided.
+    Registers nightly consolidation always. Registers the eval-gated optimizer job only when
+    ``champion_trainer``/``signal_store``/``eval_scorer`` are all provided AND
+    ``settings.enable_champion_promotion`` is true — the gate ships disarmed by default (see
+    ``enable_champion_promotion`` in config.py for why).
     """
     settings = get_settings()
+    optimizer_requested = (
+        champion_trainer is not None and signal_store is not None and eval_scorer is not None
+    )
+    optimizer_enabled = optimizer_requested and settings.enable_champion_promotion
+    if optimizer_requested and not settings.enable_champion_promotion:
+        champion_trainer = None
+        signal_store = None
+        eval_scorer = None
     try:
         from morgan_brain.scheduling.learning_jobs import LearningScheduler
 
@@ -143,7 +154,8 @@ def _build_learning_scheduler(
         log.info(
             "learning-scheduler.registered",
             user_id=settings.owner_user_id,
-            with_optimizer=champion_trainer is not None,
+            with_optimizer=optimizer_enabled,
+            enable_champion_promotion=settings.enable_champion_promotion,
         )
         return ls
     except Exception:
@@ -158,6 +170,7 @@ def _build_learning_scheduler(
 
 async def run(settings: Settings | None = None) -> None:
     _settings = settings or get_settings()
+    log.info("champion-promotion.flag", enabled=_settings.enable_champion_promotion)
 
     # Build the real worker context (production stores + configured bus).
     # For inproc dev runs brain-api already handles turn storage, but the

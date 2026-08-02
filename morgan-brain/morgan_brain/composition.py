@@ -7,12 +7,16 @@ reply is produced; with the Redis bus (later phases) it runs in the learning-wor
 
 from __future__ import annotations
 
+import asyncio
 import pathlib
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Callable, cast
+from typing import Any, Callable, cast
+
+import structlog
 
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.core.orchestrator import Orchestrator
@@ -34,7 +38,7 @@ from morgan_brain.learning_lifecycle.factory import build_registry
 from morgan_brain.learning_lifecycle.interfaces import PromptRegistry
 from morgan_brain.models.memory import DEFAULT_PROJECT, Memory
 from morgan_brain.models.message import Conversation, Message, Role
-from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder, OllamaEmbedder
+from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder
 from morgan_brain.modules.memory.retrieval.entities import EntityIndex
 from morgan_brain.modules.memory.retrieval.fts import FtsIndex
 from morgan_brain.modules.memory.store import MemoryModule
@@ -59,7 +63,7 @@ from morgan_brain.learning_lifecycle.local import LocalPromptRegistry
 from morgan_brain.modules.skills.registry import SkillRegistry
 from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
-from morgan_brain.providers.factory import build_router
+from morgan_brain.providers.factory import build_embedder, build_router
 from morgan_brain.providers.router import Binding, RoleRouter
 from morgan_brain.providers.wire import ChatResult, ToolSpec
 from morgan_brain.security.memory_gate import MemoryGate
@@ -71,9 +75,61 @@ from morgan_brain.interfaces.events import EventBus
 # Name used when storing the system-prompt champion in the registry.
 CHAMPION_PROMPT_NAME = "morgan-system"
 
+log = structlog.get_logger("composition")
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _run_coro_isolated(coro: Any) -> Any:
+    """Run *coro* to completion even when called from inside a running event loop.
+
+    ``build_worker_context`` can be invoked from the learning-worker's async ``run()`` (where
+    ``asyncio.run()`` would raise "cannot be called from a running event loop") as well as
+    synchronously at brain-api import time (no loop yet). Running the coroutine on a short-lived
+    background thread with its own loop works in both cases.
+    """
+    result: list[Any] = []
+    error: list[BaseException] = []
+
+    def _runner() -> None:
+        try:
+            result.append(asyncio.run(coro))
+        except BaseException as exc:  # noqa: BLE001 — re-raised on the calling thread below
+            error.append(exc)
+
+    thread = threading.Thread(target=_runner, daemon=True)
+    thread.start()
+    thread.join()
+    if error:
+        raise error[0]
+    return result[0]
+
+
+def _probe_embedding_dim(embedder: Embedder, settings: Settings) -> None:
+    """Verify the live embedder's output dimension matches ``settings.embedding_dim``.
+
+    Catches the class of bug where ``embedding_model`` and ``embedding_dim`` disagree (the
+    vector store is created with a fixed ``dim`` up front — a mismatch fails silently at
+    insert time otherwise, deep in the request path). Skipped for the hash backend (no
+    provider to ask) and made non-fatal when the endpoint is unreachable — a startup probe
+    must not turn a temporarily-down model server into a crash loop.
+    """
+    if settings.embedding_backend == "hash":
+        return
+    try:
+        vector = _run_coro_isolated(embedder.embed("probe"))
+    except Exception as exc:  # noqa: BLE001 — unreachable/misconfigured endpoint, not fatal
+        log.warning("embedding-dim-probe.unreachable", error=str(exc))
+        return
+    if len(vector) != settings.embedding_dim:
+        raise RuntimeError(
+            f"embedding_model {settings.embedding_model!r} returned a "
+            f"{len(vector)}-dimensional vector but settings.embedding_dim="
+            f"{settings.embedding_dim}; the two must agree "
+            "(set MORGAN_EMBEDDING_DIM to match the model, or vice versa)."
+        )
 
 
 def _build_vector_index(settings: Settings, conn: sqlite3.Connection) -> VectorIndex:
@@ -357,7 +413,8 @@ def build_app_context(settings: Settings | None = None) -> AppContext:
     conn = open_db(temporal_path)
     vectors = _build_vector_index(settings, conn)
 
-    embedder = OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
+    embedder = build_embedder(settings)
+    _probe_embedding_dim(embedder, settings)
     router = build_router(settings)
     # Use the persistent registry (same path as the worker) so brain-api reads
     # champions written by the learning-worker.
@@ -437,7 +494,8 @@ def build_worker_context(settings: Settings | None = None) -> WorkerContext:
     conn = open_db(temporal_path)
     vectors = _build_vector_index(settings, conn)
 
-    embedder = OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
+    embedder = build_embedder(settings)
+    _probe_embedding_dim(embedder, settings)
     router = build_router(settings)
     bus = get_event_bus()
 

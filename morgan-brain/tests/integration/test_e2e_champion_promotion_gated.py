@@ -165,10 +165,17 @@ async def test_worse_candidate_rejected_registry_unchanged() -> None:
 
 @pytest.mark.asyncio
 async def test_eval_scorer_gates_promotion_via_fake_judge() -> None:
-    """The eval scorer (backed by a fake judge) gates champion promotion end-to-end."""
+    """The eval scorer (backed by a fake judge) gates champion promotion end-to-end —
+    including when there is no existing champion.
+
+    The fake assistant client answers identically regardless of the system prompt, so the
+    empty-baseline and candidate score identically here (a genuine tie). The strict gate
+    correctly rejects a tie even with no prior champion — this is precisely the loophole
+    the unconditional first-candidate branch used to paper over: promotion must be earned,
+    not granted for free just because nothing existed to beat.
+    """
     registry = LocalPromptRegistry(":memory:", clock=CLOCK)
 
-    # No existing champion → any candidate accepted.
     judge_router, _ = _make_judge_router([True])
     judge = LLMJudge(router=judge_router, role="judge")
     harness = EvalHarness(judge=judge)
@@ -185,10 +192,10 @@ async def test_eval_scorer_gates_promotion_via_fake_judge() -> None:
 
     promoted = await trainer.train("morgan-system", train=[], scorer=eval_scorer, max_calls=1)
 
-    # No champion existed → any score → promoted.
-    assert promoted is True
+    # Identical predicted output → identical eval score → tie → not promoted.
+    assert promoted is False
     champion = await registry.champion("morgan-system")
-    assert champion is not None
+    assert champion is None
 
 
 @pytest.mark.asyncio
