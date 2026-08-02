@@ -24,10 +24,24 @@ class Settings(BaseSettings):
     # Default provider is llama-server's OpenAI-compatible port (llama.cpp), not Ollama.
     # "ollama" remains a fully supported provider key — set MORGAN_PROVIDERS /
     # MORGAN_ROLE_BINDINGS explicitly to switch back.
+    # The localhost default is a dev convenience for a fresh clone with zero config — the
+    # owner's real deployment is a REMOTE llama-server on a homelab GPU box reached over an
+    # overlay network (NetBird) from every laptop; local-loopback is the fallback topology
+    # (offline laptop, or a dev machine running its own llama-server), not the baseline.
+    # Both are the same OpenAI-compatible protocol — only the endpoint URL differs.
     llm_endpoint: str = "http://localhost:8081/v1"
     llm_model: str = "qwen2.5:7b"
     llm_fast_model: str = "qwen2.5:7b"
     embedding_model: str = "mxbai-embed-large"
+    # Outbound API key Morgan presents TO the model server (llama-server's --api-key, or a
+    # remote OpenAI-compatible provider's key). NOT the same as `api_key` above, which is the
+    # INBOUND key clients present to Morgan — the two point in opposite directions. Empty by
+    # default: most homelab llama-server setups run without one.
+    llm_api_key: str = ""
+    # Request timeout (seconds) for LLM chat + embedding calls. Sized for a network hop under
+    # GPU load (remote llama-server over an overlay network), not a loopback socket — turn it
+    # down for genuinely local dev if the shorter latency matters.
+    llm_timeout_seconds: float = Field(default=120.0, gt=0.0)
 
     # --- Stores ---
     # data_dir is the single directory every durable store derives its path from: the shared
@@ -73,10 +87,10 @@ class Settings(BaseSettings):
     # Example: {"strong": ["ollama:qwen2.5:7b"], "fast": ["ollama:qwen2.5:7b"]}
     role_bindings: dict[str, list[str]] = Field(default_factory=dict)
 
-    # providers: per-provider connection config (base_url, api_key).
-    # Key is provider name (e.g. "ollama"); value is a dict with optional keys:
-    #   base_url (str), api_key (str).
-    # Default entry for "ollama" is derived from llm_endpoint.
+    # providers: per-provider connection config (base_url, api_key, timeout).
+    # Key is provider name (e.g. "llamacpp", "ollama"); value is a dict with optional keys:
+    #   base_url (str), api_key (str), timeout (float, seconds).
+    # Default entry for "llamacpp" is derived from llm_endpoint / llm_api_key / llm_timeout_seconds.
     providers: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
     # Optional path to a YAML file with extra capability overrides (provider/model key).
@@ -105,7 +119,11 @@ class Settings(BaseSettings):
             self.providers = dict(self.providers)
             self.providers["llamacpp"] = {
                 "base_url": self.llm_endpoint,
-                "api_key": "llamacpp",
+                # llama-server without --api-key still requires SOME non-empty string for the
+                # openai SDK client; llm_api_key is the real outbound credential when the
+                # remote server enforces one.
+                "api_key": self.llm_api_key or "llamacpp",
+                "timeout": self.llm_timeout_seconds,
             }
 
         # role_bindings: derive from llm_model / llm_fast_model if not set.

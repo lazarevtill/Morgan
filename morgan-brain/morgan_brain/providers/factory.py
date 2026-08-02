@@ -22,13 +22,16 @@ def _make_chat_adapter(provider: str, provider_cfg: dict[str, Any]) -> OpenAICom
     """Instantiate the right chat adapter for a provider name."""
     base_url: str = provider_cfg.get("base_url", "http://localhost:8081/v1")
     api_key: str = provider_cfg.get("api_key", "")
+    timeout: float = provider_cfg.get("timeout", 120.0)
 
     if provider == "ollama":
         # Still supported as a non-default key for owners who haven't moved to llama.cpp.
-        return OllamaAdapter(base_url=base_url, api_key=api_key or "ollama")
+        return OllamaAdapter(base_url=base_url, api_key=api_key or "ollama", timeout=timeout)
     # For all other OpenAI-compatible providers (llamacpp — the default, openai, vllm,
     # openrouter…)
-    return OpenAICompatAdapter(base_url=base_url, api_key=api_key, provider=provider)
+    return OpenAICompatAdapter(
+        base_url=base_url, api_key=api_key, provider=provider, timeout=timeout
+    )
 
 
 def build_hash_embedder(dim: int = 1024) -> Embedder:
@@ -49,7 +52,32 @@ def build_embedder(settings: Settings) -> Embedder:
     """
     if settings.embedding_backend == "hash":
         return build_hash_embedder(dim=settings.embedding_dim)
-    return OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
+    return OllamaEmbedder(
+        settings.llm_endpoint,
+        settings.embedding_model,
+        timeout=settings.llm_timeout_seconds,
+        api_key=settings.llm_api_key or None,
+    )
+
+
+async def check_llm_reachable(settings: Settings, *, timeout: float = 5.0) -> bool:
+    """Best-effort reachability check for the configured LLM endpoint.
+
+    GETs the OpenAI-compatible ``/models`` listing, which llama-server, vLLM, and Ollama's
+    ``/v1`` shim all serve. Deliberately short-timeout and non-raising: this exists for the
+    CLI's ``doctor`` command (Task 17) to answer "which llama-server am I talking to, and can
+    I reach it right now" — the first question anyone asks when a remote endpoint is down.
+    """
+    import httpx
+
+    url = settings.llm_endpoint.rstrip("/") + "/models"
+    headers = {"Authorization": f"Bearer {settings.llm_api_key}"} if settings.llm_api_key else {}
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(url, headers=headers)
+        return resp.status_code < 500
+    except Exception:  # noqa: BLE001 — unreachable is a normal answer, not an error to surface
+        return False
 
 
 def build_router(settings: Settings) -> RoleRouter:
