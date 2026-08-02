@@ -9,9 +9,8 @@ from __future__ import annotations
 import pytest
 
 from morgan_brain.config import Settings
-from morgan_brain.interfaces.embedding import Embedder
 from morgan_brain.interfaces.llm import ChatClient
-from morgan_brain.providers.factory import build_embedder, build_router
+from morgan_brain.providers.factory import build_router
 from morgan_brain.providers.router import RoleRouter
 
 
@@ -74,23 +73,6 @@ def test_build_router_unknown_role_raises_lookup_error():
     router = build_router(s)
     with pytest.raises(LookupError):
         router.chat_for("nonexistent_role")
-
-
-# ---------------------------------------------------------------------------
-# build_embedder
-# ---------------------------------------------------------------------------
-
-
-def test_build_embedder_returns_embedder():
-    s = _minimal_settings()
-    emb = build_embedder(s)
-    assert isinstance(emb, Embedder)
-
-
-def test_build_embedder_custom_endpoint():
-    s = _minimal_settings(llm_endpoint="http://custom:11434/v1")
-    emb = build_embedder(s)
-    assert isinstance(emb, Embedder)
 
 
 # ---------------------------------------------------------------------------
