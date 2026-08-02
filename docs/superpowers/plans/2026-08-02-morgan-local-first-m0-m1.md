@@ -455,6 +455,21 @@ Apply each of these:
 - Replace the "Current direction (H1)" section with a pointer to `docs/superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md`.
 - Fix the archive reference: the tag is `legacy-v0.0.3-monolith`; the branch is `origin/legacy/v0.0.3-monolith`.
 
+- [ ] **Step 2a: Fix package docstrings that still promise deleted services**
+
+Carried from the Task 3 review. Two docstrings still name a service whose directory is gone:
+- `morgan_brain/apps/__init__.py` — lists "perception_gpu — voice/vision (deferred; interface
+  only)" as one of three entrypoints. There are now two.
+- `morgan_brain/__init__.py:12` — "apps — brain_api, learning_worker, perception_gpu entrypoints."
+
+Then sweep for any others:
+
+```bash
+cd morgan-brain
+grep -rn 'perception_gpu\|perception-gpu\|PersonaPlex\|Telegram\|Discord\|MCP host' morgan_brain --include='*.py'
+```
+Expected after the edits: no output.
+
 - [ ] **Step 3a: Delete the dead config fields themselves**
 
 Tasks 3-5 removed the code that read these, but the fields survive in `config.py` and Step 3's
