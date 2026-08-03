@@ -75,17 +75,25 @@ def _merge_forget_reports(reports: list[ForgetReport]) -> ForgetReport:
 
     ``tables_skipped`` is deduplicated (the same optional table is either present or absent
     for the whole database, not per project) rather than repeated once per project.
+
+    ``vectors_erased`` is an AND, not a majority: one project whose vector delete failed makes
+    the whole sweep incomplete, and the merged report has to say so.
     """
     merged = ForgetReport()
     skipped: set[str] = set()
+    vector_errors: list[str] = []
     for r in reports:
         merged.memories += r.memories
         merged.facts += r.facts
         merged.signals += r.signals
         merged.history += r.history
+        merged.vectors_erased = merged.vectors_erased and r.vectors_erased
+        if r.vector_error:
+            vector_errors.append(r.vector_error)
         merged.champions_flagged.extend(r.champions_flagged)
         skipped.update(r.tables_skipped)
     merged.tables_skipped = sorted(skipped)
+    merged.vector_error = "; ".join(vector_errors) or None
     return merged
 
 
@@ -93,10 +101,15 @@ def _forget_result(
     report: ForgetReport, settings: Settings, *, project: str, all_projects: bool
 ) -> dict[str, Any]:
     """Turn a ``ForgetReport`` into the CLI's output shape -- the one place that must not
-    lie: a skipped table prints as "not present", never as a silent 0, and a non-sqlite
-    vector backend prints its known gap (vectors are NOT erased under qdrant -- Task 14
-    review) instead of implying a clean sweep."""
-    vectors_erased = settings.vector_backend != "qdrant"
+    lie: a skipped table prints as "not present", never as a silent 0, and the vector result
+    is whatever ``forget()`` actually achieved.
+
+    ``vectors_erased`` is read off the report rather than inferred from ``vector_backend``.
+    Inferring it was wrong in both directions once ``forget()`` began deleting from external
+    stores: it claimed failure where the delete had in fact succeeded, and it could never have
+    reported a delete that was attempted and refused.
+    """
+    vectors_erased = report.vectors_erased
     warnings: list[str] = []
     if report.tables_skipped:
         warnings.append(
@@ -105,8 +118,9 @@ def _forget_result(
         )
     if not vectors_erased:
         warnings.append(
-            f"vector_backend={settings.vector_backend!r}: vectors are NOT erased by forget() "
-            "here -- they must be removed from Qdrant separately (known gap)."
+            f"vector_backend={settings.vector_backend!r}: vectors were NOT erased "
+            f"({report.vector_error or 'delete did not run'}) -- this project's text may "
+            "still be retrievable from the vector store and must be removed there."
         )
     return {
         "project": project,
@@ -324,7 +338,7 @@ async def cmd_ask(args: argparse.Namespace, settings: Settings, project: str) ->
     try:
         user_id = settings.owner_user_id
         hkey = session_key(user_id, None)
-        history = ctx.history_store.recent(hkey) if ctx.history_store else []
+        history = ctx.history_store.recent(hkey, project=project) if ctx.history_store else []
         champion = await ctx.prompt_registry.champion(CHAMPION_PROMPT_NAME)
         system_override = champion.body if champion is not None else ""
         result, turn_id = await ctx.orchestrator.handle_turn_with_id(

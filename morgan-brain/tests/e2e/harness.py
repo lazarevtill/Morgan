@@ -187,7 +187,7 @@ class ConversationHarness:
         self, *, user_id: str, text: str, session_id: str, project: str = "default"
     ) -> tuple[str, float]:
         """Run one turn; return (reply_text, latency_ms)."""
-        history = self._history.recent(session_id)
+        history = self._history.recent(session_id, project=project)
         t0 = time.perf_counter()
         result = await self.orchestrator.handle_turn(
             user_id=user_id,
@@ -204,7 +204,7 @@ class ConversationHarness:
         self, *, user_id: str, text: str, session_id: str, project: str = "default"
     ) -> tuple[Any, float]:
         """Like :meth:`say` but returns the full ReasoningResult (for tools_invoked)."""
-        history = self._history.recent(session_id)
+        history = self._history.recent(session_id, project=project)
         t0 = time.perf_counter()
         result = await self.orchestrator.handle_turn(
             user_id=user_id,

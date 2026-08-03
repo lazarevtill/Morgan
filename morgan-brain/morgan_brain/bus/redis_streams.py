@@ -95,15 +95,39 @@ class RedisStreamsBus:
         await self._get_client().xadd(self._stream, {"data": event.model_dump_json()})
 
     async def start(self) -> None:
-        """Create the consumer group (if absent) and start the consume loop."""
+        """Create the consumer group (if absent) and start the consume loop.
+
+        **A process with no handlers does not consume.** Every member of a consumer group
+        competes for the same messages, and ``_handle_message`` acks after dispatching --
+        including when it dispatched to nothing. brain-api registers no ``RESPONSE_GENERATED``
+        handler under the Redis bus (the learning-worker owns turn storage there), so a
+        consuming brain-api would claim a share of response events, dispatch them to zero
+        handlers, ack them, and destroy them before the worker could ever see them. Turns
+        would silently vanish from consolidation in the exact topology Redis exists to serve.
+
+        ``publish()`` needs no consumer, so a publish-only process simply does not start one.
+        Handlers must therefore be registered before ``start()`` -- which is how composition
+        already works: subscribers are wired at build time, ``start()`` happens in the app
+        lifespan afterwards.
+        """
         client = self._get_client()
 
-        # Create group; swallow BUSYGROUP if it already exists.
+        # Create group; swallow BUSYGROUP if it already exists. Done even when publish-only,
+        # so the group exists before the first message is published and no early event is
+        # missed by a worker that starts later.
         try:
             await client.xgroup_create(self._stream, self._group, id="$", mkstream=True)
         except Exception as exc:  # noqa: BLE001
             if "BUSYGROUP" not in str(exc):
                 raise
+
+        if not self._handlers:
+            logger.info(
+                "RedisStreamsBus: no handlers registered; publish-only, not joining "
+                "consumer group %r as a reader",
+                self._group,
+            )
+            return
 
         self._running = True
         self._consume_task = asyncio.ensure_future(self._consume_loop())

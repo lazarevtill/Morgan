@@ -74,7 +74,7 @@ def _build_app(reply: str = "hello from fake") -> FastAPI:
     @app.post("/api/chat", response_model=ChatResponse, dependencies=[_auth])
     async def chat(req: ChatRequest) -> ChatResponse:
         uid = req.user_id or settings.owner_user_id
-        hist = history_store.recent(req.session_id or "default")
+        hist = history_store.recent(req.session_id or "default", project="default")
         result, turn_id = await orch.handle_turn_with_id(
             user_id=uid,
             project=req.project,
@@ -89,7 +89,7 @@ def _build_app(reply: str = "hello from fake") -> FastAPI:
         uid = req.user_id or settings.owner_user_id
 
         async def _event_stream() -> AsyncIterator[str]:
-            hist = history_store.recent(req.session_id or "default")
+            hist = history_store.recent(req.session_id or "default", project="default")
             async for delta in orch.stream_turn(
                 user_id=uid,
                 project=req.project,

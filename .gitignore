@@ -75,3 +75,6 @@ conversations.json
 # Test artifacts (MagicMock directories from mocked settings)
 MagicMock/
 **/MagicMock/
+# Claude Code local settings — machine-specific, and the place credentials may legitimately
+# live per the "*.local.json is gitignored" rule. Was tracked, and leaked an API key.
+.claude/settings.local.json

@@ -64,7 +64,7 @@ async def test_turn2_history_contains_turn1_exchange() -> None:
     hkey = session_key(user_id, session_id)  # history is keyed per-user
 
     # Turn 1
-    history1 = history_store.recent(hkey)
+    history1 = history_store.recent(hkey, project="default")
     result1 = await orch.handle_turn(
         user_id=user_id,
         project="default",
@@ -76,11 +76,11 @@ async def test_turn2_history_contains_turn1_exchange() -> None:
 
     # After turn 1, the cold-path subscriber should have appended to history_store.
     # Give the in-process bus time to fire (it's synchronous in InProcessBus).
-    history_after_turn1 = history_store.recent(hkey)
+    history_after_turn1 = history_store.recent(hkey, project="default")
     assert len(history_after_turn1) == 2  # user + assistant
 
     # Turn 2 — fetch history first (as the API handler does)
-    history2 = history_store.recent(hkey)
+    history2 = history_store.recent(hkey, project="default")
     result2 = await orch.handle_turn(
         user_id=user_id,
         project="default",

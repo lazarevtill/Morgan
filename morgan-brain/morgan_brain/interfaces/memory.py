@@ -40,6 +40,14 @@ class ForgetReport:
     history: int = 0
     champions_flagged: list[str] = field(default_factory=list)
     tables_skipped: list[str] = field(default_factory=list)
+    #: Whether the vectors for these memories are gone. ``forget()`` reports this from what it
+    #: actually did, rather than callers inferring it from ``vector_backend``: an external
+    #: store is deleted from after the SQLite transaction commits, and that call can fail on
+    #: its own. False here means vectors may still hold this project's text.
+    vectors_erased: bool = True
+    #: Populated when an external vector store refused the delete -- the erasure is then
+    #: genuinely incomplete and the caller must say so.
+    vector_error: str | None = None
 
 
 @runtime_checkable

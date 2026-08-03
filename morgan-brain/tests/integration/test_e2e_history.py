@@ -63,7 +63,7 @@ async def test_turn2_prompt_contains_turn1_user_and_assistant_messages() -> None
     hkey = session_key(user_id, session_id)
 
     # Turn 1.
-    h1 = history_store.recent(hkey)
+    h1 = history_store.recent(hkey, project="default")
     result1 = await orch.handle_turn(
         user_id=user_id,
         project="default",
@@ -74,11 +74,11 @@ async def test_turn2_prompt_contains_turn1_user_and_assistant_messages() -> None
     assert result1.text == "I live in Berlin."
 
     # history_store must now have 2 entries (user + assistant).
-    after_turn1 = history_store.recent(hkey)
+    after_turn1 = history_store.recent(hkey, project="default")
     assert len(after_turn1) == 2
 
     # Turn 2.
-    h2 = history_store.recent(hkey)
+    h2 = history_store.recent(hkey, project="default")
     result2 = await orch.handle_turn(
         user_id=user_id,
         project="default",
@@ -121,7 +121,7 @@ async def test_history_is_session_scoped_not_cross_session() -> None:
     user_id = "u-scope"
 
     # Session A: turn 1.
-    h_a = history_store.recent(session_key(user_id, "session-a"))
+    h_a = history_store.recent(session_key(user_id, "session-a"), project="default")
     await orch.handle_turn(
         user_id=user_id,
         project="default",
@@ -131,7 +131,7 @@ async def test_history_is_session_scoped_not_cross_session() -> None:
     )
 
     # Session B uses EMPTY history (different session).
-    h_b = history_store.recent(session_key(user_id, "session-b"))
+    h_b = history_store.recent(session_key(user_id, "session-b"), project="default")
     assert len(h_b) == 0, "Session B should start with empty history"
 
     await orch.handle_turn(
@@ -184,10 +184,10 @@ async def test_history_grows_across_turns() -> None:
     hkey = session_key(user_id, session_id)
 
     for i in range(3):
-        h = history_store.recent(hkey)
+        h = history_store.recent(hkey, project="default")
         await orch.handle_turn(
             user_id=user_id, project="default", text=f"msg {i}", session_id=session_id, history=h
         )
 
-    entries = history_store.recent(hkey, limit=100)
+    entries = history_store.recent(hkey, project="default", limit=100)
     assert len(entries) == 6, f"Expected 6 history entries, got {len(entries)}"

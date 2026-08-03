@@ -65,7 +65,7 @@ def _build_app() -> tuple[FastAPI, object]:
     @app.post("/api/chat", response_model=ChatResponse, dependencies=[_auth])
     async def chat(req: ChatRequest) -> ChatResponse:
         uid = req.user_id or settings.owner_user_id
-        hist = history_store.recent(req.session_id or "default")
+        hist = history_store.recent(req.session_id or "default", project="default")
         result, turn_id = await orch.handle_turn_with_id(
             user_id=uid,
             project=req.project,

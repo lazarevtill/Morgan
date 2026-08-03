@@ -252,5 +252,18 @@ class MemoryModule:
             conn.rollback()
             raise
 
+        if ids and not has_vectors:
+            # The vectors live outside this database (qdrant, or the in-memory index), so they
+            # cannot join the transaction above -- but "cannot be atomic" is not a reason to
+            # leave them. Skipping this left the memory text sitting in Qdrant after a forget()
+            # that reported success, which is the erasure contract broken in the direction that
+            # matters. Deleting after the commit means the worst case is an external store that
+            # outlives its rows, reported honestly, rather than silently retained content.
+            try:
+                await self._vectors.delete(ids)
+            except Exception as exc:  # noqa: BLE001 -- reported, not swallowed
+                report.vectors_erased = False
+                report.vector_error = str(exc)
+
         conn.execute("VACUUM")  # cannot run inside a transaction
         return report
