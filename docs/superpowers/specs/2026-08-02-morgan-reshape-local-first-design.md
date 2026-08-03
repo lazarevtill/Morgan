@@ -1,6 +1,6 @@
 # Morgan reshape — local-first, durable, reusable across projects
 
-**Status:** approved design, not started
+**Status:** milestones 0 and 1 delivered; milestone 2 specified (§7.1), not started
 **Date:** 2026-08-02
 **Supersedes:** the Personal Agent OS horizon plan
 ([vision](2026-06-09-personal-agent-os-vision.md), [horizons](2026-06-09-horizons-roadmap.md),
