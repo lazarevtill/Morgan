@@ -191,9 +191,23 @@ pointing Morgan at company repositories at all.
 ### 4.4 Deletion
 
 `forget()` performs cascading erasure in one transaction across: episodics, vectors, FTS rows,
-entities, fact intervals, session history, **and `signals.db` — which stores the full `query`,
-`original_reply`, and `user_edit` text of every turn** (`learning/signals.py:41-43,69-71`), exactly
-the data the premise covers. Followed by `VACUUM`.
+entities, fact intervals, session history, **and the interaction signals — which store the full
+`query`, `original_reply`, and `user_edit` text of every turn** (`learning/signals.py`), exactly
+the data the premise covers. Signals live in the one shared database, not a separate `signals.db`,
+which is what lets them join that transaction. Followed by `VACUUM`.
+
+The transaction opens with `BEGIN IMMEDIATE` **before** the target ids are selected, not after.
+Selecting first leaves a window in which the learning-worker can insert a memory for the project
+being erased; that row would be absent from the id list, survive, and still be reported as erased.
+
+**One transaction covers exactly what one engine can cover.** With the default `sqlite` vector
+backend, the vectors are rows in that same database and are genuinely inside the transaction. With
+`MORGAN_VECTOR_BACKEND=qdrant` they are not, and no cross-engine transaction exists — so the
+external store is deleted from *after* the SQLite commit, as a compensating action with explicit
+failure handling: `ForgetReport.vectors_erased` and `.vector_error` record what actually happened
+and the CLI reports it, rather than a caller inferring success from the configured backend name.
+The guarantee is therefore "atomic within the database, compensated and reported outside it" — not
+"atomic everywhere", which a two-engine deployment cannot honestly promise.
 
 Two consequences are named rather than ignored:
 - A **promoted champion preprompt may embed text mined from now-forgotten conversations.** `forget()`
