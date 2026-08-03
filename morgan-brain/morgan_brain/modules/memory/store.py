@@ -186,29 +186,38 @@ class MemoryModule:
         tell "erased zero" apart from "nothing to erase from" (see ``ForgetReport``).
         """
         conn = self._episodics._conn  # forget() owns the whole database
-        ids = [
-            str(r["id"])
-            for r in conn.execute(
-                "SELECT id FROM memories WHERE user_id = ? AND project = ?", (user_id, project)
-            )
-        ]
-        report = ForgetReport(memories=len(ids))
-        # The id list is bound once as a JSON array and expanded by json_each, so every
-        # statement below stays a literal and a project with more memories than
-        # SQLITE_MAX_VARIABLE_NUMBER still erases in one statement each.
-        id_json = json.dumps(ids)
-        has_vectors = _table_exists(conn, "vec_items") and _table_exists(conn, "vec_meta")
-        has_signals = _table_exists(conn, "interaction_signals")
-        has_history = _table_exists(conn, "session_history")
-        if not has_vectors:
-            report.tables_skipped.append("vec_items")
-        if not has_signals:
-            report.tables_skipped.append("interaction_signals")
-        if not has_history:
-            report.tables_skipped.append("session_history")
 
+        # The write lock is taken BEFORE the ids are selected, not after. Selecting first left
+        # a window in which the learning-worker could insert a memory for this project between
+        # the SELECT and the DELETE: the new row is absent from `ids`, survives the erasure,
+        # and forget() still reports success. On the documented 2-process topology the worker
+        # writes memories off the bus continuously, so "erase this project" racing an in-flight
+        # turn is the normal case, not an exotic one. BEGIN IMMEDIATE blocks other writers for
+        # the whole read-then-delete sequence, which is what makes the id list authoritative.
         conn.execute("BEGIN IMMEDIATE")
         try:
+            ids = [
+                str(r["id"])
+                for r in conn.execute(
+                    "SELECT id FROM memories WHERE user_id = ? AND project = ?",
+                    (user_id, project),
+                )
+            ]
+            report = ForgetReport(memories=len(ids))
+            # The id list is bound once as a JSON array and expanded by json_each, so every
+            # statement below stays a literal and a project with more memories than
+            # SQLITE_MAX_VARIABLE_NUMBER still erases in one statement each.
+            id_json = json.dumps(ids)
+            has_vectors = _table_exists(conn, "vec_items") and _table_exists(conn, "vec_meta")
+            has_signals = _table_exists(conn, "interaction_signals")
+            has_history = _table_exists(conn, "session_history")
+            if not has_vectors:
+                report.tables_skipped.append("vec_items")
+            if not has_signals:
+                report.tables_skipped.append("interaction_signals")
+            if not has_history:
+                report.tables_skipped.append("session_history")
+
             if ids:
                 conn.execute(
                     "DELETE FROM memories WHERE id IN (SELECT value FROM json_each(?))",
