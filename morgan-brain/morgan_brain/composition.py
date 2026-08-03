@@ -423,8 +423,9 @@ def build_app_context(settings: Settings | None = None) -> AppContext:
     _probe_embedding_dim(embedder, settings)
     router = build_router(settings)
     # Use the persistent registry (same path as the worker) so brain-api reads
-    # champions written by the learning-worker.
-    prom_registry: PromptRegistry = build_registry(settings)
+    # champions written by the learning-worker. Shares `conn` -- the one-database invariant
+    # (Task 13A) -- so the champion registry lives in morgan.db, not a second file.
+    prom_registry: PromptRegistry = build_registry(settings, conn=conn)
     # History must be durable: it threads multi-turn context, so an in-memory store would
     # silently collapse every turn to turn 1 across restarts.
     history_store = SessionHistoryStore(conn, clock=_utcnow)
@@ -568,8 +569,9 @@ def build_worker_context(settings: Settings | None = None) -> WorkerContext:
         vectors=vectors,
     )
 
-    # Persistent registry — same file as brain-api reads.
-    registry: PromptRegistry = build_registry(settings)
+    # Persistent registry — same file as brain-api reads. Shares `conn` -- the one-database
+    # invariant (Task 13A) -- so the champion registry lives in morgan.db, not a second file.
+    registry: PromptRegistry = build_registry(settings, conn=conn)
 
     # Optimizer + trainer.
     optimizer = ReflectiveOptimizer(router=router)
