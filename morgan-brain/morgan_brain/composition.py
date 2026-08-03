@@ -138,7 +138,7 @@ def _probe_embedding_dim(embedder: Embedder, settings: Settings) -> None:
         )
 
 
-def _build_vector_index(settings: Settings, conn: sqlite3.Connection) -> VectorIndex:
+def build_vector_index(settings: Settings, conn: sqlite3.Connection) -> VectorIndex:
     """Return the configured vector index backend.
 
     "sqlite" → SqliteVectorIndex (default; persistent, shares *conn* with every other store).
@@ -255,7 +255,7 @@ def _assemble(
     resolved_conn = conn if conn is not None else open_db(temporal_path)
     temporal = SqliteTemporalStore(conn=resolved_conn)
     # Use the injected vector index -- production callers (build_app_context/build_worker_context)
-    # always pass one built from settings via _build_vector_index; test callers that don't care
+    # always pass one built from settings via build_vector_index; test callers that don't care
     # about the vector backend fall back to an ephemeral InMemoryVectorIndex so a FakeEmbedder's
     # low dimensionality never collides with the real embedding_dim a SqliteVectorIndex would
     # enforce.
@@ -409,7 +409,7 @@ def build_app_context(settings: Settings | None = None) -> AppContext:
     Reads the current champion prompt (if any) and wires it as system_override.
     """
     settings = settings or get_settings()
-    temporal_path = _sqlite_path(settings.temporal_db_url)
+    temporal_path = sqlite_path(settings.temporal_db_url)
     if temporal_path != ":memory:":
         pathlib.Path(temporal_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -417,7 +417,7 @@ def build_app_context(settings: Settings | None = None) -> AppContext:
     # and session history all live in this single database file (required for a
     # single-transaction forget() and for restart survival).
     conn = open_db(temporal_path)
-    vectors = _build_vector_index(settings, conn)
+    vectors = build_vector_index(settings, conn)
 
     embedder = build_embedder(settings)
     _probe_embedding_dim(embedder, settings)
@@ -485,14 +485,14 @@ def build_memory_context(settings: Settings | None = None) -> MemoryContext:
     entirely for ``embedding_backend="hash"``, the CLI's own default test/no-model-server path).
     """
     settings = settings or get_settings()
-    temporal_path = _sqlite_path(settings.temporal_db_url)
+    temporal_path = sqlite_path(settings.temporal_db_url)
     if temporal_path != ":memory:":
         pathlib.Path(temporal_path).parent.mkdir(parents=True, exist_ok=True)
 
     # Same shared connection every other production caller uses -- required for a
     # single-transaction forget() and for restart survival.
     conn = open_db(temporal_path)
-    vectors = _build_vector_index(settings, conn)
+    vectors = build_vector_index(settings, conn)
     embedder = build_embedder(settings)
     _probe_embedding_dim(embedder, settings)
 
@@ -545,13 +545,13 @@ def build_worker_context(settings: Settings | None = None) -> WorkerContext:
       by the real assistant running the golden set — never on the hot path.
     """
     settings = settings or get_settings()
-    temporal_path = _sqlite_path(settings.temporal_db_url)
+    temporal_path = sqlite_path(settings.temporal_db_url)
     if temporal_path != ":memory:":
         pathlib.Path(temporal_path).parent.mkdir(parents=True, exist_ok=True)
 
     # One connection for the whole process, same as build_app_context.
     conn = open_db(temporal_path)
-    vectors = _build_vector_index(settings, conn)
+    vectors = build_vector_index(settings, conn)
 
     embedder = build_embedder(settings)
     _probe_embedding_dim(embedder, settings)
@@ -717,7 +717,7 @@ def build_orchestrator_for_test_with_signals(
     return orch, signal_store, test_bus
 
 
-def _sqlite_path(url: str) -> str:
+def sqlite_path(url: str) -> str:
     """Turn a sqlite:/// URL into a filesystem path; pass through ':memory:'."""
     prefix = "sqlite:///"
     return url[len(prefix) :] if url.startswith(prefix) else url

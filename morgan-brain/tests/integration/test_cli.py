@@ -42,6 +42,17 @@ def test_remember_then_recall_across_processes(tmp_path):
     assert "Harbor" in results[0]["content"]
 
 
+def test_recall_json_output_keeps_cyrillic_readable(tmp_path):
+    """--json output must not degrade to \\uXXXX escapes -- a real papercut for an owner
+    whose corpus is substantially Russian."""
+    env = _hash_env(tmp_path)
+    assert _run(["remember", "зеркало Harbor заблокировало деплой"], env, tmp_path).returncode == 0
+    out = _run(["recall", "зеркало", "--json"], env, tmp_path)
+    assert out.returncode == 0, out.stderr
+    assert "\\u" not in out.stdout
+    assert "зеркало" in json.loads(out.stdout)["results"][0]["content"]
+
+
 def test_doctor_reports_actionable_status(tmp_path):
     out = _run(["doctor", "--json"], _hash_env(tmp_path), tmp_path)
     assert out.returncode == 0, out.stderr
@@ -153,6 +164,39 @@ def test_remember_rejects_all_projects():
         check=False,
     )
     assert out.returncode == 2
+
+
+def test_remember_rejects_all_projects_as_json_when_json_requested():
+    """Rejecting --all-projects is correct; breaking the --json contract while doing it is
+    not -- a script parsing stdout must see JSON regardless of which path failed."""
+    out = subprocess.run(
+        [sys.executable, "-m", "morgan_brain.cli", "remember", "x", "--all-projects", "--json"],
+        capture_output=True,
+        text=True,
+        env={**os.environ},
+        check=False,
+    )
+    assert out.returncode == 2
+    payload = json.loads(out.stdout)
+    assert "all-projects" in payload["error"]
+
+
+def test_ask_from_a_temp_cwd_does_not_fail_on_database_access(tmp_path):
+    """Regression for the prompt-registry path bug: LocalPromptRegistry used to be built at a
+    hardcoded, CWD-relative "./data/prompts.db", so `ask` from any real working directory
+    raised "unable to open database file" instead of respecting MORGAN_DATA_DIR. No model
+    server is running in this test, so `ask` is still expected to fail -- the point is that it
+    must fail on the LLM connection, never on local database access."""
+    repo = tmp_path / "some-repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    env = _hash_env(tmp_path / "data")
+    out = _run(["ask", "hello", "--json"], env, repo)
+    payload = json.loads(out.stdout)
+    assert "database" not in payload["error"].lower()
+    assert "unable to open database file" not in payload["error"]
+    # The prompt-registry file must actually have been created under MORGAN_DATA_DIR.
+    assert (tmp_path / "data" / "prompts.db").exists()
 
 
 @pytest.mark.parametrize("command", ["remember", "recall", "facts", "forget", "ask", "doctor"])

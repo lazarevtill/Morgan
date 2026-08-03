@@ -24,10 +24,10 @@ from typing import Any
 from morgan_brain.cli.project import detect_project
 from morgan_brain.composition import (
     CHAMPION_PROMPT_NAME,
-    _build_vector_index,
-    _sqlite_path,
     build_app_context,
     build_memory_context,
+    build_vector_index,
+    sqlite_path,
 )
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.interfaces.memory import ForgetReport
@@ -144,7 +144,7 @@ async def build_doctor_report(
     subsystem (e.g. FTS5 genuinely unavailable) reports its own failure instead of aborting
     every other check -- "genuinely diagnostic, not decorative" is the whole point.
     """
-    db_path = _sqlite_path(settings.temporal_db_url)
+    db_path = sqlite_path(settings.temporal_db_url)
     report: dict[str, Any] = {
         "database": db_path if db_path == ":memory:" else str(Path(db_path).resolve()),
         "project": project,
@@ -192,7 +192,7 @@ async def build_doctor_report(
         EntityIndex(conn)
         EpisodicStore(conn)
         if settings.vector_backend == "sqlite":
-            _build_vector_index(settings, conn)
+            build_vector_index(settings, conn)
     except Exception as exc:  # noqa: BLE001
         report["schema_error"] = str(exc)
 
@@ -453,11 +453,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 async def _dispatch(args: argparse.Namespace, settings: Settings, project: str) -> int:
     if args.command in _SINGLE_PROJECT_ONLY and args.all_projects:
-        print(
+        message = (
             f"morgan {args.command}: --all-projects is not valid here "
-            "(a write / chat turn always targets exactly one project).",
-            file=sys.stderr,
+            "(a write / chat turn always targets exactly one project)."
         )
+        # Anything that can fail must still emit JSON under --json, or a script parsing
+        # stdout can't tell a rejected flag from a crash.
+        if args.json:
+            print(json.dumps({"error": message}, ensure_ascii=False))
+        else:
+            print(message, file=sys.stderr)
         return 2
 
     handler, renderer = _RENDERERS[args.command]
@@ -465,13 +470,15 @@ async def _dispatch(args: argparse.Namespace, settings: Settings, project: str) 
         data = await handler(args, settings, project)
     except Exception as exc:  # noqa: BLE001 -- a CLI user gets a clean message, not a traceback
         if args.json:
-            print(json.dumps({"error": str(exc)}))
+            print(json.dumps({"error": str(exc)}, ensure_ascii=False))
         else:
             print(f"error: {exc}", file=sys.stderr)
         return 1
 
     if args.json:
-        print(json.dumps(data, indent=2, sort_keys=False, default=str))
+        # ensure_ascii=False: an owner whose corpus is substantially Russian gets readable
+        # Cyrillic in JSON output instead of \uXXXX escapes.
+        print(json.dumps(data, indent=2, sort_keys=False, default=str, ensure_ascii=False))
     else:
         print(renderer(data))
     return 0
