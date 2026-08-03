@@ -153,6 +153,7 @@ class Orchestrator:
         result = await self._reasoner.generate(
             ReasoningRequest(
                 user_id=user_id,
+                project=project,
                 perception=perception,
                 personalization=personalization,
                 memories=memories,
@@ -225,6 +226,7 @@ class Orchestrator:
         result = await self._reasoner.generate(
             ReasoningRequest(
                 user_id=user_id,
+                project=project,
                 perception=perception,
                 personalization=personalization,
                 memories=memories,
@@ -306,6 +308,7 @@ class Orchestrator:
         # 6. Stream reasoning — accumulate full text for cold-path storage.
         request = ReasoningRequest(
             user_id=user_id,
+            project=project,
             perception=perception,
             personalization=personalization,
             memories=memories,

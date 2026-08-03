@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from morgan_brain.interfaces.tools import ToolResult
-from morgan_brain.models.memory import DEFAULT_PROJECT, MemoryQuery
+from morgan_brain.models.memory import MemoryQuery
 from morgan_brain.security.memory_gate import MemoryGate
 
 
@@ -49,10 +49,16 @@ class MemorySearchTool:
         *,
         user_id: str,
         query: str,
+        project: str,
         top_k: int = 5,
-        project: str = DEFAULT_PROJECT,
         **_: Any,
     ) -> ToolResult:
+        """Search within *project* only.
+
+        ``project`` is a required keyword supplied by the executor from the turn, never by the
+        model: it is deliberately absent from ``schema()`` above, so the assistant cannot ask
+        to search a project the caller did not scope the turn to.
+        """
         memories = await self._gate.recall(
             MemoryQuery(user_id=user_id, project=project, text=query, top_k=top_k)
         )

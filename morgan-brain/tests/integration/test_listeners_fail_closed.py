@@ -83,6 +83,15 @@ def test_mcp_http_refuses_a_public_bind_without_a_key(monkeypatch: pytest.Monkey
     monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
     server = mcp_server.build_server()
 
+    # Stub the server loop like the brain-api siblings above do. Without it, a regression in
+    # the guard does not fail this test -- it binds the port and blocks, so CI hangs instead
+    # of reporting, which is the worst of both outcomes. Verified: with `assert_safe_bind`
+    # neutered, this test times out rather than failing.
+    async def _explode(self: object) -> None:
+        raise AssertionError("uvicorn.Server.serve was reached")
+
+    monkeypatch.setattr("uvicorn.Server.serve", _explode)
+
     with pytest.raises(SystemExit, match="morgan-mcp"):
         asyncio.run(server.run_http_async("0.0.0.0", 8090))
 

@@ -11,7 +11,6 @@ from datetime import datetime
 from typing import Callable
 
 from morgan_brain.learning.signals import InteractionSignal, SignalStore, Thumb
-from morgan_brain.models.memory import DEFAULT_PROJECT
 
 
 class SignalRecorder:
@@ -41,10 +40,16 @@ class SignalRecorder:
         turn_id: str,
         query: str,
         reply: str,
-        project: str = DEFAULT_PROJECT,
+        project: str,
         context_summary: str = "",
     ) -> str:
-        """Log the base signal for a completed turn.  Returns the signal id."""
+        """Log the base signal for a completed turn.  Returns the signal id.
+
+        ``project`` is required. A DEFAULT_PROJECT fallback here is indistinguishable from a
+        caller that forgot to thread the turn's project, and that is exactly the bug commit
+        1ee20955 fixed -- signals collapsing into ``default`` so ``forget()`` could not reach
+        them.
+        """
         sig = InteractionSignal(
             user_id=user_id,
             project=project,

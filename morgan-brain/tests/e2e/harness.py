@@ -19,7 +19,7 @@ from __future__ import annotations
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from morgan_brain.bus.inproc import InProcessBus
@@ -28,8 +28,9 @@ from morgan_brain.config import Settings
 from morgan_brain.learning.consolidation import FactOp, FactOpBatch, FactOpKind
 from morgan_brain.learning.history import SessionHistoryStore
 from morgan_brain.learning.learner import ConsolidationLearner
-from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder, OllamaEmbedder
+from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder
 from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex, VectorIndex
+from morgan_brain.providers.adapters.embeddings import OpenAICompatEmbedder
 from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.factory import build_router
@@ -40,7 +41,7 @@ from morgan_brain.providers.wire import ChatMessage, ChatResult, ToolCall
 # Fixed deterministic clock — advanced per scenario turn where temporality matters.
 # ---------------------------------------------------------------------------
 
-_EPOCH = datetime(2026, 1, 1, tzinfo=timezone.utc)
+_EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 class StepClock:
@@ -310,7 +311,7 @@ async def probe_live(settings: Settings) -> LiveProbe:
     reasons: list[str] = []
 
     base = settings.llm_endpoint.rstrip("/")
-    models_url = base[: -len("/v1")] if base.endswith("/v1") else base
+    models_url = base.removesuffix("/v1")
     try:
         async with httpx.AsyncClient(timeout=3.0) as c:
             resp = await c.get(f"{models_url}/v1/models")
@@ -334,11 +335,11 @@ async def probe_live(settings: Settings) -> LiveProbe:
 def build_live(settings: Settings, *, champion_override: str = "") -> ConversationHarness:
     """Assemble a harness over the configured LLM/embedding endpoint + vector backend.
 
-    Uses the same production adapters as ``build_app_context`` (OllamaEmbedder +
+    Uses the same production adapters as ``build_app_context`` (OpenAICompatEmbedder +
     ``build_router``) but keeps temporal storage in-memory so the bench is
     self-contained and repeatable.
     """
-    embedder: Embedder = OllamaEmbedder(settings.llm_endpoint, settings.embedding_model)
+    embedder: Embedder = OpenAICompatEmbedder(settings.llm_endpoint, settings.embedding_model)
     router = build_router(settings)
     if settings.vector_backend == "qdrant":
         from morgan_brain.modules.memory.stores.vector import QdrantVectorIndex
@@ -352,7 +353,7 @@ def build_live(settings: Settings, *, champion_override: str = "") -> Conversati
         embedder=embedder,
         router=router,
         vectors=vectors,
-        clock=lambda: datetime.now(timezone.utc),
+        clock=lambda: datetime.now(UTC),
         settings=settings,
         champion_override=champion_override,
         fake_client=None,
@@ -493,9 +494,7 @@ async def scenario_temporal_update(live: bool) -> ScenarioResult:
     await h.consolidate(user)
     _c, l3 = await h.say(user_id=user, text="Where do I live now?", session_id=session)
 
-    facts = await h.learner._consolidator._gate.current_facts(  # noqa: SLF001
-        user_id=user, subject="user"
-    )
+    facts = await h.learner._consolidator._gate.current_facts(user_id=user, subject="user")
     lives_in = {f.object for f in facts if f.predicate == "lives_in"}
     passed = lives_in == {"Munich"}
     detail = f"current lives_in={lives_in} (Munich wins, Berlin superseded)={passed}"
@@ -707,5 +706,5 @@ async def run_all(*, live: bool) -> BenchReport:
     return BenchReport(
         mode="live" if live else "deterministic",
         results=results,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
     )

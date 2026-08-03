@@ -45,7 +45,11 @@ from starlette.responses import JSONResponse, Response
 from morgan_brain.cli.__main__ import cmd_ask, cmd_facts, cmd_forget, cmd_recall, cmd_remember
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.models.memory import DEFAULT_PROJECT
-from morgan_brain.security.network import api_key_is_configured, assert_safe_bind
+from morgan_brain.security.network import (
+    api_key_is_configured,
+    assert_safe_bind,
+    unauthenticated_peer_allowed,
+)
 
 TOOL_NAMES: tuple[str, ...] = ("remember", "recall", "facts", "forget", "ask_morgan")
 
@@ -99,7 +103,8 @@ class _BearerAuthMiddleware(BaseHTTPMiddleware):
     """Enforce ``MORGAN_API_KEY`` as a bearer token on the streamable-HTTP transport, with the
     exact same policy ``apps/brain_api/auth.py`` applies to ``/api/*``: a request must present
     ``Authorization: Bearer <MORGAN_API_KEY>`` unless the key is empty or the ``"change-me"``
-    sentinel, in which case the server is open."""
+    sentinel -- and in that open case, only from a loopback peer. These five tools include
+    ``forget``, so an unauthenticated remote caller can erase a project."""
 
     def __init__(self, app: Any, settings: Settings) -> None:
         super().__init__(app)
@@ -109,15 +114,18 @@ class _BearerAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        if self._enforced:
-            authorization = request.headers.get("authorization", "")
-            token = (
-                authorization.removeprefix("Bearer ").strip()
-                if authorization.startswith("Bearer ")
-                else ""
-            )
-            if not token or token != self._api_key:
-                return JSONResponse({"error": "Invalid or missing API key."}, status_code=401)
+        if not self._enforced:
+            if unauthenticated_peer_allowed(request.client.host if request.client else None):
+                return await call_next(request)
+            return JSONResponse({"error": "Invalid or missing API key."}, status_code=401)
+        authorization = request.headers.get("authorization", "")
+        token = (
+            authorization.removeprefix("Bearer ").strip()
+            if authorization.startswith("Bearer ")
+            else ""
+        )
+        if not token or token != self._api_key:
+            return JSONResponse({"error": "Invalid or missing API key."}, status_code=401)
         return await call_next(request)
 
 

@@ -118,7 +118,7 @@ def test_executor_register_and_list() -> None:
 async def test_execute_unknown_tool_returns_error() -> None:
     reg = ToolRegistry()
     executor = ToolExecutorImpl(registry=reg, gate=_auto_gate())
-    result = await executor.execute("missing", user_id="u1")
+    result = await executor.execute("missing", user_id="u1", project="p")
     assert result.ok is False
     assert "unknown tool" in (result.error or "").lower()
 
@@ -133,7 +133,7 @@ async def test_execute_denied_tool_returns_ok_false_not_raised() -> None:
     reg = ToolRegistry()
     reg.register(_EchoTool())  # type: ignore[arg-type]
     executor = ToolExecutorImpl(registry=reg, gate=_deny_gate())
-    result = await executor.execute("echo", user_id="u1", message="hi")
+    result = await executor.execute("echo", user_id="u1", project="p", message="hi")
     assert result.ok is False
     assert "permission denied" in (result.error or "")
 
@@ -147,16 +147,17 @@ async def test_execute_allowed_tool_returns_output() -> None:
     reg = ToolRegistry()
     reg.register(_EchoTool())  # type: ignore[arg-type]
     executor = ToolExecutorImpl(registry=reg, gate=_auto_gate())
-    result = await executor.execute("echo", user_id="u1", message="hello")
+    result = await executor.execute("echo", user_id="u1", project="p", message="hello")
     assert result.ok is True
-    assert result.output == {"user_id": "u1", "message": "hello"}
+    # project is now forwarded to every tool, from the turn rather than the model.
+    assert result.output == {"user_id": "u1", "project": "p", "message": "hello"}
 
 
 async def test_execute_with_explicit_grant() -> None:
     reg = ToolRegistry()
     reg.register(_EchoTool())  # type: ignore[arg-type]
     executor = ToolExecutorImpl(registry=reg, gate=_ask_gate_with_grant("echo"))
-    result = await executor.execute("echo", user_id="u2", message="world")
+    result = await executor.execute("echo", user_id="u2", project="p", message="world")
     assert result.ok is True
 
 
@@ -169,7 +170,7 @@ async def test_execute_tool_exception_returns_ok_false() -> None:
     reg = ToolRegistry()
     reg.register(_BombTool())  # type: ignore[arg-type]
     executor = ToolExecutorImpl(registry=reg, gate=_auto_gate())
-    result = await executor.execute("bomb", user_id="u1")
+    result = await executor.execute("bomb", user_id="u1", project="p")
     assert result.ok is False
     assert "kaboom" in (result.error or "")
 
@@ -193,7 +194,7 @@ async def test_execute_emits_tool_invoked_event() -> None:
     reg = ToolRegistry()
     reg.register(_EchoTool())  # type: ignore[arg-type]
     executor = ToolExecutorImpl(registry=reg, gate=_auto_gate(), bus=bus)
-    await executor.execute("echo", user_id="u1", message="ping")
+    await executor.execute("echo", user_id="u1", project="p", message="ping")
     await bus.drain()
     await bus.stop()
 
@@ -219,7 +220,7 @@ async def test_execute_denied_emits_tool_invoked_event_with_ok_false() -> None:
     reg = ToolRegistry()
     reg.register(_EchoTool())  # type: ignore[arg-type]
     executor = ToolExecutorImpl(registry=reg, gate=_deny_gate(), bus=bus)
-    await executor.execute("echo", user_id="u1")
+    await executor.execute("echo", user_id="u1", project="p")
     await bus.drain()
     await bus.stop()
 
@@ -232,7 +233,7 @@ async def test_execute_no_bus_does_not_raise() -> None:
     reg = ToolRegistry()
     reg.register(_EchoTool())  # type: ignore[arg-type]
     executor = ToolExecutorImpl(registry=reg, gate=_auto_gate())
-    result = await executor.execute("echo", user_id="u1")
+    result = await executor.execute("echo", user_id="u1", project="p")
     assert result.ok is True
 
 

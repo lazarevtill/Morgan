@@ -46,6 +46,7 @@ def _make_router(
 def _request() -> ReasoningRequest:
     return ReasoningRequest(
         user_id="u1",
+        project="p",
         perception=FusedPerception(text="hi"),
         personalization=PersonalizedContext(),
         memories=[Memory(user_id="u1", content="user is called Sam")],
@@ -136,6 +137,7 @@ async def test_reasoning_request_accepts_tools_field():
     )
     req = ReasoningRequest(
         user_id="u1",
+        project="p",
         perception=FusedPerception(text="hi"),
         personalization=PersonalizedContext(),
         tools=[spec],
@@ -211,6 +213,7 @@ async def test_tool_call_loop_executes_tool_and_returns_final_answer():
     reasoner = ReasoningModule(router=router, role="strong", executor=executor)
     req = ReasoningRequest(
         user_id="u1",
+        project="p",
         perception=FusedPerception(text="What is 6 * 7?"),
         personalization=PersonalizedContext(),
         tools=[_calc_spec()],
@@ -251,6 +254,7 @@ async def test_tool_call_loop_permission_denied_error_appended_then_terminates()
     reasoner = ReasoningModule(router=router, role="strong", executor=executor)
     req = ReasoningRequest(
         user_id="u1",
+        project="p",
         perception=FusedPerception(text="Add 1 + 1"),
         personalization=PersonalizedContext(),
         tools=[_calc_spec()],
@@ -298,6 +302,7 @@ async def test_tool_call_loop_no_executor_plain_path():
     reasoner = ReasoningModule(router=router, role="strong")
     req = ReasoningRequest(
         user_id="u1",
+        project="p",
         perception=FusedPerception(text="What is 2 + 2?"),
         personalization=PersonalizedContext(),
         tools=[_calc_spec()],
@@ -336,6 +341,7 @@ async def test_tool_call_loop_lookuperror_falls_back_to_plain():
     reasoner = ReasoningModule(router=router, role="strong", executor=executor)
     req = ReasoningRequest(
         user_id="u1",
+        project="p",
         perception=FusedPerception(text="test"),
         personalization=PersonalizedContext(),
         tools=[_calc_spec()],
@@ -368,6 +374,7 @@ async def test_tool_call_loop_stream_with_tools_yields_final_text():
     reasoner = ReasoningModule(router=router, role="strong", executor=executor)
     req = ReasoningRequest(
         user_id="u1",
+        project="p",
         perception=FusedPerception(text="What is 3 + 3?"),
         personalization=PersonalizedContext(),
         tools=[_calc_spec()],

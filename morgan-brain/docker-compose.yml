@@ -12,14 +12,16 @@ services:
       # brain-api refuses to start. That refusal is the point: a published port with
       # authentication disabled is an open memory store.
       MORGAN_API_HOST: 0.0.0.0
+      # Redis carries events between the two processes; that is what it is here for.
       MORGAN_EVENT_BUS: redis
       MORGAN_REDIS_URL: redis://redis:6379/0
-      MORGAN_QDRANT_URL: http://qdrant:6333
-      # Shared persistent vector store so brain-api + worker see the same memory.
-      MORGAN_VECTOR_BACKEND: qdrant
+      # No MORGAN_VECTOR_BACKEND override. It used to be `qdrant`, on the rationale of "a
+      # shared vector store so brain-api and the worker see the same memory" — obsolete since
+      # the reshape: both services mount the same ./data volume and share one morgan.db, with
+      # sqlite-vec vectors inside it. Qdrant is also the one backend where forget() does not
+      # erase vectors, so defaulting to it shipped an incomplete erase. Opt in below.
     depends_on:
       redis: { condition: service_healthy }
-      qdrant: { condition: service_healthy }
     volumes: ["./data:/app/data"]
 
   learning-worker:
@@ -29,13 +31,10 @@ services:
     environment:
       MORGAN_EVENT_BUS: redis
       MORGAN_REDIS_URL: redis://redis:6379/0
-      MORGAN_QDRANT_URL: http://qdrant:6333
-      MORGAN_VECTOR_BACKEND: qdrant
       # Run the nightly consolidation + eval-gated optimizer loop.
       MORGAN_ENABLE_SCHEDULING: "true"
     depends_on:
       redis: { condition: service_healthy }
-      qdrant: { condition: service_healthy }
     volumes: ["./data:/app/data"]
 
   redis:
@@ -48,7 +47,11 @@ services:
       retries: 5
     volumes: ["redis-data:/data"]
 
+  # Opt-in: `docker compose --profile qdrant up`, and set MORGAN_VECTOR_BACKEND=qdrant plus
+  # MORGAN_QDRANT_URL=http://qdrant:6333 in .env. Note the known gap first — forget() does not
+  # erase vectors under this backend; they must be removed from Qdrant separately.
   qdrant:
+    profiles: ["qdrant"]
     image: qdrant/qdrant:latest
     ports: ["6333:6333"]
     healthcheck:

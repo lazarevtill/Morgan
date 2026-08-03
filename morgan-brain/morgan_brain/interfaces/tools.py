@@ -33,6 +33,10 @@ class ToolExecutor(Protocol):
         """Tool names + schemas."""
         ...
 
-    async def execute(self, name: str, *, user_id: str, **kwargs: Any) -> ToolResult:
-        """Permission-checked execution."""
+    async def execute(self, name: str, *, user_id: str, project: str, **kwargs: Any) -> ToolResult:
+        """Permission-checked execution, scoped to *project*.
+
+        ``project`` is required and comes from the turn, never from the model's tool-call
+        arguments — a tool that reads memory must read the project the turn is scoped to.
+        """
         ...

@@ -222,14 +222,14 @@ class TestMemorySearchTool:
 
     async def test_returns_matching_memory_contents(self) -> None:
         await self._seed("u1", ["I love hiking", "I prefer tea over coffee"])
-        r = await self.tool.run(user_id="u1", query="hobbies")
+        r = await self.tool.run(user_id="u1", project="default", query="hobbies")
         assert r.ok is True
         assert isinstance(r.output, list)
         assert "I love hiking" in r.output
 
     async def test_top_k_limits_results(self) -> None:
         await self._seed("u1", [f"memory {i}" for i in range(10)])
-        r = await self.tool.run(user_id="u1", query="memory", top_k=3)
+        r = await self.tool.run(user_id="u1", project="default", query="memory", top_k=3)
         assert r.ok is True
         assert len(r.output) <= 3  # type: ignore[arg-type]
 
@@ -237,13 +237,13 @@ class TestMemorySearchTool:
         """Memories from another user must not appear."""
         await self._seed("u1", ["u1 secret"])
         await self._seed("u2", ["u2 data"])
-        r = await self.tool.run(user_id="u1", query="data")
+        r = await self.tool.run(user_id="u1", project="default", query="data")
         assert r.ok is True
         contents: list[str] = r.output  # type: ignore[assignment]
         assert all("u2" not in c for c in contents)
 
     async def test_empty_memory_returns_empty_list(self) -> None:
-        r = await self.tool.run(user_id="u1", query="anything")
+        r = await self.tool.run(user_id="u1", project="default", query="anything")
         assert r.ok is True
         assert r.output == []
 

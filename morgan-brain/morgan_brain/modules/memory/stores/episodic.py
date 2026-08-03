@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
+from typing import ClassVar
 
 from morgan_brain.models.base import Entity
 from morgan_brain.models.memory import DEFAULT_PROJECT, Memory, MemoryKind, MemorySource
@@ -84,10 +85,38 @@ class EpisodicStore:
             self._conn.execute("DELETE FROM memories WHERE id = ?", (mid,))
         self._conn.commit()
 
+    #: Every project-keyed table `forget()` erases from. `memories` alone is not the answer:
+    #: `facts`, `interaction_signals` and `session_history` are independently project-keyed,
+    #: and `Orchestrator._persist_turn` writes history and the base signal synchronously while
+    #: the episodic memory is written by the worker off the bus. If the worker is down — or the
+    #: bounded in-proc queue drops the event — a project accumulates transcripts and signals
+    #: with zero memory rows. Enumerating from `memories` made `forget --all-projects` skip
+    #: such a project silently while reporting a clean sweep.
+    #:
+    #: A table name cannot be a bound parameter, so each is a literal statement rather than a
+    #: name interpolated into SQL.
+    _PROJECT_TABLE_SQL: ClassVar[dict[str, str]] = {
+        "memories": "SELECT DISTINCT project FROM memories WHERE user_id = ?",
+        "facts": "SELECT DISTINCT project FROM facts WHERE user_id = ?",
+        "interaction_signals": (
+            "SELECT DISTINCT project FROM interaction_signals WHERE user_id = ?"
+        ),
+        "session_history": "SELECT DISTINCT project FROM session_history WHERE user_id = ?",
+    }
+
     def distinct_projects(self, user_id: str) -> list[str]:
-        """Return the distinct project names *user_id* has stored memories under."""
-        rows = self._conn.execute(
-            "SELECT DISTINCT project FROM memories WHERE user_id = ? ORDER BY project",
-            (user_id,),
-        ).fetchall()
-        return [r["project"] for r in rows]
+        """Return every project *user_id* has data under, across all project-keyed tables."""
+        projects: set[str] = set()
+        for table, sql in self._PROJECT_TABLE_SQL.items():
+            if not self._table_exists(table):
+                continue
+            projects.update(r["project"] for r in self._conn.execute(sql, (user_id,)))
+        return sorted(projects)
+
+    def _table_exists(self, name: str) -> bool:
+        """A table may legitimately be absent -- the CLI opens the database without building
+        every store's schema, and `forget()` reports those as skipped rather than failing."""
+        row = self._conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?", (name,)
+        ).fetchone()
+        return row is not None

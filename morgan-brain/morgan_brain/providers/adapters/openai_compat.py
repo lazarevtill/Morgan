@@ -203,33 +203,3 @@ class OpenAICompatAdapter:
             input=texts,
         )
         return [item.embedding for item in response.data]
-
-
-class OpenAICompatEmbedder:
-    """Standalone embedder using the OpenAI-compatible /v1/embeddings endpoint.
-
-    Use this when you need embedding only (no chat), or when the embedding model
-    is separate from the chat model.
-    """
-
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str,
-        model: str,
-    ) -> None:
-        import openai
-
-        self._model = model
-        self._client = openai.AsyncOpenAI(
-            base_url=base_url,
-            api_key=api_key,
-            max_retries=0,
-        )
-
-    async def aembed(self, texts: list[str]) -> list[list[float]]:
-        response = await self._client.embeddings.create(
-            model=self._model,
-            input=texts,
-        )
-        return [item.embedding for item in response.data]

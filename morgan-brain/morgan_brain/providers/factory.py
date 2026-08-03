@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from morgan_brain.config import Settings
-from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder, OllamaEmbedder
+from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder
+from morgan_brain.providers.adapters.embeddings import OpenAICompatEmbedder
 from morgan_brain.providers.adapters.ollama import OllamaAdapter
 from morgan_brain.providers.adapters.openai_compat import OpenAICompatAdapter
 from morgan_brain.providers.capability import CapabilityRegistry
@@ -52,7 +53,7 @@ def build_embedder(settings: Settings) -> Embedder:
     """
     if settings.embedding_backend == "hash":
         return build_hash_embedder(dim=settings.embedding_dim)
-    return OllamaEmbedder(
+    return OpenAICompatEmbedder(
         settings.llm_endpoint,
         settings.embedding_model,
         timeout=settings.llm_timeout_seconds,
