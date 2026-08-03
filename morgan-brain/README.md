@@ -33,10 +33,10 @@ run in one process (`MORGAN_EVENT_BUS=inproc`).
 | `interfaces/` | Protocols — the contracts every module implements (llm, memory, learning, personalization, reasoning, skills, tools, perception, events). |
 | `models/` | Shared domain models; everything that persists is `user_id`-keyed (`UserScoped`). |
 | `bus/` | Event bus — in-proc + Redis-Streams backends behind one interface. |
-| `security/` | The single `MemoryGate` (all memory access) + unified `PermissionMode`/`PermissionGate`. |
+| `security/` | The single `MemoryGate` (all memory access), the unified `PermissionMode`/`PermissionGate`, and the bind guard that refuses an unauthenticated listener beyond loopback. |
 | `providers/` | Provider adapters, wire types, capability registry, role router, structured-output ladder. **The only place a provider SDK is imported.** |
 | `modules/perception/` | Raw input → `FusedPerception` (text built; audio/vision not built). |
-| `modules/memory/` | Episodic/semantic/procedural store + multi-signal retrieval (vector + BM25 + entity), valid-time facts. |
+| `modules/memory/` | Episodic + valid-time fact store on one SQLite database, and multi-signal retrieval fused by reciprocal rank — sqlite-vec vectors, an FTS5 keyword index, and an entity index, all durable. |
 | `modules/personalization/` | Request-path `AdaptivePersonalizer` — budget-aware trait selection, injected every turn. |
 | `modules/reasoning/` | Context assembly + role-routed LLM call + tool loop + generation. |
 | `modules/skills/` | Markdown+frontmatter skill registry, trigger-matched, champion-versioned. |
@@ -94,14 +94,13 @@ pip install -e ".[tokens]"       # tiktoken
 
 ## Status
 
-All phases (0–5) + Wave 0.5 + the self-learning engine are built and green: **633 tests pass**
-(7 skipped), mypy-strict clean. LoRA fine-tuning is deferred by design. See
-[`docs/ROADMAP.md`](../docs/ROADMAP.md).
+**755 tests pass** (8 skipped), mypy-strict clean, bandit clean. Reshape milestones 0 and 1 are
+delivered: one durable SQLite database behind `MemoryGate`, three retrieval signals that survive a
+restart, project scoping enforced on every read and write, cascading `forget()`, llama.cpp as the
+default provider, and the `morgan` CLI + `morgan-mcp` server as usage surfaces. Milestone 2
+(concept annotation, retrieval-quality measurement) is specified, not started. LoRA fine-tuning is
+deferred by design.
 
-## Current direction
-
-Morgan is mid-reshape toward a local-first, durable, project-scoped memory kernel — see
+See [`docs/ROADMAP.md`](../docs/ROADMAP.md) for the milestone table and
 [the reshape design spec](../docs/superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md)
-for the diagnosis, target architecture (one SQLite database behind `MemoryGate`, llama.cpp as the
-default provider, a `morgan` CLI + MCP server + Python library as first-class surfaces), and
-milestone plan. None of the reshape milestones are implemented yet.
+for the diagnosis and target architecture.

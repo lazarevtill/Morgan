@@ -38,12 +38,6 @@ services:
       qdrant: { condition: service_healthy }
     volumes: ["./data:/app/data"]
 
-  # perception-gpu: deferred (interface only). Uncomment when voice/vision lands.
-  # perception-gpu:
-  #   build: { context: ., dockerfile: Dockerfile, target: runtime }
-  #   command: python -m morgan_brain.apps.perception_gpu
-  #   deploy: { resources: { reservations: { devices: [{ capabilities: [gpu] }] } } }
-
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
