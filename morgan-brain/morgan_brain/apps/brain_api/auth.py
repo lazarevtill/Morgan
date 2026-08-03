@@ -10,9 +10,18 @@ Enforcement policy
     - ``X-API-Key: <key>``
   Anything else → ``HTTP 401``.
 
-The open case is only reachable on loopback: ``security/network.py::assert_safe_bind``
-refuses to start the process when the bind host is not loopback and no key is configured.
-That module owns the sentinel this file used to define for itself.
+The open case is only reachable from this machine. Two independent controls, because one of
+them is not enough:
+
+* ``security/network.py::assert_safe_bind`` refuses to *start* the documented entry points on
+  a non-loopback bind with no key. It reads a setting, so it cannot see a socket opened some
+  other way.
+* This dependency refuses any unauthenticated request whose *peer* is not loopback. That is a
+  fact about the connection, so it holds no matter how the ASGI app was started -- including
+  ``uvicorn morgan_brain.apps.brain_api.app:app --host 0.0.0.0``, which imports ``app``
+  directly and never runs the entry point.
+
+That module also owns the sentinel this file used to define for itself.
 
 JWT upgrade seam
 ----------------
@@ -26,11 +35,14 @@ from __future__ import annotations
 
 from typing import Any, Callable, Coroutine
 
-from fastapi import HTTPException, Security, status
+import structlog
+from fastapi import HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from morgan_brain.config import Settings
-from morgan_brain.security.network import api_key_is_configured
+from morgan_brain.security.network import api_key_is_configured, unauthenticated_peer_allowed
+
+log = structlog.get_logger("brain_api.auth")
 
 # FastAPI security scheme objects — reused across factory calls.
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -46,11 +58,29 @@ def require_api_key(settings: Settings) -> Callable[..., Coroutine[Any, Any, Non
     enforced = api_key_is_configured(settings.api_key)
 
     async def _check(
+        request: Request,
         bearer: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
         x_api_key: str | None = Security(_apikey_header),
     ) -> None:
         if not enforced:
-            return
+            # Open mode is confined to this machine, checked against the real peer rather than
+            # against MORGAN_API_HOST -- importing this ASGI app under `uvicorn --host 0.0.0.0`
+            # binds every interface while that setting still reads 127.0.0.1.
+            if unauthenticated_peer_allowed(request.client.host if request.client else None):
+                return
+            log.warning(
+                "unauthenticated_remote_request_refused",
+                path=request.url.path,
+                peer=request.client.host if request.client else None,
+                remedy="set MORGAN_API_KEY to serve /api/* beyond loopback",
+            )
+            # Deliberately the same opaque detail as a bad key: a caller learns that it is
+            # unauthorized, not that this deployment has no key configured.
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or missing API key.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
         provided: str | None = None
         if bearer is not None:

@@ -107,7 +107,8 @@ def _sse_app(api_key: str = "") -> tuple[FastAPI, Settings, TestClient]:
 
         return StreamingResponse(_event_stream(), media_type="text/event-stream")
 
-    return app, settings, TestClient(app, raise_server_exceptions=True)
+    # Explicit loopback peer -- see tests/unit/apps/test_auth.py for why.
+    return app, settings, TestClient(app, raise_server_exceptions=True, client=("127.0.0.1", 50000))
 
 
 def test_sse_endpoint_streams_data_lines() -> None:

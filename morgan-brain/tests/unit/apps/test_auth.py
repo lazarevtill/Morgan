@@ -35,7 +35,9 @@ def _make_app(api_key: str) -> tuple[FastAPI, TestClient]:
     async def probe() -> dict[str, str]:
         return {"ok": "true"}
 
-    return app, TestClient(app, raise_server_exceptions=True)
+    # Explicit loopback peer: open mode (no key configured) is refused for a
+    # non-loopback peer, and TestClient's default peer is the literal "testclient".
+    return app, TestClient(app, raise_server_exceptions=True, client=("127.0.0.1", 50000))
 
 
 # ---------------------------------------------------------------------------

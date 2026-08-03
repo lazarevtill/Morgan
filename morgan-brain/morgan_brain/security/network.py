@@ -60,6 +60,28 @@ def is_loopback(host: str) -> bool:
     return address.is_loopback
 
 
+def unauthenticated_peer_allowed(client_host: str | None) -> bool:
+    """True when an unauthenticated request may be served to this peer.
+
+    ``assert_safe_bind`` below is a startup check on a *configured* host, and a configured host
+    has no causal relationship to the socket a server actually binds: ``python -m uvicorn
+    morgan_brain.apps.brain_api.app:app --host 0.0.0.0`` imports the ASGI app directly, never
+    runs the entry point, and binds every interface while ``MORGAN_API_HOST`` still reads
+    ``127.0.0.1``. Enforcing per request closes that gap for every way of starting the app,
+    because the peer address is a fact rather than a setting.
+
+    An unknown peer (no client information on the request) is refused.
+
+    One caveat, stated rather than papered over: behind a reverse proxy on the same host, the
+    peer *is* the proxy and therefore loopback. Running Morgan behind a proxy means setting
+    ``MORGAN_API_KEY`` -- which is what the docs already tell you to do, and what
+    ``assert_safe_bind`` forces for the documented entry points.
+    """
+    if not client_host:
+        return False
+    return is_loopback(client_host)
+
+
 def assert_safe_bind(*, host: str, api_key: str, surface: str) -> None:
     """Refuse to expose *surface* on a non-loopback *host* without an API key.
 

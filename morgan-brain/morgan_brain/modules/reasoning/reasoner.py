@@ -72,8 +72,16 @@ class ReasoningModule:
                 )
                 # Execute each tool call and append the tool-result messages.
                 for tc in result.tool_calls:
+                    # The model does not get to choose the project: a `project` key in its
+                    # tool-call arguments is dropped, and the turn's project is passed
+                    # explicitly. Without the strip this call would also raise TypeError on
+                    # the duplicate keyword.
+                    model_args = {k: v for k, v in tc.arguments.items() if k != "project"}
                     tr = await self._executor.execute(
-                        tc.name, user_id=request.user_id, **tc.arguments
+                        tc.name,
+                        user_id=request.user_id,
+                        project=request.project,
+                        **model_args,
                     )
                     tool_content = str(tr.output) if tr.ok else f"ERROR: {tr.error}"
                     messages.append(

@@ -18,6 +18,11 @@ from morgan_brain.providers.wire import ToolSpec
 
 class ReasoningRequest(BaseModel):
     user_id: str
+    #: The turn's project. Required, with no default: tools run inside a turn and must search
+    #: the same project the turn is scoped to. ``memory_search`` previously defaulted to
+    #: DEFAULT_PROJECT, so asking a question in one repo searched another -- a default here
+    #: would let a future call site reintroduce that silently.
+    project: str = Field(min_length=1)
     perception: FusedPerception
     personalization: PersonalizedContext
     memories: list[Memory] = Field(default_factory=list)

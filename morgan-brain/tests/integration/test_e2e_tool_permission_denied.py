@@ -105,7 +105,7 @@ async def test_permission_denied_executor_returns_ok_false() -> None:
     deny_gate = PermissionGate(default=PermissionMode.DENY)
     executor._gate = deny_gate  # type: ignore[attr-defined]  # noqa: SLF001
 
-    result = await executor.execute("calculator", user_id="u1", expression="1+1")
+    result = await executor.execute("calculator", user_id="u1", project="p", expression="1+1")
 
     assert result.ok is False
     assert result.error is not None

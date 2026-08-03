@@ -59,11 +59,20 @@ def test_empty_key_is_refused_too() -> None:
         assert_safe_bind(host="100.64.0.7", api_key="", surface="morgan-mcp (http)")
 
 
-def test_the_message_never_echoes_the_configured_key() -> None:
-    """A startup refusal lands in logs and terminals; it must not carry a credential."""
+def test_the_message_names_the_placeholder_not_a_credential() -> None:
+    """A startup refusal lands in logs and terminals, so it names the env var and the
+    placeholder, never a key value.
+
+    The guard only raises when no real key is configured, so there is no configured credential
+    at that moment -- this asserts what the message *does* say. (An earlier version of this
+    test claimed to prove the message "never echoes the configured key", which is unfalsifiable
+    here for exactly that reason.)
+    """
     with pytest.raises(SystemExit) as excinfo:
         assert_safe_bind(host="0.0.0.0", api_key="", surface="brain-api")
-    assert UNSET_API_KEY_SENTINEL in str(excinfo.value)  # the placeholder, not a real secret
+    message = str(excinfo.value)
+    assert UNSET_API_KEY_SENTINEL in message
+    assert "MORGAN_API_KEY" in message
 
 
 def test_loopback_without_a_key_is_allowed() -> None:

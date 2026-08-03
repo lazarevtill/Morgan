@@ -30,6 +30,7 @@ CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
 def _request(**kw: object) -> ReasoningRequest:
     base: dict[str, object] = dict(
         user_id="u1",
+        project="p",
         perception=FusedPerception(text="test query"),
         personalization=PersonalizedContext(system_fragment=""),
         memories=[],

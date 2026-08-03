@@ -16,7 +16,7 @@ from __future__ import annotations
 import pytest
 
 from morgan_brain.config import Settings
-from morgan_brain.modules.memory.indexing.embedder import OllamaEmbedder
+from morgan_brain.providers.adapters.embeddings import OpenAICompatEmbedder
 from morgan_brain.providers.factory import check_llm_reachable
 
 
@@ -84,10 +84,10 @@ def test_llm_timeout_is_network_sized_and_configurable() -> None:
 def test_ollama_embedder_sends_bearer_header_only_when_api_key_set() -> None:
     """Remote llama-server needs auth on embeddings too — the embedder previously sent no
     Authorization header at all, which silently 401s against an --api-key-protected server."""
-    with_key = OllamaEmbedder("http://example:8081/v1", "m", api_key="secret")
+    with_key = OpenAICompatEmbedder("http://example:8081/v1", "m", api_key="secret")
     assert with_key._headers == {"Authorization": "Bearer secret"}
 
-    without_key = OllamaEmbedder("http://example:8081/v1", "m")
+    without_key = OpenAICompatEmbedder("http://example:8081/v1", "m")
     assert without_key._headers == {}
 
 

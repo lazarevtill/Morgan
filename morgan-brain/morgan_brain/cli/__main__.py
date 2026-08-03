@@ -209,9 +209,21 @@ async def build_doctor_report(
     params = (settings.owner_user_id, all_projects, project)
 
     def _count(table: str) -> int | None:
+        """Return the row count, or None when the table is absent or unreadable.
+
+        Independently caught, like every other probe above: a legacy database whose schema
+        migration failed leaves a table present but unqueryable, and `doctor` is the command
+        you run *because* something is broken. Aborting here would throw away the diagnostics
+        already gathered -- the provider check, the sqlite-vec and FTS5 probes, the resolved
+        paths -- which is precisely the report you need to see.
+        """
         if not _table_exists(conn, table):
             return None
-        row = conn.execute(count_sql[table], params).fetchone()
+        try:
+            row = conn.execute(count_sql[table], params).fetchone()
+        except sqlite3.Error as exc:
+            report.setdefault("count_errors", {})[table] = str(exc)
+            return None
         return int(row[0])
 
     report["memory_rows"] = _count("memories")

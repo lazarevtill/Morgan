@@ -36,6 +36,7 @@ def recorder(store: SignalStore) -> SignalRecorder:
 async def test_add_edit_updates_existing_row(recorder: SignalRecorder, store: SignalStore) -> None:
     await recorder.record_turn(
         user_id="u1",
+        project="p",
         session_id="s1",
         turn_id="t1",
         query="what time is it?",
@@ -57,7 +58,9 @@ async def test_add_edit_updates_existing_row(recorder: SignalRecorder, store: Si
 
 @pytest.mark.asyncio
 async def test_add_thumb_up(recorder: SignalRecorder, store: SignalStore) -> None:
-    await recorder.record_turn(user_id="u1", session_id="s1", turn_id="t1", query="q", reply="r")
+    await recorder.record_turn(
+        user_id="u1", project="p", session_id="s1", turn_id="t1", query="q", reply="r"
+    )
     await recorder.add_thumb(turn_id="t1", user_id="u1", thumb=Thumb.UP)
 
     results = await store.for_user("u1")
@@ -68,7 +71,9 @@ async def test_add_thumb_up(recorder: SignalRecorder, store: SignalStore) -> Non
 
 @pytest.mark.asyncio
 async def test_add_thumb_down(recorder: SignalRecorder, store: SignalStore) -> None:
-    await recorder.record_turn(user_id="u1", session_id="s1", turn_id="t1", query="q", reply="r")
+    await recorder.record_turn(
+        user_id="u1", project="p", session_id="s1", turn_id="t1", query="q", reply="r"
+    )
     await recorder.add_thumb(turn_id="t1", user_id="u1", thumb=Thumb.DOWN)
 
     results = await store.for_user("u1")
@@ -83,7 +88,9 @@ async def test_add_thumb_down(recorder: SignalRecorder, store: SignalStore) -> N
 
 @pytest.mark.asyncio
 async def test_add_retry(recorder: SignalRecorder, store: SignalStore) -> None:
-    await recorder.record_turn(user_id="u1", session_id="s1", turn_id="t1", query="q", reply="r")
+    await recorder.record_turn(
+        user_id="u1", project="p", session_id="s1", turn_id="t1", query="q", reply="r"
+    )
     await recorder.add_retry(turn_id="t1", user_id="u1")
 
     results = await store.for_user("u1")
@@ -153,6 +160,7 @@ async def test_add_retry_creates_signal_when_missing(
 async def test_context_summary_preserved(recorder: SignalRecorder, store: SignalStore) -> None:
     await recorder.record_turn(
         user_id="u1",
+        project="p",
         session_id="s1",
         turn_id="t1",
         query="q",
@@ -170,7 +178,11 @@ async def test_context_summary_preserved(recorder: SignalRecorder, store: Signal
 
 @pytest.mark.asyncio
 async def test_multiple_turns_are_separate(recorder: SignalRecorder, store: SignalStore) -> None:
-    await recorder.record_turn(user_id="u1", session_id="s1", turn_id="t1", query="q1", reply="r1")
-    await recorder.record_turn(user_id="u1", session_id="s1", turn_id="t2", query="q2", reply="r2")
+    await recorder.record_turn(
+        user_id="u1", project="p", session_id="s1", turn_id="t1", query="q1", reply="r1"
+    )
+    await recorder.record_turn(
+        user_id="u1", project="p", session_id="s1", turn_id="t2", query="q2", reply="r2"
+    )
     results = await store.for_user("u1")
     assert len(results) == 2

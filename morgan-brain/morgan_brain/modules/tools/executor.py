@@ -81,15 +81,21 @@ class ToolExecutorImpl:
         """Return tool specs from the underlying registry."""
         return self._registry.list_specs()
 
-    async def execute(self, name: str, *, user_id: str, **kwargs: Any) -> ToolResult:
+    async def execute(self, name: str, *, user_id: str, project: str, **kwargs: Any) -> ToolResult:
         """Execute *name* after gate-checking; publish audit event; catch tool exceptions.
 
         Steps
         -----
         1. Look up the tool — unknown tool → ``ToolResult(ok=False, error="unknown tool: ...")``.
         2. ``gate.check(name, params=list(kwargs))`` — denied → ``ToolResult(ok=False, error="permission denied")``.
-        3. ``await tool.run(user_id=user_id, **kwargs)`` — exception caught → ``ToolResult(ok=False, error=...)``.
+        3. ``await tool.run(user_id=user_id, project=project, **kwargs)`` — exception caught →
+           ``ToolResult(ok=False, error=...)``.
         4. Publish ``TOOL_INVOKED`` event if a bus is configured.
+
+        ``project`` is a required keyword and comes from the turn, not from the model. The
+        reasoner strips any ``project`` the model put in its tool-call arguments before
+        calling this — choosing which project to search is a scoping decision, and the
+        assistant does not get to make it.
         """
         tool = self._registry.get(name)
         if tool is None:
@@ -100,7 +106,7 @@ class ToolExecutorImpl:
             return ToolResult(ok=False, error="permission denied")
 
         try:
-            result = await tool.run(user_id=user_id, **kwargs)
+            result = await tool.run(user_id=user_id, project=project, **kwargs)
         except Exception as exc:  # noqa: BLE001
             result = ToolResult(ok=False, error=str(exc))
 
