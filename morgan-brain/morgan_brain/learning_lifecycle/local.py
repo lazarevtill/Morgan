@@ -54,19 +54,29 @@ class LocalPromptRegistry:
     Parameters
     ----------
     db_path:
-        Path to the SQLite file.  Use ``":memory:"`` (the default) for tests.
+        Path to the SQLite file.  Use ``":memory:"`` (the default) for tests.  Ignored when
+        *conn* is given.
     clock:
         Zero-argument callable that returns the "current" datetime.  Injected for
         deterministic testing.
+    conn:
+        An optional shared :class:`sqlite3.Connection`, e.g. from
+        :func:`morgan_brain.modules.memory.stores.db.open_db`, so the champion registry lives
+        in the same database file as every other store -- the one-database invariant
+        (Task 13A): single-transaction ``forget()``, one file to back up, one file to encrypt.
+        Same pattern as ``SignalStore``/``SessionHistoryStore``. When ``None`` (the default),
+        falls back to opening *db_path* as its own private connection.
     """
 
     def __init__(
         self,
         db_path: str = ":memory:",
         clock: Callable[[], datetime] = _DEFAULT_CLOCK,
+        *,
+        conn: sqlite3.Connection | None = None,
     ) -> None:
         self._clock = clock
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._conn = conn if conn is not None else sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
         self._conn.commit()

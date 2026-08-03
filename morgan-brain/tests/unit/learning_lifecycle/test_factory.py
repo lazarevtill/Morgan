@@ -1,6 +1,7 @@
 """Tests for learning_lifecycle.factory — backend selection + telemetry-off enforcement."""
 
 import os
+import sqlite3
 
 import pytest
 
@@ -42,6 +43,19 @@ def test_build_registry_local_creates_missing_parent_directories(tmp_path) -> No
     reg = build_registry(Settings(learning_backend="local", data_dir=str(data_dir)))
     assert isinstance(reg, LocalPromptRegistry)
     assert data_dir.is_dir()
+
+
+def test_build_registry_local_shares_a_given_connection(tmp_path) -> None:
+    """Task 13A's one-database invariant: every production caller (build_app_context,
+    build_worker_context) has a shared memory-database connection and must get a registry
+    that uses it, instead of a second .db file -- so forget()'s single-transaction, and the
+    single-file backup/encryption story, still cover the champion registry."""
+    conn = sqlite3.connect(str(tmp_path / "morgan.db"), check_same_thread=False)
+    reg = build_registry(Settings(learning_backend="local"), conn=conn)
+    assert isinstance(reg, LocalPromptRegistry)
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "prompt_versions" in tables
+    assert not (tmp_path / "prompts.db").exists()
 
 
 # ------------------------------------------------------------------

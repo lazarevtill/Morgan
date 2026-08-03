@@ -195,8 +195,11 @@ def test_ask_from_a_temp_cwd_does_not_fail_on_database_access(tmp_path):
     payload = json.loads(out.stdout)
     assert "database" not in payload["error"].lower()
     assert "unable to open database file" not in payload["error"]
-    # The prompt-registry file must actually have been created under MORGAN_DATA_DIR.
-    assert (tmp_path / "data" / "prompts.db").exists()
+    # The champion registry shares the one morgan.db connection (Task 13A's one-database
+    # invariant) -- it must land under MORGAN_DATA_DIR, and no separate prompts.db appears.
+    data_dir = tmp_path / "data"
+    assert (data_dir / "morgan.db").exists()
+    assert not (data_dir / "prompts.db").exists()
 
 
 @pytest.mark.parametrize("command", ["remember", "recall", "facts", "forget", "ask", "doctor"])

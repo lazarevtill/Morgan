@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import sqlite3
 
 from morgan_brain.config import Settings
 from morgan_brain.learning_lifecycle.interfaces import PromptRegistry
@@ -30,27 +31,36 @@ def _force_mlflow_privacy() -> None:
     os.environ["DO_NOT_TRACK"] = "true"
 
 
-def build_registry(settings: Settings) -> PromptRegistry:
+def build_registry(settings: Settings, *, conn: sqlite3.Connection | None = None) -> PromptRegistry:
     """Return a PromptRegistry appropriate for *settings.learning_backend*.
 
     Parameters
     ----------
     settings:
         A ``morgan_brain.config.Settings`` instance.
+    conn:
+        The shared memory-database connection (e.g. from ``composition.open_db``), when the
+        caller has one. Preferred: the champion registry then lives in the same ``morgan.db``
+        file as every other store -- the one-database invariant (Task 13A) that makes
+        ``forget()`` a single transaction and backup/encryption a single file. Every
+        production caller (``build_app_context``, ``build_worker_context``) passes this.
 
     Returns
     -------
     PromptRegistry
-        - ``"local"``  → ``LocalPromptRegistry`` backed by ``{settings.data_dir}/prompts.db``
+        - ``"local"``  → ``LocalPromptRegistry``, sharing *conn* when given, else its own file
+          at ``{settings.data_dir}/prompts.db`` (parent directories created either way).
         - ``"mlflow"`` → telemetry env vars are set, then ``NotImplementedError`` is
           raised (full impl lands in Wave 1/5).
     """
     if settings.learning_backend == "local":
-        # Derived from settings.data_dir, not a hardcoded CWD-relative path -- brain-api and
-        # the worker always happened to launch from a directory where "./data" existed, but
-        # the CLI (Task 17) is the first caller that builds the app context from an arbitrary
-        # cwd, which made this user-facing ("unable to open database file"). Parent
-        # directories are created up front, same as every other store's path in composition.py.
+        if conn is not None:
+            return LocalPromptRegistry(conn=conn)
+        # No shared connection was given (e.g. building a registry standalone, without the
+        # rest of the memory stack) -- fall back to its own file, still derived from
+        # settings.data_dir rather than a hardcoded CWD-relative path (the original bug: the
+        # CLI is the first caller to build the app context from an arbitrary cwd, where a
+        # hardcoded "./data/prompts.db" raised "unable to open database file").
         db_path = f"{settings.data_dir}/prompts.db"
         pathlib.Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         return LocalPromptRegistry(db_path=db_path)
