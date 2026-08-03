@@ -171,7 +171,10 @@ class MemoryModule:
         forgotten conversation and cannot be un-learned, only rolled back. Flagging affected
         versions requires the ``PromptRegistry``, which this module does not hold and no
         caller wires in, so ``champions_flagged`` stays empty -- for the owner to review by
-        hand until that wiring exists.
+        hand until that wiring exists. Note this is a deliberate exclusion, not a leftover
+        gap: ``prompt_versions`` (``LocalPromptRegistry``) shares this same database
+        connection since Task 17, so it WOULD be reachable from *conn* below -- it is
+        intentionally never named in the DELETE statements that follow.
 
         ``vec_items``/``vec_meta`` (only present with the sqlite vector backend) and
         ``interaction_signals``/``session_history`` (only present once a ``SignalStore`` or
