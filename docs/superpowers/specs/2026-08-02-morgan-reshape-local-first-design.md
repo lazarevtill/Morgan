@@ -276,6 +276,42 @@ the two already-fixed "latent bugs", and the word "bi-temporal" — the schema c
 Milestones 0 and 1 are planned in detail now. Milestones 2 and 3 are re-planned after 1 lands,
 because what 1 teaches about retrieval quality changes both.
 
+## 7.1 Concept annotation and query expansion — milestone 2, decided 2026-08-03
+
+Today `Entity` is `{name, type}` with no relations, and `EntityIndex.search` matches lowercased
+names exactly. A memory tagged `horse` is reachable by the literal token "horse" and nothing else.
+The owner wants recall to follow meaning: asking about a pet, an animal, or a sport should reach
+the horse memory, and the tag structure should reorganise itself as relationships change.
+
+**Decided source: an LLM proposes, a curated file overrides.** The consolidation worker (cold
+path, `strong` role, local GPU) extracts concepts per memory; a hand-editable concepts file pins
+the relationships the owner cares about — `Harbor → registry → infrastructure` — and wins over the
+model's guess. This was chosen over a lexical resource, which is English-only and would fail on a
+corpus that is substantially Russian, and over embeddings-alone, which offers no inspectable tags
+and nothing to correct when a match is wrong.
+
+Shape, consistent with the existing invariants:
+
+- **Cold path writes.** Concepts and edges are produced during consolidation, never in a request.
+  Store `concepts`, `memory_concepts(weight, source=extracted|curated)`, and
+  `concept_edges(relation=broader|narrower|related, weight)`.
+- **Hot path reads.** Query terms resolve to concepts and expand by SQL lookup — no model call —
+  producing a **fourth ranking** fed into the existing reciprocal-rank fusion beside vector, FTS
+  and entity.
+- **Restructuring is deferred work.** When edges change, mark affected memories dirty; the next
+  cold-path pass re-annotates. The graph is never rewritten mid-request.
+
+**The constraint that governs the design: bounded expansion.** Unbounded traversal turns
+`horse → animal → pet → dog` into a horse query returning the dog. Expansion is one hop, weighted
+strictly below exact matches, and never able to outrank them.
+
+**Sequencing note.** This lands alongside the retrieval-quality measurement work, deliberately.
+`tests/memory_quality/` is currently 3 tests over a hash embedder — there is no benchmark that
+could tell whether expansion improves recall or merely adds noise. Building a precision-sensitive
+feature without that measurement would be guessing. It also interacts with the open relevance-floor
+question (§11): expansion makes "recall always returns something" materially worse, so the two
+should be decided together.
+
 ## 8. Testing
 
 The current suite is a refactoring net, not evidence. Milestone 1 adds integration tests that
