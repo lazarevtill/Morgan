@@ -7,6 +7,11 @@ services:
     ports: ["8080:8080"]
     env_file: [.env]
     environment:
+      # A container's published port is unreachable from a loopback bind, so this overrides
+      # the loopback default — which means MORGAN_API_KEY in .env must be a real key or
+      # brain-api refuses to start. That refusal is the point: a published port with
+      # authentication disabled is an open memory store.
+      MORGAN_API_HOST: 0.0.0.0
       MORGAN_EVENT_BUS: redis
       MORGAN_REDIS_URL: redis://redis:6379/0
       MORGAN_QDRANT_URL: http://qdrant:6333

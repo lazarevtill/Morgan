@@ -45,12 +45,9 @@ from starlette.responses import JSONResponse, Response
 from morgan_brain.cli.__main__ import cmd_ask, cmd_facts, cmd_forget, cmd_recall, cmd_remember
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.models.memory import DEFAULT_PROJECT
+from morgan_brain.security.network import api_key_is_configured, assert_safe_bind
 
 TOOL_NAMES: tuple[str, ...] = ("remember", "recall", "facts", "forget", "ask_morgan")
-
-# Mirrors apps/brain_api/auth.py's enforcement sentinel: an unset or default-placeholder key
-# leaves the server open (local dev / CI convenience) instead of locking the owner out.
-_UNSET_KEY_SENTINEL = "change-me"
 
 _ToolFn = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -80,9 +77,14 @@ class MorganMcpServer:
 
     async def run_http_async(self, host: str, port: int) -> None:
         """Serve over streamable-HTTP with a bearer token -- laptops reaching the homelab
-        over NetBird, the normal deployment case."""
+        over NetBird, the normal deployment case.
+
+        Refuses to bind beyond loopback without an API key: the bearer middleware below is a
+        no-op when none is configured, and these five tools include ``forget``.
+        """
         import uvicorn
 
+        assert_safe_bind(host=host, api_key=self.settings.api_key, surface="morgan-mcp (http)")
         self.mcp.settings.host = host
         self.mcp.settings.port = port
         app = self.mcp.streamable_http_app()
@@ -101,7 +103,7 @@ class _BearerAuthMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app: Any, settings: Settings) -> None:
         super().__init__(app)
-        self._enforced = bool(settings.api_key) and settings.api_key != _UNSET_KEY_SENTINEL
+        self._enforced = api_key_is_configured(settings.api_key)
         self._api_key = settings.api_key
 
     async def dispatch(
@@ -180,6 +182,7 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
 
 
 def main(argv: list[str] | None = None) -> int:
+    settings = get_settings()
     parser = argparse.ArgumentParser(
         prog="morgan-mcp",
         description="Morgan's MCP server -- five tools over the same memory the morgan CLI uses.",
@@ -192,13 +195,23 @@ def main(argv: list[str] | None = None) -> int:
         "(bearer token from MORGAN_API_KEY), the normal case for laptops reaching the "
         "homelab over NetBird.",
     )
-    parser.add_argument("--host", default="0.0.0.0", help="Bind host for --transport http.")
-    parser.add_argument("--port", type=int, default=8090, help="Bind port for --transport http.")
+    parser.add_argument(
+        "--host",
+        default=settings.mcp_host,
+        help="Bind host for --transport http (default MORGAN_MCP_HOST, loopback). Binding "
+        "beyond loopback requires MORGAN_API_KEY.",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=settings.mcp_port,
+        help="Bind port for --transport http (default MORGAN_MCP_PORT).",
+    )
     args = parser.parse_args(argv)
 
     import asyncio
 
-    server = build_server(get_settings())
+    server = build_server(settings)
     if args.transport == "stdio":
         asyncio.run(server.run_stdio_async())
     else:

@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     owner_user_id: str = "owner"
     api_key: str = "change-me"
 
+    # --- Inbound listeners (brain-api, and morgan-mcp's streamable-HTTP transport) ---
+    # Loopback by default. The owner's real deployment binds the homelab box's overlay
+    # address so the laptops can reach it over NetBird — which is exactly when an API key
+    # stops being optional, so `security/network.py::assert_safe_bind` refuses to start on a
+    # non-loopback host while `api_key` is unset or still the placeholder above.
+    api_host: str = "127.0.0.1"
+    api_port: int = Field(default=8080, gt=0, lt=65536)
+    mcp_host: str = "127.0.0.1"
+    mcp_port: int = Field(default=8090, gt=0, lt=65536)
+
     # --- LLM ---
     # Default provider is llama-server's OpenAI-compatible port (llama.cpp), not Ollama.
     # "ollama" remains a fully supported provider key — set MORGAN_PROVIDERS /
