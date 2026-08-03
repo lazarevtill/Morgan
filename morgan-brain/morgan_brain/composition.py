@@ -395,8 +395,17 @@ class ChampionCache:
             try:
                 version = await self._registry.champion(self._name)
                 self._body = version.body if version is not None else ""
-            except Exception:  # noqa: BLE001 — keep last-known body on transient errors
-                pass
+            except Exception as exc:  # noqa: BLE001 — keep last-known body on transient errors
+                # Serving the last-known body is right: a registry blip must not take the
+                # request path down. Swallowing it silently is not -- a registry that is
+                # permanently unreachable would then look exactly like a healthy one that
+                # has no champion, forever.
+                log.warning(
+                    "champion_refresh_failed",
+                    prompt=self._name,
+                    error=str(exc),
+                    serving="last-known body",
+                )
             self._expires = now + self._ttl
             self._loaded = True
         return self._body

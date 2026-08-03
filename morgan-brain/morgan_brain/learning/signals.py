@@ -8,6 +8,7 @@ Design refs:
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime
 from enum import Enum
@@ -199,10 +200,13 @@ class SignalStore:
         """Mark the given signal ids as consumed so the async worker won't re-process them."""
         if not ids:
             return
-        placeholders = ",".join("?" * len(ids))
+        # json_each over one bound JSON array, rather than a generated "?,?,?" list: the SQL
+        # stays a literal (no query text built from data) and the id count is not capped by
+        # SQLITE_MAX_VARIABLE_NUMBER.
         self._conn.execute(
-            f"UPDATE interaction_signals SET consumed=1 WHERE id IN ({placeholders})",
-            ids,
+            "UPDATE interaction_signals SET consumed=1 "
+            "WHERE id IN (SELECT value FROM json_each(?))",
+            (json.dumps(ids),),
         )
         self._conn.commit()
 

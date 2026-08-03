@@ -43,9 +43,10 @@ jobs:
       - name: Install bandit
         run: pip install "bandit[toml]"
 
+      # No continue-on-error and no -ll severity floor: the scan reports zero findings at
+      # every severity, so anything new is a regression and should fail the build.
       - name: Run Bandit
-        run: bandit -r morgan_brain -ll
-        continue-on-error: true
+        run: bandit -c pyproject.toml -r morgan_brain
 
   # Note: CodeQL runs via the repository's *default* CodeQL setup (the separate
   # "CodeQL" check), so we do not define a custom codeql job here — an advanced

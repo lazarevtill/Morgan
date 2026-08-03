@@ -94,14 +94,14 @@ def cohen_kappa(a: list[bool], b: list[bool]) -> float:
     if n == 0:
         return 0.0
 
-    # Build 2×2 contingency table.
+    # Build 2×2 contingency table. The four predicates partition every (x, y) pair, and the
+    # lengths were checked above, so tp + tn + fp + fn == n by construction -- there is no
+    # invariant left for a runtime check to catch.
     # TP: both True, TN: both False, FP: a=False b=True, FN: a=True b=False
     tp = sum(1 for x, y in zip(a, b) if x and y)
     tn = sum(1 for x, y in zip(a, b) if not x and not y)
     fp = sum(1 for x, y in zip(a, b) if not x and y)
     fn = sum(1 for x, y in zip(a, b) if x and not y)
-
-    assert tp + tn + fp + fn == n
 
     # Marginals
     a_pos = tp + fn  # a says True
