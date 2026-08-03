@@ -10,6 +10,10 @@ Enforcement policy
     - ``X-API-Key: <key>``
   Anything else → ``HTTP 401``.
 
+The open case is only reachable on loopback: ``security/network.py::assert_safe_bind``
+refuses to start the process when the bind host is not loopback and no key is configured.
+That module owns the sentinel this file used to define for itself.
+
 JWT upgrade seam
 ----------------
 Swap this file's ``require_api_key`` implementation when bearer-JWT is added (Wave 6+).
@@ -26,8 +30,7 @@ from fastapi import HTTPException, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from morgan_brain.config import Settings
-
-_SENTINEL = "change-me"
+from morgan_brain.security.network import api_key_is_configured
 
 # FastAPI security scheme objects — reused across factory calls.
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -40,7 +43,7 @@ def require_api_key(settings: Settings) -> Callable[..., Coroutine[Any, Any, Non
     When the key is empty or the default sentinel (``"change-me"``), enforcement is
     skipped so local-dev / zero-config deployments work out of the box.
     """
-    enforced = bool(settings.api_key) and settings.api_key != _SENTINEL
+    enforced = api_key_is_configured(settings.api_key)
 
     async def _check(
         bearer: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
