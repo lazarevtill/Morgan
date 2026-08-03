@@ -25,6 +25,25 @@ def test_build_registry_local_satisfies_protocol() -> None:
     assert isinstance(reg, PromptRegistry)
 
 
+def test_build_registry_local_derives_path_from_data_dir(tmp_path) -> None:
+    """The prompt registry must live under settings.data_dir, not a hardcoded
+    CWD-relative "./data" -- callers that build the app context from an arbitrary
+    working directory (the CLI being the first) must not depend on "./data" existing."""
+    data_dir = tmp_path / "nested" / "data"
+    build_registry(Settings(learning_backend="local", data_dir=str(data_dir)))
+    assert (data_dir / "prompts.db").exists()
+
+
+def test_build_registry_local_creates_missing_parent_directories(tmp_path) -> None:
+    """A data_dir several levels deep that doesn't exist yet must not raise
+    "unable to open database file" -- the parent directories are created."""
+    data_dir = tmp_path / "a" / "b" / "c"
+    assert not data_dir.exists()
+    reg = build_registry(Settings(learning_backend="local", data_dir=str(data_dir)))
+    assert isinstance(reg, LocalPromptRegistry)
+    assert data_dir.is_dir()
+
+
 # ------------------------------------------------------------------
 # mlflow backend — telemetry env vars MUST be set before any failure
 # ------------------------------------------------------------------

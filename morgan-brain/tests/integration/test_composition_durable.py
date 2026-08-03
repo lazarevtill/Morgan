@@ -15,12 +15,20 @@ def test_app_context_uses_the_sqlite_vector_index(tmp_path, monkeypatch):
 
 
 def test_every_store_shares_one_database_file(tmp_path, monkeypatch):
-    """signals and history must be reachable from the memory connection, or forget() cannot work."""
+    """signals and history must be reachable from the memory connection, or forget() cannot work.
+
+    ``prompts.db`` (the ``LocalPromptRegistry``, holding champion-preprompt versions) is the one
+    deliberate exception: it is off the forget() erasure transaction by design -- a promoted
+    champion may embed text mined from a now-forgotten conversation and can only be reviewed
+    and rolled back by hand, never silently deleted (see ``ForgetReport.champions_flagged``).
+    So it living in its own file is correct, not a leak; what actually matters -- and what this
+    test checks -- is that everything forget() DOES erase shares the one ``morgan.db`` connection.
+    """
     monkeypatch.setenv("MORGAN_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
     build_app_context(Settings())
     dbs = sorted(p.name for p in tmp_path.glob("*.db"))
-    assert dbs == ["morgan.db"], f"expected one database, found {dbs}"
+    assert dbs == ["morgan.db", "prompts.db"], f"expected morgan.db + prompts.db, found {dbs}"
 
     conn = sqlite3.connect(tmp_path / "morgan.db")
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}

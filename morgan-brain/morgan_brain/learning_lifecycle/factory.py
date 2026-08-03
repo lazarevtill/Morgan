@@ -17,6 +17,7 @@ lands in Wave 1/5.  The seam + telemetry enforcement is what ships now.
 from __future__ import annotations
 
 import os
+import pathlib
 
 from morgan_brain.config import Settings
 from morgan_brain.learning_lifecycle.interfaces import PromptRegistry
@@ -40,12 +41,19 @@ def build_registry(settings: Settings) -> PromptRegistry:
     Returns
     -------
     PromptRegistry
-        - ``"local"``  → ``LocalPromptRegistry`` backed by ``./data/prompts.db``
+        - ``"local"``  → ``LocalPromptRegistry`` backed by ``{settings.data_dir}/prompts.db``
         - ``"mlflow"`` → telemetry env vars are set, then ``NotImplementedError`` is
           raised (full impl lands in Wave 1/5).
     """
     if settings.learning_backend == "local":
-        return LocalPromptRegistry(db_path="./data/prompts.db")
+        # Derived from settings.data_dir, not a hardcoded CWD-relative path -- brain-api and
+        # the worker always happened to launch from a directory where "./data" existed, but
+        # the CLI (Task 17) is the first caller that builds the app context from an arbitrary
+        # cwd, which made this user-facing ("unable to open database file"). Parent
+        # directories are created up front, same as every other store's path in composition.py.
+        db_path = f"{settings.data_dir}/prompts.db"
+        pathlib.Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        return LocalPromptRegistry(db_path=db_path)
 
     # --- mlflow branch ---
     # Telemetry MUST be disabled before any mlflow import (privacy hard rule from ADR).
