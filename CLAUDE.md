@@ -139,8 +139,10 @@ Hot path = `brain-api` request path; cold path = `learning-worker`.
   project.
 - **`forget()` does not erase vectors under `vector_backend=qdrant`.** The sqlite-vec default is
   fully covered (same transaction as everything else); Qdrant vectors must be removed separately.
-- **The MCP HTTP transport is open** (no bearer check) whenever `MORGAN_API_KEY` is unset or left
-  at `change-me` — the same policy `/api/*` uses, and just as consequential over a network listener.
+- **Both listeners serve unauthenticated when `MORGAN_API_KEY` is unset or left at `change-me`** —
+  `/api/*` and the MCP HTTP transport share that policy. It is confined to loopback:
+  `security/network.py::assert_safe_bind` refuses to start either surface on a non-loopback bind
+  without a real key, so the open case cannot reach the overlay network.
 - **Retrieval quality is unmeasured.** `tests/memory_quality/` is a stub harness over a hash
   embedder — it exercises the plumbing, not real relevance.
 
@@ -182,7 +184,8 @@ GEPA) · `[scheduling]` (APScheduler) · `[tracing]` (slim mlflow-tracing) · `[
 ## Configuration
 
 All env vars are `MORGAN_`-prefixed (see `morgan-brain/.env.example` for the full list). Notable:
-`MORGAN_API_KEY` (INBOUND, set a real key before remote exposure), `MORGAN_DATA_DIR` (where the
+`MORGAN_API_KEY` (INBOUND, required for any non-loopback bind), `MORGAN_API_HOST`/`MORGAN_API_PORT`
+and `MORGAN_MCP_HOST`/`MORGAN_MCP_PORT` (listener binds, loopback by default), `MORGAN_DATA_DIR` (where the
 shared `morgan.db` and workspace files live), `MORGAN_LLM_ENDPOINT`/`MORGAN_LLM_API_KEY`
 (OUTBOUND, to the model server — opposite direction from `MORGAN_API_KEY`), `MORGAN_EVENT_BUS`
 (`inproc`|`redis`), `MORGAN_VECTOR_BACKEND` (`sqlite`|`memory`|`qdrant`), `MORGAN_LEARNING_BACKEND`

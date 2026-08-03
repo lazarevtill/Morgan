@@ -50,9 +50,10 @@ Or by hand in a client's MCP config file (e.g. `.mcp.json`):
 
 ### A laptop reaching the homelab over NetBird — streamable-HTTP
 
-Run the daemon with `morgan-mcp --transport http --host 0.0.0.0 --port 8090`. It serves
-`/mcp` and enforces `MORGAN_API_KEY` as a bearer token — the same INBOUND key `/api/*` on
-brain-api requires, never `MORGAN_LLM_API_KEY` (outbound to llama-server).
+Run the daemon with `morgan-mcp --transport http --host <overlay address>` (or set
+`MORGAN_MCP_HOST`; `--port` / `MORGAN_MCP_PORT` defaults to 8090). It serves `/mcp` and enforces
+`MORGAN_API_KEY` as a bearer token — the same INBOUND key `/api/*` on brain-api requires, never
+`MORGAN_LLM_API_KEY` (outbound to llama-server).
 
 ```bash
 claude mcp add --transport http morgan http://<homelab-host>:8090/mcp \
@@ -74,8 +75,9 @@ Or by hand:
 }
 ```
 
-As with brain-api, if `MORGAN_API_KEY` is unset or left at the `change-me` default, the
-bearer check is skipped — set a real key before exposing the port beyond loopback.
+As with brain-api, if `MORGAN_API_KEY` is unset or left at the `change-me` default, the bearer
+check is skipped — so the daemon refuses to start on any non-loopback bind until you set a real
+key. Both surfaces default to a loopback bind for that reason.
 
 ## The stack, and why
 

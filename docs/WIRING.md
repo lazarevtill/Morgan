@@ -99,13 +99,15 @@ logic is duplicated. `project` is an explicit tool argument here (the server is 
 daemon with no meaningful cwd of its own), falling back to a system-wide default when omitted.
 ```bash
 pip install -e ".[mcp]"
-morgan-mcp --transport stdio                                       # a client on this machine
-morgan-mcp --transport http --host 0.0.0.0 --port 8090              # laptops over NetBird
+morgan-mcp --transport stdio                                # a client on this machine
+morgan-mcp --transport http                                 # loopback, MORGAN_MCP_HOST/PORT
+MORGAN_API_KEY=… morgan-mcp --transport http --host 100.64.0.7   # laptops over NetBird
 ```
 The HTTP transport enforces `MORGAN_API_KEY` as a bearer token — the same policy `/api/*` uses,
-and the same caveat: **it serves openly whenever the key is unset or left at `change-me`.** Set a
-real key before exposing the port beyond loopback. See [`docs/OPERATIONS.md`](OPERATIONS.md) for
-client config examples (`.mcp.json`, `claude mcp add`).
+including the same open-when-unset behaviour. That openness is confined to loopback: binding any
+other host without a real key **refuses to start**, because these five tools include `forget`.
+`stdio` has no socket and needs no key. See [`docs/OPERATIONS.md`](OPERATIONS.md) for client
+config examples (`.mcp.json`, `claude mcp add`).
 
 ## 6. Use it — `brain-api` (REST/SSE gateway)
 ```bash
@@ -124,9 +126,12 @@ same project. `/api/chat/stream` returns Server-Sent Events (`data: {"delta": ".
 
 `/health` is open; every other `/api/*` route requires `Authorization: Bearer <MORGAN_API_KEY>`
 (or `X-API-Key`) **when a key is set** — the default `change-me` leaves it open for local dev.
-> ⚠️ **Before exposing remotely you MUST set a real `MORGAN_API_KEY`.** Primary control per the
-> architecture is **network posture** — run behind the **NetBird overlay network with no public
-> ports**; do not bind `0.0.0.0` to the internet. See [`docs/OPERATIONS.md`](OPERATIONS.md).
+
+The listener binds `MORGAN_API_HOST`:`MORGAN_API_PORT`, loopback by default. Any other host
+without a real `MORGAN_API_KEY` refuses to start rather than serving an unauthenticated memory
+store — so the remote deployment is `MORGAN_API_HOST=<overlay address>` plus a real key. Network
+posture remains the primary control: run behind the **NetBird overlay with no public ports**. See
+[`docs/OPERATIONS.md`](OPERATIONS.md).
 
 Run the worker alongside the API to automate learning:
 `MORGAN_ENABLE_SCHEDULING=true python -m morgan_brain.apps.learning_worker`.
