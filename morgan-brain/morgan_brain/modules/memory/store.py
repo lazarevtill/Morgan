@@ -12,6 +12,7 @@ payload -- so a memory recovered after a restart is exactly the one that was sto
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime
 from typing import Callable
@@ -192,7 +193,10 @@ class MemoryModule:
             )
         ]
         report = ForgetReport(memories=len(ids))
-        placeholders = ",".join("?" * len(ids))
+        # The id list is bound once as a JSON array and expanded by json_each, so every
+        # statement below stays a literal and a project with more memories than
+        # SQLITE_MAX_VARIABLE_NUMBER still erases in one statement each.
+        id_json = json.dumps(ids)
         has_vectors = _table_exists(conn, "vec_items") and _table_exists(conn, "vec_meta")
         has_signals = _table_exists(conn, "interaction_signals")
         has_history = _table_exists(conn, "session_history")
@@ -206,19 +210,30 @@ class MemoryModule:
         conn.execute("BEGIN IMMEDIATE")
         try:
             if ids:
-                conn.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", ids)
-                conn.execute(f"DELETE FROM fts_memories WHERE memory_id IN ({placeholders})", ids)
                 conn.execute(
-                    f"DELETE FROM memory_entities WHERE memory_id IN ({placeholders})", ids
+                    "DELETE FROM memories WHERE id IN (SELECT value FROM json_each(?))",
+                    (id_json,),
+                )
+                conn.execute(
+                    "DELETE FROM fts_memories WHERE memory_id IN (SELECT value FROM json_each(?))",
+                    (id_json,),
+                )
+                conn.execute(
+                    "DELETE FROM memory_entities "
+                    "WHERE memory_id IN (SELECT value FROM json_each(?))",
+                    (id_json,),
                 )
                 if has_vectors:
                     # Vectors live in this same database, so they go inside the transaction.
                     conn.execute(
-                        f"DELETE FROM vec_items WHERE rowid IN "
-                        f"(SELECT rowid FROM vec_meta WHERE id IN ({placeholders}))",
-                        ids,
+                        "DELETE FROM vec_items WHERE rowid IN "
+                        "(SELECT rowid FROM vec_meta WHERE id IN (SELECT value FROM json_each(?)))",
+                        (id_json,),
                     )
-                    conn.execute(f"DELETE FROM vec_meta WHERE id IN ({placeholders})", ids)
+                    conn.execute(
+                        "DELETE FROM vec_meta WHERE id IN (SELECT value FROM json_each(?))",
+                        (id_json,),
+                    )
             report.facts = conn.execute(
                 "DELETE FROM facts WHERE user_id = ? AND project = ?", (user_id, project)
             ).rowcount

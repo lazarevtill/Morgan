@@ -194,16 +194,23 @@ class LearningScheduler:
 
         # ---- 2. Optimizer job (if trainer + signal_store are wired in) -----
         if self._champion_trainer is not None and self._signal_store is not None:
-            self._register_optimize_job(user_id)
+            self._register_optimize_job(user_id, self._champion_trainer, self._signal_store)
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
-    def _register_optimize_job(self, user_id: str) -> None:
+    def _register_optimize_job(
+        self, user_id: str, trainer: _Trainable, store: _SignalStore
+    ) -> None:
+        """Both collaborators arrive as parameters, non-optional.
+
+        The caller has already checked them for None; taking them as arguments is what makes
+        that check visible to the type checker. Reading them off ``self`` inside the closure
+        needed two ``assert``s to narrow -- and ``python -O`` strips asserts, so the narrowing
+        would have been gone in exactly the deployment that runs unattended.
+        """
         optimize_name = f"optimize:{user_id}"
-        trainer = self._champion_trainer  # captured for the closure
-        store = self._signal_store
 
         def _optimize_fn() -> Any:
             import asyncio
@@ -211,8 +218,6 @@ class LearningScheduler:
             from morgan_brain.learning.optimizer import mine_examples
 
             async def _run() -> None:
-                assert trainer is not None  # narrowing for mypy
-                assert store is not None
                 # mine_examples is the canonical async free function:
                 #   mine_examples(signals: SignalStore, user_id, *, limit=50)
                 # It calls store.high_value internally and returns Example objects.

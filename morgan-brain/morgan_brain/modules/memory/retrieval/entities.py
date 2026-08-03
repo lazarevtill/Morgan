@@ -6,6 +6,7 @@ then memory id, so fusion input is stable across processes.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Iterable
 
@@ -79,19 +80,28 @@ class EntityIndex:
         wanted = [t.lower() for t in terms]
         if not wanted:
             return []
-        placeholders = ",".join("?" * len(wanted))
-        sql = f"""
+        # One literal statement, no SQL assembled from data: the term list arrives as a bound
+        # JSON array through json_each, and "project IS NULL means every project" is expressed
+        # as a bound flag rather than by appending a clause.
+        rows = self._conn.execute(
+            """
             SELECT memory_id, COUNT(*) AS hits
             FROM memory_entities
-            WHERE user_id = ? AND name IN ({placeholders})
-            """
-        params: list[object] = [user_id, *wanted]
-        if project is not None:
-            sql += " AND project = ?"
-            params.append(project)
-        sql += " GROUP BY memory_id ORDER BY hits DESC, memory_id ASC LIMIT ?"
-        params.append(top_k)
-        rows = self._conn.execute(sql, params).fetchall()
+            WHERE user_id = ?
+              AND name IN (SELECT value FROM json_each(?))
+              AND (? OR project = ?)
+            GROUP BY memory_id
+            ORDER BY hits DESC, memory_id ASC
+            LIMIT ?
+            """,
+            (
+                user_id,
+                json.dumps(wanted),
+                project is None,
+                project,
+                top_k,
+            ),
+        ).fetchall()
         return [str(r["memory_id"]) for r in rows]
 
     def delete(self, ids: list[str]) -> None:

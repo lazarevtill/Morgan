@@ -196,16 +196,22 @@ async def build_doctor_report(
     except Exception as exc:  # noqa: BLE001
         report["schema_error"] = str(exc)
 
-    where = "user_id = ?"
-    params: list[object] = [settings.owner_user_id]
-    if not all_projects:
-        where += " AND project = ?"
-        params.append(project)
+    # A table name cannot be a bound parameter, so each count is a literal statement chosen by
+    # key rather than a name interpolated into SQL. The project filter is a bound flag for the
+    # same reason: no part of these queries is assembled from data.
+    count_sql = {
+        "memories": "SELECT COUNT(*) FROM memories WHERE user_id = ? AND (? OR project = ?)",
+        "fts_memories": (
+            "SELECT COUNT(*) FROM fts_memories WHERE user_id = ? AND (? OR project = ?)"
+        ),
+        "vec_meta": "SELECT COUNT(*) FROM vec_meta WHERE user_id = ? AND (? OR project = ?)",
+    }
+    params = (settings.owner_user_id, all_projects, project)
 
     def _count(table: str) -> int | None:
         if not _table_exists(conn, table):
             return None
-        row = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}", params).fetchone()
+        row = conn.execute(count_sql[table], params).fetchone()
         return int(row[0])
 
     report["memory_rows"] = _count("memories")

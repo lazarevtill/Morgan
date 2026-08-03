@@ -72,3 +72,10 @@ markers = [
     "timeout: mark test with a wall-clock timeout in seconds (requires pytest-timeout; skipped if not installed)",
     "live: mark test as requiring live external services (Qdrant, Redis); skipped by default",
 ]
+
+[tool.bandit]
+# Production code only. Bandit reads pytest's idiom as a vulnerability -- `assert` is B101
+# (1300+ in tests), the CLI integration tests' subprocess calls are B603/B607, and the
+# "0.0.0.0" literal in the tests that prove Morgan *refuses* that bind is B104. Scanning
+# morgan_brain is the scan that matters; it reports zero findings.
+exclude_dirs = ["tests"]
