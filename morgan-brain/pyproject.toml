@@ -37,9 +37,14 @@ tokens = ["tiktoken>=0.8"]
 learning = ["mlflow>=3.4"]
 # Slim tracing-only package for the hot-path service layer (much smaller than full mlflow).
 tracing = ["mlflow-tracing"]
+# MCP server port (Task 17A) -- other AI tools calling in to Morgan over the Model Context
+# Protocol. Capped below 2.0: mcp 2.0 is a breaking rewrite that swaps httpx for an
+# incompatible httpx2 package, which would collide with every other httpx consumer in this repo.
+mcp = ["mcp>=1.0,<2.0"]
 
 [project.scripts]
 morgan = "morgan_brain.cli.__main__:main"
+morgan-mcp = "morgan_brain.ports.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["morgan_brain"]

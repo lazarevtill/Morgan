@@ -21,6 +21,62 @@ terminate TLS at a reverse proxy. Never expose it on a public interface with the
 Back up the single database file with `sqlite3 morgan.db ".backup 'morgan-backup.db'"` while the
 service runs — a filesystem copy of a WAL-mode database mid-write is not consistent.
 
+## MCP clients
+
+`morgan-mcp` (`pip install -e ".[mcp]"`) exposes five tools — `remember`, `recall`, `facts`,
+`forget`, `ask_morgan` — over the Model Context Protocol, through the same `MemoryGate` the
+`morgan` CLI uses. Every tool call takes an explicit `project` argument; there is no cwd
+detection, because the server is a long-lived daemon whose own working directory means
+nothing to a client on another machine.
+
+### A client on the same machine as the brain — stdio
+
+```bash
+claude mcp add morgan -- morgan-mcp --transport stdio
+```
+
+Or by hand in a client's MCP config file (e.g. `.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "morgan": {
+      "command": "morgan-mcp",
+      "args": ["--transport", "stdio"]
+    }
+  }
+}
+```
+
+### A laptop reaching the homelab over NetBird — streamable-HTTP
+
+Run the daemon with `morgan-mcp --transport http --host 0.0.0.0 --port 8090`. It serves
+`/mcp` and enforces `MORGAN_API_KEY` as a bearer token — the same INBOUND key `/api/*` on
+brain-api requires, never `MORGAN_LLM_API_KEY` (outbound to llama-server).
+
+```bash
+claude mcp add --transport http morgan http://<homelab-host>:8090/mcp \
+  --header "Authorization: Bearer $MORGAN_API_KEY"
+```
+
+Or by hand:
+
+```json
+{
+  "mcpServers": {
+    "morgan": {
+      "url": "http://<homelab-host>:8090/mcp",
+      "headers": {
+        "Authorization": "Bearer $MORGAN_API_KEY"
+      }
+    }
+  }
+}
+```
+
+As with brain-api, if `MORGAN_API_KEY` is unset or left at the `change-me` default, the
+bearer check is skipped — set a real key before exposing the port beyond loopback.
+
 ## The stack, and why
 
 Morgan depends on four pieces of infrastructure. All are open source and self-hostable, which
