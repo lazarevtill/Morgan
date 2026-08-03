@@ -342,10 +342,39 @@ async def test_start_re_raises_non_busygroup_error() -> None:
 async def test_stop_sets_running_false() -> None:
     fake = FakeRedis()
     bus = RedisStreamsBus("redis://unused", client=fake)
+    # A handler is required for the bus to consume at all -- see
+    # test_publish_only_process_does_not_join_the_consumer_group below.
+    bus.subscribe(EventType.RESPONSE_GENERATED, _noop_handler)
     await bus.start()
     assert bus._running is True
     await bus.stop()
     assert bus._running is False
+
+
+async def _noop_handler(event: Event) -> None:
+    return None
+
+
+@pytest.mark.asyncio
+async def test_publish_only_process_does_not_join_the_consumer_group() -> None:
+    """A member with no handlers must not read, because reading destroys.
+
+    Every consumer-group member competes for the same messages and `_handle_message` acks
+    after dispatching -- including when it dispatched to nothing. brain-api registers no
+    RESPONSE_GENERATED handler under the Redis bus (the worker owns turn storage there), so a
+    consuming brain-api would claim response events, drop them on the floor and ack them
+    before the worker ever saw them.
+    """
+    fake = FakeRedis()
+    bus = RedisStreamsBus("redis://unused", client=fake)
+
+    await bus.start()
+
+    assert bus._running is False, "a handler-less bus must not run a consume loop"
+    assert bus._consume_task is None
+    # publish() still works -- that is the whole point of starting a publish-only bus.
+    await bus.publish(Event(type=EventType.RESPONSE_GENERATED, user_id="u", payload={}))
+    await bus.stop()
 
 
 @pytest.mark.asyncio

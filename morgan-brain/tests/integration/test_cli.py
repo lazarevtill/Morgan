@@ -143,16 +143,47 @@ def test_forget_reports_skipped_tables_not_a_false_zero(tmp_path):
     assert json.loads(recall_after.stdout)["results"] == []
 
 
-def test_forget_warns_vectors_not_erased_under_qdrant():
-    """Pure unit check of the formatting logic -- doesn't require a live Qdrant instance."""
+def test_forget_reports_the_vector_result_it_was_given():
+    """The report is the source of truth, not the configured backend.
+
+    This used to assert `vectors_erased is False` whenever vector_backend was qdrant, which
+    encoded the bug: forget() now deletes from external vector stores after the SQLite commit,
+    so a qdrant deployment gets a real erasure and must be told so. Only an actual failure
+    reports False -- and it names the error rather than the backend.
+    """
     from morgan_brain.cli.__main__ import _forget_result
     from morgan_brain.config import Settings
     from morgan_brain.interfaces.memory import ForgetReport
 
     settings = Settings(vector_backend="qdrant")
-    result = _forget_result(ForgetReport(memories=3), settings, project="p", all_projects=False)
-    assert result["vectors_erased"] is False
-    assert any("qdrant" in w for w in result["warnings"])
+
+    erased = _forget_result(ForgetReport(memories=3), settings, project="p", all_projects=False)
+    assert erased["vectors_erased"] is True
+    assert erased["warnings"] == []
+
+    failed = _forget_result(
+        ForgetReport(memories=3, vectors_erased=False, vector_error="connection refused"),
+        settings,
+        project="p",
+        all_projects=False,
+    )
+    assert failed["vectors_erased"] is False
+    assert any("connection refused" in w for w in failed["warnings"])
+
+
+def test_merged_forget_report_fails_closed_on_one_bad_project():
+    """--all-projects must not average away a single project whose vectors survived."""
+    from morgan_brain.cli.__main__ import _merge_forget_reports
+    from morgan_brain.interfaces.memory import ForgetReport
+
+    merged = _merge_forget_reports(
+        [
+            ForgetReport(memories=1),
+            ForgetReport(memories=1, vectors_erased=False, vector_error="timeout"),
+        ]
+    )
+    assert merged.vectors_erased is False
+    assert merged.vector_error == "timeout"
 
 
 def test_remember_rejects_all_projects():

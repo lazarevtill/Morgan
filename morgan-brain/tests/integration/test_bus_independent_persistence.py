@@ -75,7 +75,7 @@ async def test_history_and_signal_persist_under_non_inproc_bus() -> None:
     )
 
     # History written in-process despite the non-inproc bus (the GAP-2 break is closed).
-    msgs = history.recent(session_key("u1", "s1"))
+    msgs = history.recent(session_key("u1", "s1"), project="default")
     assert [m.content for m in msgs] == ["My name is Sam", "ok"]
 
     # Base signal recorded too — so feedback/learning attaches to a real row, not a stub.

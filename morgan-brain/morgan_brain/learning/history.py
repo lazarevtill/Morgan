@@ -114,24 +114,32 @@ class SessionHistoryStore:
         )
         self._conn.commit()
 
-    def recent(self, session_id: str, *, limit: int = 10) -> list[Message]:
-        """Return the *limit* most-recent messages for *session_id*, in chronological order.
+    def recent(self, session_id: str, *, project: str, limit: int = 10) -> list[Message]:
+        """Return the *limit* most-recent messages for *session_id* **in *project***.
 
         Fetches the last *limit* rows by insertion order, then re-sorts ascending so
         callers receive them oldest-first (correct context order for LLM prompts).
         Returns an empty list when no history exists (e.g. first turn).
+
+        ``project`` is required, and filtering on it is not optional decoration. Rows carried
+        a project already, but this read did not use it, and ``session_key`` falls back to a
+        per-user ``"<user>:default"`` bucket whenever a client sends no ``session_id`` -- which
+        the CLI and every default API call do. Every project therefore shared one history key,
+        so a turn in one repository injected the previous turn from another straight into the
+        prompt, and erasing a project did not stop its transcript reappearing under the next
+        one. Writes are already project-keyed, so this is the read catching up.
         """
         rows = self._conn.execute(
             """
             SELECT user_id, role, content FROM (
                 SELECT user_id, role, content, id
                 FROM session_history
-                WHERE session_id = ?
+                WHERE session_id = ? AND project = ?
                 ORDER BY id DESC
                 LIMIT ?
             ) ORDER BY id ASC
             """,
-            (session_id, limit),
+            (session_id, project, limit),
         ).fetchall()
         return [
             Message(user_id=row["user_id"], role=Role(row["role"]), content=row["content"])

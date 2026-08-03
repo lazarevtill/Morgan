@@ -72,7 +72,7 @@ def create_app() -> FastAPI:
     async def chat(req: ChatRequest) -> ChatResponse:
         user_id = req.user_id or settings.owner_user_id
         hkey = session_key(user_id, req.session_id)
-        history = ctx.history_store.recent(hkey) if ctx.history_store else []
+        history = ctx.history_store.recent(hkey, project=req.project) if ctx.history_store else []
         result, turn_id = await orchestrator.handle_turn_with_id(
             user_id=user_id,
             project=req.project,
@@ -96,7 +96,9 @@ def create_app() -> FastAPI:
         hkey = session_key(user_id, req.session_id)
 
         async def _event_stream() -> AsyncIterator[str]:
-            history = ctx.history_store.recent(hkey) if ctx.history_store else []
+            history = (
+                ctx.history_store.recent(hkey, project=req.project) if ctx.history_store else []
+            )
             champion = await _champion.body()
             async for delta in orchestrator.stream_turn(
                 user_id=user_id,
