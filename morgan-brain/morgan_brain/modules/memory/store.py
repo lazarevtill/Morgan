@@ -34,6 +34,28 @@ from morgan_brain.modules.memory.stores.episodic import EpisodicStore
 from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
 from morgan_brain.modules.memory.stores.vector import VectorIndex, VectorRecord
 
+#: Everything `forget()` erases that is *derived* from the memories it is erasing: the
+#: semantic upper index and its co-retrieval statistics, and the register of correction
+#: classes distilled from this project's edits. Each entry is a literal statement rather
+#: than a table name to interpolate -- see the note at the call site.
+#:
+#: `persona_nodes` is erased too but counted separately (it is reported on its own), and
+#: `decision_receipts` is deliberately absent: it records why the champion preprompt is
+#: what it is, and the champion itself is not erased either.
+_DERIVED_TABLE_DELETES: dict[str, str] = {
+    "mem_entity_edges": "DELETE FROM mem_entity_edges WHERE user_id = ? AND project = ?",
+    "mem_schema_edges": "DELETE FROM mem_schema_edges WHERE user_id = ? AND project = ?",
+    "mem_entity_nodes": "DELETE FROM mem_entity_nodes WHERE user_id = ? AND project = ?",
+    "mem_schemas": "DELETE FROM mem_schemas WHERE user_id = ? AND project = ?",
+    "mem_query_activations": (
+        "DELETE FROM mem_query_activations WHERE user_id = ? AND project = ?"
+    ),
+    "mem_emergence_rejected": (
+        "DELETE FROM mem_emergence_rejected WHERE user_id = ? AND project = ?"
+    ),
+    "learned_patterns": "DELETE FROM learned_patterns WHERE user_id = ? AND project = ?",
+}
+
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
     return (
@@ -287,20 +309,15 @@ class MemoryModule:
             # champion itself is not erased (see the note above). Deleting the reasoning
             # while keeping the prompt it justified would leave the least explicable of
             # the two states.
-            for table in (
-                "mem_entity_edges",
-                "mem_schema_edges",
-                "mem_entity_nodes",
-                "mem_schemas",
-                "mem_query_activations",
-                "mem_emergence_rejected",
-                "learned_patterns",
-            ):
+            #
+            # Each statement is a literal, keyed by table name rather than assembled by
+            # interpolating one -- the same rule the counting queries in `morgan doctor`
+            # follow. A table name cannot be a bound parameter, and interpolating it even
+            # from a hardcoded tuple leaves a string-built statement for a reader (and a
+            # scanner) to have to reason about.
+            for table, statement in _DERIVED_TABLE_DELETES.items():
                 if _table_exists(conn, table):
-                    report.index_entries += conn.execute(
-                        f"DELETE FROM {table} WHERE user_id = ? AND project = ?",  # noqa: S608
-                        (user_id, project),
-                    ).rowcount
+                    report.index_entries += conn.execute(statement, (user_id, project)).rowcount
                 elif table not in report.tables_skipped:
                     report.tables_skipped.append(table)
             if _table_exists(conn, "persona_nodes"):
