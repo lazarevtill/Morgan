@@ -276,6 +276,31 @@ class MemoryModule:
             report.facts = conn.execute(
                 "DELETE FROM facts WHERE user_id = ? AND project = ?", (user_id, project)
             ).rowcount
+            # The semantic upper index and the persona graph are both *derived* from the
+            # memories above, so they belong inside the same transaction rather than
+            # being cleaned up afterwards. Each is optional in the same sense as the
+            # vector and signal tables: present only once its owner has opened on this
+            # connection, skipped (and named) when it never has.
+            for table in (
+                "mem_entity_edges",
+                "mem_schema_edges",
+                "mem_entity_nodes",
+                "mem_schemas",
+            ):
+                if _table_exists(conn, table):
+                    report.index_entries += conn.execute(
+                        f"DELETE FROM {table} WHERE user_id = ? AND project = ?",  # noqa: S608
+                        (user_id, project),
+                    ).rowcount
+                elif table not in report.tables_skipped:
+                    report.tables_skipped.append(table)
+            if _table_exists(conn, "persona_nodes"):
+                report.persona_nodes = conn.execute(
+                    "DELETE FROM persona_nodes WHERE user_id = ? AND project = ?",
+                    (user_id, project),
+                ).rowcount
+            else:
+                report.tables_skipped.append("persona_nodes")
             if has_signals:
                 report.signals = conn.execute(
                     "DELETE FROM interaction_signals WHERE user_id = ? AND project = ?",

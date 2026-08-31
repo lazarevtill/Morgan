@@ -8,18 +8,23 @@ Implements the ``Learner`` Protocol by combining:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING
 
 from morgan_brain.learning.consolidation import MemoryConsolidator
+from morgan_brain.learning.persona_attribution import PersonaAttributor
 from morgan_brain.learning.semantic_index_builder import SemanticIndexBuilder
 from morgan_brain.models.base import Entity
 from morgan_brain.models.memory import DEFAULT_PROJECT, Memory, MemoryKind, MemorySource
 from morgan_brain.models.message import Conversation, Role
 from morgan_brain.models.user import UserModel
 from morgan_brain.modules.perception.text.entities import extract_entity_names
+from morgan_brain.modules.personalization.persona_graph import PersonaGraph
 from morgan_brain.security.memory_gate import MemoryGate
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from morgan_brain.learning.profile import UserProfileBuilder
@@ -40,6 +45,10 @@ class ConsolidationLearner:
     profile_builder:
         Optional ``UserProfileBuilder`` (Phase 2C).  When provided, ``user_model``
         delegates to it; when absent, a default ``UserModel`` is returned.
+    persona_attributor:
+        Optional ``PersonaAttributor`` (VoiceMem's right brain, short horizon).  When
+        provided, each processed turn's affect and its target are recorded after the
+        reply has been sent -- never during the request.
     index_builder:
         Optional ``SemanticIndexBuilder``.  When provided, the memories stored by
         ``process_session`` are filed into the semantic upper index in the same cold-path
@@ -55,12 +64,16 @@ class ConsolidationLearner:
         clock: Callable[[], datetime],
         profile_builder: UserProfileBuilder | None = None,
         index_builder: SemanticIndexBuilder | None = None,
+        persona_attributor: PersonaAttributor | None = None,
+        persona_graph: PersonaGraph | None = None,
     ) -> None:
         self._consolidator = consolidator
         self._gate = gate
         self._clock = clock
         self._profile_builder = profile_builder
         self._index_builder = index_builder
+        self._persona = persona_attributor
+        self._persona_graph = persona_graph
 
     # ------------------------------------------------------------------
     # Learner Protocol
@@ -107,6 +120,15 @@ class ConsolidationLearner:
                 memories=stored,
             )
 
+        if self._persona is not None:
+            await self._persona.attribute(
+                user_id=conversation.user_id,
+                project=conversation.project,
+                session_id=conversation.session_id,
+                messages=list(conversation.messages),
+                now=self._clock(),
+            )
+
     async def user_model(self, user_id: str) -> UserModel:
         """Return the current user model.
 
@@ -123,8 +145,23 @@ class ConsolidationLearner:
 
         Delegates to ``MemoryConsolidator.consolidate``, which pulls recent
         episodics, proposes fact operations via the LLM, and applies them.
+
+        The persona graph's long horizon runs here too: recurrent cross-entity evidence
+        is generalised into intrinsic traits, which is deliberately a nightly decision
+        rather than a per-turn one. Promotion needs recurrence *across sessions*, and a
+        per-turn pass cannot see that.
         """
         await self._consolidator.consolidate(user_id, project=project)
+        if self._persona_graph is not None:
+            promoted = self._persona_graph.consolidate(
+                user_id=user_id, project=project, now=self._clock()
+            )
+            if promoted:
+                logger.info(
+                    "persona: promoted %d disposition(s) to intrinsic for project %r",
+                    len(promoted),
+                    project,
+                )
 
     async def projects_for_user(self, user_id: str) -> list[str]:
         """Distinct projects *user_id* has written memories under.

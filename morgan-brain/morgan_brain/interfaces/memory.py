@@ -38,6 +38,14 @@ class ForgetReport:
     facts: int = 0
     signals: int = 0
     history: int = 0
+    #: Rows erased from the semantic upper index -- entity nodes, their co-occurrence
+    #: edges, and the schemas of this scope. All of it is derived from the memories being
+    #: erased, so leaving it would report a successful forget while the derived shape of
+    #: what the owner said is still on disk.
+    index_entries: int = 0
+    #: Persona nodes erased. The most personal store in the system: dispositions and
+    #: attitudes inferred from this project's conversations.
+    persona_nodes: int = 0
     champions_flagged: list[str] = field(default_factory=list)
     tables_skipped: list[str] = field(default_factory=list)
     #: Whether the vectors for these memories are gone. ``forget()`` reports this from what it

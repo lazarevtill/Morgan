@@ -34,6 +34,7 @@ from morgan_brain.learning.consolidation import MemoryConsolidator
 from morgan_brain.learning.history import SessionHistoryStore
 from morgan_brain.learning.learner import ConsolidationLearner
 from morgan_brain.learning.optimizer import AnyScorer, ReflectiveOptimizer
+from morgan_brain.learning.persona_attribution import LLMAttributor, PersonaAttributor
 from morgan_brain.learning.profile import UserProfileBuilder
 from morgan_brain.learning.recorder import SignalRecorder
 from morgan_brain.learning.semantic_index_builder import LLMSchemaClassifier, SemanticIndexBuilder
@@ -59,6 +60,7 @@ from morgan_brain.modules.memory.stores.vector import (
 )
 from morgan_brain.modules.perception.text.analyzer import TextPerception
 from morgan_brain.modules.personalization.adaptive import AdaptivePersonalizer
+from morgan_brain.modules.personalization.persona_graph import PersonaGraph
 from morgan_brain.modules.reasoning.reasoner import ReasoningModule
 from morgan_brain.modules.skills.registry import SkillRegistry
 from morgan_brain.modules.tools.builtin.calculator import CalculatorTool
@@ -275,6 +277,7 @@ def _assemble(
         semantic=SemanticIndex(resolved_conn),
     )
     gate = MemoryGate(memory_module)
+    persona_graph = PersonaGraph(resolved_conn)
     reg = CapabilityRegistry.from_packaged()
     consolidator = MemoryConsolidator(
         gate=gate,
@@ -302,6 +305,13 @@ def _assemble(
             semantic=SemanticIndex(resolved_conn),
             classifier=LLMSchemaClassifier(router=router, capability_registry=reg),
         ),
+        # The right brain. Attribution needs a model and records nothing without one --
+        # guessing at the owner's personality is worse than an empty graph.
+        persona_attributor=PersonaAttributor(
+            graph=persona_graph,
+            attributor=LLMAttributor(router=router, capability_registry=reg),
+        ),
+        persona_graph=persona_graph,
     )
     # Use the injected bus (tests) or the config-driven one (production).
     # get_event_bus() reads settings.event_bus: "inproc" → InProcessBus, "redis" → RedisStreamsBus.
@@ -314,6 +324,11 @@ def _assemble(
     personalizer = AdaptivePersonalizer(
         profile_builder=profile_builder,
         budget=settings.personalization_budget,
+        # Read-only on the request path: the personalizer activates persona nodes and
+        # never records one. Passing the semantic index too gives the joint retrieval of
+        # eq. (5) -- attitudes anchored to entities the turn implies, not only names.
+        persona_graph=persona_graph,
+        semantic_index=SemanticIndex(resolved_conn),
     )
     skills = SkillRegistry(registry=prompt_registry)
 

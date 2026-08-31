@@ -269,6 +269,21 @@ class SemanticIndex:
             return None
         return ids
 
+    def neighbours(self, names: Sequence[str], *, user_id: str, project: str) -> set[str]:
+        """The entities one hop from *names*, plus *names* themselves.
+
+        This is ``Z_t`` from eq. (1) without the memory lookup, and it is what the right
+        brain expands over for joint retrieval (eq. 5): an attitude anchored to something
+        the turn implies but does not name still has to be reachable.
+        """
+        seeds = {n.lower() for n in names if n}
+        if not seeds:
+            return set()
+        known = set(self._known_entities(user_id=user_id, project=project, names=seeds))
+        if not known:
+            return seeds
+        return seeds | known | self._one_hop(user_id=user_id, project=project, seeds=known)
+
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
