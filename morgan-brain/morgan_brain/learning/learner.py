@@ -13,9 +13,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from morgan_brain.learning.consolidation import MemoryConsolidator
+from morgan_brain.models.base import Entity
 from morgan_brain.models.memory import DEFAULT_PROJECT, Memory, MemoryKind, MemorySource
 from morgan_brain.models.message import Conversation, Role
 from morgan_brain.models.user import UserModel
+from morgan_brain.modules.perception.text.entities import extract_entity_names
 from morgan_brain.security.memory_gate import MemoryGate
 
 if TYPE_CHECKING:
@@ -63,6 +65,15 @@ class ConsolidationLearner:
         across turns while Phase 2B consolidation enriches the fact base.
         Scoped to ``conversation.project`` so a turn served under a real project name
         (e.g. from the CLI) lands where consolidation and recall will actually find it.
+
+        **Entities are extracted here** because this is the write path, and until it did
+        so ``Memory.entities`` was empty on every memory Morgan has ever stored:
+        ``MemoryModule.store`` indexes ``[e.name for e in memory.entities]``, so the
+        entity-overlap ranking -- one of the three signals ``recall`` fuses -- returned
+        nothing in production, and the only non-empty ``memory_entities`` rows were the
+        ones tests inserted by hand. Extraction belongs on the cold path: it is Learning
+        deciding what is worth indexing, it costs the request nothing, and both messages
+        of a turn get it (perception only ever sees the user's half).
         """
         for msg in conversation.messages:
             source = (
@@ -75,6 +86,7 @@ class ConsolidationLearner:
                     kind=MemoryKind.EPISODIC,
                     content=msg.content,
                     source=source,
+                    entities=[Entity(name=n) for n in extract_entity_names(msg.content)],
                     created_at=self._clock(),
                 )
             )

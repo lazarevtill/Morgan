@@ -1,7 +1,10 @@
 """Minimal text perception. Implements interfaces.Perception for the text modality.
 
-Phase 1 scope: intent classification by simple heuristics and capitalized-token entity
-extraction. Emotion/sentiment remain at defaults until Phase 2; audio/vision are Phase 5.
+Phase 1 scope: intent classification by simple heuristics, plus entity extraction
+delegated to ``perception/text/entities.py`` -- the same function the cold path uses to
+populate ``Memory.entities``, so the traits selected on the hot path and the entities
+indexed on the cold path mean the same thing. Emotion/sentiment remain at defaults until
+Phase 2; audio/vision are Phase 5.
 """
 
 from __future__ import annotations
@@ -10,24 +13,7 @@ import re
 
 from morgan_brain.models.base import Entity
 from morgan_brain.models.perception import FusedPerception, Intent, Modality
-
-_CAP_TOKEN = re.compile(r"\b([A-Z][a-z]{2,})\b")
-_STOPWORDS = {
-    "The",
-    "What",
-    "When",
-    "Where",
-    "Why",
-    "How",
-    "Remind",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday",
-}
+from morgan_brain.modules.perception.text.entities import extract_entity_names
 
 
 class TextPerception:
@@ -35,17 +21,8 @@ class TextPerception:
         self, *, user_id: str, text: str, audio: bytes | None = None, image: bytes | None = None
     ) -> FusedPerception:
         intent_name = self._classify_intent(text)
-        entities = [
-            Entity(name=m.group(1))
-            for m in _CAP_TOKEN.finditer(text)
-            if m.group(1) not in _STOPWORDS
-        ]
-        seen: set[str] = set()
-        unique: list[Entity] = []
-        for e in entities:
-            if e.name not in seen:
-                seen.add(e.name)
-                unique.append(e)
+        # extract_entity_names already deduplicates and preserves first-appearance order.
+        unique = [Entity(name=name) for name in extract_entity_names(text)]
         return FusedPerception(
             text=text,
             intent=Intent(

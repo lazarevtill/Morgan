@@ -1,0 +1,54 @@
+"""The entity extractor is the leaf level of the semantic index, so what it can see
+bounds what can ever be routed. Two properties matter: it must not be tied to one
+script, and it must be the single definition of "entity" that the hot path and the
+cold path both use -- two extractors would build two disagreeing indexes.
+"""
+
+from __future__ import annotations
+
+from morgan_brain.modules.perception.text.entities import extract_entity_names
+
+
+def test_extracts_latin_proper_nouns():
+    assert extract_entity_names("I met Alice in Berlin") == ["Alice", "Berlin"]
+
+
+def test_extracts_cyrillic_proper_nouns():
+    """The reshape rebuilt the keyword index on FTS5 unicode61 because a large part of
+    the owner's corpus is Russian. An ASCII-only entity extractor reproduces exactly
+    that bug one layer up, so this is the case the old `[A-Z][a-z]{2,}` regex fails."""
+    names = extract_entity_names("Харбор заблокировал деплой в Кубернетес")
+    assert "Харбор" in names
+    assert "Кубернетес" in names
+
+
+def test_mixed_script_text_yields_both():
+    names = extract_entity_names("Alice развернула Harbor в Москве")
+    assert {"Alice", "Harbor", "Москве"} <= set(names)
+
+
+def test_drops_stopwords_and_calendar_words():
+    names = extract_entity_names("Remind me about the meeting on Monday in March")
+    assert "Remind" not in names
+    assert "Monday" not in names
+    assert "March" not in names
+
+
+def test_drops_single_characters_and_pure_punctuation():
+    assert extract_entity_names("A. B! -- ?") == []
+
+
+def test_is_deterministic_and_order_preserving_without_duplicates():
+    text = "Berlin then Alice then Berlin again"
+    first = extract_entity_names(text)
+    assert first == extract_entity_names(text)
+    assert first.count("Berlin") == 1
+    assert first.index("Berlin") < first.index("Alice")
+
+
+def test_acronyms_are_entities():
+    assert "GDPR" in extract_entity_names("does GDPR apply here")
+
+
+def test_empty_text_is_not_an_error():
+    assert extract_entity_names("") == []
