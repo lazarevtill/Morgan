@@ -9,9 +9,10 @@ state). Design authority: [`docs/superpowers/specs/2026-06-07-morgan-brain-desig
 current direction: [`docs/superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md`](../docs/superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md);
 status: [`docs/ROADMAP.md`](../docs/ROADMAP.md); run guide: [`docs/WIRING.md`](../docs/WIRING.md).
 
-> The previous monolithic implementation is archived in the git tag
-> `legacy-v0.0.3-monolith` (branch `origin/legacy/v0.0.3-monolith`) and is the source for any
-> selectively ported code.
+> Earlier builds are archived in the git tags `legacy-v0.0.4-full` (the platform build the
+> reshape narrowed: channels, privacy, proactivity, voice, the MCP host) and
+> `legacy-v0.0.3-monolith` (branch `origin/legacy/v0.0.3-monolith`, the pre-platform monolith).
+> Both are sources for selectively ported code, not the current design.
 
 ## Topology (2 services, one package)
 
@@ -36,18 +37,20 @@ run in one process (`MORGAN_EVENT_BUS=inproc`).
 | `security/` | The single `MemoryGate` (all memory access), the unified `PermissionMode`/`PermissionGate`, and the bind guard that refuses an unauthenticated listener beyond loopback. |
 | `providers/` | Provider adapters, wire types, capability registry, role router, structured-output ladder. **The only place a provider SDK is imported.** |
 | `modules/perception/` | Raw input → `FusedPerception` (text built; audio/vision not built). |
-| `modules/memory/` | Episodic + valid-time fact store on one SQLite database, and multi-signal retrieval fused by reciprocal rank — sqlite-vec vectors, an FTS5 keyword index, and an entity index, all durable. |
-| `modules/personalization/` | Request-path `AdaptivePersonalizer` — budget-aware trait selection, injected every turn. |
+| `modules/memory/` | Episodic + valid-time fact store on one SQLite database, and multi-signal retrieval fused by reciprocal rank — sqlite-vec vectors, an FTS5 keyword index, and an entity index, all durable. `retrieval/semantic_index.py` sits above them: schema → entity routing that narrows every signal to a candidate pool before it searches. |
+| `modules/personalization/` | Request-path `AdaptivePersonalizer` — budget-aware trait selection, injected every turn — plus `persona_graph.py`, which separates intrinsic dispositions from attitudes anchored to a specific entity. Read-only on the request path. |
 | `modules/reasoning/` | Context assembly + role-routed LLM call + tool loop + generation. |
 | `modules/skills/` | Markdown+frontmatter skill registry, trigger-matched, champion-versioned. |
 | `modules/tools/` | `BaseTool` registry + executor behind the PermissionGate; SSRF/DoS-hardened built-ins. |
-| `learning/` | Signal capture (recorder/signals), consolidation, profile, `ChampionTrainer`, optimizer. |
+| `learning/` | Signal capture (recorder/signals), consolidation, profile, `ChampionTrainer`, optimizer — plus the cold-path writers for the index and persona graph (`semantic_index_builder.py`, `persona_attribution.py`, `cluster_emergence.py`) and the governance layer (`patterns.py`, `receipts.py`). |
 | `learning_lifecycle/` | `PromptRegistry` + `Optimizer` seam (local SQLite or MLflow backend). |
-| `eval/` | 3-layer golden eval harness + calibrated cross-family LLM judge — the self-learning gate. |
+| `eval/` | 3-layer golden eval harness + calibrated cross-family LLM judge — the self-learning gate. `gate_integrity.py` protects it from what it judges. |
 | `scheduling/` | CronService + nightly learning jobs (APScheduler optional). |
 | `core/` | The thin cognitive-loop orchestrator (coordinates only; owns no domain logic). |
 | `composition.py` | Wires concrete implementations into the orchestrator + app context. |
 | `apps/` | Entrypoints: `brain_api`, `learning_worker`. |
+| `cli/` | The `morgan` terminal client — `remember`/`recall`/`facts`/`forget`/`ask`/`doctor`/`receipts`; project auto-detected from the current git repository. |
+| `ports/` | `morgan-mcp` — five MCP tools over stdio or streamable-HTTP, calling the same command handlers the CLI does. |
 
 ## The cognitive loop (per turn, `brain-api`)
 
@@ -75,7 +78,7 @@ pip install -e ".[dev]"
 ruff check .
 ruff format --check .
 mypy morgan_brain                    # strict
-pytest -q                            # 633 passed, 7 skipped
+pytest -q                            # 945 passed, 8 skipped
 
 # Run (two-process)
 docker compose up -d redis qdrant
@@ -85,22 +88,35 @@ MORGAN_ENABLE_SCHEDULING=true python -m morgan_brain.apps.learning_worker
 
 ## Optional extras
 
+`[dev]` already pulls `[mcp]`, `[scale]` and `[scheduling]`, because the test suite exercises all
+three — `pip install -e ".[dev]"` must be enough to run exactly the suite CI runs. The rest are
+opt-in:
+
 ```bash
 pip install -e ".[learning]"     # MLflow-backed PromptRegistry + GEPA optimizer
-pip install -e ".[scheduling]"   # APScheduler (cron; in-proc scheduler otherwise)
 pip install -e ".[tracing]"      # slim mlflow-tracing for the hot path
 pip install -e ".[tokens]"       # tiktoken
 ```
 
 ## Status
 
-**755 tests pass** (8 skipped), mypy-strict clean, bandit clean. Reshape milestones 0 and 1 are
-delivered: one durable SQLite database behind `MemoryGate`, three retrieval signals that survive a
-restart, project scoping enforced on every read and write, cascading `forget()`, llama.cpp as the
-default provider, and the `morgan` CLI + `morgan-mcp` server as usage surfaces. Milestone 2
-(concept annotation, retrieval-quality measurement) is specified, not started. LoRA fine-tuning is
-deferred by design.
+**945 tests pass** (8 skipped), mypy-strict clean over 121 source files, ruff clean, bandit clean —
+all verified in a venv built from `pip install -e ".[dev]"` and nothing else, which is exactly what
+CI runs.
 
-See [`docs/ROADMAP.md`](../docs/ROADMAP.md) for the milestone table and
+Reshape milestones 0 and 1 are delivered: one durable SQLite database behind `MemoryGate`, three
+retrieval signals that survive a restart, project scoping on every read and write, cascading
+`forget()`, llama.cpp as the default provider, and the `morgan` CLI + `morgan-mcp` server as usage
+surfaces. On top of that, the dual-brain memory and governance graft: the semantic upper index,
+the persona graph, cluster emergence, the pattern register, gate integrity, and decision receipts.
+
+Milestone 3 — measuring retrieval quality for real and making the promotion gate statistically
+sound — is not started, and it is the honest caveat on the graft: the accuracy numbers behind the
+memory work are the **paper's**, on LoCoMo/LongMemEval/Memora, and cannot be reproduced here while
+`tests/memory_quality/` still runs over a hash embedder. LoRA fine-tuning stays deferred by design.
+
+See [`docs/ROADMAP.md`](../docs/ROADMAP.md) for the milestone table,
 [the reshape design spec](../docs/superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md)
-for the diagnosis and target architecture.
+for the diagnosis and target architecture, and
+[the dual-brain design](../docs/superpowers/specs/2026-08-31-dual-brain-memory-and-pattern-register-design.md)
+for what was taken from VoiceMem and Ouroboros — and what was left behind.

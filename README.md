@@ -10,7 +10,7 @@ OpenAI-compatible endpoint (Ollama included) supported as a non-default provider
 ## What exists today
 
 - **Two usage surfaces.** The `morgan` **CLI** (`remember`/`recall`/`facts`/`forget`/`ask`/
-  `doctor`; project auto-detected from the current git repository) and **`morgan-mcp`**, an MCP
+  `doctor`/`receipts`; project auto-detected from the current git repository) and **`morgan-mcp`**, an MCP
   server exposing the same five operations to any MCP client (Claude Code, Claude Desktop, …) over
   stdio or streamable-HTTP with a bearer token. Both are thin adapters over the same `MemoryGate`
   — no memory logic is duplicated between them.
@@ -19,6 +19,15 @@ OpenAI-compatible endpoint (Ollama included) supported as a non-default provider
 - **Durable, project-scoped memory.** Recall fuses three signals — vector (sqlite-vec), FTS5
   keyword (Cyrillic-aware), and entity overlap — all surviving a restart. Every read and write is
   scoped to a `project`; `--all-projects` is the explicit cross-project escape hatch.
+- **A semantic index above the store.** Schemas route coarsely, entities locate concretely, and
+  recall narrows every signal to that candidate pool *before* searching — the point being a small
+  top-k that is dense rather than merely small. Coherent groups earn their own slot over time,
+  from what your questions actually activate together. When the index has nothing useful to say it
+  says so, and recall searches everything: routing can cost precision, never recall.
+- **Knows who you are, not just what you said.** A persona graph keeps attitudes anchored to what
+  they concern — "impatient with the weekly sync" is a different claim from "impatient", and only
+  recurrence across several different things, on several different days, promotes one to the
+  other. An untargeted inference is dropped; only what you say about yourself enters unanchored.
 - **Learns you, safely.** A signal→consolidation→personalization loop: every turn logs training
   signals (edits > retries > thumbs); a nightly worker consolidates episodic memory into durable
   **valid-time facts** (knowledge evolves, never overwrites); an `AdaptivePersonalizer` injects
@@ -27,9 +36,19 @@ OpenAI-compatible endpoint (Ollama included) supported as a non-default provider
   high-value signals, proposes an improved system prompt, and would promote it only if it beats
   the current champion on a 3-layer held-out eval. `MORGAN_ENABLE_CHAMPION_PROMOTION` defaults to
   `false`: the promotion gate itself isn't statistically sound yet (see [`docs/ROADMAP.md`](docs/ROADMAP.md)).
-- **Cascading erasure.** `forget()` removes a project's memories, facts, vectors, signals, and
-  session history in one transaction (vectors under `vector_backend=qdrant` are the one gap —
-  they must be removed from Qdrant separately).
+- **Learns from classes, not incidents.** Corrections are grouped into recurring *classes* and
+  counted — including whether a class came back *after* the fix meant to close it, which is the
+  signal that the fix was at the wrong depth. The optimizer is told the class, not eleven
+  unrelated edits, so it stops proposing the same patch every week.
+- **The gate can't be weakened by what it judges.** The optimizer writes a prompt; the judge reads
+  what that prompt produced. So the eval gate is fingerprinted — item count and ids, judge model,
+  scorer set, tie epsilon — and a candidate measured on a different or weaker gate is refused, as
+  is one whose text addresses the evaluator rather than you. Every decision, promotions **and**
+  rejections with their reasons, is recorded: `morgan receipts`.
+- **Cascading erasure.** `forget()` removes a project's memories, facts, vectors, signals, session
+  history — and everything derived from them: the semantic index, its co-retrieval statistics, the
+  persona graph, and the correction-class register — in one transaction (vectors under
+  `vector_backend=qdrant` are the one gap; they must be removed from Qdrant separately).
 - **Agentic.** Permission-gated, SSRF/DoS-hardened built-in **tools** (calculator, clock,
   memory-search, fetch-url) plus your own `BaseTool`s; default-deny for side effects.
 - **Skills.** Markdown + frontmatter skills, trigger-matched and champion-versioned.
@@ -62,6 +81,9 @@ loop) live in [`docs/WIRING.md`](docs/WIRING.md).
 - [`CLAUDE.md`](CLAUDE.md) — architecture map + non-negotiable invariants.
 - [The local-first reshape design](docs/superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md)
   — diagnosis, target architecture, milestone plan.
+- [Dual-brain memory + the pattern register](docs/superpowers/specs/2026-08-31-dual-brain-memory-and-pattern-register-design.md)
+  — what was taken from [VoiceMem](https://arxiv.org/abs/2608.26005) and
+  [Ouroboros](https://github.com/razzant/ouroboros), and what was deliberately left behind.
 - Decision records (under `docs/superpowers/specs/`):
   [self-learning](docs/superpowers/specs/2026-06-08-self-learning-decision.md) ·
   [platform architecture](docs/superpowers/specs/2026-06-08-platform-architecture-decision.md).

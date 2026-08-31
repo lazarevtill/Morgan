@@ -2,13 +2,23 @@
 
 ## At-rest protection
 
-Morgan stores everything — episodics, facts, session history, training signals, and vectors —
-in one SQLite database under `MORGAN_DATA_DIR`. There is no field-level encryption: it cannot
-coexist with the FTS5 keyword index, and it would not cover vectors.
+Morgan stores everything in one SQLite database under `MORGAN_DATA_DIR`: episodics, facts,
+session history, training signals, vectors, the semantic index and its co-retrieval statistics,
+the persona graph, the correction-class register, the champion prompt registry, and the decision
+receipts. There is no field-level encryption: it cannot coexist with the FTS5 keyword index, and
+it would not cover vectors.
+
+Two of those deserve naming explicitly when you think about who can read this file. The **persona
+graph** (`persona_nodes`) holds inferred dispositions and attitudes — what the owner is like, not
+merely what they said. The **decision receipts** (`decision_receipts`) hold the history of what
+the assistant learned about them and why. Neither is reconstructible from the conversation text
+alone, and neither is erased by `morgan forget` in the way the rest is: the persona graph is
+erased per project, but receipts are deliberately kept (they explain a champion prompt that is
+itself not erased).
 
 At-rest protection is therefore a property of the host. The homelab volume backing
 `MORGAN_DATA_DIR` must be encrypted (LUKS or the equivalent for your storage layer). This
-covers the entire database, including vectors and signal text.
+covers the entire database, including vectors, signal text, and the two stores above.
 
 ## Transport protection
 
@@ -20,6 +30,10 @@ terminate TLS at a reverse proxy. Never expose it on a public interface with the
 
 Back up the single database file with `sqlite3 morgan.db ".backup 'morgan-backup.db'"` while the
 service runs — a filesystem copy of a WAL-mode database mid-write is not consistent.
+
+One file is the whole backup, and that is the point of the one-database invariant: there is no
+second store to fall out of step with it. It is also the whole exposure — see *At-rest
+protection* above before deciding where the backup lands.
 
 ## MCP clients
 

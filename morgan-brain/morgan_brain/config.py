@@ -108,8 +108,11 @@ class Settings(BaseSettings):
 
     # --- Learning lifecycle ---
     learning_backend: Literal["local", "mlflow"] = "local"
-    # SQLite URI for MLflow tracking store (used when learning_backend="mlflow").
-    mlflow_tracking_uri: str = "sqlite:///./data/mlflow.db"
+    # `mlflow_tracking_uri` used to live here. It had no reader anywhere -- the reshape's
+    # diagnosis listed it among six dead settings, and the MLflow backend still raises
+    # NotImplementedError. A setting that is declared, documented nowhere, and read by
+    # nothing is worse than a missing one: it reads as configurable behaviour that does
+    # not exist. It comes back with the code that needs it.
     # Path to the golden evaluation set JSON file.
     # Empty string → use the packaged default (morgan_brain/eval/data/golden_set.json).
     eval_golden_path: str = ""
