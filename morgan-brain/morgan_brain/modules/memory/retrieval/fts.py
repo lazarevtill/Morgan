@@ -5,8 +5,9 @@ Two traps this module exists to handle:
 * Raw user text is **not** a valid FTS5 ``MATCH`` expression. Hyphens, quotes and bare
   ``AND``/``OR`` produce syntax errors that surface as silent recall failures, so every
   token is extracted and quoted.
-* The previous tokenizer was ``[a-z0-9]+``, which dropped Cyrillic entirely. ``unicode61``
-  indexes it, so keyword recall works for the intended corpus.
+* The previous tokenizer was ``[a-z0-9]+``, which dropped every non-Latin script. Keyword
+  recall silently returned nothing for such text -- a wrong answer, not an empty one.
+  ``unicode61`` indexes it, so recall works for a multilingual corpus.
 """
 
 from __future__ import annotations

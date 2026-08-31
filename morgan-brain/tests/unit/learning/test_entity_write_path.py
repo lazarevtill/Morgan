@@ -108,10 +108,10 @@ async def test_the_entity_signal_actually_returns_the_memory(wiring):
 async def test_cyrillic_turns_are_indexed_too(wiring):
     conn, _entities, _gate, learner = wiring
 
-    await learner.process_session(_conversation("Харбор заблокировал деплой"))
+    await learner.process_session(_conversation("Ромашка отправила образец"))
 
     rows = conn.execute("SELECT name FROM memory_entities WHERE user_id = 'u1'").fetchall()
-    assert "харбор" in {r["name"] for r in rows}
+    assert "ромашка" in {r["name"] for r in rows}
 
 
 async def test_entities_are_scoped_to_the_conversation_project(wiring):

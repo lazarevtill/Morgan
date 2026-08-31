@@ -11,14 +11,14 @@
 
 Morgan was built as an architecture and never as a tool. The domain semantics are sound; the
 wiring, the defaults, and the persistence are not. Nothing in the repo has ever run against real
-data on the owner's machine.
+data on a real machine.
 
 Evidence, verified against the working tree on 2026-08-02:
 
 | Claim | Evidence |
 |---|---|
 | Two of three retrieval signals die on restart | `modules/memory/store.py:40-42,65-67` — the BM25 index, `_by_id`, and the entity map are process-local dicts, written only in `store()`, never rehydrated. Vector payloads carry enough to reconstruct a `Memory` (`store.py:50-63`), so under Qdrant the vector signal survives and the other two do not. |
-| The keyword index cannot read Russian | `modules/memory/retrieval/bm25.py:9` tokenises on `[a-z0-9]+`. Cyrillic is dropped entirely, so keyword recall returns nothing for Russian text — a large fraction of the intended corpus. |
+| The keyword index cannot read non-Latin scripts | `modules/memory/retrieval/bm25.py:9` tokenises on `[a-z0-9]+`. Everything outside ASCII is dropped entirely, so keyword recall returns nothing for such text — a substantial part of the intended corpus. |
 | The default vector backend is ephemeral | `config.py:42` defaults `vector_backend="memory"`. Combined with the above, a fresh process recalls nothing at all. |
 | Qdrant was never initialised | `ensure_collection()` is defined at `modules/memory/stores/vector.py:97`; `composition.py:81-86` constructs `QdrantVectorIndex` and never calls it. The only caller is one unit test. |
 | The optimize/eval path cannot execute | `composition.py:440` asks the router for role `judge`; `config.py:114-118` creates only `strong` and `fast`; `RoleRouter.chat_for` raises `LookupError` (`providers/router.py:75`). The job body runs under `asyncio.ensure_future` (`scheduling/learning_jobs.py:217`), so the failure surfaces only as an unretrieved-task warning. Consolidation is unaffected — it uses role `strong` (`learning/consolidation.py:97`). |
@@ -42,7 +42,7 @@ project-scoped memory reachable from anywhere — and re-arms the rest on real d
 
 ## 2. Constraints (owner decisions)
 
-1. **One brain, homelab-hosted.** A single always-on deployment; the three laptops and all AI tools
+1. **One brain, homelab-hosted.** A single always-on deployment; every owned device and all AI tools
    connect to it. There is one store and one truth, so device sync, the read-only replica, and the
    phone client are out of scope permanently.
 2. **Two first-class consumers.** An MCP server so every AI tool shares the brain, and an importable
@@ -271,7 +271,7 @@ incompatible with the FTS5 keyword index of §4.1 — you cannot full-text index
 would not have covered vectors anyway. At-rest protection is therefore **volume-level encryption on
 the homelab host**, which covers the entire database including vectors and signals, costs no code,
 and is documented in the operations guide. Transport protection is a bearer token over the
-**NetBird** overlay network (self-hostable WireGuard, already in use across the owner's machines)
+**NetBird** overlay network (self-hostable WireGuard, already in use across the deployment)
 or TLS at a reverse proxy. Shipping an advertised but unreachable security control is worse than shipping none.
 
 A docs truth pass lands in the same commits: the six dead settings, the false test and mypy counts,
@@ -283,7 +283,7 @@ the two already-fixed "latent bugs", and the word "bi-temporal" — the schema c
 | # | Deliverable | Acceptance | Size |
 |---|---|---|---|
 | 0 | `.gitattributes` to end the CRLF churn; tag `legacy-v0.0.4-full`; delete §6 including its tests and the three dependent edits; docs truth pass; fix the wheel data-file exclusion | Wheel installs into a clean venv and starts; suite green; `mypy` reports 0 errors | ~1 day |
-| 1 | One-database store: SQLite + FTS5 + `sqlite-vec` + WAL; project scoping through an extended `MemoryGate`; `forget()`; cold-path task queue; llama.cpp defaults + `judge`/`reflection` roles + the promotion flag defaulting off; `morgan remember\|recall\|facts\|forget\|ask\|doctor` | Store a fact in one repo, reboot, recall it from a different repo with `--all-projects`, with a real embedder, on disk — all three retrieval signals returning, including for Russian text | 4–5 days |
+| 1 | One-database store: SQLite + FTS5 + `sqlite-vec` + WAL; project scoping through an extended `MemoryGate`; `forget()`; cold-path task queue; llama.cpp defaults + `judge`/`reflection` roles + the promotion flag defaulting off; `morgan remember\|recall\|facts\|forget\|ask\|doctor` | Store a fact in one repo, reboot, recall it from a different repo with `--all-projects`, with a real embedder, on disk — all three retrieval signals returning, including for non-Latin text | 4–5 days |
 | 2 | ChatGPT import with import-time holdout; MCP server (stdio local, streamable-HTTP + bearer token to the homelab) + `SKILL.md` | An external MCP client writes an episodic that survives consolidation into a fact | 3 days |
 | 3 | Noise floor → 100+ labeled golden items from the holdout → paired-bootstrap gate → set the promotion flag | A promotion requires a bootstrap win exceeding the measured noise floor | ~1.5 weeks |
 
@@ -301,7 +301,7 @@ the horse memory, and the tag structure should reorganise itself as relationship
 path, `strong` role, local GPU) extracts concepts per memory; a hand-editable concepts file pins
 the relationships the owner cares about — `Harbor → registry → infrastructure` — and wins over the
 model's guess. This was chosen over a lexical resource, which is English-only and would fail on a
-corpus that is substantially Russian, and over embeddings-alone, which offers no inspectable tags
+corpus that is substantially non-English, and over embeddings-alone, which offers no inspectable tags
 and nothing to correct when a match is wrong.
 
 Shape, consistent with the existing invariants:

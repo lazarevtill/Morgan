@@ -22,7 +22,7 @@ covers the entire database, including vectors, signal text, and the two stores a
 
 ## Transport protection
 
-The homelab instance is reachable from three laptops. All `/api/*` routes require
+The instance is reachable from several devices. All `/api/*` routes require
 `Authorization: Bearer $MORGAN_API_KEY`. Reach the service over the NetBird overlay network, or
 terminate TLS at a reverse proxy. Never expose it on a public interface with the default key.
 

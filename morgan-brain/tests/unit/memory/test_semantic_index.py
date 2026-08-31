@@ -144,9 +144,9 @@ def test_routing_is_user_scoped(index):
 
 def test_matching_is_case_insensitive_and_script_agnostic(index):
     idx, _conn, leaves = index
-    idx.assign(user_id=U, project=P, entity="харбор", schema_name="work")
-    _link(leaves, memory_id="m1", name="харбор")
-    assert idx.route(["Харбор"], user_id=U, project=P) == ["m1"]
+    idx.assign(user_id=U, project=P, entity="ромашка", schema_name="work")
+    _link(leaves, memory_id="m1", name="ромашка")
+    assert idx.route(["Ромашка"], user_id=U, project=P) == ["m1"]
 
 
 def test_pool_order_is_deterministic(index):

@@ -71,7 +71,7 @@ def test_cross_repo_recall_after_restart(tmp_path: Path) -> None:
     # A second memory, in the second repository. Without it "the recall found the only row
     # in the database" and "the recall found the right row" are the same observation, and
     # the project-scoping assertion below has nothing it could fail on.
-    decoy = _morgan(["remember", "тимбилдинг перенесли на пятницу"], cwd=repo_b, data_dir=data)
+    decoy = _morgan(["remember", "жёлтая папка лежит на верхней полке"], cwd=repo_b, data_dir=data)
     assert decoy.returncode == 0, decoy.stderr
 
     # A separate process, in a separate repository -- nothing is shared but the database
@@ -134,7 +134,7 @@ def test_real_embedder_round_trip(tmp_path: Path) -> None:
     # unfloored top-k returns it for any query and the assertion below would hold even
     # against a random embedding.
     for decoy in (
-        "тимбилдинг перенесли на пятницу",
+        "жёлтая папка лежит на верхней полке",
         "the espresso machine on the second floor takes coins",
         "Anna prefers code review comments in English",
     ):
@@ -179,12 +179,12 @@ def test_cyrillic_survives_the_same_round_trip(tmp_path: Path) -> None:
     """
     data = tmp_path / "brain"
     repo = _init_repo(tmp_path / "repo")
-    content = "реестр Harbor заблокировал деплой"
+    content = "Ромашка сохранила образец в архиве"
 
     stored = _morgan(["remember", content], cwd=repo, data_dir=data)
     assert stored.returncode == 0, stored.stderr
 
-    out = _morgan(["recall", "реестр", "--json"], cwd=repo, data_dir=data)
+    out = _morgan(["recall", "образец", "--json"], cwd=repo, data_dir=data)
     assert out.returncode == 0, out.stderr
     results = json.loads(out.stdout)["results"]
     assert results

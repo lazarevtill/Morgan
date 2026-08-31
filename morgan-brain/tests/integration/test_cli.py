@@ -43,14 +43,14 @@ def test_remember_then_recall_across_processes(tmp_path):
 
 
 def test_recall_json_output_keeps_cyrillic_readable(tmp_path):
-    """--json output must not degrade to \\uXXXX escapes -- a real papercut for an owner
-    whose corpus is substantially Russian."""
+    """--json output must not degrade to \\uXXXX escapes -- a real papercut for any
+    corpus that is substantially non-Latin."""
     env = _hash_env(tmp_path)
-    assert _run(["remember", "зеркало Harbor заблокировало деплой"], env, tmp_path).returncode == 0
-    out = _run(["recall", "зеркало", "--json"], env, tmp_path)
+    assert _run(["remember", "Ромашка положила образец на полку"], env, tmp_path).returncode == 0
+    out = _run(["recall", "образец", "--json"], env, tmp_path)
     assert out.returncode == 0, out.stderr
     assert "\\u" not in out.stdout
-    assert "зеркало" in json.loads(out.stdout)["results"][0]["content"]
+    assert "образец" in json.loads(out.stdout)["results"][0]["content"]
 
 
 def test_doctor_reports_actionable_status(tmp_path):

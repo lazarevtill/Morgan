@@ -16,9 +16,9 @@ async def test_keyword_recall_survives_restart(tmp_path):
 
 async def test_cyrillic_keyword_recall_survives_restart(tmp_path):
     path = str(tmp_path / "m.db")
-    await _module(path).store(Memory(user_id="u", content="реестр Harbor заблокировал деплой"))
-    got = await _module(path).recall(MemoryQuery(user_id="u", text="реестр"))
-    assert any("реестр" in m.content for m in got)
+    await _module(path).store(Memory(user_id="u", content="Ромашка сохранила образец в архиве"))
+    got = await _module(path).recall(MemoryQuery(user_id="u", text="образец"))
+    assert any("образец" in m.content for m in got)
 
 
 async def test_entity_recall_survives_restart(tmp_path):

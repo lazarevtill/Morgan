@@ -401,7 +401,7 @@ covers the entire database, including vectors and signal text.
 
 ## Transport protection
 
-The homelab instance is reachable from three laptops. All `/api/*` routes require
+The instance is reachable from several devices. All `/api/*` routes require
 `Authorization: Bearer $MORGAN_API_KEY`. Reach the service over the NetBird overlay network, or
 terminate TLS at a reverse proxy. Never expose it on a public interface with the default key.
 
@@ -954,9 +954,9 @@ git commit -m "feat(memory): persistent sqlite-vec vector index with delete supp
 
 ---
 
-## Task 9: FTS5 keyword index that can read Russian
+## Task 9: FTS5 keyword index that can read non-Latin scripts
 
-`retrieval/bm25.py:9` tokenises on `[a-z0-9]+`, so Cyrillic is dropped entirely and keyword recall returns nothing for Russian text. FTS5 with `unicode61` fixes that.
+`retrieval/bm25.py:9` tokenises on `[a-z0-9]+`, so every non-Latin script is dropped entirely and keyword recall returns nothing for such text. FTS5 with `unicode61` fixes that.
 
 **Files:**
 - Create: `morgan_brain/modules/memory/retrieval/fts.py`
@@ -1037,7 +1037,7 @@ Two traps this module exists to handle:
   ``AND``/``OR`` produce syntax errors that surface as silent recall failures, so every
   token is extracted and quoted.
 * The previous tokenizer was ``[a-z0-9]+``, which dropped Cyrillic entirely. ``unicode61``
-  indexes it, so keyword recall works for the intended corpus.
+  indexes it, so keyword recall works for a multilingual corpus.
 """
 
 from __future__ import annotations

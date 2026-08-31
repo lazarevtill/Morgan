@@ -66,10 +66,10 @@ all until entities exist. Fixing the write path is therefore not adjacent work �
 one of §3, and it is a root-cause fix, not a graft prerequisite.
 
 The extractor itself is also Latin-only: `_CAP_TOKEN` matches capitalised ASCII words
-(`modules/perception/text/analyzer.py:39`). The reshape design established that a large
-fraction of the intended corpus is Russian and rebuilt the keyword index on FTS5
-`unicode61` for exactly that reason. An entity extractor that cannot see Cyrillic reproduces
-the bug one layer up.
+(`modules/perception/text/analyzer.py:39`). The reshape design established that a
+substantial part of the intended corpus is non-English and rebuilt the keyword index on
+FTS5 `unicode61` for exactly that reason. An entity extractor that cannot see non-Latin
+scripts reproduces the bug one layer up.
 
 ## 3. Graft 1 — the semantic upper index (VoiceMem's left brain)
 

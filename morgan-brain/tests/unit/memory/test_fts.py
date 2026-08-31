@@ -15,8 +15,8 @@ def test_finds_english_term(tmp_path):
 def test_finds_cyrillic_term(tmp_path):
     """The old [a-z0-9]+ tokenizer dropped Cyrillic entirely."""
     idx = _idx(tmp_path)
-    idx.add("a", "реестр Harbor был настроен неверно", user_id="u")
-    assert idx.search("реестр", user_id="u", top_k=5) == ["a"]
+    idx.add("a", "Ромашка положила образец на полку", user_id="u")
+    assert idx.search("образец", user_id="u", top_k=5) == ["a"]
 
 
 def test_is_user_scoped(tmp_path):

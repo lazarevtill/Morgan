@@ -14,17 +14,17 @@ def test_extracts_latin_proper_nouns():
 
 
 def test_extracts_cyrillic_proper_nouns():
-    """The reshape rebuilt the keyword index on FTS5 unicode61 because a large part of
-    the intended corpus is Russian. An ASCII-only entity extractor reproduces exactly
-    that bug one layer up, so this is the case the old `[A-Z][a-z]{2,}` regex fails."""
-    names = extract_entity_names("Харбор заблокировал деплой в Кубернетес")
-    assert "Харбор" in names
-    assert "Кубернетес" in names
+    """The reshape rebuilt the keyword index on FTS5 unicode61 so non-Latin scripts stop
+    being dropped. An ASCII-only entity extractor reproduces exactly that bug one layer
+    up, so this is the case the old `[A-Z][a-z]{2,}` regex fails."""
+    names = extract_entity_names("Ромашка отправила образец в Кувшинку")
+    assert "Ромашка" in names
+    assert "Кувшинку" in names
 
 
 def test_mixed_script_text_yields_both():
-    names = extract_entity_names("Alice развернула Harbor в Москве")
-    assert {"Alice", "Harbor", "Москве"} <= set(names)
+    names = extract_entity_names("Alice сохранила образец в Ромашке")
+    assert {"Alice", "Ромашке"} <= set(names)
 
 
 def test_drops_stopwords_and_calendar_words():

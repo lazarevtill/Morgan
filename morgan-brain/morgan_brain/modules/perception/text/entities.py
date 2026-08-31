@@ -8,11 +8,11 @@ extractors would build two indexes that disagree about what is in them, which is
 duplication the "one of each" invariant exists to prevent.
 
 **Script-aware, not ASCII-aware.** The predecessor matched ``[A-Z][a-z]{2,}`` and could
-not see a single Cyrillic name. That is the same defect the reshape fixed one layer down
-when it replaced the ``[a-z0-9]+`` BM25 tokeniser with FTS5 ``unicode61``: a large part of
-the intended corpus is Russian, and an index that cannot see it returns nothing for it.
-Case detection here goes through Python's own Unicode casing (``str.istitle()`` /
-``str.isupper()``), so Cyrillic, Greek and Latin all work without a per-script rule.
+not see a single non-Latin name. That is the same defect the reshape fixed one layer down
+when it replaced the ``[a-z0-9]+`` BM25 tokeniser with FTS5 ``unicode61``: an index that
+cannot see part of the corpus returns nothing for it, silently. Case detection here goes
+through Python's own Unicode casing (``str.istitle()`` / ``str.isupper()``), so Cyrillic,
+Greek and Latin all work without a per-script rule.
 
 **Known limit, stated rather than hidden.** Scripts without letter case -- Chinese,
 Japanese, Arabic, Hebrew -- carry no capitalisation signal, so a deterministic extractor

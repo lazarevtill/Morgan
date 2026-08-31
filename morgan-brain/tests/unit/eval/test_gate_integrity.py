@@ -106,7 +106,7 @@ def test_a_larger_eval_set_is_still_refused_as_changed_not_silently_accepted():
 
 def test_an_ordinary_preprompt_passes():
     screen_candidate(
-        "You are Anatoly's assistant. Prefer terse answers with a runnable command. "
+        "You are the owner's assistant. Prefer terse answers with a runnable command. "
         "When you are unsure, say so and name what would settle it."
     )
 
