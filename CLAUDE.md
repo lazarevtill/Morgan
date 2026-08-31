@@ -30,8 +30,8 @@ any OpenAI-compatible endpoint works; Ollama remains a supported non-default pro
 - **`brain-api`** — the REST/SSE gateway (`/api/chat`, `/api/chat/stream`, `/api/feedback`,
   `/api/tools`, `/api/skills`, `/api/profile`).
 - **`learning-worker`** — the async consolidation + eval-gated optimizer process.
-- **`morgan` CLI** — a terminal client (`remember`/`recall`/`facts`/`forget`/`ask`/`doctor`);
-  project is auto-detected from the current git repository's directory name.
+- **`morgan` CLI** — a terminal client (`remember`/`recall`/`facts`/`forget`/`ask`/`doctor`/
+  `receipts`); project is auto-detected from the current git repository's directory name.
 - **`morgan-mcp`** — an MCP server exposing five tools (`remember`, `recall`, `facts`, `forget`,
   `ask_morgan`) over stdio or streamable-HTTP with a bearer token, for any MCP client (Claude
   Code, Claude Desktop, etc.). Both the CLI and the MCP server are thin adapters over the same
@@ -74,17 +74,28 @@ Hot path = `brain-api` request path; cold path = `learning-worker`.
   skills (select), tools. Each `__init__.py` states its responsibility, owner service, and wiring.
   `modules/memory/stores/` + `retrieval/` are the durable SQLite-backed indexes (vector via
   sqlite-vec, keyword via FTS5, entity) that recall fuses with reciprocal rank fusion.
+  `modules/memory/retrieval/semantic_index.py` is the **upper index** above them: schemas route
+  coarsely, entities locate concretely, and `recall` narrows every signal to its candidate pool
+  before searching. `modules/personalization/persona_graph.py` is the **persona graph**: intrinsic
+  dispositions vs. attitudes anchored to an entity.
+  `modules/perception/text/entities.py` is the one entity extractor both paths use.
 - `learning/` — signal capture, consolidation, profile, `ChampionTrainer`, optimizer (cold path;
-  the recorder runs on the cold path of each turn).
+  the recorder runs on the cold path of each turn), plus the cold-path writers for the two
+  brains and the governance layer: `semantic_index_builder.py`, `persona_attribution.py`,
+  `cluster_emergence.py`, `patterns.py` (the register of correction *classes*), and
+  `receipts.py` (why the champion is what it is).
 - `learning_lifecycle/` — `PromptRegistry` + `Optimizer` seam (local SQLite or MLflow backend).
 - `eval/` — 3-layer golden eval harness + calibrated cross-family judge — the self-learning gate.
+  `eval/gate_integrity.py` protects it from what it judges: the gate is fingerprinted, and a
+  candidate scored on a different or weaker one is refused.
 - `scheduling/` — CronService + nightly learning jobs (worker).
 - `core/orchestrator.py` — the thin cognitive loop (design spec §6). Coordinates only; owns no domain logic.
 - `composition.py` — wires concrete implementations into the orchestrator + app context.
 - `apps/` — entrypoints: `brain_api` (owns the bus lifespan — starts it on entry, stops it on
   exit), `learning_worker`.
-- `cli/` — the `morgan` terminal client (`__main__.py`); project is auto-detected from the
-  current git repository's directory name (`cli/project.py::detect_project`).
+- `cli/` — the `morgan` terminal client (`__main__.py`): `remember`/`recall`/`facts`/`forget`/
+  `ask`/`doctor`/`receipts`; project is auto-detected from the current git repository's
+  directory name (`cli/project.py::detect_project`).
 - `ports/mcp_server.py` — the `morgan-mcp` MCP server: five tools over stdio or streamable-HTTP
   with a bearer token, calling the exact same `cli.__main__` command handlers the CLI uses.
 
@@ -108,8 +119,24 @@ Hot path = `brain-api` request path; cold path = `learning-worker`.
   `valid_from`/`valid_to`/`superseded_by`. Update = close the old interval, open a new one.
 - **Actor attribution.** Every memory records `MemorySource` (user_stated / agent_inferred /
   tool_observed). Never treat an inference as a user-stated fact.
+- **Routing never costs recall.** `SemanticIndex.route()` returns `None` — "search everything" —
+  and never an empty list, whenever it has nothing useful to say. The candidate pool is pushed
+  *into* each signal's query, never applied to its output: a post-filter over the top-k cannot
+  reach a memory that ranks below the cut, which is the entire point of routing. Cross-project
+  recall is never routed.
+- **A situational reading is not a trait.** The persona graph keeps attitudes anchored to the
+  entity they concern. Promotion to an intrinsic disposition requires recurrence across several
+  *different anchors* and several *distinct sessions* — impatience with one recurring meeting is
+  a fact about that meeting. An untargeted inference is dropped; only the user's own statement
+  about themselves enters unanchored.
+- **The gate may not be weakened by what it judges.** The eval gate is fingerprinted (item count
+  and ids, judge model, scorer set, epsilon); a candidate scored on a different or weaker gate is
+  refused, and a candidate whose body addresses the evaluator is refused *before* it is scored.
+  Every promotion decision — including rejections and why — is recorded as a receipt.
 - **One of each.** One config system, one event-bus interface, one permission model, one
-  `structlog` logger, one SQLite database.
+  `structlog` logger, one SQLite database, one entity extractor
+  (`modules/perception/text/entities.py`, used by both the hot and the cold path), one
+  `SemanticIndex` instance per assembly.
 - **Provider SDKs are isolated to `providers/adapters/`.** Nothing above the provider layer imports
   `openai`/`anthropic`/etc. directly; the brain talks to `ChatClient`/`Embedder` seams and a role
   router. No provider is hardcoded.
@@ -130,7 +157,19 @@ Hot path = `brain-api` request path; cold path = `learning-worker`.
    (zero inference-time cost), cached with a short TTL so a promotion reaches live traffic without
    a `brain-api` restart.
 4. **Personalize (hot path):** `AdaptivePersonalizer` injects the compact profile + turn-relevant
-   traits every turn — this is where learning becomes visible.
+   traits every turn, plus the persona nodes this turn activated — this is where learning becomes
+   visible.
+
+### The two brains (VoiceMem, arXiv:2608.26005 — design spec `2026-08-31-…-design.md`)
+- **Left brain — the semantic upper index.** Schemas route coarsely, entities locate concretely,
+  one-hop co-occurrence expands. `recall` narrows every signal to the resulting candidate pool
+  *before* searching, which is what makes a small top-k dense rather than merely small. Built on
+  the cold path (`semantic_index_builder.py`); re-partitioned nightly by `cluster_emergence.py`
+  when queries keep activating a subgroup together and a judge agrees it is one topic.
+- **Right brain — the persona graph.** Intrinsic dispositions and entity-anchored attitudes, with
+  the short horizon (per turn, cold path) and the long horizon (nightly generalisation) kept
+  apart. Joint retrieval: the anchor set is the turn's entities expanded one hop through the left
+  brain, so an attitude toward something the turn implies but does not name still surfaces.
 
 ### Known limitations (current state, not regressions)
 - **`recall` has no relevance floor.** Vector, FTS5, and entity search each return their top-k
@@ -144,7 +183,19 @@ Hot path = `brain-api` request path; cold path = `learning-worker`.
   `security/network.py::assert_safe_bind` refuses to start either surface on a non-loopback bind
   without a real key, so the open case cannot reach the overlay network.
 - **Retrieval quality is unmeasured.** `tests/memory_quality/` is a stub harness over a hash
-  embedder — it exercises the plumbing, not real relevance.
+  embedder — it exercises the plumbing, not real relevance. The upper index's accuracy claim is
+  the paper's, measured on LoCoMo/LongMemEval; it has not been reproduced here, and cannot be
+  until that harness runs against a real embedder.
+- **Entity extraction has no model behind it yet.** The deterministic extractor handles cased
+  scripts (Latin, Cyrillic, CamelCase brands); scripts without letter case — Chinese, Japanese,
+  Arabic, Hebrew — yield nothing rather than a guess. The model-backed path exists for schema
+  classification but not yet for extraction itself.
+- **An entity is classified into a schema once.** Deliberate — reclassifying nightly would let a
+  slot flap, and each flap rewrites what a query can route to — but it means an early
+  misclassification persists until cluster emergence re-partitions around it.
+- **Persona attribution and cluster emergence need a reachable model.** Both record/promote
+  nothing without one, by design: guessing at the owner's personality, or re-partitioning the
+  index on a heuristic, is worse than an empty graph and an unchanged partition.
 
 **Deferred by design:** LoRA (only if the 4-condition escalation test fires).
 
@@ -167,7 +218,7 @@ python -m morgan_brain.apps.brain_api                                  # http://
 MORGAN_ENABLE_SCHEDULING=true python -m morgan_brain.apps.learning_worker
 
 # Tests
-pytest -q                                       # 730 passed, 8 skipped
+pytest -q                                       # 945 passed, 8 skipped
 pytest tests/unit/test_foundation.py            # one file
 pytest tests/unit/test_foundation.py::test_everything_is_user_scoped -v
 
