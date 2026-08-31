@@ -91,7 +91,12 @@ async def test_forget_reports_absent_tables_as_skipped_not_zero(tmp_path):
 async def test_forget_does_not_report_present_tables_as_skipped(tmp_path):
     """Once a SignalStore/SessionHistoryStore has opened on the shared connection, the tables
     exist -- forgetting a project with no signals/history in it must report a real 0, not a
-    skip, because the table is present and genuinely empty for this project."""
+    skip, because the table is present and genuinely empty for this project.
+
+    The semantic index and persona graph tables are the other side of the same rule: this
+    fixture never opens them, so they are genuinely absent and *must* appear as skipped.
+    Reporting "0 erased" for a table that was never created is the false reassurance
+    ``tables_skipped`` exists to prevent."""
     path = str(tmp_path / "m.db")
     m = _module(path)
     conn = m._episodics._conn  # test-only introspection
@@ -101,7 +106,15 @@ async def test_forget_does_not_report_present_tables_as_skipped(tmp_path):
     report = await m.forget(user_id="u", project="p")
     assert report.signals == 0
     assert report.history == 0
-    assert report.tables_skipped == []
+    assert "interaction_signals" not in report.tables_skipped
+    assert "session_history" not in report.tables_skipped
+    assert sorted(report.tables_skipped) == [
+        "mem_entity_edges",
+        "mem_entity_nodes",
+        "mem_schema_edges",
+        "mem_schemas",
+        "persona_nodes",
+    ]
 
 
 async def test_forget_champions_flagged_is_empty_by_design(tmp_path):

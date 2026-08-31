@@ -87,6 +87,8 @@ def _merge_forget_reports(reports: list[ForgetReport]) -> ForgetReport:
         merged.facts += r.facts
         merged.signals += r.signals
         merged.history += r.history
+        merged.index_entries += r.index_entries
+        merged.persona_nodes += r.persona_nodes
         merged.vectors_erased = merged.vectors_erased and r.vectors_erased
         if r.vector_error:
             vector_errors.append(r.vector_error)
@@ -129,6 +131,8 @@ def _forget_result(
         "facts": report.facts,
         "signals": report.signals,
         "history": report.history,
+        "index_entries": report.index_entries,
+        "persona_nodes": report.persona_nodes,
         "tables_skipped": list(report.tables_skipped),
         "champions_flagged": list(report.champions_flagged),
         "vector_backend": settings.vector_backend,
@@ -424,7 +428,8 @@ def _render_forget(data: dict[str, Any]) -> str:
     scope = "all projects" if data["all_projects"] else f"project {data['project']!r}"
     summary = (
         f"Forgot {scope}: memories={data['memories']} facts={data['facts']} "
-        f"signals={data['signals']} history={data['history']}"
+        f"signals={data['signals']} history={data['history']} "
+        f"index={data['index_entries']} persona={data['persona_nodes']}"
     )
     lines = [summary]
     for w in data["warnings"]:

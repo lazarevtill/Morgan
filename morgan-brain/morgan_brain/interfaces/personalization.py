@@ -9,6 +9,7 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from morgan_brain.models.memory import DEFAULT_PROJECT
 from morgan_brain.models.perception import FusedPerception
 from morgan_brain.models.user import UserModel
 
@@ -25,5 +26,16 @@ class PersonalizedContext(BaseModel):
 @runtime_checkable
 class Personalizer(Protocol):
     async def build(
-        self, *, user_model: UserModel, perception: FusedPerception
-    ) -> PersonalizedContext: ...
+        self,
+        *,
+        user_model: UserModel,
+        perception: FusedPerception,
+        project: str = DEFAULT_PROJECT,
+    ) -> PersonalizedContext:
+        """Compose this turn's personalisation.
+
+        *project* is part of the contract because personalisation now reads persona
+        state, and everything that persists in Morgan is project-keyed: an attitude
+        learned in one project must not surface in another.
+        """
+        ...

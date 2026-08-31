@@ -138,7 +138,7 @@ class Orchestrator:
         # 3. Personalization
         user_model = await self._learner.user_model(user_id)
         personalization = await self._personalizer.build(
-            user_model=user_model, perception=perception
+            user_model=user_model, perception=perception, project=project
         )
 
         # 4. Memory recall
@@ -211,7 +211,7 @@ class Orchestrator:
         # 3. Personalization (reads UserModel; biases everything that follows)
         user_model = await self._learner.user_model(user_id)
         personalization = await self._personalizer.build(
-            user_model=user_model, perception=perception
+            user_model=user_model, perception=perception, project=project
         )
 
         # 4. Memory recall (multi-signal, currently-valid facts)
@@ -294,7 +294,7 @@ class Orchestrator:
         # 3. Personalization
         user_model = await self._learner.user_model(user_id)
         personalization = await self._personalizer.build(
-            user_model=user_model, perception=perception
+            user_model=user_model, perception=perception, project=project
         )
 
         # 4. Memory recall

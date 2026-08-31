@@ -25,8 +25,17 @@ from __future__ import annotations
 import re
 
 from morgan_brain.interfaces.personalization import PersonalizedContext
+from morgan_brain.models.memory import DEFAULT_PROJECT
 from morgan_brain.models.perception import FusedPerception
 from morgan_brain.models.user import RelationshipStage, Trait, UserModel
+from morgan_brain.modules.memory.retrieval.semantic_index import SemanticIndex
+from morgan_brain.modules.personalization.persona_graph import (
+    PersonaGraph,
+    PersonaKind,
+)
+from morgan_brain.modules.personalization.persona_graph import (
+    PersonaNode as PersonaNodeLike,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -61,6 +70,16 @@ class AdaptivePersonalizer:
     budget:
         Fraction of the context window allocated to personalisation (default 0.15).
         Mapped to ``max(1, round(budget * 20))`` traits.
+    persona_graph:
+        Optional ``PersonaGraph`` (VoiceMem's right brain). When wired, the turn also
+        activates persona nodes -- intrinsic dispositions matched from the turn's words,
+        and attitudes anchored to the entities the turn made relevant. Read-only: this
+        class never records an observation, which is the cold path's job.
+    semantic_index:
+        Optional ``SemanticIndex`` (the left brain). When wired, the anchor set is the
+        turn's entities expanded one hop through it, which is the joint retrieval of
+        eq. (5) -- the right brain expands over the entity set the left brain activated,
+        not only over the literal entities in the text.
     """
 
     def __init__(
@@ -68,20 +87,29 @@ class AdaptivePersonalizer:
         *,
         profile_builder: object = None,
         budget: float = 0.15,
+        persona_graph: PersonaGraph | None = None,
+        semantic_index: SemanticIndex | None = None,
     ) -> None:
         self._profile_builder = profile_builder
         self._budget = budget
+        self._persona = persona_graph
+        self._semantic = semantic_index
 
     @property
     def _max_traits(self) -> int:
         return max(1, round(self._budget * 20))
 
     async def build(
-        self, *, user_model: UserModel, perception: FusedPerception
+        self,
+        *,
+        user_model: UserModel,
+        perception: FusedPerception,
+        project: str = DEFAULT_PROJECT,
     ) -> PersonalizedContext:
         """Select relevant traits and compose a ``PersonalizedContext`` for this turn."""
         selected = self._select_traits(user_model, perception)
-        fragment = self._compose_fragment(user_model, selected)
+        persona = self._activate_persona(user_model, perception, project)
+        fragment = self._compose_fragment(user_model, selected, persona)
         tone = user_model.comm_prefs.tone
         threshold = _PROACTIVE_THRESHOLD.get(
             user_model.relationship_stage,
@@ -124,10 +152,43 @@ class AdaptivePersonalizer:
         return [t for _, t in scored[: self._max_traits]]
 
     # ------------------------------------------------------------------
+    # Persona activation (right brain)
+    # ------------------------------------------------------------------
+
+    def _activate_persona(
+        self, user_model: UserModel, perception: FusedPerception, project: str
+    ) -> list[PersonaNodeLike]:
+        """Activate persona nodes for this turn. Returns ``[]`` when no graph is wired."""
+        if self._persona is None:
+            return []
+        anchors = {e.name for e in perception.entities if e.name}
+        if self._semantic is not None and anchors:
+            # Joint retrieval: expand the turn's entities through the left brain first, so
+            # an attitude toward something the turn implies but does not name still
+            # surfaces. Without the index the anchor set is the literal entities only.
+            pool = self._semantic.neighbours(
+                sorted(anchors), user_id=user_model.user_id, project=project
+            )
+            anchors |= pool
+        return list(
+            self._persona.activate(
+                user_id=user_model.user_id,
+                project=project,
+                terms=sorted(_tokenize(perception.text)),
+                entities=anchors,
+            )
+        )
+
+    # ------------------------------------------------------------------
     # Fragment composition
     # ------------------------------------------------------------------
 
-    def _compose_fragment(self, user_model: UserModel, selected: list[Trait]) -> str:
+    def _compose_fragment(
+        self,
+        user_model: UserModel,
+        selected: list[Trait],
+        persona: list[PersonaNodeLike] | None = None,
+    ) -> str:
         """Compose the system fragment from comm_prefs + selected traits."""
         parts: list[str] = []
 
@@ -148,6 +209,16 @@ class AdaptivePersonalizer:
         # selected traits
         for trait in selected:
             parts.append(f"  - {trait.name}: {trait.value}")
+
+        # Persona nodes. An attitude is always rendered with its anchor: "impatient" on
+        # its own reads as a claim about the person, which is the collapse the persona
+        # graph exists to prevent. Dispositions promoted to intrinsic have earned the
+        # unanchored form and are rendered without one.
+        for node in persona or []:
+            if node.kind is PersonaKind.CROSS_ENTITY and node.entity:
+                parts.append(f"  - about {node.entity}: {node.description}")
+            else:
+                parts.append(f"  - {node.description}")
 
         return "\n".join(parts)
 
