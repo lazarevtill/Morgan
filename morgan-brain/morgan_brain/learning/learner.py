@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from morgan_brain.learning.consolidation import MemoryConsolidator
+from morgan_brain.learning.patterns import PatternRegister
 from morgan_brain.learning.persona_attribution import PersonaAttributor
 from morgan_brain.learning.semantic_index_builder import SemanticIndexBuilder
 from morgan_brain.models.base import Entity
@@ -49,6 +50,11 @@ class ConsolidationLearner:
         Optional ``PersonaAttributor`` (VoiceMem's right brain, short horizon).  When
         provided, each processed turn's affect and its target are recorded after the
         reply has been sent -- never during the request.
+    patterns:
+        Optional ``PatternRegister``.  When provided, each preference distilled from an
+        edit is recorded as an occurrence of a correction *class*, so a correction that
+        keeps recurring is visible to the optimizer as a class rather than as N unrelated
+        instances.
     index_builder:
         Optional ``SemanticIndexBuilder``.  When provided, the memories stored by
         ``process_session`` are filed into the semantic upper index in the same cold-path
@@ -66,6 +72,7 @@ class ConsolidationLearner:
         index_builder: SemanticIndexBuilder | None = None,
         persona_attributor: PersonaAttributor | None = None,
         persona_graph: PersonaGraph | None = None,
+        patterns: PatternRegister | None = None,
     ) -> None:
         self._consolidator = consolidator
         self._gate = gate
@@ -74,6 +81,7 @@ class ConsolidationLearner:
         self._index_builder = index_builder
         self._persona = persona_attributor
         self._persona_graph = persona_graph
+        self._patterns = patterns
 
     # ------------------------------------------------------------------
     # Learner Protocol
@@ -202,4 +210,16 @@ class ConsolidationLearner:
         delta = await preference_delta_from_edit(self._profile_builder, user_id, original, edited)
         for fact in preference_facts_from_delta(user_id, delta, self._clock(), project=project):
             await self._gate.upsert_fact(fact)
+
+        # The same delta, recorded as a *class* rather than as one more instance. The
+        # facts above change the next turn; the register is what stops the optimizer from
+        # proposing the same patch every week for a correction that keeps coming back.
+        if self._patterns is not None and delta.strip():
+            self._patterns.record(
+                user_id=user_id,
+                project=project,
+                title=delta.strip(),
+                description="distilled from an edit to a reply",
+                now=self._clock(),
+            )
         return delta

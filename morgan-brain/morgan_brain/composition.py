@@ -23,7 +23,9 @@ from morgan_brain.bus import get_event_bus
 from morgan_brain.bus.inproc import InProcessBus
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.core.orchestrator import Orchestrator
+from morgan_brain.eval.gate_integrity import GateSpec
 from morgan_brain.eval.golden import default_golden_path, load_golden_set
+from morgan_brain.eval.harness import EPSILON as EVAL_EPSILON
 from morgan_brain.eval.harness import EvalHarness
 from morgan_brain.eval.judge import LLMJudge
 from morgan_brain.eval.runner import make_eval_scorer, make_predict_fn
@@ -34,8 +36,10 @@ from morgan_brain.learning.consolidation import MemoryConsolidator
 from morgan_brain.learning.history import SessionHistoryStore
 from morgan_brain.learning.learner import ConsolidationLearner
 from morgan_brain.learning.optimizer import AnyScorer, ReflectiveOptimizer
+from morgan_brain.learning.patterns import PatternRegister
 from morgan_brain.learning.persona_attribution import LLMAttributor, PersonaAttributor
 from morgan_brain.learning.profile import UserProfileBuilder
+from morgan_brain.learning.receipts import ReceiptStore
 from morgan_brain.learning.recorder import SignalRecorder
 from morgan_brain.learning.semantic_index_builder import LLMSchemaClassifier, SemanticIndexBuilder
 from morgan_brain.learning.signals import SignalStore
@@ -278,6 +282,7 @@ def _assemble(
     )
     gate = MemoryGate(memory_module)
     persona_graph = PersonaGraph(resolved_conn)
+    pattern_register = PatternRegister(resolved_conn)
     reg = CapabilityRegistry.from_packaged()
     consolidator = MemoryConsolidator(
         gate=gate,
@@ -312,6 +317,7 @@ def _assemble(
             attributor=LLMAttributor(router=router, capability_registry=reg),
         ),
         persona_graph=persona_graph,
+        patterns=pattern_register,
     )
     # Use the injected bus (tests) or the config-driven one (production).
     # get_event_bus() reads settings.event_bus: "inproc" → InProcessBus, "redis" → RedisStreamsBus.
@@ -614,13 +620,44 @@ def build_worker_context(settings: Settings | None = None) -> WorkerContext:
     # invariant (Task 13A) -- so the champion registry lives in morgan.db, not a second file.
     registry: PromptRegistry = build_registry(settings, conn=conn)
 
-    # Optimizer + trainer.
-    optimizer = ReflectiveOptimizer(router=router)
-    trainer = ChampionTrainer(optimizer=optimizer, registry=registry, clock=_utcnow)
+    # Both open on the same connection the rest of the worker uses, so the receipts the
+    # trainer writes and the classes the optimizer reads are in the one database.
+    pattern_register = PatternRegister(conn)
+    receipt_store = ReceiptStore(conn)
 
-    # Eval-backed scorer: run the real assistant over the golden set.
+    # The eval set is loaded before the trainer, because the trainer needs to know what
+    # gate it is scoring against: a promotion is only "beats current" if the candidate
+    # and the champion faced the same instrument.
     golden_path_str = settings.eval_golden_path
     golden_items = load_golden_set(golden_path_str or default_golden_path())
+    try:
+        _, judge_model = router.chat_for("judge")
+    except LookupError:
+        # No judge binding: the optimize path cannot run at all, but the gate description
+        # must still be honest about which judge produced the numbers -- recording an
+        # assumed model here is how two incomparable runs come to look comparable.
+        judge_model = "unbound"
+    gate_spec = GateSpec.from_items(
+        (item.id for item in golden_items),
+        judge_model=judge_model,
+        scorers=sorted({item.probe.value for item in golden_items}),
+        epsilon=EVAL_EPSILON,
+    )
+
+    # Optimizer + trainer.
+    optimizer = ReflectiveOptimizer(
+        router=router,
+        patterns=pattern_register,
+        pattern_user_id=settings.owner_user_id,
+    )
+    trainer = ChampionTrainer(
+        optimizer=optimizer,
+        registry=registry,
+        clock=_utcnow,
+        receipts=receipt_store,
+        gate=gate_spec,
+    )
+
     judge = LLMJudge(router=router, role="judge")
     harness = EvalHarness(judge=judge)
     # with_confidence=True so the eval harness computes + logs calibration (Brier/ECE) on every

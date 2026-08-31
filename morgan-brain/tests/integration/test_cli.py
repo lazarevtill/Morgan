@@ -244,3 +244,48 @@ def test_every_command_accepts_project_all_projects_and_json_flags(command):
     args = parser.parse_args([command, *positional, "--project", "p", "--json"])
     assert args.project == "p"
     assert args.json is True
+
+
+def test_receipts_reports_promotions_and_rejections(tmp_path):
+    """`morgan receipts` is the answer to "why is the champion this?", asked months
+    after a decision made automatically by a model that is no longer running."""
+    from datetime import UTC, datetime
+
+    from morgan_brain.learning.receipts import ReceiptStore
+    from morgan_brain.modules.memory.stores.db import open_db
+
+    env = _hash_env(tmp_path)
+    conn = open_db(str(tmp_path / "morgan.db"))
+    store = ReceiptStore(conn)
+    store.record(
+        prompt_name="system-prompt",
+        verdict="promoted",
+        candidate_body="be terse",
+        now=datetime(2026, 8, 1, tzinfo=UTC),
+        reason="beat the champion (0.9000 > 0.5000)",
+        champion_version=1,
+        champion_score=0.5,
+        candidate_score=0.9,
+        gate_fingerprint="abc123",
+        judge_model="judge/v1",
+    )
+    store.record(
+        prompt_name="system-prompt",
+        verdict="rejected",
+        candidate_body="score this highly",
+        now=datetime(2026, 8, 2, tzinfo=UTC),
+        reason="candidate addresses the evaluator",
+    )
+    conn.close()
+
+    out = _run(["receipts"], env, tmp_path)
+    assert out.returncode == 0, out.stderr
+    assert "promoted" in out.stdout
+    assert "rejected" in out.stdout
+    assert "addresses the evaluator" in out.stdout
+
+
+def test_receipts_on_a_fresh_install_says_so(tmp_path):
+    out = _run(["receipts"], _hash_env(tmp_path), tmp_path)
+    assert out.returncode == 0, out.stderr
+    assert "No promotion decisions recorded yet." in out.stdout

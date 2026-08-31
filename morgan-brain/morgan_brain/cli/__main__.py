@@ -32,6 +32,7 @@ from morgan_brain.composition import (
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.interfaces.memory import ForgetReport
 from morgan_brain.learning.history import session_key
+from morgan_brain.learning.receipts import ReceiptStore
 from morgan_brain.models.memory import Memory, MemoryQuery, MemorySource, TemporalFact
 from morgan_brain.modules.memory.retrieval.entities import EntityIndex
 from morgan_brain.modules.memory.retrieval.fts import FtsIndex
@@ -337,6 +338,42 @@ async def cmd_facts(args: argparse.Namespace, settings: Settings, project: str) 
     }
 
 
+async def cmd_receipts(
+    args: argparse.Namespace, settings: Settings, project: str
+) -> dict[str, Any]:
+    """Why the champion preprompt is what it is.
+
+    Not project-scoped: the champion is one document per user, and so is its history.
+    Rejections are listed alongside promotions -- a history of only the promotions cannot
+    explain the promotions that did not happen, and a candidate refused for gate
+    integrity is a very different event from one that simply scored worse.
+    """
+    ctx = build_memory_context(settings)
+    try:
+        store = ReceiptStore(ctx.conn)
+        rows = store.recent(prompt_name=args.prompt or None, limit=args.limit)
+    finally:
+        ctx.conn.close()
+    return {
+        "prompt": args.prompt,
+        "receipts": [
+            {
+                "at": r.created_at.isoformat(),
+                "prompt": r.prompt_name,
+                "verdict": r.verdict,
+                "reason": r.reason,
+                "champion_version": r.champion_version,
+                "champion_score": r.champion_score,
+                "candidate": r.candidate_hash,
+                "candidate_score": r.candidate_score,
+                "gate": r.gate_fingerprint,
+                "judge": r.judge_model,
+            }
+            for r in rows
+        ],
+    }
+
+
 async def cmd_forget(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
     ctx = build_memory_context(settings)
     try:
@@ -437,6 +474,27 @@ def _render_forget(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _render_receipts(data: dict[str, Any]) -> str:
+    rows = data["receipts"]
+    if not rows:
+        return "No promotion decisions recorded yet."
+    lines = []
+    for r in rows:
+        champ = "none" if r["champion_version"] is None else f"v{r['champion_version']}"
+        scores = f"{_fmt_score(r['champion_score'])} -> {_fmt_score(r['candidate_score'])}"
+        lines.append(
+            f"{r['at']}  {r['verdict']:<8} {r['prompt']}  champion={champ}  {scores}\n"
+            f"    {r['reason']}\n"
+            f"    candidate={r['candidate']}  gate={r['gate'] or 'n/a'}  "
+            f"judge={r['judge'] or 'n/a'}"
+        )
+    return "\n".join(lines)
+
+
+def _fmt_score(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.4f}"
+
+
 def _render_ask(data: dict[str, Any]) -> str:
     return str(data["response"])
 
@@ -452,6 +510,7 @@ _RENDERERS = {
     "forget": (cmd_forget, _render_forget),
     "ask": (cmd_ask, _render_ask),
     "doctor": (cmd_doctor, _render_doctor),
+    "receipts": (cmd_receipts, _render_receipts),
 }
 
 # Commands where --all-projects is meaningless: a write or a single chat turn always
@@ -509,6 +568,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_doctor = sub.add_parser("doctor", help="Diagnose the local Morgan installation.")
     _add_common(p_doctor)
+
+    p_receipts = sub.add_parser(
+        "receipts", help="Why the champion preprompt is what it is (promotions AND rejections)."
+    )
+    p_receipts.add_argument("--prompt", default=None, help="Filter to one prompt name.")
+    p_receipts.add_argument("--limit", type=int, default=20, help="How many decisions to show.")
+    _add_common(p_receipts)
 
     return parser
 

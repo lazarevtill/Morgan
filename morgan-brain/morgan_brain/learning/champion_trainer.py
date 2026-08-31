@@ -40,7 +40,14 @@ import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from morgan_brain.eval.gate_integrity import (
+    GateIntegrityError,
+    GateSpec,
+    assert_gate_unweakened,
+    screen_candidate,
+)
 from morgan_brain.learning.optimizer import AnyScorer, Example, _call_scorer
+from morgan_brain.learning.receipts import ReceiptStore
 from morgan_brain.learning_lifecycle.interfaces import Optimizer, PromptRegistry
 
 logger = logging.getLogger(__name__)
@@ -59,6 +66,14 @@ class ChampionTrainer:
         registry:  A ``PromptRegistry`` implementation (e.g. ``LocalPromptRegistry``).
         clock:     Zero-argument callable returning the current ``datetime``
                    (injected for deterministic testing).
+        receipts:  Optional ``ReceiptStore``. When wired, every decision -- promoted or
+                   rejected, and for which reason -- is recorded. It is also the only
+                   record of which gate certified the standing champion, so the
+                   integrity check below depends on it.
+        gate:      Optional ``GateSpec`` describing the gate this run is scoring against.
+                   When both this and *receipts* are wired, a candidate measured on a
+                   different or weaker gate than the champion is refused before its score
+                   is even considered.
     """
 
     def __init__(
@@ -67,10 +82,14 @@ class ChampionTrainer:
         optimizer: Optimizer,
         registry: PromptRegistry,
         clock: Callable[[], datetime] = _utcnow,
+        receipts: ReceiptStore | None = None,
+        gate: GateSpec | None = None,
     ) -> None:
         self._optimizer = optimizer
         self._registry = registry
         self._clock = clock
+        self._receipts = receipts
+        self._gate = gate
 
     async def train(
         self,
@@ -121,6 +140,30 @@ class ChampionTrainer:
         )
         candidate_body = candidate_version.body
 
+        # Step 3a: the integrity guards, BEFORE the candidate is scored.
+        #
+        # Order matters. Scoring first and checking after would let a candidate that
+        # addresses the judge produce a number, and a number that exists gets compared --
+        # by a later reader if not by this code. Refusing before the measurement means
+        # there is no tainted score to reason about.
+        try:
+            screen_candidate(candidate_body)
+            if self._gate is not None:
+                assert_gate_unweakened(certified=self._certified_gate(name), current=self._gate)
+        except GateIntegrityError as exc:
+            logger.warning("ChampionTrainer: refusing candidate for %r: %s", name, exc)
+            self._record(
+                name,
+                verdict="rejected",
+                candidate_body=candidate_body,
+                reason=str(exc),
+                champion_version=(
+                    existing_champion.version if existing_champion is not None else None
+                ),
+                champion_score=champion_score,
+            )
+            return False
+
         # Step 4: score the candidate.
         candidate_score = await _call_scorer(scorer, candidate_body)
 
@@ -138,6 +181,20 @@ class ChampionTrainer:
                 name,
                 candidate_score,
                 champion_score,
+            )
+            self._record(
+                name,
+                verdict="rejected",
+                candidate_body=candidate_body,
+                reason=(
+                    f"candidate did not beat the champion "
+                    f"({candidate_score:.4f} <= {champion_score:.4f})"
+                ),
+                champion_version=(
+                    existing_champion.version if existing_champion is not None else None
+                ),
+                champion_score=champion_score,
+                candidate_score=candidate_score,
             )
             return False
 
@@ -157,4 +214,59 @@ class ChampionTrainer:
             champion_score,
             candidate_score,
         )
+        self._record(
+            name,
+            verdict="promoted",
+            candidate_body=candidate_body,
+            reason=f"beat the champion ({candidate_score:.4f} > {champion_score:.4f})",
+            champion_version=(existing_champion.version if existing_champion is not None else None),
+            champion_score=champion_score,
+            candidate_score=candidate_score,
+        )
         return True
+
+    # ------------------------------------------------------------------
+    # Integrity + receipts
+    # ------------------------------------------------------------------
+
+    def _certified_gate(self, name: str) -> GateSpec | None:
+        """The gate the standing champion was certified on.
+
+        Reconstructed from the last promotion receipt, which is the only place that
+        survives to be asked -- ``PromptVersion.metrics`` is ``dict[str, float]`` and
+        cannot carry a gate description. No receipts wired, or no promotion recorded,
+        means there is nothing to compare against, and nothing to weaken.
+        """
+        if self._receipts is None:
+            return None
+        last = self._receipts.last_promotion(name)
+        if last is None:
+            return None
+        return GateSpec.from_dict(last.gate_spec)
+
+    def _record(
+        self,
+        name: str,
+        *,
+        verdict: str,
+        candidate_body: str,
+        reason: str,
+        champion_version: int | None,
+        champion_score: float | None,
+        candidate_score: float | None = None,
+    ) -> None:
+        if self._receipts is None:
+            return
+        self._receipts.record(
+            prompt_name=name,
+            verdict=verdict,
+            candidate_body=candidate_body,
+            now=self._clock(),
+            reason=reason,
+            champion_version=champion_version,
+            champion_score=champion_score,
+            candidate_score=candidate_score,
+            gate_fingerprint=self._gate.fingerprint() if self._gate else "",
+            gate_spec=self._gate.to_dict() if self._gate else {},
+            judge_model=self._gate.judge_model if self._gate else "",
+        )
