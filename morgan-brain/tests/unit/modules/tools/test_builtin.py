@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import AsyncIterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -22,7 +22,6 @@ from morgan_brain.modules.tools.builtin.clock_tool import CurrentTimeTool
 from morgan_brain.modules.tools.builtin.fetch_url import FetchUrlTool
 from morgan_brain.modules.tools.builtin.memory_search import MemorySearchTool
 from morgan_brain.security.memory_gate import MemoryGate
-
 
 # ===========================================================================
 # CalculatorTool
@@ -151,7 +150,7 @@ class TestCalculatorTool:
 
 class TestCurrentTimeTool:
     def _fixed_clock(self) -> datetime:
-        return datetime(2026, 6, 8, 12, 0, 0, tzinfo=timezone.utc)
+        return datetime(2026, 6, 8, 12, 0, 0, tzinfo=UTC)
 
     def setup_method(self) -> None:
         self.tool = CurrentTimeTool(clock=self._fixed_clock)

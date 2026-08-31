@@ -13,7 +13,6 @@ from morgan_brain.interfaces.llm import ChatClient
 from morgan_brain.providers.factory import build_router
 from morgan_brain.providers.router import RoleRouter
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -54,7 +53,7 @@ def test_build_router_strong_role_exists():
 def test_build_router_fast_role_exists():
     s = _minimal_settings()
     router = build_router(s)
-    client, model = router.chat_for("fast")
+    client, _model = router.chat_for("fast")
     assert isinstance(client, ChatClient)
 
 
@@ -64,7 +63,7 @@ def test_build_router_custom_role_bindings():
         role_bindings={"strong": ["ollama:qwen2.5:7b"], "fast": ["ollama:qwen2.5:7b"]},
     )
     router = build_router(s)
-    client, model = router.chat_for("strong")
+    _client, model = router.chat_for("strong")
     assert model == "qwen2.5:7b"
 
 

@@ -8,7 +8,7 @@ All tests are deterministic:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -36,9 +36,9 @@ from morgan_brain.security.memory_gate import MemoryGate
 # Helpers
 # ---------------------------------------------------------------------------
 
-T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
-T1 = datetime(2026, 6, 1, tzinfo=timezone.utc)
-T_FAR = datetime(2027, 6, 1, tzinfo=timezone.utc)  # ~1 year later for decay tests
+T0 = datetime(2026, 1, 1, tzinfo=UTC)
+T1 = datetime(2026, 6, 1, tzinfo=UTC)
+T_FAR = datetime(2027, 6, 1, tzinfo=UTC)  # ~1 year later for decay tests
 
 
 def _make_batch(**ops_kwargs: object) -> str:
@@ -144,7 +144,7 @@ async def test_propose_calls_llm_and_returns_batch() -> None:
 
 @pytest.mark.asyncio
 async def test_apply_add_creates_current_fact() -> None:
-    consolidator, temporal, gate = _build_stack([], clock=lambda: T0)
+    consolidator, temporal, _gate = _build_stack([], clock=lambda: T0)
 
     batch = FactOpBatch(
         ops=[FactOp(op=FactOpKind.ADD, subject="user", predicate="lives_in", object="Berlin")]
@@ -349,7 +349,7 @@ async def test_decay_reduces_confidence_with_age() -> None:
 
 @pytest.mark.asyncio
 async def test_decay_flags_facts_below_threshold_as_stale() -> None:
-    consolidator, temporal, gate = _build_stack([], clock=lambda: T0)
+    consolidator, _temporal, gate = _build_stack([], clock=lambda: T0)
 
     await gate.upsert_fact(
         TemporalFact(
@@ -363,7 +363,7 @@ async def test_decay_flags_facts_below_threshold_as_stale() -> None:
     )
 
     # Very far future → confidence will be below default threshold 0.2
-    very_far = datetime(2030, 1, 1, tzinfo=timezone.utc)
+    very_far = datetime(2030, 1, 1, tzinfo=UTC)
     stale = await consolidator.decay_confidence(
         "u1", project="default", half_life_days=30.0, now=very_far, stale_threshold=0.9
     )

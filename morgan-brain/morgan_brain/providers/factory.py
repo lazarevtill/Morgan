@@ -61,7 +61,14 @@ def build_embedder(settings: Settings) -> Embedder:
     )
 
 
-async def check_llm_reachable(settings: Settings, *, timeout: float = 5.0) -> bool:
+async def check_llm_reachable(
+    settings: Settings,
+    *,
+    # ASYNC109 wants a cancel scope instead of a timeout parameter.  That is trio/anyio
+    # advice; here the value goes straight to httpx.AsyncClient, which is how asyncio
+    # code expresses the same thing.
+    timeout: float = 5.0,  # noqa: ASYNC109
+) -> bool:
     """Best-effort reachability check for the configured LLM endpoint.
 
     GETs the OpenAI-compatible ``/models`` listing, which llama-server, vLLM, and Ollama's
@@ -76,9 +83,10 @@ async def check_llm_reachable(settings: Settings, *, timeout: float = 5.0) -> bo
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.get(url, headers=headers)
-        return resp.status_code < 500
-    except Exception:  # noqa: BLE001 — unreachable is a normal answer, not an error to surface
+    except Exception:  # noqa: BLE001 -- unreachable is a normal answer, not an error to surface
         return False
+    else:
+        return resp.status_code < 500
 
 
 def build_router(settings: Settings) -> RoleRouter:

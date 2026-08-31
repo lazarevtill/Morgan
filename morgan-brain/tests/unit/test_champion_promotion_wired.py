@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -35,7 +35,7 @@ from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry, JsonMode
 from morgan_brain.providers.router import Binding, RoleRouter
 
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 
 
 # ---------------------------------------------------------------------------
@@ -64,8 +64,8 @@ def _make_orch_router(optimizer_reply: str, assistant_reply: str) -> tuple[Any, 
     - 'reflection' role returns optimizer_reply (LLM proposal).
     - 'strong' role returns assistant_reply (actual turn reply).
     """
-    from morgan_brain.composition import _assemble
     from morgan_brain.bus.inproc import InProcessBus
+    from morgan_brain.composition import _assemble
     from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
 
     # Reflection calls first, then assistant calls.
@@ -141,7 +141,7 @@ async def test_better_candidate_is_promoted() -> None:
         # CONTAINS "new body" rather than equalling it.
         return 0.8 if "new body" in body else 0.0
 
-    orch, router = _make_orch_router(
+    _orch, router = _make_orch_router(
         optimizer_reply="new body",
         assistant_reply="TestUser",
     )
@@ -176,7 +176,7 @@ async def test_worse_candidate_is_rejected() -> None:
     async def low_scorer(body: str) -> float:
         return 0.0
 
-    orch, router = _make_orch_router(
+    _orch, router = _make_orch_router(
         optimizer_reply="worse body",
         assistant_reply="bad answer",
     )
@@ -206,7 +206,7 @@ async def test_first_candidate_promoted_when_no_champion() -> None:
     async def const_scorer(body: str) -> float:
         return 0.0 if body == "" else 0.5
 
-    orch, router = _make_orch_router(
+    _orch, router = _make_orch_router(
         optimizer_reply="first body",
         assistant_reply="answer",
     )
@@ -271,8 +271,9 @@ async def test_eval_scorer_used_as_gate() -> None:
 
 def test_worker_context_has_champion_trainer_field() -> None:
     """WorkerContext dataclass must expose champion_trainer, prompt_registry, eval_scorer."""
-    from morgan_brain.composition import WorkerContext
     import dataclasses
+
+    from morgan_brain.composition import WorkerContext
 
     fields = {f.name for f in dataclasses.fields(WorkerContext)}
     assert "champion_trainer" in fields
@@ -282,8 +283,9 @@ def test_worker_context_has_champion_trainer_field() -> None:
 
 def test_app_context_has_prompt_registry_field() -> None:
     """AppContext must expose prompt_registry for brain-api champion read."""
-    from morgan_brain.composition import AppContext
     import dataclasses
+
+    from morgan_brain.composition import AppContext
 
     fields = {f.name for f in dataclasses.fields(AppContext)}
     assert "prompt_registry" in fields
@@ -300,8 +302,7 @@ def test_load_champion_override_returns_empty_when_no_champion() -> None:
 
 def test_load_champion_override_returns_body_when_champion_exists() -> None:
     """_load_champion_override returns the champion body."""
-    from morgan_brain.composition import _load_champion_override
-    from morgan_brain.composition import CHAMPION_PROMPT_NAME
+    from morgan_brain.composition import CHAMPION_PROMPT_NAME, _load_champion_override
 
     registry = LocalPromptRegistry(":memory:", clock=CLOCK)
 

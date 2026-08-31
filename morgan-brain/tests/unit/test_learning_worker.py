@@ -10,7 +10,7 @@ All tests are deterministic: fake bus + spy learner, no external services.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -19,7 +19,6 @@ from morgan_brain.bus.inproc import InProcessBus
 from morgan_brain.config import Settings
 from morgan_brain.interfaces.events import Event, EventType
 from morgan_brain.models.message import Conversation
-
 
 # ---------------------------------------------------------------------------
 # Spy learner (captures process_session calls)
@@ -58,7 +57,7 @@ def _make_fake_settings(**kwargs: Any) -> Settings:
 
 
 def _fake_clock() -> datetime:
-    return datetime(2026, 1, 1)
+    return datetime(2026, 1, 1, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +188,7 @@ def test_learning_worker_exposes_make_response_handler() -> None:
     """The module must export _make_response_handler."""
     import morgan_brain.apps.learning_worker.__main__ as mod
 
-    assert callable(mod._make_response_handler)  # noqa: SLF001
+    assert callable(mod._make_response_handler)
 
 
 def test_learning_worker_exposes_build_worker_context() -> None:

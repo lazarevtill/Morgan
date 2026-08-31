@@ -77,7 +77,7 @@ class RedisStreamsBus:
     def _get_client(self) -> Any:
         """Return the redis client, creating it lazily if needed."""
         if self._client is None:
-            import redis.asyncio as aioredis  # noqa: PLC0415
+            import redis.asyncio as aioredis
 
             self._client = aioredis.Redis.from_url(self._redis_url, decode_responses=True)
         return self._client
@@ -117,7 +117,7 @@ class RedisStreamsBus:
         # missed by a worker that starts later.
         try:
             await client.xgroup_create(self._stream, self._group, id="$", mkstream=True)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             if "BUSYGROUP" not in str(exc):
                 raise
 
@@ -139,8 +139,10 @@ class RedisStreamsBus:
             self._consume_task.cancel()
             try:
                 await self._consume_task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                pass
+            except asyncio.CancelledError:
+                pass  # expected: we just cancelled it
+            except Exception:
+                logger.exception("RedisStreamsBus: consume loop failed during stop")
             self._consume_task = None
         if self._client_owned and self._client is not None:
             # redis.asyncio exposes aclose() in recent versions; fall back to close().
@@ -169,7 +171,7 @@ class RedisStreamsBus:
                 )
             except asyncio.CancelledError:
                 break
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.exception("RedisStreamsBus: xreadgroup error")
                 await asyncio.sleep(1)
                 continue
@@ -181,7 +183,7 @@ class RedisStreamsBus:
                 for msg_id, fields in messages:
                     try:
                         await self._handle_message(msg_id, fields)
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         logger.exception("RedisStreamsBus: unhandled error for msg %s", msg_id)
 
     async def _handle_message(self, msg_id: str, fields: dict[str, str]) -> None:
@@ -193,7 +195,7 @@ class RedisStreamsBus:
         raw_data = fields.get("data", "")
         try:
             event = Event.model_validate_json(raw_data)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception(
                 "RedisStreamsBus: failed to parse event from msg %s: %r", msg_id, raw_data
             )
@@ -204,7 +206,7 @@ class RedisStreamsBus:
         for handler in list(self._handlers.get(event.type, [])):
             try:
                 await handler(event)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.exception(
                     "RedisStreamsBus: handler %s raised for event %s",
                     handler,

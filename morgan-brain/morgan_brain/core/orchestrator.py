@@ -11,7 +11,8 @@ mockable. The discipline it enforces:
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING, Any
 
 from morgan_brain.interfaces.events import Event, EventBus, EventType
 from morgan_brain.interfaces.learning import Learner
@@ -42,8 +43,8 @@ class Orchestrator:
         learner: Learner,
         bus: EventBus,
         tools: list[ToolSpec] | None = None,
-        recorder: "SignalRecorder | None" = None,
-        history_store: "SessionHistoryStore | None" = None,
+        recorder: SignalRecorder | None = None,
+        history_store: SessionHistoryStore | None = None,
     ) -> None:
         self._perception = perception
         self._personalizer = personalizer

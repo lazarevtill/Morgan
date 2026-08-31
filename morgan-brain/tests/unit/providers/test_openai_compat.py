@@ -6,15 +6,14 @@ Construction and message/tool translation only — NO network calls.
 from __future__ import annotations
 
 from morgan_brain.interfaces.llm import ChatClient
+from morgan_brain.providers.adapters.ollama import OllamaAdapter
 from morgan_brain.providers.adapters.openai_compat import (
     OpenAICompatAdapter,
+    _from_openai_tool_calls,
     _to_openai_messages,
     _to_openai_tools,
-    _from_openai_tool_calls,
 )
-from morgan_brain.providers.adapters.ollama import OllamaAdapter
 from morgan_brain.providers.wire import ChatMessage, ToolCall, ToolSpec
-
 
 # ---------------------------------------------------------------------------
 # Construction

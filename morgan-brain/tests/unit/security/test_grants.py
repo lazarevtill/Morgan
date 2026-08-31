@@ -13,7 +13,6 @@ import pytest
 
 from morgan_brain.security.permissions import Grant, PermissionGate, PermissionMode
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -1,11 +1,11 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from morgan_brain.composition import build_orchestrator_for_test
 
 
 async def test_chat_loop_generates_and_recalls():
     orch, mem = build_orchestrator_for_test(
-        reply="Nice to meet you!", clock=lambda: datetime(2026, 1, 1)
+        reply="Nice to meet you!", clock=lambda: datetime(2026, 1, 1, tzinfo=UTC)
     )
     await mem.bus.start()
 
@@ -23,7 +23,9 @@ async def test_chat_loop_generates_and_recalls():
 
 
 async def test_chat_loop_is_user_scoped():
-    orch, mem = build_orchestrator_for_test(reply="ok", clock=lambda: datetime(2026, 1, 1))
+    orch, mem = build_orchestrator_for_test(
+        reply="ok", clock=lambda: datetime(2026, 1, 1, tzinfo=UTC)
+    )
     await mem.bus.start()
     await orch.handle_turn(user_id="u1", project="default", text="secret for u1", session_id="s1")
     await mem.bus.drain()

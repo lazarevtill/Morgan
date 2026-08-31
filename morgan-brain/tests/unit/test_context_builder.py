@@ -6,15 +6,17 @@ from morgan_brain.modules.reasoning.context.builder import build_messages
 
 
 def _request(**kw) -> ReasoningRequest:
-    base = dict(
-        user_id="u1",
-        project="p",
-        perception=FusedPerception(text="where do I live?"),
-        personalization=PersonalizedContext(system_fragment="User prefers terse replies."),
-        memories=[Memory(user_id="u1", kind=MemoryKind.SEMANTIC, content="User lives in Berlin")],
-        history=[],
-        skill_prompt="",
-    )
+    base = {
+        "user_id": "u1",
+        "project": "p",
+        "perception": FusedPerception(text="where do I live?"),
+        "personalization": PersonalizedContext(system_fragment="User prefers terse replies."),
+        "memories": [
+            Memory(user_id="u1", kind=MemoryKind.SEMANTIC, content="User lives in Berlin")
+        ],
+        "history": [],
+        "skill_prompt": "",
+    }
     base.update(kw)
     return ReasoningRequest(**base)
 

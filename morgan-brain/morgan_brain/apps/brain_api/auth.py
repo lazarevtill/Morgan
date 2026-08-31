@@ -33,7 +33,8 @@ internal verify logic is entirely local to this module.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import structlog
 from fastapi import HTTPException, Request, Security, status

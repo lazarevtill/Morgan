@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from morgan_brain.providers.router import Binding, RoleRouter
-from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.adapters.fake import FakeChatClient
+from morgan_brain.providers.capability import CapabilityRegistry
+from morgan_brain.providers.router import Binding, RoleRouter
 
 
 def _reg() -> CapabilityRegistry:
@@ -36,7 +36,7 @@ async def test_router_capability_gate_skips_incapable_binding() -> None:
         reg=_reg(),
         bindings={"strong": [Binding("p", "weak", weak), Binding("p", "strong", strong)]},
     )
-    client, model = r.chat_for("strong", needs_tools=True)  # weak gated out
+    _client, model = r.chat_for("strong", needs_tools=True)  # weak gated out
     assert model == "strong"
 
 

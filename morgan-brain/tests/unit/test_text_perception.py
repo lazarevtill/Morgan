@@ -1,5 +1,5 @@
-from morgan_brain.modules.perception.text.analyzer import TextPerception
 from morgan_brain.models.perception import Modality
+from morgan_brain.modules.perception.text.analyzer import TextPerception
 
 
 async def test_returns_fused_perception_for_text():

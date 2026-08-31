@@ -20,7 +20,7 @@ from __future__ import annotations
 import ast
 import math
 import operator
-from typing import Any, Union
+from typing import Any
 
 from morgan_brain.interfaces.tools import ToolResult
 
@@ -70,7 +70,7 @@ _UNARYOP_MAP: dict[type[ast.unaryop], Any] = {
     ast.UAdd: operator.pos,
 }
 
-_Number = Union[int, float]
+_Number = int | float
 
 
 def _check_int_magnitude(value: int, op_name: str) -> None:
@@ -122,7 +122,7 @@ def _guard_pow(left: _Number, right: _Number) -> _Number:
 def _eval_node(node: ast.AST) -> _Number:
     """Recursively evaluate a safe AST node; raise ``ValueError`` for anything else."""
     if not isinstance(node, _ALLOWED_NODE_TYPES):
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004 -- ValueError is this module's single error contract
             f"Unsafe or unsupported expression node: {type(node).__name__!r}. "
             "Only arithmetic operators and numeric literals are allowed."
         )
@@ -132,7 +132,8 @@ def _eval_node(node: ast.AST) -> _Number:
 
     if isinstance(node, ast.Constant):
         if not isinstance(node.value, (int, float)):
-            raise ValueError(f"Non-numeric literal: {node.value!r}")
+            # ValueError, not TypeError: see the contract note above.
+            raise ValueError(f"Non-numeric literal: {node.value!r}")  # noqa: TRY004
         return node.value
 
     if isinstance(node, ast.BinOp):

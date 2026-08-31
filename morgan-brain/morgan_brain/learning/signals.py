@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
-from typing import Callable
 
 from morgan_brain.models.base import UserScoped
 from morgan_brain.models.memory import DEFAULT_PROJECT

@@ -1,8 +1,10 @@
 """Provider-neutral wire types (OpenAI Chat Completions shape). No provider SDK imported here."""
 
 from __future__ import annotations
+
 import json
 from typing import Any, Literal
+
 from pydantic import BaseModel, Field
 
 Role = Literal["system", "user", "assistant", "tool"]

@@ -12,30 +12,34 @@ import pathlib
 import sqlite3
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, cast
+from datetime import UTC, datetime
+from typing import Any, cast
 
 import structlog
 
+from morgan_brain.bus import get_event_bus
+from morgan_brain.bus.inproc import InProcessBus
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.core.orchestrator import Orchestrator
 from morgan_brain.eval.golden import default_golden_path, load_golden_set
 from morgan_brain.eval.harness import EvalHarness
 from morgan_brain.eval.judge import LLMJudge
 from morgan_brain.eval.runner import make_eval_scorer, make_predict_fn
-from morgan_brain.interfaces.events import Event, EventType
+from morgan_brain.interfaces.events import Event, EventBus, EventType
 from morgan_brain.interfaces.tools import BaseTool
 from morgan_brain.learning.champion_trainer import ChampionTrainer
 from morgan_brain.learning.consolidation import MemoryConsolidator
+from morgan_brain.learning.history import SessionHistoryStore
 from morgan_brain.learning.learner import ConsolidationLearner
 from morgan_brain.learning.optimizer import AnyScorer, ReflectiveOptimizer
 from morgan_brain.learning.profile import UserProfileBuilder
-from morgan_brain.learning.history import SessionHistoryStore
 from morgan_brain.learning.recorder import SignalRecorder
 from morgan_brain.learning.signals import SignalStore
 from morgan_brain.learning_lifecycle.factory import build_registry
 from morgan_brain.learning_lifecycle.interfaces import PromptRegistry
+from morgan_brain.learning_lifecycle.local import LocalPromptRegistry
 from morgan_brain.models.memory import DEFAULT_PROJECT, Memory
 from morgan_brain.models.message import Conversation, Message, Role
 from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder
@@ -54,13 +58,12 @@ from morgan_brain.modules.memory.stores.vector import (
 from morgan_brain.modules.perception.text.analyzer import TextPerception
 from morgan_brain.modules.personalization.adaptive import AdaptivePersonalizer
 from morgan_brain.modules.reasoning.reasoner import ReasoningModule
+from morgan_brain.modules.skills.registry import SkillRegistry
 from morgan_brain.modules.tools.builtin.calculator import CalculatorTool
 from morgan_brain.modules.tools.builtin.clock_tool import CurrentTimeTool
 from morgan_brain.modules.tools.builtin.fetch_url import FetchUrlTool
 from morgan_brain.modules.tools.builtin.memory_search import MemorySearchTool
 from morgan_brain.modules.tools.executor import ToolExecutorImpl, ToolRegistry
-from morgan_brain.learning_lifecycle.local import LocalPromptRegistry
-from morgan_brain.modules.skills.registry import SkillRegistry
 from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.factory import build_embedder, build_router
@@ -68,9 +71,6 @@ from morgan_brain.providers.router import Binding, RoleRouter
 from morgan_brain.providers.wire import ChatResult, ToolSpec
 from morgan_brain.security.memory_gate import MemoryGate
 from morgan_brain.security.permissions import Grant, PermissionGate, PermissionMode
-from morgan_brain.bus import get_event_bus
-from morgan_brain.bus.inproc import InProcessBus
-from morgan_brain.interfaces.events import EventBus
 
 # Name used when storing the system-prompt champion in the registry.
 CHAMPION_PROMPT_NAME = "morgan-system"
@@ -79,7 +79,7 @@ log = structlog.get_logger("composition")
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _run_coro_isolated(coro: Any) -> Any:
@@ -235,7 +235,7 @@ def _assemble(
     conn: sqlite3.Connection | None = None,
     temporal_path: str = ":memory:",
     prompt_registry: LocalPromptRegistry | None = None,
-    history_store: "SessionHistoryStore | None" = None,
+    history_store: SessionHistoryStore | None = None,
     bus: EventBus | None = None,
     vectors: VectorIndex | None = None,
 ) -> tuple[
@@ -336,7 +336,7 @@ class AppContext:
     prompt_registry: PromptRegistry
     bus: EventBus
     vectors: VectorIndex
-    history_store: "SessionHistoryStore | None" = field(default=None)
+    history_store: SessionHistoryStore | None = field(default=None)
 
 
 def _load_champion_override(registry: PromptRegistry) -> str:
@@ -357,9 +357,14 @@ def _load_champion_override(registry: PromptRegistry) -> str:
             version = loop.run_until_complete(registry.champion(CHAMPION_PROMPT_NAME))
         finally:
             loop.close()
-        return version.body if version is not None else ""
     except Exception:
+        # Falling back to no override keeps the service startable, but a champion that
+        # cannot be read is a learning outage: every turn silently loses the promoted
+        # preprompt.  That has to be visible in the log, not swallowed.
+        log.exception("champion.load-failed", prompt=CHAMPION_PROMPT_NAME)
         return ""
+    else:
+        return version.body if version is not None else ""
 
 
 class ChampionCache:
@@ -588,7 +593,7 @@ def build_worker_context(settings: Settings | None = None) -> WorkerContext:
 
     # Eval-backed scorer: run the real assistant over the golden set.
     golden_path_str = settings.eval_golden_path
-    golden_items = load_golden_set(golden_path_str if golden_path_str else default_golden_path())
+    golden_items = load_golden_set(golden_path_str or default_golden_path())
     judge = LLMJudge(router=router, role="judge")
     harness = EvalHarness(judge=judge)
     # with_confidence=True so the eval harness computes + logs calibration (Brier/ECE) on every
@@ -639,7 +644,7 @@ def build_orchestrator_for_test(
     *,
     reply: str,
     clock: Callable[[], datetime],
-    chat_results: "list[ChatResult] | None" = None,
+    chat_results: list[ChatResult] | None = None,
 ) -> tuple[Orchestrator, MemoryTestHandle]:
     """Test wiring: fake embedder + fake LLM + in-memory stores. Returns (orchestrator, memory
     handle) where the memory handle exposes recall_raw() for assertions.
@@ -689,7 +694,7 @@ def build_orchestrator_for_test_with_signals(
     *,
     reply: str,
     clock: Callable[[], datetime],
-    chat_results: "list[ChatResult] | None" = None,
+    chat_results: list[ChatResult] | None = None,
 ) -> tuple[Orchestrator, SignalStore, InProcessBus]:
     """Test wiring variant that also returns the SignalStore and InProcessBus.
 
@@ -731,4 +736,4 @@ def build_orchestrator_for_test_with_signals(
 def sqlite_path(url: str) -> str:
     """Turn a sqlite:/// URL into a filesystem path; pass through ':memory:'."""
     prefix = "sqlite:///"
-    return url[len(prefix) :] if url.startswith(prefix) else url
+    return url.removeprefix(prefix)

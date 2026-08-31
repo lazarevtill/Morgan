@@ -14,7 +14,6 @@ can verify judge calibration without any external library.
 
 from __future__ import annotations
 
-
 # ---------------------------------------------------------------------------
 # Retrieval scorers (L1)
 # ---------------------------------------------------------------------------
@@ -98,10 +97,10 @@ def cohen_kappa(a: list[bool], b: list[bool]) -> float:
     # lengths were checked above, so tp + tn + fp + fn == n by construction -- there is no
     # invariant left for a runtime check to catch.
     # TP: both True, TN: both False, FP: a=False b=True, FN: a=True b=False
-    tp = sum(1 for x, y in zip(a, b) if x and y)
-    tn = sum(1 for x, y in zip(a, b) if not x and not y)
-    fp = sum(1 for x, y in zip(a, b) if not x and y)
-    fn = sum(1 for x, y in zip(a, b) if x and not y)
+    tp = sum(1 for x, y in zip(a, b, strict=False) if x and y)
+    tn = sum(1 for x, y in zip(a, b, strict=False) if not x and not y)
+    fp = sum(1 for x, y in zip(a, b, strict=False) if not x and y)
+    fn = sum(1 for x, y in zip(a, b, strict=False) if x and not y)
 
     # Marginals
     a_pos = tp + fn  # a says True

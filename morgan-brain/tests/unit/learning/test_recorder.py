@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
 from morgan_brain.learning.recorder import SignalRecorder
 from morgan_brain.learning.signals import SignalStore, Thumb
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-FIXED_CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+FIXED_CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 
 
 @pytest.fixture

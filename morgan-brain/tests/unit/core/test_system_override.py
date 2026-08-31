@@ -9,7 +9,7 @@ Asserts:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -19,7 +19,7 @@ from morgan_brain.models.memory import Memory, MemoryKind
 from morgan_brain.models.perception import FusedPerception
 from morgan_brain.modules.reasoning.context.builder import _BASE_SYSTEM, build_messages
 
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 
 
 # ---------------------------------------------------------------------------
@@ -28,15 +28,15 @@ CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
 
 
 def _request(**kw: object) -> ReasoningRequest:
-    base: dict[str, object] = dict(
-        user_id="u1",
-        project="p",
-        perception=FusedPerception(text="test query"),
-        personalization=PersonalizedContext(system_fragment=""),
-        memories=[],
-        history=[],
-        skill_prompt="",
-    )
+    base: dict[str, object] = {
+        "user_id": "u1",
+        "project": "p",
+        "perception": FusedPerception(text="test query"),
+        "personalization": PersonalizedContext(system_fragment=""),
+        "memories": [],
+        "history": [],
+        "skill_prompt": "",
+    }
     base.update(kw)
     return ReasoningRequest(**base)  # type: ignore[arg-type]
 
@@ -82,9 +82,9 @@ def test_system_override_with_memories_and_personalization() -> None:
 async def test_handle_turn_system_override_in_system_message() -> None:
     """handle_turn with system_override causes override text to appear in the
     system message sent to the fake client."""
-    from morgan_brain.providers.adapters.fake import FakeChatClient
     from morgan_brain.bus.inproc import InProcessBus
     from morgan_brain.config import Settings
+    from morgan_brain.providers.adapters.fake import FakeChatClient
 
     override_text = "CHAMPION_OVERRIDE_SENTINEL"
     fake_client = FakeChatClient(reply="answer")
@@ -114,10 +114,10 @@ def _build_orch_with_inspectable_client(
     bus: object,
 ) -> tuple[object, object]:
     """Helper — builds a minimal Orchestrator whose FakeChatClient we can inspect."""
-    from morgan_brain.providers.capability import CapabilityRegistry
-    from morgan_brain.providers.router import Binding, RoleRouter
     from morgan_brain.composition import _assemble
     from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
+    from morgan_brain.providers.capability import CapabilityRegistry
+    from morgan_brain.providers.router import Binding, RoleRouter
 
     fc = fake_client  # type: ignore[assignment]
     s = settings  # type: ignore[assignment]
@@ -148,9 +148,9 @@ def _build_orch_with_inspectable_client(
 @pytest.mark.asyncio
 async def test_handle_turn_no_override_no_sentinel() -> None:
     """Default (no system_override) does NOT add sentinel to system message."""
-    from morgan_brain.providers.adapters.fake import FakeChatClient
     from morgan_brain.bus.inproc import InProcessBus
     from morgan_brain.config import Settings
+    from morgan_brain.providers.adapters.fake import FakeChatClient
 
     sentinel = "CHAMPION_OVERRIDE_SENTINEL"
     fake_client = FakeChatClient(reply="answer")
@@ -170,9 +170,9 @@ async def test_handle_turn_no_override_no_sentinel() -> None:
 @pytest.mark.asyncio
 async def test_handle_turn_with_id_system_override() -> None:
     """handle_turn_with_id also threads system_override into the system message."""
-    from morgan_brain.providers.adapters.fake import FakeChatClient
     from morgan_brain.bus.inproc import InProcessBus
     from morgan_brain.config import Settings
+    from morgan_brain.providers.adapters.fake import FakeChatClient
 
     sentinel = "OVERRIDE_FOR_TURN_WITH_ID"
     fake_client = FakeChatClient(reply="ok")

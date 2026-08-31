@@ -7,7 +7,7 @@ the self-learning loop) never reached a streamed turn. These tests pin the fix.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -18,7 +18,7 @@ from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import Binding, RoleRouter
 
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 CHAMPION = "CHAMPION-PREPROMPT-XYZ: always answer like a pirate."
 
 

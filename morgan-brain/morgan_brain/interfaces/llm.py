@@ -1,7 +1,13 @@
-"""ChatClient seam — provider-agnostic chat. Callers normally use RoleRouter, not a client directly."""
+"""ChatClient seam — provider-agnostic chat.
+
+Callers normally use RoleRouter, not a client directly.
+"""
 
 from __future__ import annotations
-from typing import Any, AsyncIterator, Protocol, runtime_checkable
+
+from collections.abc import AsyncIterator
+from typing import Any, Protocol, runtime_checkable
+
 from morgan_brain.providers.wire import ChatMessage, ChatResult, StreamDelta, ToolSpec
 
 

@@ -10,7 +10,7 @@ the full build_orchestrator_for_test builder path.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -22,7 +22,7 @@ from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import Binding, RoleRouter
 
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 
 
 def _make_router(fake_client: FakeChatClient) -> RoleRouter:
@@ -150,12 +150,12 @@ async def test_history_is_session_scoped_not_cross_session() -> None:
     # The only user message should be the current turn (session B's question).
     user_msgs = [m for m in history_msgs if m.role == "user"]
     # Session A's "My name is Alice." must not appear as an injected history message.
-    assert not any("My name is Alice." == m.content for m in user_msgs), (
+    assert not any(m.content == "My name is Alice." for m in user_msgs), (
         f"Session A's user message leaked into session B as history: {messages}"
     )
     # Session A's "Alice noted." must not appear as an injected assistant history message.
     assistant_msgs = [m for m in history_msgs if m.role == "assistant"]
-    assert not any("Alice noted." == m.content for m in assistant_msgs), (
+    assert not any(m.content == "Alice noted." for m in assistant_msgs), (
         f"Session A's assistant message leaked into session B as history: {messages}"
     )
 

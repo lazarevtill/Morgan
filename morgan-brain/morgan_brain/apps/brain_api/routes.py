@@ -23,9 +23,8 @@ from morgan_brain.apps.brain_api.auth import require_api_key
 from morgan_brain.config import Settings
 from morgan_brain.learning.recorder import SignalRecorder
 from morgan_brain.learning.signals import Thumb
-from morgan_brain.modules.tools.executor import ToolExecutorImpl
 from morgan_brain.modules.skills.registry import SkillRegistry
-
+from morgan_brain.modules.tools.executor import ToolExecutorImpl
 
 # ---------------------------------------------------------------------------
 # Request / response models
@@ -109,7 +108,7 @@ def build_router(
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=f"Invalid thumb value '{req.thumb}'; must be 'up' or 'down'.",
-                )
+                ) from None
             await signal_recorder.add_thumb(turn_id=req.turn_id, user_id=user_id, thumb=thumb_val)
         else:
             raise HTTPException(

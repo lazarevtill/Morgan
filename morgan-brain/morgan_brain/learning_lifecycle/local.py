@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from morgan_brain.learning_lifecycle.interfaces import Optimizer, PromptRegistry, PromptVersion
@@ -29,7 +29,7 @@ from morgan_brain.learning_lifecycle.interfaces import Optimizer, PromptRegistry
 
 def _utcnow() -> datetime:
     """Timezone-aware UTC now (replaces the deprecated ``datetime.utcnow``)."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 _SCHEMA = """
@@ -118,7 +118,8 @@ class LocalPromptRegistry:
         now = self._clock()
         self._conn.execute(
             """
-            INSERT INTO prompt_versions (name, version, body, created_at, metrics_json, commit_message)
+            INSERT INTO prompt_versions
+                (name, version, body, created_at, metrics_json, commit_message)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
             (

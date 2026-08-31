@@ -36,7 +36,8 @@ class EntityIndex:
         conn.commit()
         self._migrate_project_column()
         conn.executescript(
-            "CREATE INDEX IF NOT EXISTS idx_entities_lookup ON memory_entities (user_id, project, name);"
+            "CREATE INDEX IF NOT EXISTS idx_entities_lookup "
+            "ON memory_entities (user_id, project, name);"
         )
         conn.commit()
 

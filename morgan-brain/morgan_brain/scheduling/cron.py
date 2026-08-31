@@ -127,12 +127,8 @@ class InProcessScheduler:
         if interval_seconds is None and cron is None:
             raise ValueError(f"Job {name!r}: must specify interval_seconds or cron")
 
-        effective_interval: float
-        if interval_seconds is not None:
-            effective_interval = interval_seconds
-        else:
-            # Approximate: cron-only job fires every hour by default.
-            effective_interval = 3600.0
+        # A cron-only job has no interval of its own; approximate it as hourly.
+        effective_interval: float = interval_seconds if interval_seconds is not None else 3600.0
 
         self._jobs[name] = _JobEntry(name, fn, effective_interval)
         logger.debug(

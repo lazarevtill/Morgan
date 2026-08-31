@@ -99,7 +99,7 @@ async def test_publish_received_by_subscriber(
     # Wait up to _TIMEOUT seconds for the handler to fire.
     try:
         await asyncio.wait_for(ready.wait(), timeout=_TIMEOUT)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         pytest.fail(
             f"Subscriber did not receive the event within {_TIMEOUT}s. "
             "Is Redis running at %s?" % _redis_url()
@@ -143,7 +143,7 @@ async def test_multiple_event_types_routed_correctly(
 
     try:
         await asyncio.wait_for(both_ready.wait(), timeout=_TIMEOUT)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         pytest.fail("Did not receive both event types within timeout.")
 
     assert len(heartbeats) >= 1

@@ -72,7 +72,7 @@ class CapabilityRegistry:
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_seed(cls, data: dict[str, Any]) -> "CapabilityRegistry":
+    def from_seed(cls, data: dict[str, Any]) -> CapabilityRegistry:
         """Build a registry from a plain dict keyed by "provider/model".
 
         Each value is a dict of field overrides; missing fields use conservative defaults.
@@ -92,7 +92,7 @@ class CapabilityRegistry:
         return cls(store)
 
     @classmethod
-    def from_packaged(cls) -> "CapabilityRegistry":
+    def from_packaged(cls) -> CapabilityRegistry:
         """Load the vendored seed from ``providers/data/model_capabilities.json``."""
         data_path = Path(__file__).parent / "data" / "model_capabilities.json"
         with data_path.open("r", encoding="utf-8") as fh:

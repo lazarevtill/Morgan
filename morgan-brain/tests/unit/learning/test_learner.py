@@ -9,12 +9,12 @@ Verifies that ConsolidationLearner:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from morgan_brain.interfaces.learning import Learner
-from morgan_brain.learning.consolidation import FactOp, FactOpBatch, FactOpKind
+from morgan_brain.learning.consolidation import FactOp, FactOpBatch, FactOpKind, MemoryConsolidator
 from morgan_brain.learning.learner import ConsolidationLearner
 from morgan_brain.models.memory import Memory, MemoryKind, MemoryQuery, MemorySource
 from morgan_brain.models.message import Conversation, Message, Role
@@ -31,9 +31,8 @@ from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import Binding, RoleRouter
 from morgan_brain.security.memory_gate import MemoryGate
-from morgan_brain.learning.consolidation import MemoryConsolidator
 
-T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _build_learner(
@@ -190,7 +189,7 @@ async def test_consolidate_applies_add_op() -> None:
 async def test_consolidate_returns_none_not_ops() -> None:
     """consolidate() matches the Protocol return type (None / no return value)."""
     batch = FactOpBatch(ops=[])
-    learner, gate, _ = _build_learner([batch.model_dump_json()])
+    learner, _gate, _ = _build_learner([batch.model_dump_json()])
 
     result = await learner.consolidate("u1")
     assert result is None

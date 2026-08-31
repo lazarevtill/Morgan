@@ -87,7 +87,8 @@ class ToolExecutorImpl:
         Steps
         -----
         1. Look up the tool — unknown tool → ``ToolResult(ok=False, error="unknown tool: ...")``.
-        2. ``gate.check(name, params=list(kwargs))`` — denied → ``ToolResult(ok=False, error="permission denied")``.
+        2. ``gate.check(name, params=list(kwargs))`` — denied →
+           ``ToolResult(ok=False, error="permission denied")``.
         3. ``await tool.run(user_id=user_id, project=project, **kwargs)`` — exception caught →
            ``ToolResult(ok=False, error=...)``.
         4. Publish ``TOOL_INVOKED`` event if a bus is configured.

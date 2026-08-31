@@ -70,13 +70,13 @@ def build_registry(settings: Settings, *, conn: sqlite3.Connection | None = None
     _force_mlflow_privacy()
 
     try:
-        import mlflow as _mlflow  # type: ignore[import-not-found]  # noqa: F401
-    except ImportError:
+        import mlflow as _mlflow  # noqa: F401
+    except ImportError as exc:
         raise NotImplementedError(
             "MLflow registry backend lands in Wave 1/5; "
             "install with: pip install 'morgan-brain[learning]'. "
             "Telemetry env vars enforced."
-        )
+        ) from exc
 
     raise NotImplementedError(
         "MLflow registry backend lands in Wave 1/5 (GEPA via mlflow.genai.optimize_prompts). "

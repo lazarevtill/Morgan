@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import structlog
@@ -48,7 +48,7 @@ _logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -57,10 +57,10 @@ def _utcnow() -> datetime:
 
 
 def _make_response_handler(
-    learner: "ConsolidationLearner",
+    learner: ConsolidationLearner,
     *,
     clock: Callable[[], datetime] = _utcnow,
-) -> "Handler":
+) -> Handler:
     """Return an async handler that processes a RESPONSE_GENERATED event.
 
     Reconstructs a :class:`Conversation` from the event payload and calls
@@ -109,19 +109,19 @@ def _make_response_handler(
 # ---------------------------------------------------------------------------
 
 
-def _build_cron_service() -> "CronService":
+def _build_cron_service() -> CronService:
     from morgan_brain.scheduling.cron import CronService
 
     return CronService(clock=_utcnow)
 
 
 def _build_learning_scheduler(
-    cron: "CronService",
-    learner: "ConsolidationLearner",
-    champion_trainer: "Any | None" = None,
-    signal_store: "Any | None" = None,
-    eval_scorer: "Any | None" = None,
-) -> "LearningScheduler | None":
+    cron: CronService,
+    learner: ConsolidationLearner,
+    champion_trainer: Any | None = None,
+    signal_store: Any | None = None,
+    eval_scorer: Any | None = None,
+) -> LearningScheduler | None:
     """Build a :class:`LearningScheduler` over the real learner from the worker context.
 
     Registers nightly consolidation always. Registers the eval-gated optimizer job only when
@@ -157,10 +157,11 @@ def _build_learning_scheduler(
             with_optimizer=optimizer_enabled,
             enable_champion_promotion=settings.enable_champion_promotion,
         )
-        return ls
     except Exception:
         log.exception("learning-scheduler.build-failed")
         return None
+    else:
+        return ls
 
 
 # ---------------------------------------------------------------------------

@@ -9,12 +9,11 @@ from morgan_brain.interfaces.personalization import PersonalizedContext
 from morgan_brain.interfaces.reasoning import ReasoningRequest, ReasoningResult
 from morgan_brain.models.memory import Memory
 from morgan_brain.models.perception import FusedPerception
+from morgan_brain.modules.reasoning.reasoner import ReasoningModule
 from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import Binding, RoleRouter
 from morgan_brain.providers.wire import ChatResult, ToolCall, ToolSpec
-from morgan_brain.modules.reasoning.reasoner import ReasoningModule
-
 
 # ---------------------------------------------------------------------------
 # Helpers

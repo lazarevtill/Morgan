@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel
 
-from morgan_brain.providers.structured import StructuredError, generate_structured
-from morgan_brain.providers.capability import CapabilityDescriptor, JsonMode
 from morgan_brain.providers.adapters.fake import FakeChatClient
+from morgan_brain.providers.capability import CapabilityDescriptor, JsonMode
+from morgan_brain.providers.structured import StructuredError, generate_structured
 
 
 class Person(BaseModel):

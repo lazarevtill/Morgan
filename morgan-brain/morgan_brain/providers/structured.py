@@ -21,7 +21,7 @@ validate-and-re-ask spine already works without them.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Type, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -38,12 +38,12 @@ class StructuredError(Exception):
     """Raised when *generate_structured* exhausts all re-ask retries without a valid parse."""
 
 
-async def generate_structured(
-    client: "ChatClient",
+async def generate_structured[M: BaseModel](
+    client: ChatClient,
     messages: list[ChatMessage],
     *,
     model: str,
-    schema: Type[M],
+    schema: type[M],
     descriptor: CapabilityDescriptor,
     max_reask: int = 2,
 ) -> M:
@@ -129,9 +129,10 @@ async def generate_structured(
 
         try:
             parsed: M = schema.model_validate_json(result.text)
-            return parsed
         except (ValidationError, json.JSONDecodeError, ValueError) as exc:
             last_error = str(exc)
+        else:
+            return parsed
 
     raise StructuredError(
         f"Failed to parse a valid {schema.__name__} after {total_attempts} attempt(s). "

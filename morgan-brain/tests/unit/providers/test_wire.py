@@ -1,4 +1,4 @@
-from morgan_brain.providers.wire import ChatMessage, ChatResult, StreamDelta, Usage, ToolCall
+from morgan_brain.providers.wire import ChatMessage, ChatResult, StreamDelta, ToolCall, Usage
 
 
 def test_chatmessage_roundtrips_openai_dict():

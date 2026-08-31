@@ -10,13 +10,16 @@ Tests:
 
 from __future__ import annotations
 
-from datetime import datetime
+import json as _json
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.responses import StreamingResponse
 from httpx import ASGITransport, AsyncClient
 
+from morgan_brain import __version__
 from morgan_brain.apps.brain_api.app import ChatRequest, ChatResponse
 from morgan_brain.apps.brain_api.auth import require_api_key
 from morgan_brain.apps.brain_api.routes import build_router
@@ -27,12 +30,8 @@ from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
 from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import Binding, RoleRouter
-from morgan_brain import __version__
 
-import json as _json
-from typing import AsyncIterator
-
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 API_KEY = "e2e-chat-key"
 AUTH_HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
@@ -55,7 +54,7 @@ def _build_app(reply: str = "hello from fake") -> FastAPI:
         bindings={"strong": [Binding("fake", "test-model", fake_client)]},
     )
     history_store = SessionHistoryStore()
-    orch, _, signal_store, recorder, executor, skills, learner = _assemble(
+    orch, _, _signal_store, recorder, executor, skills, learner = _assemble(
         embedder=FakeEmbedder(dim=16),
         router=router,
         settings=settings,
@@ -144,16 +143,18 @@ async def test_chat_returns_200_with_response_model_used_turn_id() -> None:
 async def test_chat_stream_yields_sse_lines_ending_with_done() -> None:
     """/api/chat/stream returns SSE lines ending with data: [DONE]."""
     app = _build_app("streamed reply")
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        async with c.stream(
+    async with (
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c,
+        c.stream(
             "POST",
             "/api/chat/stream",
             json={"message": "stream me", "project": "default", "session_id": "s1"},
             headers=AUTH_HEADERS,
-        ) as resp:
-            assert resp.status_code == 200
-            assert "text/event-stream" in resp.headers.get("content-type", "")
-            raw = await resp.aread()
+        ) as resp,
+    ):
+        assert resp.status_code == 200
+        assert "text/event-stream" in resp.headers.get("content-type", "")
+        raw = await resp.aread()
 
     text = raw.decode()
     lines = [ln for ln in text.splitlines() if ln.startswith("data:")]

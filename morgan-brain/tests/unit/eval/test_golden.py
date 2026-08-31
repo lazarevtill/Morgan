@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from morgan_brain.eval.golden import GoldenItem, ProbeType, load_golden_set
-
 # Path to the golden set — relative to the repo root but resolved at runtime.
 import pathlib
+
+from morgan_brain.eval.golden import GoldenItem, ProbeType, load_golden_set
 
 _GOLDEN_PATH = pathlib.Path(__file__).parent.parent.parent / "eval" / "golden_set.json"
 

@@ -15,9 +15,9 @@ Design invariants:
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from collections.abc import Callable
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Callable
 
 from pydantic import BaseModel, Field
 
@@ -33,7 +33,6 @@ from morgan_brain.providers.router import RoleRouter
 from morgan_brain.providers.structured import generate_structured
 from morgan_brain.providers.wire import ChatMessage
 from morgan_brain.security.memory_gate import MemoryGate
-
 
 # ---------------------------------------------------------------------------
 # Domain types
@@ -361,7 +360,7 @@ class MemoryConsolidator:
 
     def _provider_for_model(self, model: str) -> str:
         """Best-effort: find the provider string for a model from registered bindings."""
-        for binding_list in self._router._bindings.values():  # noqa: SLF001
+        for binding_list in self._router._bindings.values():
             for binding in binding_list:
                 if binding.model == model:
                     return binding.provider
@@ -415,9 +414,8 @@ def _ensure_comparable(ref: datetime, now: datetime) -> datetime:
     """Return *ref* in the same tz-awareness as *now* to allow subtraction."""
     if now.tzinfo is not None and ref.tzinfo is None:
         # now is tz-aware, ref is naive — treat ref as UTC.
-        from datetime import timezone
 
-        return ref.replace(tzinfo=timezone.utc)
+        return ref.replace(tzinfo=UTC)
     if now.tzinfo is None and ref.tzinfo is not None:
         # now is naive, ref is tz-aware — strip tz from ref.
         return ref.replace(tzinfo=None)

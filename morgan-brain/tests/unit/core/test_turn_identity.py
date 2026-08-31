@@ -9,14 +9,14 @@ Asserts:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
 from morgan_brain.composition import build_orchestrator_for_test_with_signals
 
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 
 
 @pytest.mark.asyncio

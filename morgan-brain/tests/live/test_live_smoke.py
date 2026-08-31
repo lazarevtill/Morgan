@@ -129,19 +129,21 @@ async def test_live_chat_stream_ends_with_done() -> None:
     app = _build_live_app()
     headers = _live_auth_headers()
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-        timeout=120.0,
-    ) as c:
-        async with c.stream(
+    async with (
+        AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+            timeout=120.0,
+        ) as c,
+        c.stream(
             "POST",
             "/api/chat/stream",
             json={"message": "Say hi", "session_id": "smoke-stream"},
             headers=headers,
-        ) as resp:
-            assert resp.status_code == 200
-            raw = await resp.aread()
+        ) as resp,
+    ):
+        assert resp.status_code == 200
+        raw = await resp.aread()
 
     text = raw.decode()
     lines = [ln for ln in text.splitlines() if ln.startswith("data:")]

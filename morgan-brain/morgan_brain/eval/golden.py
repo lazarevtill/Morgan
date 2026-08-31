@@ -5,7 +5,8 @@ ProbeType taxonomy (per the ADR / LongMemEval):
 - IMPLICIT_TRAIT         — a trait inferred from patterns, not stated directly.
 - PREFERENCE_UPDATE      — the value AFTER the owner changed their mind (tests anti-staleness).
 - LONG_GAP_DECAY         — fact mentioned long ago; may have decayed (tests uncertainty signalling).
-- OVER_PERSONALIZATION_NEGATIVE — a stale preference that must NOT be applied (anti-sycophancy gate).
+- OVER_PERSONALIZATION_NEGATIVE — a stale preference that must NOT be applied
+  (anti-sycophancy gate).
 - ABSTENTION             — no known fact; assistant should say "I don't know".
 
 GoldenItem.should_inject:

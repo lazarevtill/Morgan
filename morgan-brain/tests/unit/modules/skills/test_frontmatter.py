@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from morgan_brain.modules.skills.frontmatter import parse_frontmatter
 
-
 # ---------------------------------------------------------------------------
 # Happy-path: scalar + integer version
 # ---------------------------------------------------------------------------
@@ -54,7 +53,7 @@ def test_parses_dash_list() -> None:
 
 def test_dash_list_mixed_with_scalars() -> None:
     text = "---\nname: empathy\ntriggers:\n- sad\n- feeling\nversion: 2\n---\nbody\n"
-    meta, body = parse_frontmatter(text)
+    meta, _body = parse_frontmatter(text)
     assert meta["name"] == "empathy"
     assert meta["triggers"] == ["sad", "feeling"]
     assert meta["version"] == 2

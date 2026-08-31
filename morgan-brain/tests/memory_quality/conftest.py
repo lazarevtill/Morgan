@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -24,7 +24,7 @@ def memory() -> MemoryModule:
         embedder=FakeEmbedder(dim=32),
         vectors=InMemoryVectorIndex(),
         temporal=SqliteTemporalStore(":memory:"),
-        clock=lambda: datetime(2026, 1, 1),
+        clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
         fts=FtsIndex(conn),
         entities=EntityIndex(conn),
         episodics=EpisodicStore(conn),

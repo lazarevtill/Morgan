@@ -16,7 +16,6 @@ from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry, JsonMode
 from morgan_brain.providers.router import Binding, RoleRouter
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

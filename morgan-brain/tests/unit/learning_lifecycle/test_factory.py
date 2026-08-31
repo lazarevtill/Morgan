@@ -1,5 +1,6 @@
 """Tests for learning_lifecycle.factory — backend selection + telemetry-off enforcement."""
 
+import contextlib
 import os
 import sqlite3
 
@@ -9,7 +10,6 @@ from morgan_brain.config import Settings
 from morgan_brain.learning_lifecycle.factory import build_registry
 from morgan_brain.learning_lifecycle.interfaces import PromptRegistry
 from morgan_brain.learning_lifecycle.local import LocalPromptRegistry
-
 
 # ------------------------------------------------------------------
 # local backend (default)
@@ -69,10 +69,10 @@ def test_build_registry_mlflow_sets_telemetry_env_vars() -> None:
     os.environ.pop("MLFLOW_DISABLE_TELEMETRY", None)
     os.environ.pop("DO_NOT_TRACK", None)
 
-    try:
+    # Expected: the MLflow backend lands in Wave 1/5.  What this test asserts is the
+    # side effect that must happen first -- the telemetry env vars being forced off.
+    with contextlib.suppress(NotImplementedError):
         build_registry(Settings(learning_backend="mlflow"))
-    except NotImplementedError:
-        pass  # Expected — Wave 1/5 not yet implemented
 
     assert os.environ.get("MLFLOW_DISABLE_TELEMETRY") == "true"
     assert os.environ.get("DO_NOT_TRACK") == "true"

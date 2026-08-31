@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import math
 from collections import deque
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from morgan_brain.providers.wire import (
     ChatMessage,

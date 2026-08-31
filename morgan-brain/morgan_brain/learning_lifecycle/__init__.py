@@ -17,9 +17,9 @@ from morgan_brain.learning_lifecycle.local import LocalPromptRegistry, NoopOptim
 
 __all__ = [
     "EvalScore",
+    "LocalPromptRegistry",
+    "NoopOptimizer",
     "Optimizer",
     "PromptRegistry",
     "PromptVersion",
-    "LocalPromptRegistry",
-    "NoopOptimizer",
 ]
