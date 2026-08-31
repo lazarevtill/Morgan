@@ -89,7 +89,15 @@ morgan recall "how do I like answers"          # vector + FTS5 keyword + entity,
 morgan facts                                    # currently-valid facts for this project
 morgan ask "what do you know about me"          # a full chat turn — recalls, reasons, stores
 morgan forget                                   # cascading erasure for this project, one report
+morgan receipts                                 # why the champion preprompt is what it is
 ```
+
+`morgan receipts` lists every champion promotion decision — promotions **and** rejections, with
+the reason for each: beaten on score, refused because the candidate addressed the evaluator, or
+refused because the gate it was scored on was not the gate that certified the standing champion.
+It is not project-scoped: the champion is one document per user, and so is its history. Rejections
+are the more useful half — a history of only the promotions cannot explain the promotions that
+did not happen.
 
 ## 5. Use it — `morgan-mcp` (any MCP client)
 The same memory, exposed as five MCP tools (`remember`, `recall`, `facts`, `forget`, `ask_morgan`)
@@ -171,8 +179,14 @@ The 3-layer eval harness (`morgan_brain/eval/`) + golden set (`tests/eval/golden
 ## 10. Erasure — `forget()`
 `morgan forget` (or the MCP `forget` tool) cascades a project's rows out of `memories`,
 `fts_memories`, `memory_entities`, `facts`, `interaction_signals`, and `session_history` in one
-transaction, and out of `vec_items`/`vec_meta` too — but **only under the default `sqlite` vector
-backend**. Under `vector_backend=qdrant`, vectors are **not** erased by `forget()` and must be
+transaction — and out of everything derived from them: the semantic upper index
+(`mem_entity_nodes`, `mem_entity_edges`, `mem_schema_edges`, `mem_schemas`), its co-retrieval
+statistics (`mem_query_activations`, `mem_emergence_rejected`), the persona graph
+(`persona_nodes`, the most personal store in the system), and the correction-class register
+(`learned_patterns`). `decision_receipts` is deliberately **not** erased: it records why the
+champion preprompt is what it is, and the champion itself is not erased either — deleting the
+reasoning while keeping the prompt it justified leaves the least explicable of the two states.
+Vectors go out in the same transaction, but **only under the default `sqlite` vector backend**. Under `vector_backend=qdrant`, vectors are **not** erased by `forget()` and must be
 removed from Qdrant separately; the CLI's JSON/text output says so explicitly rather than implying
 a clean sweep. The report also distinguishes "erased zero rows" from "this table doesn't exist in
 your database" (`tables_skipped`) so a fresh install doesn't read as a bug.

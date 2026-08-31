@@ -112,7 +112,7 @@ sequenced as milestones M0–M3.
 | Milestone | Deliverable | State |
 |---|---|---|
 | M0 | Repo hygiene: end CRLF churn, tag `legacy-v0.0.4-full`, delete subsystems with no production importers, fix the non-editable-install wheel bug, docs truth pass | done |
-| M1 | One SQLite database (WAL + `sqlite-vec` + FTS5, Cyrillic-aware) behind an extended `MemoryGate` covering the cold path too; `project` scoping on every read/write; `forget()` cascading erasure; the cold path genuinely off the request (bounded async queue, bus lifespan wired into `brain-api`); llama.cpp defaults with all four roles bound and the promotion flag off; the `morgan` CLI (`remember`/`recall`/`facts`/`forget`/`ask`/`doctor`) | done |
+| M1 | One SQLite database (WAL + `sqlite-vec` + FTS5, Cyrillic-aware) behind an extended `MemoryGate` covering the cold path too; `project` scoping on every read/write; `forget()` cascading erasure; the cold path genuinely off the request (bounded async queue, bus lifespan wired into `brain-api`); llama.cpp defaults with all four roles bound and the promotion flag off; the `morgan` CLI (`remember`/`recall`/`facts`/`forget`/`ask`/`doctor`/`receipts`) | done |
 | M2 (partial) | MCP server (`morgan-mcp`, stdio + streamable-HTTP with a bearer token) — done, ahead of its original milestone. ChatGPT import with an import-time eval holdout, and `SKILL.md` conformance — not started | MCP server done; import not started |
 | M3 | Noise-floor measurement → 100+ labeled golden items from the import holdout → a paired-bootstrap promotion gate → flip `MORGAN_ENABLE_CHAMPION_PROMOTION` to `true` | not started |
 
@@ -120,11 +120,34 @@ Also delivered, ahead of or alongside the milestone plan above: calibration scor
 ECE) added to the eval gate, report-only for now — groundwork for M3's promotion gate, not yet
 wired to a pass/fail decision.
 
+And the **dual-brain memory + governance graft**
+([design](superpowers/specs/2026-08-31-dual-brain-memory-and-pattern-register-design.md)), from
+VoiceMem (arXiv:2608.26005) and Ouroboros:
+
+| Graft | What it does | State |
+|---|---|---|
+| Entity write path | Fixed a defect it surfaced: `Memory.entities` was never populated by any write path, so the entity-overlap ranking — one of `recall`'s three fused signals — was empty in production. One script-aware extractor now serves both paths. | done |
+| Semantic upper index | Schema → entity routing above the store; `recall` narrows every signal to the candidate pool before searching. Routing returns "search everything" rather than an empty pool, so it can only cost precision, never recall. | done |
+| Persona graph | Attitudes stay anchored to what they concern; promotion to a stable trait needs recurrence across several anchors *and* sessions. Short horizon per turn (cold path), long horizon nightly. | done |
+| Cluster emergence | Coherent subgroups earn their own slot from co-retrieval statistics, gated by an LLM judge on relevance/importance/completeness. Promotes nothing without a judge. | done |
+| Pattern register | Corrections are grouped into *classes*, counted, and fed back to the optimizer — including whether a class recurred after its fix, which says the fix was at the wrong depth. | done |
+| Gate integrity | The eval gate is fingerprinted; a candidate scored on a different or weaker gate is refused, as is one whose body addresses the evaluator. | done |
+| Decision receipts | Every promotion decision — and every rejection, with its reason — is recorded and surfaced by `morgan receipts`. | done |
+
+The accuracy numbers behind the first four are the **paper's**, on LoCoMo/LongMemEval/Memora.
+They have not been reproduced here and cannot be until `tests/memory_quality/` runs against a real
+embedder — see M3's noise-floor work.
+
 ### Known limitations (see [`CLAUDE.md`](../CLAUDE.md) and [`WIRING.md`](WIRING.md) for detail)
 - `recall` has no relevance floor — a query against a non-empty project always returns something.
 - `forget()` does not erase vectors under `vector_backend=qdrant` (the `sqlite` default is fully covered).
 - The MCP HTTP transport serves openly whenever `MORGAN_API_KEY` is unset or left at `change-me`.
-- Retrieval quality is unmeasured — `tests/memory_quality/` runs over a hash embedder.
+- Retrieval quality is unmeasured — `tests/memory_quality/` runs over a hash embedder, so the
+  upper index's benefit is imported from the paper, not observed here.
+- Entity extraction is deterministic and cased-script only; Chinese, Japanese, Arabic and Hebrew
+  yield nothing rather than a guess.
+- Persona attribution and cluster emergence record/promote nothing without a reachable model,
+  by design.
 
 ## Working agreement
 
