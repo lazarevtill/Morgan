@@ -4,7 +4,7 @@
 **Status:** Approved (conversation), pending written review
 **Supersedes:** `docs/ARCHITECTURE_V2.md` (deleted 2026-08-02; see
 [the local-first reshape design](2026-08-02-morgan-reshape-local-first-design.md))
-**Predecessor codebase:** archived in git tag `legacy-v0.0.3-monolith` (branch `origin/legacy/v0.0.3-monolith`)
+**Predecessor codebase:** archived in git tag `legacy-v0.0.3-monolith`
 
 ---
 
@@ -172,7 +172,7 @@ Thin and stateless — reads UserModel + FusedPerception, writes nothing.
 
 ## 14. Phasing (greenfield, always-shippable)
 
-| Phase | Ships | Port from `legacy/v0.0.3-monolith` |
+| Phase | Ships | Port from `legacy-v0.0.3-monolith` |
 |-------|-------|-----|
 | 0 Foundation | skeleton: config, events, protocols, MemoryGate, data model, gateway, CLI | config patterns |
 | 1 Memory + reasoning | working text assistant w/ recall (vector+BM25+entity, temporal facts) | `services/llm`, `services/embeddings`, `vector_db`, `search/reranker` |

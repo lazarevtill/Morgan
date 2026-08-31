@@ -459,7 +459,7 @@ Apply each of these:
 - Delete every reference to channels, voice, perception-gpu, proactivity, MCP host, and the privacy layer from the package map, the service table, the extras list, and the invariants.
 - Remove the "provider SDKs isolated" claim's implication that composition is provider-neutral until Task 16 makes it true.
 - Replace the "Current direction (H1)" section with a pointer to `docs/superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md`.
-- Fix the archive reference: the tag is `legacy-v0.0.3-monolith`; the branch is `origin/legacy/v0.0.3-monolith`.
+- Fix the archive reference: the archive is the tag `legacy-v0.0.3-monolith`.
 
 - [ ] **Step 0: Append the stack rationale to `docs/OPERATIONS.md`**
 

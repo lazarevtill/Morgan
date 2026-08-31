@@ -89,8 +89,9 @@ loop) live in [`docs/WIRING.md`](docs/WIRING.md).
   [platform architecture](docs/superpowers/specs/2026-06-08-platform-architecture-decision.md).
 
 > Earlier builds are archived in the git tags **`legacy-v0.0.4-full`** (the platform build this
-> reshape narrowed) and **`legacy-v0.0.3-monolith`** (branch `origin/legacy/v0.0.3-monolith`, the
-> pre-platform monolith) — sources for any selectively ported code, not the current design.
+> reshape narrowed) and **`legacy-v0.0.3-monolith`** (the pre-platform monolith) — sources for
+> any selectively ported code, not the current design. Both are tags, not branches: `main` is the
+> only branch, and `git checkout legacy-v0.0.3-monolith` is how you read either archive.
 
 ## License
 

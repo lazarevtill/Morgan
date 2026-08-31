@@ -12,7 +12,7 @@ vectors (sqlite-vec), the FTS5 keyword index, training signals, session history,
 prompt registry. Redis and Qdrant are optional extras, not requirements. The default provider is
 **llama.cpp** (`llama-server`), remote-first: a GPU box on the homelab reached over an overlay
 network, with local loopback as the offline/dev fallback. The previous monolith is archived in the
-git tag **`legacy-v0.0.3-monolith`** (branch `origin/legacy/v0.0.3-monolith`); the pre-reshape
+git tag **`legacy-v0.0.3-monolith`**; the pre-reshape
 platform build is archived in tag **`legacy-v0.0.4-full`**.
 
 **Key principle:** Quality over speed (5–10 s thoughtful responses acceptable). Provider-agnostic —

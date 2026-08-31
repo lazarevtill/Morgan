@@ -11,8 +11,8 @@ status: [`docs/ROADMAP.md`](../docs/ROADMAP.md); run guide: [`docs/WIRING.md`](.
 
 > Earlier builds are archived in the git tags `legacy-v0.0.4-full` (the platform build the
 > reshape narrowed: channels, privacy, proactivity, voice, the MCP host) and
-> `legacy-v0.0.3-monolith` (branch `origin/legacy/v0.0.3-monolith`, the pre-platform monolith).
-> Both are sources for selectively ported code, not the current design.
+> `legacy-v0.0.3-monolith` (the pre-platform monolith). Both are tags, not branches -- `main` is
+> the only branch -- and both are sources for selectively ported code, not the current design.
 
 ## Topology (2 services, one package)
 
