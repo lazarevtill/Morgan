@@ -29,6 +29,7 @@ from morgan_brain.modules.memory.indexing.embedder import Embedder
 from morgan_brain.modules.memory.retrieval.entities import EntityIndex
 from morgan_brain.modules.memory.retrieval.fts import FtsIndex
 from morgan_brain.modules.memory.retrieval.fusion import reciprocal_rank_fusion
+from morgan_brain.modules.memory.retrieval.semantic_index import SemanticIndex
 from morgan_brain.modules.memory.stores.episodic import EpisodicStore
 from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
 from morgan_brain.modules.memory.stores.vector import VectorIndex, VectorRecord
@@ -54,6 +55,7 @@ class MemoryModule:
         fts: FtsIndex,
         entities: EntityIndex,
         episodics: EpisodicStore,
+        semantic: SemanticIndex | None = None,
     ) -> None:
         self._embedder = embedder
         self._vectors = vectors
@@ -62,6 +64,7 @@ class MemoryModule:
         self._fts = fts
         self._entities = entities
         self._episodics = episodics
+        self._semantic = semantic
 
     async def store(self, memory: Memory) -> str:
         if memory.created_at is None:
@@ -90,19 +93,29 @@ class MemoryModule:
     async def recall(self, query: MemoryQuery) -> list[Memory]:
         # None means "no project filter" at the store layer -- the cross-project escape hatch.
         project = None if query.all_projects else query.project
+        restrict_ids = self._route(query)
         q_vector = await self._embedder.embed(query.text)
         vec_hits = await self._vectors.search(
-            user_id=query.user_id, vector=q_vector, top_k=query.top_k * 2, project=project
+            user_id=query.user_id,
+            vector=q_vector,
+            top_k=query.top_k * 2,
+            project=project,
+            restrict_ids=restrict_ids,
         )
         vector_ranking = [h.id for h in vec_hits]
         fts_ranking = self._fts.search(
-            query.text, user_id=query.user_id, top_k=query.top_k * 2, project=project
+            query.text,
+            user_id=query.user_id,
+            top_k=query.top_k * 2,
+            project=project,
+            restrict_ids=restrict_ids,
         )
         entity_ranking = self._entities.search(
             set(query.text.split()),
             user_id=query.user_id,
             top_k=query.top_k * 2,
             project=project,
+            restrict_ids=restrict_ids,
         )
 
         fused_ids = reciprocal_rank_fusion([vector_ranking, fts_ranking, entity_ranking])
@@ -127,6 +140,23 @@ class MemoryModule:
             for f in facts
         ]
         return (fact_memories + episodic)[: query.top_k]
+
+    def _route(self, query: MemoryQuery) -> list[str] | None:
+        """Ask the semantic upper index for a candidate pool, or ``None`` to search all.
+
+        Cross-project recall is deliberately never routed: the index is built per
+        ``(user_id, project)``, so a pool derived from one project would narrow a search
+        that was explicitly asked to cross them -- turning the escape hatch into a
+        stricter filter than the default. ``None`` here is the honest answer.
+
+        The pool is advisory in one direction only. Every signal treats ``None`` as
+        "search everything", so a routing miss costs precision, never recall.
+        """
+        if self._semantic is None or query.all_projects:
+            return None
+        return self._semantic.route(
+            query.text.split(), user_id=query.user_id, project=query.project
+        )
 
     async def upsert_fact(self, fact: TemporalFact) -> str:
         return await self._temporal.upsert_fact(fact, now=self._clock())

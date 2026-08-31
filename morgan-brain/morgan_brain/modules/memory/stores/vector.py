@@ -41,7 +41,18 @@ class VectorIndex(Protocol):
         vector: list[float],
         top_k: int,
         project: str | None = DEFAULT_PROJECT,
-    ) -> list[VectorHit]: ...
+        restrict_ids: list[str] | None = None,
+    ) -> list[VectorHit]:
+        """Nearest neighbours to *vector*.
+
+        *restrict_ids* is the semantic index's candidate pool. Where the backend can
+        express it as part of the search it must, so a memory ranking below the cut in
+        the whole store is still reachable inside a small pool -- that is what routing
+        buys. A backend that can only post-filter has to over-fetch first and say so in
+        its own docstring. ``None`` means no pool: search everything.
+        """
+        ...
+
     async def delete(self, ids: list[str]) -> None: ...
 
 
@@ -66,11 +77,18 @@ class InMemoryVectorIndex:
         vector: list[float],
         top_k: int,
         project: str | None = DEFAULT_PROJECT,
+        restrict_ids: list[str] | None = None,
     ) -> list[VectorHit]:
+        pool = None if restrict_ids is None else set(restrict_ids)
         scored = [
             VectorHit(id=r.id, score=_cosine(vector, r.vector), payload=r.payload)
             for r in self._records.values()
-            if r.user_id == user_id and (project is None or r.project == project)
+            if r.user_id == user_id
+            and (project is None or r.project == project)
+            # Applied before the sort, not after the slice: this index scores every
+            # record anyway, so restricting here is the same "search inside the pool"
+            # the SQL backends express in their WHERE clause.
+            and (pool is None or r.id in pool)
         ]
         scored.sort(key=lambda h: h.score, reverse=True)
         return scored[:top_k]
@@ -153,11 +171,18 @@ class QdrantVectorIndex:
         vector: list[float],
         top_k: int,
         project: str | None = DEFAULT_PROJECT,
+        restrict_ids: list[str] | None = None,
     ) -> list[VectorHit]:
         qm = self._qm
         must = [qm.FieldCondition(key="user_id", match=qm.MatchValue(value=user_id))]
         if project is not None:
             must.append(qm.FieldCondition(key="project", match=qm.MatchValue(value=project)))
+        if restrict_ids is not None:
+            # The candidate pool goes into the query filter rather than being applied to
+            # the result, so the KNN runs *inside* the pool. `mem_id` is the original
+            # string id stored on upsert; filtering on point ids instead would mean
+            # re-deriving every UUID5 here for no gain.
+            must.append(qm.FieldCondition(key="mem_id", match=qm.MatchAny(any=list(restrict_ids))))
         res = await self._client.query_points(
             collection_name=self._collection,
             query=vector,
