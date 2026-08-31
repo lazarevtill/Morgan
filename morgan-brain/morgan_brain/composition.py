@@ -32,6 +32,7 @@ from morgan_brain.eval.runner import make_eval_scorer, make_predict_fn
 from morgan_brain.interfaces.events import Event, EventBus, EventType
 from morgan_brain.interfaces.tools import BaseTool
 from morgan_brain.learning.champion_trainer import ChampionTrainer
+from morgan_brain.learning.cluster_emergence import ClusterEmergence, LLMEmergenceJudge
 from morgan_brain.learning.consolidation import MemoryConsolidator
 from morgan_brain.learning.history import SessionHistoryStore
 from morgan_brain.learning.learner import ConsolidationLearner
@@ -268,6 +269,12 @@ def _assemble(
     # low dimensionality never collides with the real embedding_dim a SqliteVectorIndex would
     # enforce.
     resolved_vectors: VectorIndex = vectors if vectors is not None else InMemoryVectorIndex()
+    # One SemanticIndex for the whole assembly: recall routes through it, the personalizer
+    # expands anchors through it, the builder writes it, and emergence re-partitions it.
+    # Two instances over the same connection would behave identically today, which is
+    # exactly how a second one survives long enough to diverge.
+    semantic_index = SemanticIndex(resolved_conn)
+
     memory_module = MemoryModule(
         embedder=embedder,
         vectors=resolved_vectors,
@@ -278,7 +285,7 @@ def _assemble(
         episodics=EpisodicStore(resolved_conn),
         # The semantic upper index narrows recall's candidate pool before any signal
         # searches. Read-only here; the learning-worker builds it.
-        semantic=SemanticIndex(resolved_conn),
+        semantic=semantic_index,
     )
     gate = MemoryGate(memory_module)
     persona_graph = PersonaGraph(resolved_conn)
@@ -307,8 +314,16 @@ def _assemble(
         # The classifier runs on the reflection role and degrades to keyword matching
         # when that role has no binding, so this stays wired on a box with no model.
         index_builder=SemanticIndexBuilder(
-            semantic=SemanticIndex(resolved_conn),
+            semantic=semantic_index,
             classifier=LLMSchemaClassifier(router=router, capability_registry=reg),
+        ),
+        # Emergence re-partitions the index, so it promotes nothing without a judge --
+        # LLMEmergenceJudge falls back to promoting nothing when the reflection role has
+        # no binding, which is the honest degradation for an irreversible operation.
+        emergence=ClusterEmergence(
+            semantic=semantic_index,
+            conn=resolved_conn,
+            judge=LLMEmergenceJudge(router=router, capability_registry=reg),
         ),
         # The right brain. Attribution needs a model and records nothing without one --
         # guessing at the owner's personality is worse than an empty graph.
@@ -334,7 +349,7 @@ def _assemble(
         # never records one. Passing the semantic index too gives the joint retrieval of
         # eq. (5) -- attitudes anchored to entities the turn implies, not only names.
         persona_graph=persona_graph,
-        semantic_index=SemanticIndex(resolved_conn),
+        semantic_index=semantic_index,
     )
     skills = SkillRegistry(registry=prompt_registry)
 

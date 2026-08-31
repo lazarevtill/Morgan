@@ -110,8 +110,10 @@ async def test_forget_does_not_report_present_tables_as_skipped(tmp_path):
     assert "session_history" not in report.tables_skipped
     assert sorted(report.tables_skipped) == [
         "learned_patterns",
+        "mem_emergence_rejected",
         "mem_entity_edges",
         "mem_entity_nodes",
+        "mem_query_activations",
         "mem_schema_edges",
         "mem_schemas",
         "persona_nodes",

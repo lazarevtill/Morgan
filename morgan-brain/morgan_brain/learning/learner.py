@@ -13,6 +13,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from morgan_brain.learning.cluster_emergence import ClusterEmergence
 from morgan_brain.learning.consolidation import MemoryConsolidator
 from morgan_brain.learning.patterns import PatternRegister
 from morgan_brain.learning.persona_attribution import PersonaAttributor
@@ -50,6 +51,10 @@ class ConsolidationLearner:
         Optional ``PersonaAttributor`` (VoiceMem's right brain, short horizon).  When
         provided, each processed turn's affect and its target are recorded after the
         reply has been sent -- never during the request.
+    emergence:
+        Optional ``ClusterEmergence``.  When provided, each turn's activated entity set
+        is logged for the co-retrieval statistics, and the nightly consolidation judges
+        whether a coherent subgroup has earned its own slot.
     patterns:
         Optional ``PatternRegister``.  When provided, each preference distilled from an
         edit is recorded as an occurrence of a correction *class*, so a correction that
@@ -73,6 +78,7 @@ class ConsolidationLearner:
         persona_attributor: PersonaAttributor | None = None,
         persona_graph: PersonaGraph | None = None,
         patterns: PatternRegister | None = None,
+        emergence: ClusterEmergence | None = None,
     ) -> None:
         self._consolidator = consolidator
         self._gate = gate
@@ -82,6 +88,7 @@ class ConsolidationLearner:
         self._persona = persona_attributor
         self._persona_graph = persona_graph
         self._patterns = patterns
+        self._emergence = emergence
 
     # ------------------------------------------------------------------
     # Learner Protocol
@@ -128,6 +135,26 @@ class ConsolidationLearner:
                 memories=stored,
             )
 
+        if self._emergence is not None:
+            # What this turn *would have* activated, recomputed off the request path:
+            # the user's entities expanded one hop, which is exactly the set recall
+            # routed through. Recording it during the request would put a write on the
+            # hot path for a statistic that is only ever read nightly.
+            for memory in stored:
+                if memory.source is not MemorySource.USER_STATED:
+                    continue
+                activated = self._emergence.semantic.neighbours(
+                    [e.name for e in memory.entities],
+                    user_id=conversation.user_id,
+                    project=conversation.project,
+                )
+                self._emergence.log_activation(
+                    user_id=conversation.user_id,
+                    project=conversation.project,
+                    entities=activated,
+                    now=self._clock(),
+                )
+
         if self._persona is not None:
             await self._persona.attribute(
                 user_id=conversation.user_id,
@@ -160,6 +187,11 @@ class ConsolidationLearner:
         per-turn pass cannot see that.
         """
         await self._consolidator.consolidate(user_id, project=project)
+        if self._emergence is not None:
+            emerged = await self._emergence.run(user_id=user_id, project=project, now=self._clock())
+            if emerged:
+                logger.info("semantic-index: emergent slot(s) %s in project %r", emerged, project)
+
         if self._persona_graph is not None:
             promoted = self._persona_graph.consolidate(
                 user_id=user_id, project=project, now=self._clock()
