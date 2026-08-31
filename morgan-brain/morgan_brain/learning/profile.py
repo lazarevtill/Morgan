@@ -19,8 +19,8 @@ by keyword matching.  The LLM only produces the delta text; the merge is pure/de
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable
 
 from pydantic import BaseModel
 
@@ -155,7 +155,7 @@ class UserProfileBuilder:
                     comm_prefs = comm_prefs.model_copy(update={"length": "terse"})
                 elif obj in ("thorough", "detailed", "verbose", "long"):
                     comm_prefs = comm_prefs.model_copy(update={"length": "thorough"})
-                elif obj in ("formal",):
+                elif obj == "formal":
                     comm_prefs = comm_prefs.model_copy(update={"formality": "formal"})
                 elif obj in ("informal", "casual"):
                     comm_prefs = comm_prefs.model_copy(update={"formality": "informal"})
@@ -299,7 +299,7 @@ def render_md(user_model: UserModel) -> str:
 
 
 async def preference_delta_from_edit(
-    builder: "UserProfileBuilder",
+    builder: UserProfileBuilder,
     user_id: str,
     original: str,
     edited: str,
@@ -472,7 +472,7 @@ def preference_facts_from_delta(
 
 def _provider_for_model(router: RoleRouter, model: str) -> str:
     """Best-effort: find the provider string for a model from registered bindings."""
-    for binding_list in router._bindings.values():  # noqa: SLF001
+    for binding_list in router._bindings.values():
         for binding in binding_list:
             if binding.model == model:
                 return binding.provider

@@ -11,7 +11,8 @@ this code.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 from morgan_brain.interfaces.reasoning import ReasoningRequest, ReasoningResult
 from morgan_brain.modules.reasoning.context.builder import build_messages
@@ -30,7 +31,7 @@ class ReasoningModule:
         *,
         router: RoleRouter,
         role: str = "strong",
-        executor: "ToolExecutor | None" = None,
+        executor: ToolExecutor | None = None,
         max_tool_iters: int = _DEFAULT_MAX_TOOL_ITERS,
     ) -> None:
         self._router = router

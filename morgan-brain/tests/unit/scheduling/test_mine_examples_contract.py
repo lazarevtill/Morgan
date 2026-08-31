@@ -8,7 +8,7 @@ store.mine_examples() method. A real SignalStore is used so the contract is conc
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -21,7 +21,7 @@ from morgan_brain.scheduling.learning_jobs import LearningScheduler
 # Helpers
 # ---------------------------------------------------------------------------
 
-T0 = datetime(2026, 1, 1, 0, 0, 0)
+T0 = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
 OPTIMIZE_INTERVAL = 50.0
 CONSOLIDATE_INTERVAL = 1000.0  # large so only the optimize job fires in these tests
 

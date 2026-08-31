@@ -7,8 +7,8 @@ accumulates edit/retry/thumb feedback without duplicating the base record.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable
 
 from morgan_brain.learning.signals import InteractionSignal, SignalStore, Thumb
 
@@ -82,7 +82,7 @@ class SignalRecorder:
         for this ``(user_id, turn_id)`` pair, a stub is created first.
         """
         await self._ensure_signal(turn_id=turn_id, user_id=user_id)
-        self._store._conn.execute(  # noqa: SLF001  (internal access, same package)
+        self._store._conn.execute(
             """
             UPDATE interaction_signals
             SET user_edit = ?
@@ -90,12 +90,12 @@ class SignalRecorder:
             """,
             (edited_reply, user_id, turn_id),
         )
-        self._store._conn.commit()  # noqa: SLF001
+        self._store._conn.commit()
 
     async def add_retry(self, *, turn_id: str, user_id: str) -> None:
         """Record that the user retried the turn (asked again / regenerated)."""
         await self._ensure_signal(turn_id=turn_id, user_id=user_id)
-        self._store._conn.execute(  # noqa: SLF001
+        self._store._conn.execute(
             """
             UPDATE interaction_signals
             SET retried = 1
@@ -103,12 +103,12 @@ class SignalRecorder:
             """,
             (user_id, turn_id),
         )
-        self._store._conn.commit()  # noqa: SLF001
+        self._store._conn.commit()
 
     async def add_thumb(self, *, turn_id: str, user_id: str, thumb: Thumb) -> None:
         """Record a thumb-up or thumb-down rating for *turn_id*."""
         await self._ensure_signal(turn_id=turn_id, user_id=user_id)
-        self._store._conn.execute(  # noqa: SLF001
+        self._store._conn.execute(
             """
             UPDATE interaction_signals
             SET thumb = ?
@@ -116,7 +116,7 @@ class SignalRecorder:
             """,
             (thumb.value, user_id, turn_id),
         )
-        self._store._conn.commit()  # noqa: SLF001
+        self._store._conn.commit()
 
     async def original_reply_for(self, *, user_id: str, turn_id: str) -> str | None:
         """Return the base reply recorded for ``(user_id, turn_id)``, or ``None``.
@@ -126,7 +126,7 @@ class SignalRecorder:
         Returns ``None`` when no base signal exists or the reply is empty (e.g. a stub
         created by feedback that arrived before the turn was recorded).
         """
-        row = self._store._conn.execute(  # noqa: SLF001  (internal access, same package)
+        row = self._store._conn.execute(
             "SELECT original_reply FROM interaction_signals WHERE user_id = ? AND turn_id = ?",
             (user_id, turn_id),
         ).fetchone()
@@ -141,7 +141,7 @@ class SignalRecorder:
 
     async def _ensure_signal(self, *, turn_id: str, user_id: str) -> None:
         """Create a stub signal for ``(user_id, turn_id)`` if none exists yet."""
-        row = self._store._conn.execute(  # noqa: SLF001
+        row = self._store._conn.execute(
             "SELECT id FROM interaction_signals WHERE user_id = ? AND turn_id = ?",
             (user_id, turn_id),
         ).fetchone()

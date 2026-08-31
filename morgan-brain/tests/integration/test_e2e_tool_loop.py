@@ -8,13 +8,12 @@ Extends test_tool_loop.py with additional assertions:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
 from morgan_brain.composition import build_orchestrator_for_test
 from morgan_brain.providers.wire import ChatResult, ToolCall
-
 
 # ---------------------------------------------------------------------------
 # Existing tests (kept for back-compat; new assertions added inline)
@@ -33,13 +32,13 @@ async def test_tool_loop_calculator_executes_and_result_in_prompt() -> None:
 
     orch, _ = build_orchestrator_for_test(
         reply="",
-        clock=lambda: datetime(2026, 1, 1),
+        clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
         chat_results=results,
     )
 
     # FakeChatClient is shared via the router — capture it via a handle.
     # We reach it through the reasoner's router, which holds the binding.
-    fake_client = orch._reasoner._router._bindings["strong"][0].client  # type: ignore[attr-defined]  # noqa: SLF001
+    fake_client = orch._reasoner._router._bindings["strong"][0].client  # type: ignore[attr-defined]
 
     result = await orch.handle_turn(
         user_id="u1", project="default", text="What is 6 * 7?", session_id="s1"
@@ -63,8 +62,10 @@ async def test_tool_loop_calculator_executes_and_result_in_prompt() -> None:
 @pytest.mark.asyncio
 async def test_tool_loop_plain_turn_has_no_tool_messages() -> None:
     """Plain turn (no tool calls scripted) produces no role='tool' messages."""
-    orch, _ = build_orchestrator_for_test(reply="Hello!", clock=lambda: datetime(2026, 1, 1))
-    fake_client = orch._reasoner._router._bindings["strong"][0].client  # type: ignore[attr-defined]  # noqa: SLF001
+    orch, _ = build_orchestrator_for_test(
+        reply="Hello!", clock=lambda: datetime(2026, 1, 1, tzinfo=UTC)
+    )
+    fake_client = orch._reasoner._router._bindings["strong"][0].client  # type: ignore[attr-defined]
 
     result = await orch.handle_turn(
         user_id="u1", project="default", text="Hi there", session_id="s1"
@@ -90,7 +91,7 @@ async def test_tool_loop_multiple_tool_calls_all_invoked() -> None:
 
     orch, _ = build_orchestrator_for_test(
         reply="",
-        clock=lambda: datetime(2026, 1, 1),
+        clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
         chat_results=results,
     )
 

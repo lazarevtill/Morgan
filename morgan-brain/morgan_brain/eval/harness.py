@@ -26,7 +26,7 @@ passes, and leaves the champion untouched on failure.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Awaitable, Callable, Union
+from collections.abc import Awaitable, Callable
 
 import structlog
 from pydantic import BaseModel, Field
@@ -53,7 +53,7 @@ _OVERALL_KEY = "overall_preference_following_accuracy"
 # A predict_fn takes one GoldenItem and returns the assistant's answer, optionally paired with a
 # confidence in [0, 1] for calibration scoring. Returning a bare ``str`` (no confidence) is the
 # back-compatible default; ``(answer, confidence)`` opts the item into calibration.
-PredictFn = Callable[[GoldenItem], Awaitable[Union[str, tuple[str, float]]]]
+PredictFn = Callable[[GoldenItem], Awaitable[str | tuple[str, float]]]
 
 # predict_fn_factory: given a prompt body string, returns a PredictFn.
 PredictFnFactory = Callable[[str], PredictFn]
@@ -140,7 +140,7 @@ class EvalHarness:
                are async and scripted in tests (no network).
     """
 
-    def __init__(self, *, judge: Union[LLMJudge, CalibratedJudge]) -> None:
+    def __init__(self, *, judge: LLMJudge | CalibratedJudge) -> None:
         self._judge = judge
 
     async def run_l2(

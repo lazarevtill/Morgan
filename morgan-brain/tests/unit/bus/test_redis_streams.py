@@ -15,6 +15,15 @@ from morgan_brain.bus.redis_streams import RedisStreamsBus
 from morgan_brain.interfaces.events import Event, EventType
 
 
+class RedisError(Exception):
+    """Stands in for redis-py's own error type.
+
+    Declared here rather than imported so the bus's error handling is tested against
+    the *shape* it actually contracts on -- an exception whose message carries the
+    server reply -- without binding the test to the redis package being installed.
+    """
+
+
 # ---------------------------------------------------------------------------
 # Fake async redis client
 # ---------------------------------------------------------------------------
@@ -320,7 +329,7 @@ async def test_start_swallows_busygroup_error() -> None:
 
     class BusyRedis(FakeRedis):
         async def xgroup_create(self, *args: Any, **kwargs: Any) -> None:
-            raise Exception("BUSYGROUP Consumer Group name already exists")
+            raise RedisError("BUSYGROUP Consumer Group name already exists")
 
     bus = RedisStreamsBus("redis://unused", client=BusyRedis())
     await bus.start()  # must NOT raise

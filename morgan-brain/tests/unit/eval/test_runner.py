@@ -14,7 +14,7 @@ Asserts:
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -28,7 +28,7 @@ from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry, JsonMode
 from morgan_brain.providers.router import Binding, RoleRouter
 
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 
 
 # ---------------------------------------------------------------------------
@@ -55,9 +55,9 @@ def _build_orch_with_client(
     reply: str,
 ) -> tuple[Any, FakeChatClient, Any]:
     """Build a minimal fake orchestrator + return the FakeChatClient and MemoryGate."""
+    from morgan_brain.bus.inproc import InProcessBus
     from morgan_brain.composition import _assemble
     from morgan_brain.config import Settings
-    from morgan_brain.bus.inproc import InProcessBus
     from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
 
     fake_client = FakeChatClient(reply=reply)
@@ -76,7 +76,7 @@ def _build_orch_with_client(
     )
     settings = Settings(llm_model="test-model", llm_fast_model="test-model")
     bus = InProcessBus()
-    orch, memory_module, *_ = _assemble(
+    orch, _memory_module, *_ = _assemble(
         embedder=FakeEmbedder(dim=16),
         router=router,
         settings=settings,
@@ -188,9 +188,9 @@ async def test_firewall_real_memory_untouched() -> None:
 @pytest.mark.asyncio
 async def test_firewall_gate_restored_on_exception() -> None:
     """Real gate is restored even if orchestrator raises an exception."""
+    from morgan_brain.bus.inproc import InProcessBus
     from morgan_brain.composition import _assemble
     from morgan_brain.config import Settings
-    from morgan_brain.bus.inproc import InProcessBus
     from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
 
     # Build orchestrator that will raise on handle_turn.

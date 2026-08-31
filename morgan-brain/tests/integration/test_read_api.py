@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -16,7 +16,7 @@ from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import Binding, RoleRouter
 
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 API_KEY = "test-read-key"
 _AUTH_HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
@@ -38,7 +38,7 @@ def _build_test_app() -> TestClient:
         bindings={"strong": [Binding("fake", "test-model", fake_client)]},
     )
     history_store = SessionHistoryStore()
-    orch, _, signal_store, recorder, executor, skills, learner = _assemble(
+    orch, _, _signal_store, recorder, executor, skills, learner = _assemble(
         embedder=FakeEmbedder(dim=16),
         router=router,
         settings=settings,

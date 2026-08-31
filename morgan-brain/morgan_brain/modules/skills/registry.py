@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
 
 from morgan_brain.interfaces.skills import Skill, SkillEngine
 from morgan_brain.learning_lifecycle.interfaces import PromptRegistry
@@ -62,10 +61,7 @@ def _load_skill_from_file(path: Path) -> Skill | None:
         triggers = [str(raw_triggers)]
 
     raw_tools = meta.get("tools", [])
-    if isinstance(raw_tools, list):
-        tools = [str(t) for t in raw_tools]
-    else:
-        tools = [str(raw_tools)]
+    tools = [str(t) for t in raw_tools] if isinstance(raw_tools, list) else [str(raw_tools)]
 
     model: str | None = str(meta["model"]) if "model" in meta else None
     version_raw = meta.get("version", 1)
@@ -111,8 +107,8 @@ class SkillRegistry:
     def __init__(
         self,
         *,
-        skills_dir: Optional[str] = None,
-        registry: Optional[PromptRegistry] = None,
+        skills_dir: str | None = None,
+        registry: PromptRegistry | None = None,
     ) -> None:
         self._registry = registry
         # Start from bundled skills, then overlay user-supplied dir.

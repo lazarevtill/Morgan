@@ -81,7 +81,8 @@ class SqliteVectorIndex:
             )
             for r in rows:
                 self._conn.execute(
-                    "INSERT INTO vec_items (rowid, embedding, user_id, project) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO vec_items (rowid, embedding, user_id, project) "
+                    "VALUES (?, ?, ?, ?)",
                     (r["rowid"], r["embedding"], r["user_id"], DEFAULT_PROJECT),
                 )
             self._conn.commit()

@@ -1,7 +1,6 @@
 from morgan_brain.interfaces.llm import ChatClient
 from morgan_brain.providers.adapters.fake import FakeChatClient, FakeEmbedder
 
-
 # ---------------------------------------------------------------------------
 # FakeChatClient — single reply
 # ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ exceptions and that the right types are registered.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 import pytest
 
@@ -95,10 +96,8 @@ async def test_worker_run_with_flags_off_does_not_start_cron(
         task = asyncio.create_task(worker_mod.run(settings=settings))
         await asyncio.sleep(0.05)
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError, Exception):
             await task
-        except (asyncio.CancelledError, Exception):
-            pass
 
     await _run_briefly()
     assert cron_starts == [], "CronService should NOT be built when enable_scheduling=False"

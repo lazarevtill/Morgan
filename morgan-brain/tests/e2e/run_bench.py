@@ -34,11 +34,15 @@ def _is_live() -> bool:
 async def _amain(out_dir: pathlib.Path, live: bool) -> int:
     report = await run_all(live=live)
 
-    out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / "text_e2e_report.json"
     md_path = out_dir / "text_e2e_report.md"
-    json_path.write_text(to_json(report), encoding="utf-8")
-    md_path.write_text(to_markdown(report), encoding="utf-8")
+
+    def _write_report() -> None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(to_json(report), encoding="utf-8")
+        md_path.write_text(to_markdown(report), encoding="utf-8")
+
+    await asyncio.to_thread(_write_report)
 
     # Echo the markdown to stdout for immediate visibility.
     print(to_markdown(report))

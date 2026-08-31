@@ -131,9 +131,7 @@ async def run_streaming(*, stream_len: int = 24) -> StreamingReport:
     stale_after_update = current_lang == {"Haskell"}
 
     # Sanity: the late queries genuinely exceeded the history window.
-    assert h._history.recent(
-        session_key(user, session), project="default"
-    )  # history exists  # noqa: SLF001
+    assert h._history.recent(session_key(user, session), project="default")  # history exists
 
     return StreamingReport(
         stream_len=stream_len,

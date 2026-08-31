@@ -8,7 +8,7 @@ All tests are deterministic:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -23,7 +23,7 @@ from morgan_brain.scheduling.cron import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-T0 = datetime(2026, 1, 1, 0, 0, 0)
+T0 = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
 
 
 def _fixed_clock(t: datetime):  # type: ignore[return]

@@ -13,7 +13,7 @@ Also demonstrates: "I live in Berlin" → consolidate → turn 2 knows it.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -26,7 +26,7 @@ from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import Binding, RoleRouter
 
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 USER_ID = "u-learn-recall"
 SESSION_ID = "sess-learn"
 
@@ -162,7 +162,7 @@ async def test_learn_preference_then_recall_in_turn2() -> None:
 
     # Verify the fact is now stored (via the memory gate).
     # We access the learner's consolidator → gate to check current facts.
-    gate = learner._consolidator._gate  # type: ignore[attr-defined]  # noqa: SLF001
+    gate = learner._consolidator._gate  # type: ignore[attr-defined]
     facts = await gate.current_facts(user_id=USER_ID)
     matching = [
         f
@@ -223,7 +223,7 @@ async def test_learn_location_then_visible_in_memories() -> None:
     await learner.consolidate(USER_ID)
 
     # Check the fact store via the gate.
-    gate = learner._consolidator._gate  # type: ignore[attr-defined]  # noqa: SLF001
+    gate = learner._consolidator._gate  # type: ignore[attr-defined]
     facts = await gate.current_facts(user_id=USER_ID)
     berlin_facts = [f for f in facts if "Berlin" in f.object]
     assert len(berlin_facts) >= 1, f"Expected Berlin fact in temporal store. Got: {facts}"

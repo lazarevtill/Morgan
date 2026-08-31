@@ -7,7 +7,7 @@ model's final text reply.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -21,7 +21,7 @@ from morgan_brain.providers.router import Binding, RoleRouter
 from morgan_brain.providers.wire import ChatResult, ToolCall
 from morgan_brain.security.permissions import PermissionGate, PermissionMode
 
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 
 
 def _make_router(fake_client: FakeChatClient) -> RoleRouter:
@@ -67,9 +67,9 @@ async def test_permission_denied_tool_returns_error_and_loop_terminates() -> Non
     # Deny the calculator explicitly at the executor level.
     # Replace the gate on the executor with one that denies calculator.
     deny_gate = PermissionGate(default=PermissionMode.DENY)
-    executor._gate = deny_gate  # type: ignore[attr-defined]  # noqa: SLF001
+    executor._gate = deny_gate  # type: ignore[attr-defined]
     # Also replace the gate inside the orchestrator's reasoner's executor.
-    orch._reasoner._executor._gate = deny_gate  # type: ignore[attr-defined]  # noqa: SLF001
+    orch._reasoner._executor._gate = deny_gate  # type: ignore[attr-defined]
 
     result = await orch.handle_turn(
         user_id="u1", project="default", text="What is 1+1?", session_id="s1"
@@ -103,7 +103,7 @@ async def test_permission_denied_executor_returns_ok_false() -> None:
 
     # Set a DENY gate on the executor.
     deny_gate = PermissionGate(default=PermissionMode.DENY)
-    executor._gate = deny_gate  # type: ignore[attr-defined]  # noqa: SLF001
+    executor._gate = deny_gate  # type: ignore[attr-defined]
 
     result = await executor.execute("calculator", user_id="u1", project="p", expression="1+1")
 

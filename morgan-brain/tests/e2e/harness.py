@@ -96,7 +96,7 @@ class BenchReport:
         lat = sorted(self.all_latencies)
         if not lat:
             return 0.0
-        idx = min(len(lat) - 1, int(round((pct / 100.0) * (len(lat) - 1))))
+        idx = min(len(lat) - 1, round((pct / 100.0) * (len(lat) - 1)))
         return lat[idx]
 
     def recall_accuracy(self) -> float:

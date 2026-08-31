@@ -55,8 +55,5 @@ class TestSettingsEvalGoldenPath:
     def test_resolves_packaged_when_empty(self) -> None:
         """When eval_golden_path is empty, callers use default_golden_path()."""
         s = Settings(llm_model="x", llm_fast_model="x")
-        if not s.eval_golden_path:
-            path = default_golden_path()
-        else:
-            path = Path(s.eval_golden_path)
+        path = default_golden_path() if not s.eval_golden_path else Path(s.eval_golden_path)
         assert path.exists()

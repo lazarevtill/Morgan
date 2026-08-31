@@ -1,13 +1,13 @@
 """Tests for LocalPromptRegistry (SQLite-backed, dependency-light)."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
 from morgan_brain.learning_lifecycle.interfaces import PromptRegistry
 from morgan_brain.learning_lifecycle.local import LocalPromptRegistry
 
-_CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+_CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ async def test_register_first_version(reg: LocalPromptRegistry) -> None:
     assert pv.name == "system"
     assert pv.version == 1
     assert pv.body == "Be helpful."
-    assert pv.created_at == datetime(2026, 1, 1)
+    assert pv.created_at == datetime(2026, 1, 1, tzinfo=UTC)
 
 
 async def test_register_increments_version(reg: LocalPromptRegistry) -> None:

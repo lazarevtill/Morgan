@@ -8,7 +8,7 @@ All tests use fakes — no network, no LLM, deterministic clock.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -35,7 +35,7 @@ from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import Binding, RoleRouter
 from morgan_brain.security.memory_gate import MemoryGate
 
-T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T0 = datetime(2026, 1, 1, tzinfo=UTC)
 USER = "u1"
 
 
@@ -273,7 +273,7 @@ def test_render_md_truncates_lowest_confidence_first() -> None:
 async def test_preference_delta_from_edit_calls_llm_and_returns_delta() -> None:
     """preference_delta_from_edit should call the fake LLM and return the delta string."""
     delta_payload = json.dumps({"delta": "prefers concise, code-first"})
-    _, reg = _make_router([delta_payload])
+    _, _reg = _make_router([delta_payload])
     fake_client = FakeChatClient(reply=delta_payload)
     reg2 = CapabilityRegistry.from_seed(
         {

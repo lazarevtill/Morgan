@@ -8,8 +8,9 @@ Implements the ``Learner`` Protocol by combining:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from morgan_brain.learning.consolidation import MemoryConsolidator
 from morgan_brain.models.memory import DEFAULT_PROJECT, Memory, MemoryKind, MemorySource
@@ -44,7 +45,7 @@ class ConsolidationLearner:
         consolidator: MemoryConsolidator,
         gate: MemoryGate,
         clock: Callable[[], datetime],
-        profile_builder: "UserProfileBuilder | None" = None,
+        profile_builder: UserProfileBuilder | None = None,
     ) -> None:
         self._consolidator = consolidator
         self._gate = gate

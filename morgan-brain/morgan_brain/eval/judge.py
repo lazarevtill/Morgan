@@ -113,7 +113,7 @@ class LLMJudge:
         if not bindings:
             raise LookupError(f"No bindings registered for judge role {self._role!r}")
         b = bindings[0]
-        return self._router._reg.get(b.provider, b.model)  # noqa: SLF001
+        return self._router._reg.get(b.provider, b.model)
 
     async def judge(
         self,

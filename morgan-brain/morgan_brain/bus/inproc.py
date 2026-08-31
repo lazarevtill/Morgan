@@ -19,6 +19,7 @@ underlying rows are already on disk and get picked up by the next consolidation 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections import defaultdict
 
@@ -89,8 +90,6 @@ class InProcessBus:
         if self._drain_task is not None:
             await self.drain()
             self._drain_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._drain_task
-            except asyncio.CancelledError:
-                pass
             self._drain_task = None

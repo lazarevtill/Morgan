@@ -18,7 +18,6 @@ from morgan_brain.models.emotion import EmotionState, SentimentScore
 from morgan_brain.models.perception import FusedPerception, Intent
 from morgan_brain.modules.skills.registry import SkillRegistry
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

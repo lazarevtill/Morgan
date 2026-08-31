@@ -8,7 +8,7 @@ to the model, and handle_turn returned the correct final answer.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from morgan_brain.composition import build_orchestrator_for_test
 from morgan_brain.providers.wire import ChatResult, ToolCall
@@ -24,7 +24,7 @@ async def test_tool_loop_calculator_executes_in_handle_turn():
 
     orch, _ = build_orchestrator_for_test(
         reply="",
-        clock=lambda: datetime(2026, 1, 1),
+        clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
         chat_results=results,
     )
 
@@ -38,7 +38,9 @@ async def test_tool_loop_calculator_executes_in_handle_turn():
 
 async def test_tool_loop_plain_turn_still_works():
     """Existing plain turns (no tool calls scripted) continue to work after wiring."""
-    orch, mem = build_orchestrator_for_test(reply="Hello!", clock=lambda: datetime(2026, 1, 1))
+    orch, _mem = build_orchestrator_for_test(
+        reply="Hello!", clock=lambda: datetime(2026, 1, 1, tzinfo=UTC)
+    )
 
     result = await orch.handle_turn(
         user_id="u1", project="default", text="Hi there", session_id="s1"

@@ -10,7 +10,7 @@ All tests are deterministic:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -53,7 +53,7 @@ class _FakeInteractionSignal:
         self.retried = False
 
 
-T0 = datetime(2026, 1, 1, 0, 0, 0)
+T0 = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
 CONSOLIDATE_INTERVAL = 100.0  # short interval so tests can tick past it easily
 OPTIMIZE_INTERVAL = 50.0
 
@@ -104,8 +104,6 @@ class _FakeSignalStore:
 
     def __init__(self, examples: list[Any] | None = None) -> None:
         self._has_default = examples is None
-        # Store is empty iff explicitly passed examples=[].
-        self._static_examples: list[Any] = [] if examples is not None else []
         # Sentinel: None means "auto-generate for requested user_id"
         self._explicit_examples: list[Any] | None = examples
         self.high_value_calls: list[dict[str, Any]] = []

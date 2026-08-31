@@ -14,7 +14,7 @@ router → EvalHarness → eval_scorer → ChampionTrainer → PromptRegistry.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -33,7 +33,7 @@ from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry, JsonMode
 from morgan_brain.providers.router import Binding, RoleRouter
 
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 
 
 def _verdict_json(score: float, passed: bool, rationale: str = "ok") -> str:
@@ -120,7 +120,7 @@ async def test_better_candidate_promoted_in_registry() -> None:
         # Curate-contract: the delta is merged into the playbook, so the body CONTAINS it.
         return 0.9 if "improved body" in body else 0.1
 
-    orch, router = _make_orch_and_router(
+    _orch, router = _make_orch_and_router(
         optimizer_reply="improved body",
         assistant_reply="TestUser",
     )
@@ -148,7 +148,7 @@ async def test_worse_candidate_rejected_registry_unchanged() -> None:
     async def low_scorer(body: str) -> float:
         return 0.0  # always worse
 
-    orch, router = _make_orch_and_router(
+    _orch, router = _make_orch_and_router(
         optimizer_reply="worse body",
         assistant_reply="bad",
     )
@@ -209,7 +209,7 @@ async def test_tie_score_does_not_promote() -> None:
     async def const_scorer(body: str) -> float:
         return 0.5  # same score for both current and candidate
 
-    orch, router = _make_orch_and_router(
+    _orch, router = _make_orch_and_router(
         optimizer_reply="tied body",
         assistant_reply="ok",
     )

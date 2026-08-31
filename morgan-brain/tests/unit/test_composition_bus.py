@@ -8,7 +8,7 @@ Verifies that:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from morgan_brain.bus.inproc import InProcessBus
 from morgan_brain.composition import _assemble
@@ -28,7 +28,7 @@ def _fake_router() -> RoleRouter:
 
 
 def _fake_clock() -> datetime:
-    return datetime(2026, 1, 1)
+    return datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def test_assemble_default_uses_inprocess_bus() -> None:
@@ -41,7 +41,7 @@ def test_assemble_default_uses_inprocess_bus() -> None:
         clock=_fake_clock,
         temporal_path=":memory:",
     )
-    assert isinstance(orch._bus, InProcessBus)  # noqa: SLF001
+    assert isinstance(orch._bus, InProcessBus)
 
 
 def test_assemble_injected_bus_is_used() -> None:
@@ -56,4 +56,4 @@ def test_assemble_injected_bus_is_used() -> None:
         temporal_path=":memory:",
         bus=injected,
     )
-    assert orch._bus is injected  # noqa: SLF001
+    assert orch._bus is injected

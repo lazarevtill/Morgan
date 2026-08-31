@@ -26,7 +26,7 @@ class Binding:
 
     provider: str
     model: str
-    client: "ChatClient"
+    client: ChatClient
 
 
 class RoleRouter:
@@ -57,7 +57,7 @@ class RoleRouter:
         needs_json_schema: bool = False,
         needs_vision: bool = False,
         min_context: int = 0,
-    ) -> tuple["ChatClient", str]:
+    ) -> tuple[ChatClient, str]:
         """Return ``(client, model)`` for the first binding that satisfies all caps.
 
         Args:

@@ -9,7 +9,7 @@ Auth: MORGAN_API_KEY set in test settings; Authorization: Bearer header required
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import Depends, FastAPI
@@ -27,7 +27,7 @@ from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import Binding, RoleRouter
 
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 API_KEY = "e2e-feedback-key"
 AUTH_HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
@@ -97,7 +97,7 @@ def _build_app() -> tuple[FastAPI, object]:
 @pytest.mark.asyncio
 async def test_feedback_thumb_up_via_async_client() -> None:
     """POST /api/chat → turn_id; POST /api/feedback thumb=up → 200 {ok: true}."""
-    app, signal_store = _build_app()
+    app, _signal_store = _build_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         # Step 1: chat to get a turn_id.
         resp = await c.post(

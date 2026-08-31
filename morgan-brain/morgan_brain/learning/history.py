@@ -15,8 +15,8 @@ Design notes
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable
 
 from morgan_brain.models.memory import DEFAULT_PROJECT
 from morgan_brain.models.message import Message, Role

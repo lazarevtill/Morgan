@@ -115,14 +115,14 @@ class Settings(BaseSettings):
     eval_golden_path: str = ""
 
     @model_validator(mode="after")
-    def _fill_data_dir_defaults(self) -> "Settings":
+    def _fill_data_dir_defaults(self) -> Settings:
         """Derive temporal_db_url from data_dir when not explicitly overridden."""
         if not self.temporal_db_url:
             self.temporal_db_url = f"sqlite:///{self.data_dir}/morgan.db"
         return self
 
     @model_validator(mode="after")
-    def _fill_provider_defaults(self) -> "Settings":
+    def _fill_provider_defaults(self) -> Settings:
         """Populate role_bindings and providers from legacy llm_* fields if not set."""
         # providers: ensure the default llamacpp entry exists
         if "llamacpp" not in self.providers:

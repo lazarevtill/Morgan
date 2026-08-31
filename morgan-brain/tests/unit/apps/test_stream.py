@@ -6,18 +6,18 @@ All tests are deterministic: no network, no filesystem.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
-from fastapi import FastAPI, Depends
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from morgan_brain.apps.brain_api.auth import require_api_key
 from morgan_brain.apps.brain_api.app import ChatRequest
+from morgan_brain.apps.brain_api.auth import require_api_key
 from morgan_brain.composition import build_orchestrator_for_test
 from morgan_brain.config import Settings
 
-_CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+_CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +92,8 @@ def _sse_app(api_key: str = "") -> tuple[FastAPI, Settings, TestClient]:
     @app.post("/api/chat/stream", dependencies=[_auth])
     async def chat_stream(req: ChatRequest):  # type: ignore[return]
         import json
-        from typing import AsyncIterator
+        from collections.abc import AsyncIterator
+
         from fastapi.responses import StreamingResponse
 
         async def _event_stream() -> AsyncIterator[str]:
@@ -134,7 +135,7 @@ def test_sse_endpoint_delta_json_well_formed() -> None:
     data_lines = [line for line in resp.text.splitlines() if line.startswith("data:")]
     token_lines = [ln for ln in data_lines if ln != "data: [DONE]"]
     for line in token_lines:
-        payload = json.loads(line[len("data: ") :])  # noqa: FURB184
+        payload = json.loads(line[len("data: ") :])
         assert "delta" in payload
         assert isinstance(payload["delta"], str)
 

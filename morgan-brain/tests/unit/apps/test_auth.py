@@ -9,12 +9,11 @@ Policy under test:
 from __future__ import annotations
 
 import pytest
-from fastapi import FastAPI, Depends
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from morgan_brain.apps.brain_api.auth import require_api_key
 from morgan_brain.config import Settings
-
 
 # ---------------------------------------------------------------------------
 # Helpers

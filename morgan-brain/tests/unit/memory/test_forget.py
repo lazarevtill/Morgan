@@ -165,7 +165,9 @@ async def test_forget_empties_every_underlying_table(tmp_path):
         ("interaction_signals", "user_id = 'u' AND project = 'p'"),
         ("session_history", "user_id = 'u' AND project = 'p'"),
     ]:
-        row = conn.execute(f"SELECT COUNT(*) AS n FROM {table} WHERE {where}").fetchone()
+        # The table name and predicate come from the literal list above, not from data.
+        sql = f"SELECT COUNT(*) AS n FROM {table} WHERE {where}"  # noqa: S608
+        row = conn.execute(sql).fetchone()
         assert row["n"] == 0, f"{table} still has rows after forget()"
 
     # vec_items carries no id column of its own -- it is reachable only by rowid through

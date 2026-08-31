@@ -5,7 +5,7 @@ with_confidence=True → predict_fn returns (answer, confidence in [0,1]); defau
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -13,7 +13,7 @@ from morgan_brain.composition import build_orchestrator_for_test
 from morgan_brain.eval.golden import GoldenItem, ProbeType
 from morgan_brain.eval.runner import make_predict_fn
 
-T0 = datetime(2026, 1, 1)
+T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _item() -> GoldenItem:

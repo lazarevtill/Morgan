@@ -18,9 +18,9 @@ import pytest
 from tests.e2e.harness import (
     SCENARIOS,
     ScenarioFn,
+    _live_settings,
     probe_live,
     run_all,
-    _live_settings,
 )
 from tests.e2e.report import to_dict
 

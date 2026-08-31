@@ -112,7 +112,8 @@ async def test_migration_backfills_default_project_on_a_pre_existing_database(tm
             entities TEXT NOT NULL, created_at TEXT
         );
         INSERT INTO memories VALUES
-            ('m1', 'u', 'episodic', 'user_stated', 'old harbor note', 0.5, '[]', '2026-01-01T00:00:00');
+            ('m1', 'u', 'episodic', 'user_stated', 'old harbor note', 0.5, '[]',
+             '2026-01-01T00:00:00');
 
         CREATE TABLE facts (
             id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subject TEXT NOT NULL,
@@ -128,7 +129,8 @@ async def test_migration_backfills_default_project_on_a_pre_existing_database(tm
             memory_id UNINDEXED, user_id UNINDEXED, content,
             tokenize = 'unicode61 remove_diacritics 2'
         );
-        INSERT INTO fts_memories (memory_id, user_id, content) VALUES ('m1', 'u', 'old harbor note');
+        INSERT INTO fts_memories (memory_id, user_id, content)
+        VALUES ('m1', 'u', 'old harbor note');
 
         CREATE TABLE memory_entities (
             memory_id TEXT NOT NULL, user_id TEXT NOT NULL, name TEXT NOT NULL,

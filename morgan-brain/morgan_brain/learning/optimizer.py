@@ -43,7 +43,7 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, Union
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -80,7 +80,7 @@ class Example(BaseModel):
 # Sync/async scorer type alias used across this module.
 _SyncScorer = Callable[[str], float]
 _AsyncScorer = Callable[[str], Awaitable[float]]
-AnyScorer = Union[_SyncScorer, _AsyncScorer]
+AnyScorer = _SyncScorer | _AsyncScorer
 
 
 async def mine_examples(
@@ -339,7 +339,7 @@ class ReflectiveOptimizer:
 
         for _ in range(max_calls):
             user_msg = _USER_TEMPLATE.format(
-                current_body=best_body if best_body else "(empty — no current champion)",
+                current_body=best_body or "(empty — no current champion)",
                 examples_text=examples_text,
             )
             messages = [
@@ -496,7 +496,9 @@ class GepaOptimizer:
         os.environ["DO_NOT_TRACK"] = "1"
 
         try:
-            from mlflow.genai.optimize import GepaPromptOptimizer as _GepaPromptOptimizer  # type: ignore[import-not-found]  # noqa: F401
+            from mlflow.genai.optimize import (
+                GepaPromptOptimizer as _GepaPromptOptimizer,  # noqa: F401
+            )
         except ImportError as exc:
             raise NotImplementedError(
                 "MLflow GEPA lands when [learning] extra is installed "

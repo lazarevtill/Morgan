@@ -151,12 +151,16 @@ def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-async def build_doctor_report(
+def _collect_local_probes(
     settings: Settings, *, project: str, all_projects: bool
 ) -> dict[str, Any]:
-    """Build the ``doctor`` report. Every probe is independently caught so one broken
-    subsystem (e.g. FTS5 genuinely unavailable) reports its own failure instead of aborting
-    every other check -- "genuinely diagnostic, not decorative" is the whole point.
+    """Run every *local* doctor probe: filesystem, SQLite, sqlite-vec, FTS5, row counts.
+
+    Synchronous on purpose. Each probe blocks -- ``Path.resolve()`` stats, every
+    ``conn.execute()`` is a blocking sqlite call -- so this whole body is the thing that
+    must not run on the event loop. ``build_doctor_report`` hands it to a worker thread.
+    Splitting here keeps that boundary in one place instead of scattering per-call
+    offloads through a function that is blocking from top to bottom.
     """
     db_path = sqlite_path(settings.temporal_db_url)
     report: dict[str, Any] = {
@@ -196,8 +200,6 @@ async def build_doctor_report(
         report["fts5"] = True
     except sqlite3.OperationalError:
         report["fts5"] = False
-
-    report["provider"] = "reachable" if await check_llm_reachable(settings) else "unreachable"
 
     # Build the real schema (idempotent CREATE ... IF NOT EXISTS) so row counts are always
     # meaningful -- 0 on a fresh install rather than "table doesn't exist yet".
@@ -247,6 +249,26 @@ async def build_doctor_report(
     report["vector_rows"] = _count("vec_meta") if settings.vector_backend == "sqlite" else None
 
     conn.close()
+    return report
+
+
+async def build_doctor_report(
+    settings: Settings, *, project: str, all_projects: bool
+) -> dict[str, Any]:
+    """Build the ``doctor`` report.
+
+    Every probe is independently caught so one broken subsystem (e.g. FTS5 genuinely
+    unavailable) reports its own failure instead of aborting every other check --
+    "genuinely diagnostic, not decorative" is the whole point.
+
+    The local probes are blocking, so they run in a worker thread; the one genuinely
+    async probe -- can we reach the configured LLM endpoint -- runs here. ``provider``
+    is pre-seeded by the local pass, so assigning it back keeps its place in the report.
+    """
+    report = await asyncio.to_thread(
+        _collect_local_probes, settings, project=project, all_projects=all_projects
+    )
+    report["provider"] = "reachable" if await check_llm_reachable(settings) else "unreachable"
     return report
 
 
@@ -386,7 +408,10 @@ def _render_recall(data: dict[str, Any]) -> str:
 
 def _render_facts(data: dict[str, Any]) -> str:
     if not data["facts"]:
-        return f"No currently-valid facts (project={data['project']!r}, all_projects={data['all_projects']})."
+        return (
+            f"No currently-valid facts "
+            f"(project={data['project']!r}, all_projects={data['all_projects']})."
+        )
     lines = [
         f"{f['subject']} {f['predicate']} {f['object']} (confidence={f['confidence']:.2f}, "
         f"project={f['project']})"

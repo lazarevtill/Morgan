@@ -5,14 +5,14 @@ Covers append + recent, limit enforcement, chronological order, and session scop
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
 from morgan_brain.learning.history import SessionHistoryStore
 from morgan_brain.models.message import Message, Role
 
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 USER_ID = "u1"
 
 

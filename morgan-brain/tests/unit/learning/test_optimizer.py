@@ -8,7 +8,7 @@ All tests are fully deterministic:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -23,7 +23,7 @@ from morgan_brain.providers.router import Binding, RoleRouter
 # Helpers
 # ---------------------------------------------------------------------------
 
-CLOCK = lambda: datetime(2026, 1, 1, 12, 0, 0)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)  # noqa: E731
 
 
 def _store() -> SignalStore:

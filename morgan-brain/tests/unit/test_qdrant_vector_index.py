@@ -24,7 +24,6 @@ from morgan_brain.modules.memory.stores.vector import (
     VectorRecord,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fake Qdrant client helpers
 # ---------------------------------------------------------------------------

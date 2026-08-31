@@ -9,10 +9,10 @@ Flow:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
-from fastapi import FastAPI, Depends
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from morgan_brain.apps.brain_api.app import ChatRequest, ChatResponse
@@ -27,7 +27,7 @@ from morgan_brain.providers.adapters.fake import FakeChatClient
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import Binding, RoleRouter
 
-CLOCK = lambda: datetime(2026, 1, 1)  # noqa: E731
+CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 API_KEY = "test-feedback-key"
 
 
@@ -98,7 +98,7 @@ _AUTH_HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
 
 def test_feedback_thumb_up_returns_ok() -> None:
-    _, client, signal_store = _build_test_app()
+    _, client, _signal_store = _build_test_app()
 
     # Step 1: post a chat turn to get a turn_id
     resp = client.post(

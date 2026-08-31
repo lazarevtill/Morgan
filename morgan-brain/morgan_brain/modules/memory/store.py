@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable
 
 from morgan_brain.interfaces.memory import ForgetReport
 from morgan_brain.models.memory import (
@@ -99,7 +99,7 @@ class MemoryModule:
             query.text, user_id=query.user_id, top_k=query.top_k * 2, project=project
         )
         entity_ranking = self._entities.search(
-            {t for t in query.text.split()},
+            set(query.text.split()),
             user_id=query.user_id,
             top_k=query.top_k * 2,
             project=project,

@@ -7,8 +7,8 @@ Phase 5: /api/chat/stream (SSE) streams token deltas with a terminal [DONE] sent
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import Depends, FastAPI
 from fastapi.responses import StreamingResponse
