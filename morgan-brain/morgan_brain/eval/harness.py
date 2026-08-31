@@ -37,6 +37,7 @@ from morgan_brain.eval.calibration import (
     expected_calibration_error,
     reliability_bins,
 )
+from morgan_brain.eval.gate_integrity import screen_candidate
 from morgan_brain.eval.golden import GoldenItem, ProbeType
 from morgan_brain.eval.judge import CalibratedJudge, LLMJudge
 from morgan_brain.learning_lifecycle.interfaces import PromptRegistry
@@ -45,7 +46,11 @@ _log = structlog.get_logger(__name__)
 
 # Per-probe regression tolerance — small regressions within this band are
 # accepted as noise (the overall gate is the primary signal).
-_EPSILON: float = 0.05
+#: Tie tolerance for `beats_current`. Public because it is part of the gate's
+#: description: widening it lets a regression count as "no regression", which is exactly
+#: what `GateSpec` exists to notice.
+EPSILON: float = 0.05
+_EPSILON: float = EPSILON
 
 # The key used for the overall accuracy figure in layer2 / champion metrics.
 _OVERALL_KEY = "overall_preference_following_accuracy"
@@ -276,6 +281,11 @@ class EvalGate:
         Returns:
             True if the candidate was promoted (champion updated); False otherwise.
         """
+        # A candidate that addresses the evaluator is refused before its scorecard is
+        # consulted at all. The score it carries was produced under that text, so
+        # reasoning about it is already reasoning about a compromised measurement.
+        screen_candidate(candidate_body)
+
         # Build the champion scorecard from stored metrics (if any champion exists).
         existing_champion = await self._registry.champion(name)
         champion_scorecard: Scorecard | None = None
@@ -286,6 +296,15 @@ class EvalGate:
                 n_items=0,
                 passed=True,
             )
+
+        if champion_scorecard is None and not candidate_scorecard.passed:
+            # `beats_current` treats "no champion" as "anything qualifies", which is
+            # correct for a *comparison* and wrong for a *promotion*: with no baseline it
+            # would install a candidate that failed the eval outright, and that candidate
+            # then becomes the baseline everything after is measured against. A missing
+            # champion is not a free pass -- the same rule ChampionTrainer enforces by
+            # scoring the empty body as its baseline.
+            return False
 
         if not beats_current(candidate_scorecard, champion_scorecard):
             return False

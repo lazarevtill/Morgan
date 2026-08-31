@@ -47,6 +47,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from morgan_brain.learning.patterns import PatternRegister, render_for_optimizer
 from morgan_brain.learning.signals import SignalStore
 from morgan_brain.learning_lifecycle.interfaces import PromptVersion
 from morgan_brain.providers.router import RoleRouter
@@ -167,12 +168,16 @@ Rules:
 1. Return ONLY new bullet lines — one guidance item per line, each prefixed with "- ".
 2. Propose DELTAS: do NOT restate existing bullets and do NOT rewrite the playbook.
 3. Each bullet must be concise, durable, and broadly useful. Anti-bloat is critical.
+4. Fix the CLASS, not the instance. When a RECURRING CLASSES section is present, those
+   corrections have already happened many times; a bullet that only covers the newest
+   example will let the class recur again. A class listed as having recurred after a
+   previous fix means that fix was at the wrong depth — go deeper, do not restate it.
 """
 
 _USER_TEMPLATE = """\
 CURRENT PLAYBOOK:
 {current_body}
-
+{patterns_text}
 FAILING EXAMPLES (query → expected good output):
 {examples_text}
 
@@ -270,11 +275,31 @@ class ReflectiveOptimizer:
         role: str = "reflection",
         fallback_role: str = "strong",
         char_budget: int = 1500,
+        patterns: PatternRegister | None = None,
+        pattern_user_id: str | None = None,
     ) -> None:
         self._router = router
         self._role = role
         self._fallback_role = fallback_role
         self._char_budget = char_budget
+        self._patterns = patterns
+        self._pattern_user_id = pattern_user_id
+
+    def _patterns_text(self) -> str:
+        """Recurring correction classes, rendered for the prompt.
+
+        Empty when no register is wired or nothing has recurred often enough -- an empty
+        section is right, because inventing a class from one correction is how a single
+        stray edit becomes policy.
+        """
+        if self._patterns is None or self._pattern_user_id is None:
+            return ""
+        # Across every project: the champion preprompt is one document per user, so a
+        # class recurring in three projects is one strong class, not three weak ones.
+        rendered = render_for_optimizer(
+            self._patterns.recurring(user_id=self._pattern_user_id, project=None)
+        )
+        return f"\nRECURRING CLASSES:\n{rendered}\n" if rendered else ""
 
     def _get_client_model(self) -> tuple[Any, str]:
         """Return (client, model) for the reflection role, falling back gracefully."""
@@ -336,10 +361,17 @@ class ReflectiveOptimizer:
         best_score = await _call_scorer(scorer, current_body)
 
         examples_text = _format_examples(typed_train)
+        # Recurring classes, when a register is wired. A model handed eleven separate
+        # corrections proposes a twelfth patch; the same model told the class has
+        # recurred eleven times -- and that the last fix did not hold -- has what it
+        # needs to propose something structural instead. This is Meta-over-Patch made
+        # operational rather than exhorted.
+        patterns_text = self._patterns_text()
 
         for _ in range(max_calls):
             user_msg = _USER_TEMPLATE.format(
                 current_body=best_body or "(empty — no current champion)",
+                patterns_text=patterns_text,
                 examples_text=examples_text,
             )
             messages = [

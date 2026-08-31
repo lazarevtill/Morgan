@@ -281,11 +281,18 @@ class MemoryModule:
             # being cleaned up afterwards. Each is optional in the same sense as the
             # vector and signal tables: present only once its owner has opened on this
             # connection, skipped (and named) when it never has.
+            # `learned_patterns` joins them: a correction class is distilled from this
+            # project's edits, so it is derived content like the rest. `decision_receipts`
+            # deliberately does NOT -- it records why the champion is what it is, and the
+            # champion itself is not erased (see the note above). Deleting the reasoning
+            # while keeping the prompt it justified would leave the least explicable of
+            # the two states.
             for table in (
                 "mem_entity_edges",
                 "mem_schema_edges",
                 "mem_entity_nodes",
                 "mem_schemas",
+                "learned_patterns",
             ):
                 if _table_exists(conn, table):
                     report.index_entries += conn.execute(

@@ -79,7 +79,12 @@ async def test_forget_erases_the_semantic_index(stack):
 
     await module.forget(user_id=U, project=P)
 
-    for table in ("mem_entity_nodes", "mem_entity_edges", "mem_schema_edges", "mem_schemas"):
+    for table in (
+        "mem_entity_nodes",
+        "mem_entity_edges",
+        "mem_schema_edges",
+        "mem_schemas",
+    ):
         n = conn.execute(
             f"SELECT COUNT(*) AS n FROM {table} WHERE user_id = ? AND project = ?",  # noqa: S608
             (U, P),
@@ -122,3 +127,35 @@ async def test_forgetting_a_project_with_no_index_rows_is_not_an_error(stack):
     report = await module.forget(user_id=U, project="never-used")
     assert report.persona_nodes == 0
     assert report.index_entries == 0
+
+
+async def test_forget_erases_the_pattern_register(stack):
+    """A correction class is distilled from this project's edits: derived content."""
+    from morgan_brain.learning.patterns import PatternRegister
+
+    module, semantic, persona, conn = stack
+    patterns = PatternRegister(conn)
+    await _populate(module, semantic, persona, P)
+    patterns.record(user_id=U, project=P, title="replies are too long", now=T0)
+
+    await module.forget(user_id=U, project=P)
+
+    assert patterns.all_patterns(user_id=U, project=P) == []
+
+
+async def test_forget_keeps_the_decision_receipts(stack):
+    """Receipts record why the champion is what it is, and the champion is deliberately
+    not erased. Deleting the reasoning while keeping the prompt it justified leaves the
+    least explicable of the two states."""
+    from morgan_brain.learning.receipts import ReceiptStore
+
+    module, semantic, persona, conn = stack
+    receipts = ReceiptStore(conn)
+    await _populate(module, semantic, persona, P)
+    receipts.record(
+        prompt_name="system-prompt", verdict="promoted", candidate_body="be terse", now=T0
+    )
+
+    await module.forget(user_id=U, project=P)
+
+    assert len(receipts.recent()) == 1
