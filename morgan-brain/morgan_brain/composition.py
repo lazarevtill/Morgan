@@ -36,6 +36,7 @@ from morgan_brain.learning.learner import ConsolidationLearner
 from morgan_brain.learning.optimizer import AnyScorer, ReflectiveOptimizer
 from morgan_brain.learning.profile import UserProfileBuilder
 from morgan_brain.learning.recorder import SignalRecorder
+from morgan_brain.learning.semantic_index_builder import LLMSchemaClassifier, SemanticIndexBuilder
 from morgan_brain.learning.signals import SignalStore
 from morgan_brain.learning_lifecycle.factory import build_registry
 from morgan_brain.learning_lifecycle.interfaces import PromptRegistry
@@ -45,6 +46,7 @@ from morgan_brain.models.message import Conversation, Message, Role
 from morgan_brain.modules.memory.indexing.embedder import Embedder, FakeEmbedder
 from morgan_brain.modules.memory.retrieval.entities import EntityIndex
 from morgan_brain.modules.memory.retrieval.fts import FtsIndex
+from morgan_brain.modules.memory.retrieval.semantic_index import SemanticIndex
 from morgan_brain.modules.memory.store import MemoryModule
 from morgan_brain.modules.memory.stores.db import open_db
 from morgan_brain.modules.memory.stores.episodic import EpisodicStore
@@ -268,6 +270,9 @@ def _assemble(
         fts=FtsIndex(resolved_conn),
         entities=EntityIndex(resolved_conn),
         episodics=EpisodicStore(resolved_conn),
+        # The semantic upper index narrows recall's candidate pool before any signal
+        # searches. Read-only here; the learning-worker builds it.
+        semantic=SemanticIndex(resolved_conn),
     )
     gate = MemoryGate(memory_module)
     reg = CapabilityRegistry.from_packaged()
@@ -291,6 +296,12 @@ def _assemble(
         gate=gate,
         clock=clock,
         profile_builder=profile_builder,
+        # The classifier runs on the reflection role and degrades to keyword matching
+        # when that role has no binding, so this stays wired on a box with no model.
+        index_builder=SemanticIndexBuilder(
+            semantic=SemanticIndex(resolved_conn),
+            classifier=LLMSchemaClassifier(router=router, capability_registry=reg),
+        ),
     )
     # Use the injected bus (tests) or the config-driven one (production).
     # get_event_bus() reads settings.event_bus: "inproc" → InProcessBus, "redis" → RedisStreamsBus.
@@ -519,6 +530,7 @@ def build_memory_context(settings: Settings | None = None) -> MemoryContext:
         fts=FtsIndex(conn),
         entities=EntityIndex(conn),
         episodics=EpisodicStore(conn),
+        semantic=SemanticIndex(conn),
     )
     return MemoryContext(
         gate=MemoryGate(memory_module),

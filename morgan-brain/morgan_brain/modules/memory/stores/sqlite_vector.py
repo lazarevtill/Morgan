@@ -121,6 +121,7 @@ class SqliteVectorIndex:
         vector: list[float],
         top_k: int,
         project: str | None = DEFAULT_PROJECT,
+        restrict_ids: list[str] | None = None,
     ) -> list[VectorHit]:
         # user_id and project are both vec0 metadata columns, so the filter applies INSIDE the
         # KNN -- see the module docstring for why post-filtering would silently drop results.
@@ -134,6 +135,15 @@ class SqliteVectorIndex:
         if project is not None:
             sql += " AND v.project = ?"
             params.append(project)
+        if restrict_ids is not None:
+            # `rowid IN (...)` constrains the KNN itself in sqlite-vec, exactly like the
+            # metadata columns above -- the k nearest are chosen from inside the pool
+            # rather than from the whole table and then filtered. That distinction is the
+            # whole value of routing: with a pool of {m3, m4} and k=2 this returns m3 and
+            # m4 even when m0 and m1 are globally nearer, which a post-filter could not.
+            sql += " AND v.rowid IN (SELECT rowid FROM vec_meta WHERE id IN "
+            sql += "(SELECT value FROM json_each(?)))"
+            params.append(json.dumps(restrict_ids))
         sql += " ORDER BY v.distance"
         rows = self._conn.execute(sql, params).fetchall()
         # vec0's cosine distance is (1 - cosine_similarity), on 0..2. Convert back to

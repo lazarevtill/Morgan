@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from morgan_brain.learning.consolidation import MemoryConsolidator
+from morgan_brain.learning.semantic_index_builder import SemanticIndexBuilder
 from morgan_brain.models.base import Entity
 from morgan_brain.models.memory import DEFAULT_PROJECT, Memory, MemoryKind, MemorySource
 from morgan_brain.models.message import Conversation, Role
@@ -39,6 +40,11 @@ class ConsolidationLearner:
     profile_builder:
         Optional ``UserProfileBuilder`` (Phase 2C).  When provided, ``user_model``
         delegates to it; when absent, a default ``UserModel`` is returned.
+    index_builder:
+        Optional ``SemanticIndexBuilder``.  When provided, the memories stored by
+        ``process_session`` are filed into the semantic upper index in the same cold-path
+        pass that stored them, so routing sees a turn from the next turn onward rather
+        than from the next nightly run.
     """
 
     def __init__(
@@ -48,11 +54,13 @@ class ConsolidationLearner:
         gate: MemoryGate,
         clock: Callable[[], datetime],
         profile_builder: UserProfileBuilder | None = None,
+        index_builder: SemanticIndexBuilder | None = None,
     ) -> None:
         self._consolidator = consolidator
         self._gate = gate
         self._clock = clock
         self._profile_builder = profile_builder
+        self._index_builder = index_builder
 
     # ------------------------------------------------------------------
     # Learner Protocol
@@ -75,20 +83,28 @@ class ConsolidationLearner:
         deciding what is worth indexing, it costs the request nothing, and both messages
         of a turn get it (perception only ever sees the user's half).
         """
+        stored: list[Memory] = []
         for msg in conversation.messages:
             source = (
                 MemorySource.USER_STATED if msg.role is Role.USER else MemorySource.AGENT_INFERRED
             )
-            await self._gate.store(
-                Memory(
-                    user_id=conversation.user_id,
-                    project=conversation.project,
-                    kind=MemoryKind.EPISODIC,
-                    content=msg.content,
-                    source=source,
-                    entities=[Entity(name=n) for n in extract_entity_names(msg.content)],
-                    created_at=self._clock(),
-                )
+            memory = Memory(
+                user_id=conversation.user_id,
+                project=conversation.project,
+                kind=MemoryKind.EPISODIC,
+                content=msg.content,
+                source=source,
+                entities=[Entity(name=n) for n in extract_entity_names(msg.content)],
+                created_at=self._clock(),
+            )
+            await self._gate.store(memory)
+            stored.append(memory)
+
+        if self._index_builder is not None:
+            await self._index_builder.index(
+                user_id=conversation.user_id,
+                project=conversation.project,
+                memories=stored,
             )
 
     async def user_model(self, user_id: str) -> UserModel:
