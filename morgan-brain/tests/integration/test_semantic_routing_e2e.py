@@ -127,3 +127,63 @@ async def test_an_unrouted_query_still_recalls_everything(stack):
 
     hits = await module.recall(MemoryQuery(user_id=U, project=P, text="moved slot", top_k=8))
     assert any("Dentist" in m.content for m in hits)
+
+
+async def test_turns_feed_the_co_retrieval_log_off_the_request_path(tmp_path):
+    """Emergence needs to know what queries activate together. That statistic is
+    recorded after the reply, from the same cold-path pass that stored the turn -- never
+    during the request, for a number that is only ever read nightly."""
+    from morgan_brain.learning.cluster_emergence import ClusterEmergence, RefusingJudge
+
+    conn = open_db(str(tmp_path / "morgan.db"))
+    semantic = SemanticIndex(conn)
+    module = MemoryModule(
+        embedder=FakeEmbedder(dim=16),
+        vectors=SqliteVectorIndex(conn, dim=16),
+        temporal=SqliteTemporalStore(conn=conn),
+        clock=lambda: T0,
+        fts=FtsIndex(conn),
+        entities=EntityIndex(conn),
+        episodics=EpisodicStore(conn),
+        semantic=semantic,
+    )
+    gate = MemoryGate(module)
+    reg = CapabilityRegistry.from_seed(
+        {
+            "fake/test-model": {
+                "supports_tools": True,
+                "json_mode": "json_schema",
+                "context_window": 32768,
+            }
+        }
+    )
+    router = RoleRouter(
+        reg=reg, bindings={"strong": [Binding("fake", "test-model", FakeChatClient(replies=[]))]}
+    )
+    emergence = ClusterEmergence(semantic=semantic, conn=conn, judge=RefusingJudge())
+    learner = ConsolidationLearner(
+        consolidator=MemoryConsolidator(
+            gate=gate, router=router, capability_registry=reg, clock=lambda: T0
+        ),
+        gate=gate,
+        clock=lambda: T0,
+        index_builder=SemanticIndexBuilder(semantic=semantic, classifier=KeywordSchemaClassifier()),
+        emergence=emergence,
+    )
+
+    await learner.process_session(
+        Conversation(
+            user_id=U,
+            project=P,
+            session_id="s1",
+            messages=[
+                Message(user_id=U, role=Role.USER, content="Harbor blocked the GitLab deploy")
+            ],
+        )
+    )
+
+    rows = conn.execute(
+        "SELECT entity FROM mem_query_activations WHERE user_id = ? AND project = ?", (U, P)
+    ).fetchall()
+    assert {r["entity"] for r in rows} == {"harbor", "gitlab"}
+    conn.close()

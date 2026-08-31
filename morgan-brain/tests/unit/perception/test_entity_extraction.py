@@ -50,5 +50,17 @@ def test_acronyms_are_entities():
     assert "GDPR" in extract_entity_names("does GDPR apply here")
 
 
+def test_camelcase_brands_are_entities():
+    """`"GitLab".istitle()` is False -- an internal capital breaks it -- and a technical
+    corpus is mostly these. Missing them left the co-retrieval log half empty."""
+    names = extract_entity_names("the GitLab pipeline calls PyPI from an iPhone")
+    assert {"GitLab", "PyPI", "iPhone"} <= set(names)
+
+
+def test_lowercase_words_are_still_not_entities():
+    """The CamelCase rule must stay narrow: ordinary prose has no interior capitals."""
+    assert extract_entity_names("the pipeline calls the registry") == []
+
+
 def test_empty_text_is_not_an_error():
     assert extract_entity_names("") == []

@@ -208,19 +208,25 @@ _MIN_ACRONYM_LENGTH = 2
 
 
 def _is_candidate(word: str) -> bool:
-    """True when *word* looks like a name or an acronym in a cased script.
+    """True when *word* looks like a name, an acronym, or a CamelCase brand.
 
     ``istitle()`` and ``isupper()`` are Unicode-aware, so this is one rule for every
-    cased script rather than one regex per alphabet. A word that is neither -- lower
-    case, or from a script without case -- is not a candidate.
+    cased script rather than one regex per alphabet. A word that matches none of the
+    three -- lower case throughout, or from a script without case -- is not a candidate.
     """
+    if len(word) < _MIN_NAME_LENGTH or not any(c.isalpha() for c in word):
+        return False
     if word.isupper():
         # ALL CAPS: an acronym (GDPR, SQL) or shouting. Digits are allowed inside
         # (S3, K8S) but a bare number is not a name.
-        return len(word) >= _MIN_ACRONYM_LENGTH and any(c.isalpha() for c in word)
+        return True
     if word.istitle():
-        return len(word) >= _MIN_NAME_LENGTH
-    return False
+        return True
+    # CamelCase. `istitle()` is False for GitLab, PyPI, JavaScript, iPhone and McDonald
+    # -- an internal capital breaks it -- and those are exactly the proper nouns a
+    # technical corpus is full of. An interior capital in an otherwise-lowercase word is
+    # not something ordinary prose does, so this is a narrow rule, not a loose one.
+    return any(c.isupper() for c in word[1:])
 
 
 def extract_entity_names(text: str) -> list[str]:

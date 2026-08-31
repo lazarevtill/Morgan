@@ -292,6 +292,8 @@ class MemoryModule:
                 "mem_schema_edges",
                 "mem_entity_nodes",
                 "mem_schemas",
+                "mem_query_activations",
+                "mem_emergence_rejected",
                 "learned_patterns",
             ):
                 if _table_exists(conn, table):
