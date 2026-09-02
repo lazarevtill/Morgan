@@ -9,8 +9,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from morgan_brain.learning.history import SessionHistoryStore
-from morgan_brain.models.message import Message, Role
+from morgan_brain.memory.history import SessionHistoryStore
+from morgan_brain.models import Message, Role
 
 CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 USER_ID = "u1"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from morgan_brain.ports.mcp_server import TOOL_NAMES, build_server
+from morgan_brain.mcp_server import TOOL_NAMES, build_server
 
 
 def test_exposes_exactly_the_five_tools():

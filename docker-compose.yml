@@ -1,69 +1,12 @@
-name: morgan-brain
+name: morgan
 
 services:
-  brain-api:
-    build: { context: ., dockerfile: Dockerfile, target: runtime }
-    command: python -m morgan_brain.apps.brain_api
-    ports: ["8080:8080"]
-    env_file: [.env]
-    environment:
-      # A container's published port is unreachable from a loopback bind, so this overrides
-      # the loopback default — which means MORGAN_API_KEY in .env must be a real key or
-      # brain-api refuses to start. That refusal is the point: a published port with
-      # authentication disabled is an open memory store.
-      MORGAN_API_HOST: 0.0.0.0
-      # The mounted volume below, not the per-user default the CLI uses outside a container.
-      MORGAN_DATA_DIR: /app/data
-      # Redis carries events between the two processes; that is what it is here for.
-      MORGAN_EVENT_BUS: redis
-      MORGAN_REDIS_URL: redis://redis:6379/0
-      # No MORGAN_VECTOR_BACKEND override. It used to be `qdrant`, on the rationale of "a
-      # shared vector store so brain-api and the worker see the same memory" — obsolete since
-      # the reshape: both services mount the same ./data volume and share one morgan.db, with
-      # sqlite-vec vectors inside it. Qdrant is also the one backend where forget() does not
-      # erase vectors, so defaulting to it shipped an incomplete erase. Opt in below.
-    depends_on:
-      redis: { condition: service_healthy }
-    volumes: ["./data:/app/data"]
-
-  learning-worker:
-    build: { context: ., dockerfile: Dockerfile, target: runtime }
-    command: python -m morgan_brain.apps.learning_worker
+  morgan-mcp:
+    build: .
+    ports: ["8090:8090"]
+    # MORGAN_LLM_ENDPOINT, MORGAN_API_KEY (required: the port is published) and the model
+    # names come from .env next to this file.
     env_file: [.env]
     environment:
       MORGAN_DATA_DIR: /app/data
-      MORGAN_EVENT_BUS: redis
-      MORGAN_REDIS_URL: redis://redis:6379/0
-      # Run the nightly consolidation + eval-gated optimizer loop.
-      MORGAN_ENABLE_SCHEDULING: "true"
-    depends_on:
-      redis: { condition: service_healthy }
     volumes: ["./data:/app/data"]
-
-  redis:
-    image: redis:7-alpine
-    ports: ["6379:6379"]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    volumes: ["redis-data:/data"]
-
-  # Opt-in: `docker compose --profile qdrant up`, and set MORGAN_VECTOR_BACKEND=qdrant plus
-  # MORGAN_QDRANT_URL=http://qdrant:6333 in .env. Note the known gap first — forget() does not
-  # erase vectors under this backend; they must be removed from Qdrant separately.
-  qdrant:
-    profiles: ["qdrant"]
-    image: qdrant/qdrant:latest
-    ports: ["6333:6333"]
-    healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/6333"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    volumes: ["qdrant-storage:/qdrant/storage"]
-
-volumes:
-  redis-data:
-  qdrant-storage:

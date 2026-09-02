@@ -1,101 +1,76 @@
 # Morgan
 
-A self-hosted, **self-learning, provider-agnostic personal agent kernel** — it owns your identity,
-memory, learning, and policy. The chat assistant is one app on top of it, not the product. Memory
-is **local-first**: one SQLite database holds everything, project-scoped, reachable from any
-project on any of your machines. The default provider is **llama.cpp** (`llama-server`),
-remote-first — a GPU box on the homelab reached over an overlay network — with any other
-OpenAI-compatible endpoint (Ollama included) supported as a non-default provider key.
+A **project-scoped memory for your AI tools**, consolidated into facts by a local model.
 
-## What exists today
+You tell Morgan things from any repository, on any of your machines. Claude Code, Claude
+Desktop or any other MCP client recalls them, scoped to the repository it is working in. A
+local model turns what was said into durable, dated facts that evolve instead of being
+overwritten. Everything lives in one SQLite file on hardware you own.
 
-- **Two usage surfaces.** The `morgan` **CLI** (`remember`/`recall`/`facts`/`forget`/`ask`/
-  `doctor`/`receipts`; project auto-detected from the current git repository) and **`morgan-mcp`**, an MCP
-  server exposing the same five operations to any MCP client (Claude Code, Claude Desktop, …) over
-  stdio or streamable-HTTP with a bearer token. Both are thin adapters over the same `MemoryGate`
-  — no memory logic is duplicated between them.
-- **A remote gateway.** `brain-api` (`/api/chat`, `/api/chat/stream` SSE, `/api/feedback`,
-  `/api/tools`, `/api/skills`, `/api/profile`), API-key auth on every route but `/health`.
-- **Durable, project-scoped memory.** Recall fuses three signals — vector (sqlite-vec), FTS5
-  keyword (Cyrillic-aware), and entity overlap — all surviving a restart. Every read and write is
-  scoped to a `project`; `--all-projects` is the explicit cross-project escape hatch.
-- **A semantic index above the store.** Schemas route coarsely, entities locate concretely, and
-  recall narrows every signal to that candidate pool *before* searching — the point being a small
-  top-k that is dense rather than merely small. Coherent groups earn their own slot over time,
-  from what your questions actually activate together. When the index has nothing useful to say it
-  says so, and recall searches everything: routing can cost precision, never recall.
-- **Knows who you are, not just what you said.** A persona graph keeps attitudes anchored to what
-  they concern — "impatient with the weekly sync" is a different claim from "impatient", and only
-  recurrence across several different things, on several different days, promotes one to the
-  other. An untargeted inference is dropped; only what you say about yourself enters unanchored.
-- **Learns you, safely.** A signal→consolidation→personalization loop: every turn logs training
-  signals (edits > retries > thumbs); a nightly worker consolidates episodic memory into durable
-  **valid-time facts** (knowledge evolves, never overwrites); an `AdaptivePersonalizer` injects
-  your compact profile + turn-relevant traits on every turn.
-- **Optimizes itself, gated — and disarmed by default.** A champion-preprompt optimizer mines
-  high-value signals, proposes an improved system prompt, and would promote it only if it beats
-  the current champion on a 3-layer held-out eval. `MORGAN_ENABLE_CHAMPION_PROMOTION` defaults to
-  `false`: the promotion gate itself isn't statistically sound yet (see [`docs/ROADMAP.md`](docs/ROADMAP.md)).
-- **Learns from classes, not incidents.** Corrections are grouped into recurring *classes* and
-  counted — including whether a class came back *after* the fix meant to close it, which is the
-  signal that the fix was at the wrong depth. The optimizer is told the class, not eleven
-  unrelated edits, so it stops proposing the same patch every week.
-- **The gate can't be weakened by what it judges.** The optimizer writes a prompt; the judge reads
-  what that prompt produced. So the eval gate is fingerprinted — item count and ids, judge model,
-  scorer set, tie epsilon — and a candidate measured on a different or weaker gate is refused, as
-  is one whose text addresses the evaluator rather than you. Every decision, promotions **and**
-  rejections with their reasons, is recorded: `morgan receipts`.
-- **Cascading erasure.** `forget()` removes a project's memories, facts, vectors, signals, session
-  history — and everything derived from them: the semantic index, its co-retrieval statistics, the
-  persona graph, and the correction-class register — in one transaction (vectors under
-  `vector_backend=qdrant` are the one gap; they must be removed from Qdrant separately).
-- **Agentic.** Permission-gated, SSRF/DoS-hardened built-in **tools** (calculator, clock,
-  memory-search, fetch-url) plus your own `BaseTool`s; default-deny for side effects.
-- **Skills.** Markdown + frontmatter skills, trigger-matched and champion-versioned.
-- **Provider-agnostic.** Role router (strong/fast/judge/reflection) behind typed seams; no
-  provider SDK is imported above the adapter layer.
+## What it does
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the milestone-by-milestone status and known
-limitations.
+- **Remembers per project.** Every memory belongs to a project, which the CLI takes from the
+  current git repository's directory name. Recall is scoped to it; `--all-projects` is the
+  explicit escape hatch.
+- **Recalls by three signals at once.** Vector search (sqlite-vec), full-text search (FTS5,
+  Cyrillic-aware) and entity overlap, fused by reciprocal rank. A semantic index above them
+  routes a query to the memories that share its entities and topics, so a small top-k is
+  dense rather than merely small. When the index has nothing useful to say, recall searches
+  everything: routing can cost precision, never recall.
+- **Consolidates into facts.** `morgan consolidate` asks your model to turn recent memories
+  into subject-predicate-object facts with validity intervals. An update closes the old
+  interval and opens a new one; nothing is overwritten and history stays queryable. Every
+  fact records who asserted it: you, or the model's inference.
+- **Answers with what it knows.** `morgan ask` recalls first, answers, and remembers the
+  exchange.
+- **Forgets completely.** `morgan forget` erases a project from every table in one
+  transaction, including vectors and the derived index, and reports exactly what it touched.
+- **Talks to any model server.** Any OpenAI-compatible endpoint: llama-server by default,
+  Ollama's `/v1`, vLLM. The model server is the only thing Morgan needs that it does not ship.
+- **Two surfaces, one gate.** The `morgan` CLI and the `morgan-mcp` server (stdio, or HTTP
+  with a bearer token for other machines) call the same handlers through the same
+  `MemoryGate`. No memory logic is duplicated.
 
 ## Quick start
 
 ```bash
-pip install -e ".[dev]"
+pip install -e .
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env
-#   ↑ point MORGAN_LLM_ENDPOINT at your llama-server; read from every working directory
-morgan doctor                        # diagnose the install — no Redis/Qdrant/Docker required
-cd ~/src/any-other-repo              # the brain is the same from every repository
+#   ↑ point MORGAN_LLM_ENDPOINT at your model server; read from every working directory
+morgan doctor
+cd ~/src/any-repo                      # the brain is the same from every repository
 morgan remember "prefers terse, code-first answers"
-morgan recall "how do I like answers"
+morgan recall "how do I like answers"  # needs only the embedding model
+morgan ask "what do you know about me" # needs the chat model
+morgan consolidate                      # recent memories → dated facts
 ```
 
-Everything lives in one file, `~/.local/share/morgan/morgan.db` (`MORGAN_DATA_DIR`), and the
-project a memory belongs to is the current git repository's directory name.
+Give Claude Code the same memory:
 
-Full instructions (llama-server setup, all four roles, the MCP server, `brain-api`, the learning
-loop) live in [`docs/WIRING.md`](docs/WIRING.md).
+```bash
+claude mcp add morgan -- morgan-mcp --transport stdio
+```
+
+The database is `~/.local/share/morgan/morgan.db` (`MORGAN_DATA_DIR`). The memory
+commands work with no model server at all under `MORGAN_EMBEDDING_BACKEND=hash`.
 
 ## Documentation
 
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — status, milestones, known limitations.
-- [`docs/WIRING.md`](docs/WIRING.md) — how to run, endpoints, config, the learning loop.
-- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — at-rest/transport protection, backups, the stack.
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — topology, package layout, the two loops.
-- [`CLAUDE.md`](CLAUDE.md) — architecture map + non-negotiable invariants.
-- [The local-first reshape design](docs/design/local-first-reshape.md)
-  — diagnosis, target architecture, milestone plan.
-- [Dual-brain memory + the pattern register](docs/design/dual-brain-memory-and-pattern-register.md)
-  — what was taken from [VoiceMem](https://arxiv.org/abs/2608.26005) and
-  [Ouroboros](https://github.com/razzant/ouroboros), and what was deliberately left behind.
-- Decision records (under `docs/decisions/`):
-  [self-learning](docs/decisions/self-learning.md) ·
-  [platform architecture](docs/decisions/platform-architecture.md).
+- [`docs/WIRING.md`](docs/WIRING.md) — configuration, the model server, the CLI, the MCP server, Docker.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the package, the write path, recall, consolidation, erasure.
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — at-rest and transport protection, backups, the stack.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — where this came from, what was cut, what is next.
+- [`CLAUDE.md`](CLAUDE.md) — the invariants, for anyone (or anything) changing the code.
 
-> Earlier builds are archived in the git tags **`legacy-v0.0.4-full`** (the platform build this
-> reshape narrowed) and **`legacy-v0.0.3-monolith`** (the pre-platform monolith) — sources for
-> any selectively ported code, not the current design. Both are tags, not branches: `main` is the
-> only branch, and `git checkout legacy-v0.0.3-monolith` is how you read either archive.
+## History
+
+Morgan began as a self-learning personal agent kernel: a cognitive loop, a persona graph,
+an eval-gated prompt optimizer, a REST gateway, a learning worker, skills and tools. That
+build is archived at the git tag `legacy-v0.1.0-kernel` and its documents under
+[`docs/archive/`](docs/archive/). It was cut to this core in September 2026 because the
+memory was the part that was used, and the learning loop was switched off pending an
+evaluation gate sound enough to trust it. Earlier builds: `legacy-v0.0.4-full`,
+`legacy-v0.0.3-monolith`. All are tags; `main` is the only branch.
 
 ## License
 

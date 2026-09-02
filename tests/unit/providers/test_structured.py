@@ -1,13 +1,12 @@
-"""Tests for the structured-output ladder (generate_structured)."""
+"""Structured output: request JSON the configured way, validate, re-ask on failure."""
 
 from __future__ import annotations
 
 import pytest
 from pydantic import BaseModel
 
-from morgan_brain.providers.adapters.fake import FakeChatClient
-from morgan_brain.providers.capability import CapabilityDescriptor, JsonMode
 from morgan_brain.providers.structured import StructuredError, generate_structured
+from tests.fakes import FakeChatClient
 
 
 class Person(BaseModel):
@@ -15,54 +14,41 @@ class Person(BaseModel):
     age: int
 
 
-@pytest.mark.asyncio
-async def test_prompted_json_tier_parses_valid_json() -> None:
-    """NONE tier: instruction appended, valid JSON parsed on first call."""
+async def test_prompted_mode_parses_valid_json() -> None:
     c = FakeChatClient(reply='{"name": "Sam", "age": 40}')
-    d = CapabilityDescriptor(provider="p", model="m", json_mode=JsonMode.NONE)
-    out = await generate_structured(c, [], model="m", schema=Person, descriptor=d)
+    out = await generate_structured(c, [], model="m", schema=Person, json_mode="prompted")
     assert out.name == "Sam" and out.age == 40
+    assert c.last_response_format is None
+    assert "schema" in c.last_messages[-1].content
 
 
-@pytest.mark.asyncio
-async def test_invalid_then_valid_triggers_one_reask() -> None:
-    """First reply is invalid JSON; second is valid → one re-ask, calls == 2."""
+async def test_reask_on_invalid_then_valid() -> None:
     c = FakeChatClient(replies=["not json", '{"name":"Sam","age":40}'])
-    d = CapabilityDescriptor(provider="p", model="m", json_mode=JsonMode.NONE)
-    out = await generate_structured(c, [], model="m", schema=Person, descriptor=d, max_reask=2)
-    assert out.age == 40
+    out = await generate_structured(c, [], model="m", schema=Person, json_mode="prompted")
+    assert out.name == "Sam"
+    assert c.calls == 2
+    assert "invalid" in c.last_messages[-1].content.lower()
+
+
+async def test_exhausted_reasks_raise() -> None:
+    c = FakeChatClient(reply="never json")
+    with pytest.raises(StructuredError):
+        await generate_structured(c, [], model="m", schema=Person, max_reask=1)
     assert c.calls == 2
 
 
-@pytest.mark.asyncio
-async def test_exhausted_reask_raises() -> None:
-    """Reply is never valid JSON → StructuredError raised after max_reask attempts."""
-    c = FakeChatClient(reply="never json")
-    d = CapabilityDescriptor(provider="p", model="m", json_mode=JsonMode.NONE)
-    with pytest.raises(StructuredError):
-        await generate_structured(c, [], model="m", schema=Person, descriptor=d, max_reask=1)
-
-
-@pytest.mark.asyncio
-async def test_json_object_tier_passes_response_format() -> None:
-    """JSON_OBJECT tier: response_format is passed to client, valid JSON parsed."""
+async def test_json_schema_mode_sends_the_schema_natively() -> None:
     c = FakeChatClient(reply='{"name": "Jo", "age": 25}')
-    d = CapabilityDescriptor(provider="p", model="m", json_mode=JsonMode.JSON_OBJECT)
-    out = await generate_structured(c, [], model="m", schema=Person, descriptor=d)
+    out = await generate_structured(c, [], model="m", schema=Person, json_mode="json_schema")
     assert out.name == "Jo"
-    # Verify the client received a response_format dict
     assert c.last_response_format is not None
-    assert c.last_response_format.get("type") == "json_object"
+    assert c.last_response_format["type"] == "json_schema"
+    assert c.last_response_format["json_schema"]["name"] == "Person"
 
 
-@pytest.mark.asyncio
-async def test_json_schema_tier_passes_json_schema_format() -> None:
-    """JSON_SCHEMA tier: response_format includes json_schema key."""
+async def test_json_object_mode_sends_object_mode_and_the_schema_in_the_prompt() -> None:
     c = FakeChatClient(reply='{"name": "Alex", "age": 30}')
-    d = CapabilityDescriptor(provider="p", model="m", json_mode=JsonMode.JSON_SCHEMA)
-    out = await generate_structured(c, [], model="m", schema=Person, descriptor=d)
+    out = await generate_structured(c, [], model="m", schema=Person, json_mode="json_object")
     assert out.name == "Alex"
-    assert c.last_response_format is not None
-    assert c.last_response_format.get("type") == "json_schema"
-    js = c.last_response_format.get("json_schema", {})
-    assert js.get("name") == "Person"
+    assert c.last_response_format == {"type": "json_object"}
+    assert c.last_messages[0].role == "system"

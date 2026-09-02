@@ -1,4 +1,4 @@
-from morgan_brain.modules.memory.retrieval.fusion import reciprocal_rank_fusion
+from morgan_brain.memory.fusion import reciprocal_rank_fusion
 
 
 def test_item_ranked_high_across_lists_wins():

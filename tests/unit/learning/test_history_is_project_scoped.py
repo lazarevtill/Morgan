@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from morgan_brain.learning.history import SessionHistoryStore, session_key
-from morgan_brain.models.message import Message, Role
+from morgan_brain.memory.history import SessionHistoryStore, session_key
+from morgan_brain.models import Message, Role
 
 
 def _store() -> SessionHistoryStore:

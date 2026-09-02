@@ -1,33 +1,17 @@
-"""The assembled app must use durable stores, not in-memory ones."""
+"""The assembled context uses one durable database, and every store is in it."""
 
 import sqlite3
 
-from morgan_brain.composition import build_app_context
+from morgan_brain.composition import build_app_context, build_memory_context
 from morgan_brain.config import Settings
-from morgan_brain.modules.memory.stores.sqlite_vector import SqliteVectorIndex
-
-
-def test_app_context_uses_the_sqlite_vector_index(tmp_path, monkeypatch):
-    monkeypatch.setenv("MORGAN_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
-    ctx = build_app_context(Settings())
-    assert isinstance(ctx.vectors, SqliteVectorIndex), type(ctx.vectors)
 
 
 def test_every_store_shares_one_database_file(tmp_path, monkeypatch):
-    """signals and history must be reachable from the memory connection, or forget() cannot work.
-
-    This includes ``prompt_versions`` (the ``LocalPromptRegistry``, holding champion-preprompt
-    versions): it shares the same connection as every other store -- the one-database invariant
-    (Task 13A) -- so backup, at-rest encryption, and "does forget() reach everything" stay a
-    single-file story. It is NOT touched by forget()'s DELETE statements, though: a promoted
-    champion may embed text mined from a now-forgotten conversation and can only be reviewed
-    and rolled back by hand, never silently deleted (see ``ForgetReport.champions_flagged``).
-    Sharing the connection and being exempt from erasure are independent decisions.
-    """
+    """History must be reachable from the memory connection, or forget() cannot reach it."""
     monkeypatch.setenv("MORGAN_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
-    build_app_context(Settings())
+    ctx = build_memory_context(Settings())
+    ctx.conn.close()
     dbs = sorted(p.name for p in tmp_path.glob("*.db"))
     assert dbs == ["morgan.db"], f"expected one database, found {dbs}"
 
@@ -36,22 +20,20 @@ def test_every_store_shares_one_database_file(tmp_path, monkeypatch):
     assert {
         "memories",
         "facts",
-        "interaction_signals",
+        "fts_memories",
+        "memory_entities",
+        "vec_meta",
+        "mem_entity_nodes",
         "session_history",
-        "prompt_versions",
     } <= tables, tables
 
 
-def test_brain_api_starts_and_stops_the_bus(tmp_path, monkeypatch):
-    """Nothing called bus.start() before this task, so queued cold-path work never ran."""
-    from fastapi.testclient import TestClient
-
+def test_app_context_needs_no_model_to_build(tmp_path, monkeypatch):
+    """Building the context must not call the model: `ask` fails on the call, never on
+    construction, so `doctor` and the memory commands work with the server down."""
     monkeypatch.setenv("MORGAN_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
-    from morgan_brain.apps.brain_api.app import create_app
-
-    app = create_app()
-    with TestClient(app) as client:  # __enter__ runs the lifespan
-        assert client.get("/health").status_code == 200
-        assert app.state.ctx.bus.is_running is True
-    assert app.state.ctx.bus.is_running is False
+    monkeypatch.setenv("MORGAN_LLM_ENDPOINT", "http://127.0.0.1:1/v1")
+    ctx = build_app_context(Settings())
+    assert ctx.chat is not None and ctx.consolidator is not None
+    ctx.conn.close()

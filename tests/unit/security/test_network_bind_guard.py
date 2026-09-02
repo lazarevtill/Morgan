@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from morgan_brain.security.network import (
+from morgan_brain.network import (
     UNSET_API_KEY_SENTINEL,
     api_key_is_configured,
     assert_safe_bind,
@@ -48,9 +48,11 @@ def test_placeholder_key_counts_as_unconfigured() -> None:
 
 def test_refuses_to_expose_an_unauthenticated_listener() -> None:
     with pytest.raises(SystemExit) as excinfo:
-        assert_safe_bind(host="0.0.0.0", api_key=UNSET_API_KEY_SENTINEL, surface="brain-api")
+        assert_safe_bind(
+            host="0.0.0.0", api_key=UNSET_API_KEY_SENTINEL, surface="morgan-mcp (http)"
+        )
     message = str(excinfo.value)
-    assert "brain-api" in message
+    assert "morgan-mcp" in message
     assert "MORGAN_API_KEY" in message
 
 
@@ -69,7 +71,7 @@ def test_the_message_names_the_placeholder_not_a_credential() -> None:
     here for exactly that reason.)
     """
     with pytest.raises(SystemExit) as excinfo:
-        assert_safe_bind(host="0.0.0.0", api_key="", surface="brain-api")
+        assert_safe_bind(host="0.0.0.0", api_key="", surface="morgan-mcp (http)")
     message = str(excinfo.value)
     assert UNSET_API_KEY_SENTINEL in message
     assert "MORGAN_API_KEY" in message
@@ -77,9 +79,9 @@ def test_the_message_names_the_placeholder_not_a_credential() -> None:
 
 def test_loopback_without_a_key_is_allowed() -> None:
     """The zero-config path a fresh clone depends on."""
-    assert_safe_bind(host="127.0.0.1", api_key=UNSET_API_KEY_SENTINEL, surface="brain-api")
+    assert_safe_bind(host="127.0.0.1", api_key=UNSET_API_KEY_SENTINEL, surface="morgan-mcp (http)")
 
 
 def test_non_loopback_with_a_key_is_allowed() -> None:
     """The owner's real deployment: bound to the overlay address, authenticated."""
-    assert_safe_bind(host="100.64.0.7", api_key="a-real-key", surface="brain-api")
+    assert_safe_bind(host="100.64.0.7", api_key="a-real-key", surface="morgan-mcp (http)")

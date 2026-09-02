@@ -26,7 +26,7 @@ def test_every_stdout_line_is_a_jsonrpc_message(tmp_path):
         PYTHONUNBUFFERED="1",
     )
     proc = subprocess.Popen(
-        [sys.executable, "-m", "morgan_brain.ports.mcp_server", "--transport", "stdio"],
+        [sys.executable, "-m", "morgan_brain.mcp_server", "--transport", "stdio"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

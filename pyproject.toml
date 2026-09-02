@@ -4,22 +4,21 @@ build-backend = "hatchling.build"
 
 [project]
 name = "morgan-brain"
-version = "0.1.0"
-description = "Self-hosted personal assistant that knows and learns from you (MAPLE + SkillOpt)."
+version = "0.2.0"
+description = "A project-scoped memory for your AI tools, consolidated into facts by a local model."
 requires-python = ">=3.12"
-# An SPDX expression, not a file reference: the text lives at the repository root, one level
-# above this package, and a path outside the project directory is not available to a build
-# from an sdist or inside the Docker build context.
+# An SPDX expression, not a file reference: the text lives at the repository root.
 license = "Apache-2.0"
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.32",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "httpx>=0.27",
     "openai>=1.0",
     "structlog>=24.4",
     "sqlite-vec>=0.1.9",
+    # The MCP server is a primary surface, not an extra. Capped below 2.0: mcp 2.0 swaps
+    # httpx for an incompatible httpx2 package.
+    "mcp>=1.0,<2.0",
 ]
 
 [project.optional-dependencies]
@@ -27,42 +26,18 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "hypothesis>=6.0",
-    # Upper-bounded on purpose: a linter/type-checker minor release adds rules,
-    # so an open range makes CI fail on someone else's release date.  Raise the
-    # bound deliberately, with the findings fixed in the same change.
+    # Upper-bounded on purpose: a linter/type-checker minor release adds rules, so an open
+    # range makes CI fail on someone else's release date. Raise the bound deliberately.
     "ruff>=0.16,<0.17",
     "mypy>=1.13,<2.0",
-    # The suite exercises every optional surface it ships -- the MCP server, the
-    # Qdrant vector index, the Redis-Streams bus, the scheduler -- so `dev` pulls
-    # them in rather than leaving them to the CI command.  `pip install -e
-    # ".[dev]"` must be enough to run exactly the suite the gate runs; anything
-    # less makes the result depend on install state instead of on the code.
-    "morgan-brain[mcp,scale,scheduling]",
 ]
-# Deferred / phase-gated extras
-scale = ["redis>=5.2", "qdrant-client>=1.12"]
-scheduling = ["apscheduler>=3.10"]
-tokens = ["tiktoken>=0.8"]
-# Learning lifecycle — MLflow-backed PromptRegistry + GEPA optimizer (Wave 1/5).
-# Core deps intentionally excluded; install this extra when enabling learning_backend="mlflow".
-learning = ["mlflow>=3.4"]
-# Slim tracing-only package for the hot-path service layer (much smaller than full mlflow).
-tracing = ["mlflow-tracing"]
-# MCP server port (Task 17A) -- other AI tools calling in to Morgan over the Model Context
-# Protocol. Capped below 2.0: mcp 2.0 is a breaking rewrite that swaps httpx for an
-# incompatible httpx2 package, which would collide with every other httpx consumer in this repo.
-mcp = ["mcp>=1.0,<2.0"]
 
 [project.scripts]
 morgan = "morgan_brain.cli.__main__:main"
-morgan-mcp = "morgan_brain.ports.mcp_server:main"
+morgan-mcp = "morgan_brain.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["morgan_brain"]
-artifacts = [
-    "morgan_brain/eval/data/*.json",
-    "morgan_brain/providers/data/*.json",
-]
 
 [tool.black]
 line-length = 100
@@ -128,33 +103,17 @@ ignore = [
 python_version = "3.12"
 strict = true
 
-# Optional extras.  Whether these import cleanly depends on which extras are
-# installed, so without an explicit override `mypy` reports a different result
-# on a `[dev]` runner than on a developer box with `[mcp,scale]` -- i.e. the
-# type gate would depend on install state rather than on the code.  The modules
-# that import them are already guarded at their own import site.
+# The MCP SDK ships no type information of its own.
 [[tool.mypy.overrides]]
-module = [
-    "mcp.*",
-    "redis.*",
-    "qdrant_client.*",
-    "apscheduler.*",
-    "mlflow.*",
-    "tiktoken.*",
-]
+module = ["mcp.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-markers = [
-    "timeout: mark test with a wall-clock timeout in seconds (requires pytest-timeout; skipped if not installed)",
-    "live: mark test as requiring live external services (Qdrant, Redis); skipped by default",
-]
 
 [tool.bandit]
-# Production code only. Bandit reads pytest's idiom as a vulnerability -- `assert` is B101
-# (1300+ in tests), the CLI integration tests' subprocess calls are B603/B607, and the
-# "0.0.0.0" literal in the tests that prove Morgan *refuses* that bind is B104. Scanning
-# morgan_brain is the scan that matters; it reports zero findings.
+# Production code only. Bandit reads pytest's idiom as a vulnerability -- `assert` is B101,
+# the CLI integration tests' subprocess calls are B603/B607, and the "0.0.0.0" literal in
+# the tests that prove Morgan *refuses* that bind is B104.
 exclude_dirs = ["tests"]

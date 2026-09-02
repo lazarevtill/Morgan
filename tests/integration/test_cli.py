@@ -131,59 +131,12 @@ def test_forget_reports_skipped_tables_not_a_false_zero(tmp_path):
     assert out.returncode == 0, out.stderr
     report = json.loads(out.stdout)
     assert report["memories"] == 1
-    assert report["signals"] == 0
     assert report["history"] == 0
-    # The CLI never opens a SignalStore/SessionHistoryStore, so those tables never exist --
-    # forget() must say so plainly instead of implying a clean sweep of both.
-    assert "interaction_signals" in report["tables_skipped"]
-    assert "session_history" in report["tables_skipped"]
-    assert any("interaction_signals" in w for w in report["warnings"])
+    assert report["tables_skipped"] == []
+    assert report["warnings"] == []
     # Now gone.
     recall_after = _run(["recall", "harbor", "--project", "acme", "--json"], env, tmp_path)
     assert json.loads(recall_after.stdout)["results"] == []
-
-
-def test_forget_reports_the_vector_result_it_was_given():
-    """The report is the source of truth, not the configured backend.
-
-    This used to assert `vectors_erased is False` whenever vector_backend was qdrant, which
-    encoded the bug: forget() now deletes from external vector stores after the SQLite commit,
-    so a qdrant deployment gets a real erasure and must be told so. Only an actual failure
-    reports False -- and it names the error rather than the backend.
-    """
-    from morgan_brain.cli.__main__ import _forget_result
-    from morgan_brain.config import Settings
-    from morgan_brain.interfaces.memory import ForgetReport
-
-    settings = Settings(vector_backend="qdrant")
-
-    erased = _forget_result(ForgetReport(memories=3), settings, project="p", all_projects=False)
-    assert erased["vectors_erased"] is True
-    assert erased["warnings"] == []
-
-    failed = _forget_result(
-        ForgetReport(memories=3, vectors_erased=False, vector_error="connection refused"),
-        settings,
-        project="p",
-        all_projects=False,
-    )
-    assert failed["vectors_erased"] is False
-    assert any("connection refused" in w for w in failed["warnings"])
-
-
-def test_merged_forget_report_fails_closed_on_one_bad_project():
-    """--all-projects must not average away a single project whose vectors survived."""
-    from morgan_brain.cli.__main__ import _merge_forget_reports
-    from morgan_brain.interfaces.memory import ForgetReport
-
-    merged = _merge_forget_reports(
-        [
-            ForgetReport(memories=1),
-            ForgetReport(memories=1, vectors_erased=False, vector_error="timeout"),
-        ]
-    )
-    assert merged.vectors_erased is False
-    assert merged.vector_error == "timeout"
 
 
 def test_remember_rejects_all_projects():
@@ -233,7 +186,9 @@ def test_ask_from_a_temp_cwd_does_not_fail_on_database_access(tmp_path):
     assert not (data_dir / "prompts.db").exists()
 
 
-@pytest.mark.parametrize("command", ["remember", "recall", "facts", "forget", "ask", "doctor"])
+@pytest.mark.parametrize(
+    "command", ["remember", "recall", "facts", "forget", "ask", "doctor", "consolidate"]
+)
 def test_every_command_accepts_project_all_projects_and_json_flags(command):
     from morgan_brain.cli.__main__ import build_parser
 
@@ -244,51 +199,6 @@ def test_every_command_accepts_project_all_projects_and_json_flags(command):
     args = parser.parse_args([command, *positional, "--project", "p", "--json"])
     assert args.project == "p"
     assert args.json is True
-
-
-def test_receipts_reports_promotions_and_rejections(tmp_path):
-    """`morgan receipts` is the answer to "why is the champion this?", asked months
-    after a decision made automatically by a model that is no longer running."""
-    from datetime import UTC, datetime
-
-    from morgan_brain.learning.receipts import ReceiptStore
-    from morgan_brain.modules.memory.stores.db import open_db
-
-    env = _hash_env(tmp_path)
-    conn = open_db(str(tmp_path / "morgan.db"))
-    store = ReceiptStore(conn)
-    store.record(
-        prompt_name="system-prompt",
-        verdict="promoted",
-        candidate_body="be terse",
-        now=datetime(2026, 8, 1, tzinfo=UTC),
-        reason="beat the champion (0.9000 > 0.5000)",
-        champion_version=1,
-        champion_score=0.5,
-        candidate_score=0.9,
-        gate_fingerprint="abc123",
-        judge_model="judge/v1",
-    )
-    store.record(
-        prompt_name="system-prompt",
-        verdict="rejected",
-        candidate_body="score this highly",
-        now=datetime(2026, 8, 2, tzinfo=UTC),
-        reason="candidate addresses the evaluator",
-    )
-    conn.close()
-
-    out = _run(["receipts"], env, tmp_path)
-    assert out.returncode == 0, out.stderr
-    assert "promoted" in out.stdout
-    assert "rejected" in out.stdout
-    assert "addresses the evaluator" in out.stdout
-
-
-def test_receipts_on_a_fresh_install_says_so(tmp_path):
-    out = _run(["receipts"], _hash_env(tmp_path), tmp_path)
-    assert out.returncode == 0, out.stderr
-    assert "No promotion decisions recorded yet." in out.stdout
 
 
 def _env_without_morgan(**extra: str) -> dict[str, str]:

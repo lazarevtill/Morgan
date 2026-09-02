@@ -16,10 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from morgan_brain.modules.memory.retrieval.entities import EntityIndex
-from morgan_brain.modules.memory.retrieval.fts import FtsIndex
-from morgan_brain.modules.memory.stores.db import open_db
-from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex, VectorRecord
+from morgan_brain.memory.db import open_db
+from morgan_brain.memory.entities import EntityIndex
+from morgan_brain.memory.fts import FtsIndex
+from morgan_brain.memory.vectors import SqliteVectorIndex, VectorRecord
 
 
 @pytest.fixture
@@ -51,7 +51,7 @@ def test_entity_search_does_not_cross_projects(conn: object) -> None:
 
 
 async def test_vector_search_does_not_cross_projects() -> None:
-    idx = InMemoryVectorIndex()
+    idx = SqliteVectorIndex(open_db(":memory:"), dim=3)
     vector = [1.0, 0.0, 0.0]
     await idx.upsert(VectorRecord(id="a", user_id="u", project="acme", vector=vector))
     await idx.upsert(VectorRecord(id="b", user_id="u", project="personal", vector=vector))

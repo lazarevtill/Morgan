@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from morgan_brain.models.memory import DEFAULT_PROJECT
+from morgan_brain.models import DEFAULT_PROJECT
 
 
 def detect_project(cwd: Path | None = None) -> str:

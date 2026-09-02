@@ -1,15 +1,13 @@
-"""Morgan — a personal assistant that knows and learns from you.
+"""Morgan — a project-scoped memory for your AI tools, consolidated into facts by a local model.
 
-Package structure:
-    config      — single MORGAN_-prefixed settings source
-    interfaces  — Protocols every module implements (the contracts)
-    models      — shared domain models, all user_id-keyed
-    bus         — event bus (in-proc + Redis Streams, one interface)
-    security    — MemoryGate + unified permissions
-    modules     — perception, memory, learning, personalization, reasoning,
-                  skills, tools
-    core        — thin cognitive-loop orchestrator
-    apps        — brain_api, learning_worker entrypoints
+config        — the single MORGAN_-prefixed settings source
+models        — the domain models; everything that persists is user- and project-keyed
+memory        — one SQLite database behind one gate: stores, retrieval, consolidation
+providers     — the chat and embedding adapters (the only place a model SDK is imported)
+chat          — one chat turn: recall, answer, remember
+composition   — opens the database and wires the above
+cli           — the `morgan` terminal client
+mcp_server    — the `morgan-mcp` server: the same operations for any MCP client
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

@@ -1,16 +1,11 @@
-"""Phase 0 smoke tests — the foundation contracts hold."""
+"""The foundation contracts hold."""
 
 from __future__ import annotations
 
-from morgan_brain.config import Settings
-from morgan_brain.models.memory import MemorySource, TemporalFact
-from morgan_brain.models.user import RelationshipStage, UserModel
-from morgan_brain.security.memory_gate import MemoryGate
-from morgan_brain.security.permissions import PermissionGate, PermissionMode
+import pytest
 
-
-def test_settings_default_event_bus_is_inproc() -> None:
-    assert Settings().event_bus == "inproc"
+from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.models import MemoryQuery, MemorySource, TemporalFact
 
 
 def test_everything_is_user_scoped() -> None:
@@ -20,38 +15,21 @@ def test_everything_is_user_scoped() -> None:
     assert fact.source is MemorySource.USER_STATED
 
 
-def test_user_model_starts_as_new_relationship() -> None:
-    um = UserModel(user_id="u1")
-    assert um.relationship_stage is RelationshipStage.NEW
-    assert um.confidence == 0.0
-
-
-def test_permission_gate_denies_explicitly() -> None:
-    gate = PermissionGate(default=PermissionMode.ASK)
-    gate.set("bash", PermissionMode.DENY)
-    assert gate.allowed("bash") is False
-    assert gate.allowed("calculator") is True  # default ASK is allowed
-
-
 async def test_memory_gate_requires_user_id() -> None:
     class _NullStore:
-        async def store(self, memory):  # type: ignore[no-untyped-def]
-            return "id"
-
         async def recall(self, query):  # type: ignore[no-untyped-def]
             return []
 
-        async def upsert_fact(self, fact):  # type: ignore[no-untyped-def]
-            return "id"
+    gate = MemoryGate(_NullStore())  # type: ignore[arg-type]
+    with pytest.raises(PermissionError):
+        await gate.recall(MemoryQuery(user_id="", text="hi"))
 
-        async def current_facts(self, *, user_id, subject=None):  # type: ignore[no-untyped-def]
-            return []
+
+async def test_memory_gate_requires_a_project() -> None:
+    class _NullStore:
+        async def forget(self, *, user_id, project):  # type: ignore[no-untyped-def]
+            raise AssertionError("must not be reached")
 
     gate = MemoryGate(_NullStore())  # type: ignore[arg-type]
-    from morgan_brain.models.memory import MemoryQuery
-
-    try:
-        await gate.recall(MemoryQuery(user_id="", text="hi"))
-    except PermissionError:
-        return
-    raise AssertionError("MemoryGate should reject empty user_id")
+    with pytest.raises(PermissionError):
+        await gate.forget(user_id="u", project="")

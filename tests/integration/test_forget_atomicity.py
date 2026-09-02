@@ -1,7 +1,7 @@
 """`forget()` either erases everything or nothing.
 
 Atomicity is the stated justification for the whole shared-single-connection design
-(`modules/memory/store.py`), and this is the destructive operation. It had no committed test:
+(`memory/module.py`), and this is the destructive operation. It had no committed test:
 replacing the exception handler's `conn.rollback()` with `conn.commit()` left the suite green,
 so a refactor that half-erased a project would have shipped.
 """
@@ -14,16 +14,11 @@ from pathlib import Path
 
 import pytest
 
-from morgan_brain.models.memory import Memory, MemoryKind, TemporalFact
-from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
-from morgan_brain.modules.memory.retrieval.entities import EntityIndex
-from morgan_brain.modules.memory.retrieval.fts import FtsIndex
-from morgan_brain.modules.memory.store import MemoryModule
-from morgan_brain.modules.memory.stores.db import open_db
-from morgan_brain.modules.memory.stores.episodic import EpisodicStore
-from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
-from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex
-from morgan_brain.security.memory_gate import MemoryGate
+from morgan_brain.composition import build_memory_module
+from morgan_brain.memory.db import open_db
+from morgan_brain.memory.embedder import FakeEmbedder
+from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.models import Memory, MemoryKind, TemporalFact
 
 
 def _now() -> datetime:
@@ -47,17 +42,8 @@ def _counts(conn: sqlite3.Connection) -> dict[str, int]:
 
 @pytest.fixture
 def gate_and_conn(tmp_path: Path) -> tuple[MemoryGate, sqlite3.Connection]:
-    path = str(tmp_path / "morgan.db")
-    conn = open_db(path)
-    module = MemoryModule(
-        embedder=FakeEmbedder(dim=16),
-        vectors=InMemoryVectorIndex(),
-        temporal=SqliteTemporalStore(path),
-        clock=_now,
-        fts=FtsIndex(conn),
-        entities=EntityIndex(conn),
-        episodics=EpisodicStore(conn),
-    )
+    conn = open_db(str(tmp_path / "morgan.db"))
+    module = build_memory_module(conn, embedder=FakeEmbedder(dim=16), dim=16, clock=_now)
     return MemoryGate(module), conn
 
 

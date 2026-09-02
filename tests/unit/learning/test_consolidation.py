@@ -12,25 +12,19 @@ from datetime import UTC, datetime
 
 import pytest
 
-from morgan_brain.learning.consolidation import (
+from morgan_brain.composition import build_memory_module
+from morgan_brain.memory.consolidation import (
     FactOp,
     FactOpBatch,
     FactOpKind,
     MemoryConsolidator,
 )
-from morgan_brain.models.memory import Memory, MemoryKind, MemorySource, TemporalFact
-from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
-from morgan_brain.modules.memory.retrieval.entities import EntityIndex
-from morgan_brain.modules.memory.retrieval.fts import FtsIndex
-from morgan_brain.modules.memory.store import MemoryModule
-from morgan_brain.modules.memory.stores.db import open_db
-from morgan_brain.modules.memory.stores.episodic import EpisodicStore
-from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
-from morgan_brain.modules.memory.stores.vector import InMemoryVectorIndex
-from morgan_brain.providers.adapters.fake import FakeChatClient
-from morgan_brain.providers.capability import CapabilityRegistry
-from morgan_brain.providers.router import Binding, RoleRouter
-from morgan_brain.security.memory_gate import MemoryGate
+from morgan_brain.memory.db import open_db
+from morgan_brain.memory.embedder import FakeEmbedder
+from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.temporal import SqliteTemporalStore
+from morgan_brain.models import Memory, MemoryKind, MemorySource, TemporalFact
+from tests.fakes import FakeChatClient
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -51,43 +45,17 @@ def _build_stack(
     fake_replies: list[str],
     clock: object,
 ) -> tuple[MemoryConsolidator, SqliteTemporalStore, MemoryGate]:
-    temporal = SqliteTemporalStore(":memory:")
-    embedder = FakeEmbedder(dim=16)
-    vector_index = InMemoryVectorIndex()
-    conn = open_db(":memory:")
-    memory_module = MemoryModule(
-        embedder=embedder,
-        vectors=vector_index,
-        temporal=temporal,
-        clock=lambda: T0,  # type: ignore[arg-type]
-        fts=FtsIndex(conn),
-        entities=EntityIndex(conn),
-        episodics=EpisodicStore(conn),
+    module = build_memory_module(
+        open_db(":memory:"), embedder=FakeEmbedder(dim=16), dim=16, clock=lambda: T0
     )
-    gate = MemoryGate(memory_module)
-
-    fake_client = FakeChatClient(replies=fake_replies)
-    reg = CapabilityRegistry.from_seed(
-        {
-            "fake/test-model": {
-                "supports_tools": True,
-                "json_mode": "json_schema",
-                "context_window": 32768,
-            }
-        }
-    )
-    router = RoleRouter(
-        reg=reg,
-        bindings={"strong": [Binding("fake", "test-model", fake_client)]},
-    )
+    gate = MemoryGate(module)
     consolidator = MemoryConsolidator(
         gate=gate,
-        router=router,
-        capability_registry=reg,
+        client=FakeChatClient(replies=fake_replies),
+        model="test-model",
         clock=clock,  # type: ignore[arg-type]
-        role="strong",
     )
-    return consolidator, temporal, gate
+    return consolidator, module._temporal, gate
 
 
 # ---------------------------------------------------------------------------

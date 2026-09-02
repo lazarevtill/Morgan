@@ -1,5 +1,5 @@
-from morgan_brain.modules.memory.retrieval.entities import EntityIndex
-from morgan_brain.modules.memory.stores.db import open_db
+from morgan_brain.memory.db import open_db
+from morgan_brain.memory.entities import EntityIndex
 
 
 def _idx(tmp_path):

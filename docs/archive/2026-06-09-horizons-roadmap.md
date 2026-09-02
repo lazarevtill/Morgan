@@ -1,6 +1,6 @@
 # Horizons Roadmap — Personal Agent OS (2026-06-09)
 
-> **Superseded** by [the local-first reshape](../design/local-first-reshape.md)
+> **Superseded** by [the local-first reshape](2026-08-02-local-first-reshape-design.md)
 > (2026-08-02). Device sync, the memory replica, the phone client, deployment profiles, and the
 > `/v1` facade are out of scope.
 

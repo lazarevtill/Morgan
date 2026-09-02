@@ -7,10 +7,9 @@ from __future__ import annotations
 
 import pytest
 
-from morgan_brain.interfaces.llm import ProviderUnreachable
-from morgan_brain.providers.adapters.embeddings import OpenAICompatEmbedder
-from morgan_brain.providers.adapters.openai_compat import OpenAICompatAdapter
-from morgan_brain.providers.wire import ChatMessage
+from morgan_brain.providers.embeddings import OpenAICompatEmbedder
+from morgan_brain.providers.openai_compat import OpenAICompatAdapter
+from morgan_brain.providers.wire import ChatMessage, ProviderUnreachable
 
 _CLOSED = "http://127.0.0.1:1/v1"
 _MESSAGES = [ChatMessage(role="user", content="hi")]

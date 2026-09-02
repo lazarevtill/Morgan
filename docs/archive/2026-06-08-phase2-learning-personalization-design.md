@@ -1,7 +1,7 @@
 # Phase 2 (Wave 1) — Learning + Personalization — Design
 
 **Date:** 2026-06-08 · **Status:** Approved (from decisions) · **Branch:** `feat/phase2-learning`
-**Decisions:** [self-learning ADR](../decisions/self-learning.md) · [platform ADR](../decisions/platform-architecture.md) · [ROADMAP](../ROADMAP.md)
+**Decisions:** [self-learning ADR](2026-06-08-self-learning-decision.md) · [platform ADR](2026-06-08-platform-architecture-decision.md) · [ROADMAP](../ROADMAP.md)
 
 ## Goal
 Make the assistant **measurably learn the owner**: capture signal from each turn, consolidate it into

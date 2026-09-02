@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from morgan_brain.models.base import Entity
-from morgan_brain.models.memory import Memory, MemoryQuery
+from morgan_brain.models import Entity, Memory, MemoryQuery
 from tests.unit.memory.conftest import build_memory_module as _module
 
 

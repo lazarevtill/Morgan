@@ -6,7 +6,7 @@ cold path both use -- two extractors would build two disagreeing indexes.
 
 from __future__ import annotations
 
-from morgan_brain.modules.perception.text.entities import extract_entity_names
+from morgan_brain.memory.extract import extract_entity_names
 
 
 def test_extracts_latin_proper_nouns():

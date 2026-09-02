@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
-from morgan_brain.models.memory import TemporalFact
-from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
+from morgan_brain.memory.temporal import SqliteTemporalStore
+from morgan_brain.models import TemporalFact
 
 
 def _fact(obj: str, **kw) -> TemporalFact:

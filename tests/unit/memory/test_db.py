@@ -1,4 +1,4 @@
-from morgan_brain.modules.memory.stores.db import open_db
+from morgan_brain.memory.db import open_db
 
 
 def test_open_db_enables_wal_and_vec(tmp_path):

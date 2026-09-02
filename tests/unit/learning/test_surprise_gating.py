@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from morgan_brain.learning.consolidation import _surprise_filter
-from morgan_brain.models.memory import Memory, MemoryKind, MemorySource, TemporalFact
+from morgan_brain.memory.consolidation import _surprise_filter
+from morgan_brain.models import Memory, MemoryKind, MemorySource, TemporalFact
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

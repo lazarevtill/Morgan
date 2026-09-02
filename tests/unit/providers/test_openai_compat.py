@@ -1,19 +1,17 @@
-"""Unit tests for OpenAICompatAdapter and OllamaAdapter.
+"""Unit tests for OpenAICompatAdapter.
 
 Construction and message/tool translation only — NO network calls.
 """
 
 from __future__ import annotations
 
-from morgan_brain.interfaces.llm import ChatClient
-from morgan_brain.providers.adapters.ollama import OllamaAdapter
-from morgan_brain.providers.adapters.openai_compat import (
+from morgan_brain.providers.openai_compat import (
     OpenAICompatAdapter,
     _from_openai_tool_calls,
     _to_openai_messages,
     _to_openai_tools,
 )
-from morgan_brain.providers.wire import ChatMessage, ToolCall, ToolSpec
+from morgan_brain.providers.wire import ChatClient, ChatMessage, ToolCall, ToolSpec
 
 # ---------------------------------------------------------------------------
 # Construction
@@ -32,27 +30,6 @@ def test_openai_compat_adapter_constructs_without_network():
 
 def test_openai_compat_adapter_is_chat_client():
     adapter = OpenAICompatAdapter(base_url="http://x/v1", api_key="k", provider="p")
-    assert isinstance(adapter, ChatClient)
-
-
-# ---------------------------------------------------------------------------
-# OllamaAdapter
-# ---------------------------------------------------------------------------
-
-
-def test_ollama_adapter_default_base_url():
-    adapter = OllamaAdapter()
-    assert "11434" in adapter._base_url
-    assert adapter._provider == "ollama"
-
-
-def test_ollama_adapter_custom_base_url():
-    adapter = OllamaAdapter(base_url="http://remote:11434/v1")
-    assert adapter._base_url == "http://remote:11434/v1"
-
-
-def test_ollama_adapter_is_chat_client():
-    adapter = OllamaAdapter()
     assert isinstance(adapter, ChatClient)
 
 

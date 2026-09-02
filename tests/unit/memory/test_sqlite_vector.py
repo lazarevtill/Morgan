@@ -1,8 +1,7 @@
 import pytest
 
-from morgan_brain.modules.memory.stores.db import open_db
-from morgan_brain.modules.memory.stores.sqlite_vector import SqliteVectorIndex
-from morgan_brain.modules.memory.stores.vector import VectorRecord
+from morgan_brain.memory.db import open_db
+from morgan_brain.memory.vectors import SqliteVectorIndex, VectorRecord
 
 
 def _idx(tmp_path, dim=4):

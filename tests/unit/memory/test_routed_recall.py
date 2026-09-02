@@ -13,17 +13,12 @@ from datetime import UTC, datetime
 
 import pytest
 
-from morgan_brain.models.memory import Memory, MemoryQuery
-from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
-from morgan_brain.modules.memory.retrieval.entities import EntityIndex
-from morgan_brain.modules.memory.retrieval.fts import FtsIndex
-from morgan_brain.modules.memory.retrieval.semantic_index import SemanticIndex
-from morgan_brain.modules.memory.store import MemoryModule
-from morgan_brain.modules.memory.stores.db import open_db
-from morgan_brain.modules.memory.stores.episodic import EpisodicStore
-from morgan_brain.modules.memory.stores.sqlite_vector import SqliteVectorIndex
-from morgan_brain.modules.memory.stores.temporal import SqliteTemporalStore
-from morgan_brain.modules.memory.stores.vector import VectorRecord
+from morgan_brain.composition import build_memory_module
+from morgan_brain.memory.db import open_db
+from morgan_brain.memory.embedder import FakeEmbedder
+from morgan_brain.memory.fts import FtsIndex
+from morgan_brain.memory.vectors import SqliteVectorIndex, VectorRecord
+from morgan_brain.models import Memory, MemoryQuery
 
 U = "u1"
 P = "acme"
@@ -33,24 +28,20 @@ _PROBE = [0.0, *([0.0] * 6), 1.0]
 @pytest.fixture
 def wiring():
     conn = open_db(":memory:")
-    semantic = SemanticIndex(conn)
-    semantic.ensure_schemas(user_id=U, project=P)
-    module = MemoryModule(
+    module = build_memory_module(
+        conn,
         embedder=FakeEmbedder(dim=8),
-        vectors=SqliteVectorIndex(conn, dim=8),
-        temporal=SqliteTemporalStore(conn=conn),
+        dim=8,
         clock=lambda: datetime(2026, 8, 31, tzinfo=UTC),
-        fts=FtsIndex(conn),
-        entities=EntityIndex(conn),
-        episodics=EpisodicStore(conn),
-        semantic=semantic,
     )
+    semantic = module._semantic
+    semantic.ensure_schemas(user_id=U, project=P)
     yield module, semantic, conn
     conn.close()
 
 
 async def _store(module, content: str, entity_names: list[str]) -> str:
-    from morgan_brain.models.base import Entity
+    from morgan_brain.models import Entity
 
     return await module.store(
         Memory(
@@ -132,20 +123,3 @@ async def test_an_empty_pool_never_silences_recall(wiring):
 
     hits = await module.recall(MemoryQuery(user_id=U, project=P, text="Harbor deploy", top_k=8))
     assert [m.content for m in hits] == ["the deploy was blocked"]
-
-
-async def test_recall_still_works_with_no_index_wired(wiring):
-    """`semantic` is optional: every existing caller builds MemoryModule without it."""
-    _module, _semantic, conn = wiring
-    plain = MemoryModule(
-        embedder=FakeEmbedder(dim=8),
-        vectors=SqliteVectorIndex(conn, dim=8),
-        temporal=SqliteTemporalStore(conn=conn),
-        clock=lambda: datetime(2026, 8, 31, tzinfo=UTC),
-        fts=FtsIndex(conn),
-        entities=EntityIndex(conn),
-        episodics=EpisodicStore(conn),
-    )
-    await _store(plain, "the deploy was blocked", ["harbor"])
-    hits = await plain.recall(MemoryQuery(user_id=U, project=P, text="deploy", top_k=8))
-    assert hits

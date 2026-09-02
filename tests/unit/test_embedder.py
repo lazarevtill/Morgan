@@ -1,4 +1,4 @@
-from morgan_brain.modules.memory.indexing.embedder import FakeEmbedder
+from morgan_brain.memory.embedder import FakeEmbedder
 
 
 async def test_fake_embedder_is_deterministic_and_fixed_dim():

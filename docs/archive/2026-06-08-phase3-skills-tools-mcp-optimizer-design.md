@@ -1,7 +1,7 @@
 # Phase 3 (Wave 2) — Skills + Tools + MCP + GEPA Optimizer — Design
 
 **Date:** 2026-06-08 · **Status:** Approved (from decisions) · **Branch:** `feat/phase3-skills-tools`
-**Decisions:** [platform ADR](../decisions/platform-architecture.md) · [self-learning ADR](../decisions/self-learning.md) · [ROADMAP](../ROADMAP.md)
+**Decisions:** [platform ADR](2026-06-08-platform-architecture-decision.md) · [self-learning ADR](2026-06-08-self-learning-decision.md) · [ROADMAP](../ROADMAP.md)
 
 ## Goal
 Turn Morgan into a **platform**: pluggable permission-gated **tools**, external integrations via a

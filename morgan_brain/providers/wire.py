@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Literal
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -73,3 +73,33 @@ class StreamDelta(BaseModel):
     tool_call: ToolCall | None = None
     usage: Usage | None = None
     finish_reason: str | None = None
+
+
+class ProviderUnreachable(ConnectionError):
+    """The model endpoint could not be reached, or gave no answer in time.
+
+    Raised by both adapters (chat and embeddings). Carries the endpoint so the message can
+    name it: "Connection error." tells the owner nothing about *which* server is down.
+    """
+
+    def __init__(self, endpoint: str, detail: str) -> None:
+        self.endpoint = endpoint
+        self.detail = detail
+        super().__init__(
+            f"model endpoint {endpoint} is unreachable ({detail}); check MORGAN_LLM_ENDPOINT "
+            "and run `morgan doctor`"
+        )
+
+
+@runtime_checkable
+class ChatClient(Protocol):
+    """What the core needs from a chat model: one call, messages in, a result out."""
+
+    async def agenerate(
+        self,
+        messages: list[ChatMessage],
+        *,
+        model: str,
+        tools: list[ToolSpec] | None = None,
+        response_format: dict[str, Any] | None = None,
+    ) -> ChatResult: ...

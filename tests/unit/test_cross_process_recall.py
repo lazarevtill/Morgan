@@ -1,9 +1,9 @@
 """Cross-process episodic recall (Redis 2-process topology).
 
 A memory stored by one process must be recallable by a second, independent process that opens
-its own connection to the same on-disk database file -- this is what the Redis 2-process
-topology (brain-api + learning-worker) actually needs. A fresh ``MemoryModule`` built over the
-same path is the faithful simulation: unlike the old in-process ``_by_id`` dict this test used
+its own connection to the same on-disk database file -- this is what the real topology (a
+CLI process per command, a long-lived MCP daemon) needs. A fresh ``MemoryModule`` built over
+the same path is the faithful simulation: unlike the old in-process ``_by_id`` dict this test used
 to clear, the durable stores (vectors, FTS, entities, episodics) hold no per-process state, so a
 second instance genuinely reads what the first one wrote.
 """
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from morgan_brain.models.memory import Memory, MemoryKind, MemoryQuery, MemorySource
+from morgan_brain.models import Memory, MemoryKind, MemoryQuery, MemorySource
 from tests.unit.memory.conftest import build_memory_module as _module
 
 

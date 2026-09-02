@@ -1,73 +1,68 @@
 # Architecture
 
-One installable package, `morgan_brain`, that runs as up to two services. Built on the
-**MAPLE** decomposition (Memory ≠ Learning ≠ Personalization — three mechanisms on three
-timescales) and **SkillOpt** (skills + champion preprompt as trainable, validation-gated state).
+One package, `morgan_brain`, one process, one SQLite file. Two surfaces over one gate.
 
-Design authority: [`design/morgan-brain.md`](design/morgan-brain.md). Current direction:
-[`design/local-first-reshape.md`](design/local-first-reshape.md). The memory and governance
-graft: [`design/dual-brain-memory-and-pattern-register.md`](design/dual-brain-memory-and-pattern-register.md).
-Status: [`ROADMAP.md`](ROADMAP.md). Run guide: [`WIRING.md`](WIRING.md).
+```
+morgan CLI ──┐                          ┌─ episodic rows
+             ├─▶ MemoryGate ─▶ MemoryModule ─┼─ sqlite-vec vectors
+morgan-mcp ──┘        │                 ├─ FTS5 keyword index      one morgan.db
+                      │                 ├─ entity index
+   Chat (ask) ────────┤                 └─ semantic upper index
+   Consolidator ──────┘   ──▶ valid-time facts
+         │
+         └──▶ model server (any OpenAI-compatible endpoint)
+```
 
-## Topology (two services, one package)
+## The package (`morgan_brain/`)
 
-| Service | Role |
-|---------|------|
-| `brain-api` | The request path — perceive → personalize → recall → skills → tools → reason → store → signal. Hosts the REST/SSE gateway. |
-| `learning-worker` | Off the request path — consolidate episodic memory into valid-time facts, mine signals, run the eval-gated GEPA optimizer, schedule nightly jobs. |
+| Module | Responsibility |
+|---|---|
+| `config.py` | The single `MORGAN_`-prefixed settings source. Reads `~/.config/morgan/.env`, then `./.env`, then the environment; the database defaults to `~/.local/share/morgan/`. |
+| `models.py` | `Memory`, `TemporalFact`, `MemoryQuery`, `Message`. Everything that persists is `user_id`- and `project`-keyed. |
+| `memory/gate.py` | `MemoryGate`: the only door to memory. Refuses an empty user or project. `ForgetReport`. |
+| `memory/module.py` | `MemoryModule`: the one write path (every index in one call, entities extracted if absent) and the fused recall (three signals, reciprocal rank fusion, current facts first). `forget()` in one transaction. |
+| `memory/episodic.py`, `temporal.py`, `vectors.py`, `fts.py`, `entities.py`, `history.py` | The stores, all over the one connection. Vectors are scoped *inside* the KNN via vec0 metadata columns, not filtered afterwards. |
+| `memory/semantic_index.py` | The upper index: schemas route coarsely, entities locate concretely, one-hop co-occurrence expands. `route()` returns `None`, never an empty pool, when it has nothing useful to say. |
+| `memory/schema_classifier.py` | Files entities into schema slots (keyword cues, deterministic) and records co-occurrence. An entity is classified once. |
+| `memory/extract.py` | The one entity extractor: cased words, acronyms, CamelCase, Latin and Cyrillic. |
+| `memory/consolidation.py` | Episodics → facts. Asks the model for ADD/UPDATE/DELETE/NOOP operations as validated JSON, applies them through the gate: supersede, never overwrite. Skips episodics current facts already cover. |
+| `providers/` | `openai_compat.py` (chat over the `openai` SDK), `embeddings.py` (`/embeddings` over httpx), `structured.py` (JSON-schema, JSON-object or prompted, validated, re-asked), `factory.py`, `wire.py` (`ChatClient`, `ProviderUnreachable`). Nothing above imports a model SDK. |
+| `chat.py` | One turn: recall → prompt → answer → remember both halves, attributed. |
+| `composition.py` | Opens the database and wires everything. `build_memory_context` for the memory commands; `build_app_context` adds the chat client. |
+| `cli/` | `morgan` with `remember`, `recall`, `facts`, `forget`, `ask`, `consolidate`, `doctor`. Project = the current git repository's directory name. |
+| `mcp_server.py` | `morgan-mcp`: `remember`, `recall`, `facts`, `forget`, `ask_morgan` over stdio or streamable-HTTP with a bearer token. Calls the CLI's handlers; `project` is a tool argument. |
+| `network.py` | The bind guard. |
+| `logging_setup.py` | All logs to stderr; stdout is `--json` and JSON-RPC. |
 
-Modules talk over typed Protocols (`interfaces/`) and an event bus whose in-process and
-Redis-Streams backends share one interface, so any module can be promoted to its own service
-with no code change. For local use everything runs in one process (`MORGAN_EVENT_BUS=inproc`),
-and the `morgan` CLI and the `morgan-mcp` server are thin adapters over the same wiring.
+## Recall
 
-## Package layout (`morgan_brain/`)
+1. The semantic index is asked for a candidate pool from the query's terms. `None` means
+   search everything, and cross-project queries are never routed.
+2. Vector, FTS5 and entity search each return their top-k *inside* that pool.
+3. Reciprocal rank fusion merges the three rankings.
+4. Currently-valid facts for the project are placed first; the fused episodics follow, cut
+   to `top_k`.
 
-| Package | Responsibility |
-|---------|----------------|
-| `config.py` | The single `MORGAN_`-prefixed settings source (`get_settings()`). Reads `~/.config/morgan/.env`, then `./.env`, then the environment; the one database defaults to `~/.local/share/morgan/`. |
-| `logging_setup.py` | The one logging configuration: every entrypoint logs to stderr, because the CLI's stdout is its `--json` contract and the MCP server's stdout is the JSON-RPC channel. |
-| `interfaces/` | Protocols — the contracts every module implements (llm, memory, learning, personalization, reasoning, skills, tools, perception, events). `llm.ProviderUnreachable` is the one error every surface reports by name. |
-| `models/` | Shared domain models; everything that persists is `user_id`-keyed (`UserScoped`) and, for memories and facts, `project`-keyed. |
-| `bus/` | Event bus — in-proc + Redis-Streams backends behind one interface. |
-| `security/` | The single `MemoryGate` (all memory access), the unified `PermissionMode`/`PermissionGate`, and the bind guard that refuses an unauthenticated listener beyond loopback. |
-| `providers/` | Provider adapters, wire types, capability registry, role router (strong/fast/judge/reflection), structured-output ladder. **The only place a provider SDK is imported.** |
-| `modules/perception/` | Raw input → `FusedPerception` (text built; audio/vision not built). `text/entities.py` is the one entity extractor both paths use. |
-| `modules/memory/` | Episodic + valid-time fact store on one SQLite database, and multi-signal retrieval fused by reciprocal rank — sqlite-vec vectors, an FTS5 keyword index, and an entity index, all durable. `retrieval/semantic_index.py` sits above them: schema → entity routing that narrows every signal to a candidate pool before it searches. |
-| `modules/personalization/` | Request-path `AdaptivePersonalizer` — budget-aware trait selection, injected every turn — plus `persona_graph.py`, which separates intrinsic dispositions from attitudes anchored to a specific entity. Read-only on the request path. |
-| `modules/reasoning/` | Context assembly + role-routed LLM call + tool loop + generation (streaming when the bound model cannot call tools). |
-| `modules/skills/` | Markdown+frontmatter skill registry, trigger-matched, champion-versioned. |
-| `modules/tools/` | `BaseTool` registry + executor behind the PermissionGate; SSRF/DoS-hardened built-ins. |
-| `learning/` | Signal capture (recorder/signals), consolidation, profile, `ChampionTrainer`, optimizer — plus the cold-path writers for the index and persona graph (`semantic_index_builder.py`, `persona_attribution.py`, `cluster_emergence.py`) and the governance layer (`patterns.py`, `receipts.py`). |
-| `learning_lifecycle/` | `PromptRegistry` + `Optimizer` seam (local SQLite or MLflow backend). |
-| `eval/` | 3-layer golden eval harness + calibrated cross-family LLM judge — the self-learning gate. `gate_integrity.py` protects it from what it judges. |
-| `scheduling/` | CronService + nightly learning jobs (APScheduler optional). |
-| `core/` | The thin cognitive-loop orchestrator (coordinates only; owns no domain logic). |
-| `composition.py` | Wires concrete implementations into the orchestrator + app context. |
-| `apps/` | Entrypoints: `brain_api`, `learning_worker`. |
-| `cli/` | The `morgan` terminal client — `remember`/`recall`/`facts`/`forget`/`ask`/`doctor`/`receipts`; project auto-detected from the current git repository. |
-| `ports/` | `morgan-mcp` — five MCP tools over stdio or streamable-HTTP, calling the same command handlers the CLI does. |
+There is no relevance floor: a non-empty project always answers.
 
-## The cognitive loop (per turn, `brain-api`)
+## Consolidation (`morgan consolidate`)
 
-**perceive → personalize → recall → skills → tools → reason → store → signal.** Steps 2–6 only
-**read** learned knowledge (hot path); the store + signal steps only **write** and never block the
-response (cold path). Memory access goes through `MemoryGate`; facts are valid-time (update = close
-the old interval, open a new one) with actor attribution on every record.
+Recent episodics minus those current facts already cover → the model proposes fact operations
+as JSON validated against `FactOpBatch` → applied through the gate. UPDATE closes the old
+interval and opens a new one (`valid_to`, `superseded_by`); DELETE closes it; confidence decays
+with age since last confirmation. It runs when asked, never on a schedule of its own.
 
-## The self-learning loop (`learning-worker`)
+## Erasure (`morgan forget`)
 
-Off the request path: **consolidate** recent episodics into durable valid-time facts
-(ADD/UPDATE/DELETE/NOOP, contradiction → supersede, confidence decay), then **eval-gated optimize** —
-mine high-value signals (edits > retries > thumbs), ask the **reflection** model to propose an
-improved champion preprompt, score it on the 3-layer golden eval, and promote **only on a strict
-beats-current win** (versioned for instant rollback), and only when
-`MORGAN_ENABLE_CHAMPION_PROMOTION` is on — it ships off. No learned update ever degrades the assistant.
+One `BEGIN IMMEDIATE`, then: memories, FTS rows, entity rows, vectors (`vec_items` +
+`vec_meta`), facts, the semantic index (nodes, edges, schemas), session history. Tables that
+were never created on this database are named in `tables_skipped` rather than counted as
+zero. Vacuum afterwards.
 
 ## Tests (`tests/`)
 
-`unit/` per package; `integration/` for the CLI as a subprocess, the API over ASGI, the MCP server
-over raw stdio pipes, cross-process durability and erasure; `e2e/` a deterministic conversation
-harness with an optional live mode; `memory_quality/` a plumbing check over a hash embedder (not a
-relevance measurement); `live/` smoke tests behind `--live`. `pip install -e ".[dev]"` installs
-exactly what the suite needs.
+`unit/` per module; `integration/` runs the CLI as a subprocess, the MCP server over raw stdio
+pipes and in-process, cross-process durability, erasure atomicity and completeness, routing end
+to end, the wheel build. One live test (`pytest --live`) needs a real embedding model.
+`pip install -e ".[dev]"` installs exactly what the suite needs. `tests/fakes.py` holds the
+scripted chat client; nothing in the package exists only for tests.
