@@ -15,9 +15,6 @@ jobs:
       matrix:
         python-version: ["3.12"]
       fail-fast: false
-    defaults:
-      run:
-        working-directory: morgan-brain
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

@@ -1,80 +1,27 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-*.egg
 *.egg-info/
 dist/
 build/
-eggs/
-.eggs/
-*.manifest
-*.spec
-
-# Virtual environments
-/morgan-venv/
-venv/
 .venv/
-ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
 
-# IDE
-/.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# Environment files (NEVER commit secrets)
+# Environment files: never commit a real one.
 .env
 .env.*
 !.env.example
-!env.example
 
-# Cache and data
+# Runtime data only. Packaged data under morgan_brain/**/data/ must ship.
 /data/
-data/
-# Vendor/seed data bundled with source code (not runtime data) must be tracked.
-!morgan-brain/morgan_brain/providers/data/
-!morgan-brain/morgan_brain/eval/data/
-*.cache
-*.meta
-/morgan-rag/data/cache/
-/morgan-rag/local_libs/
-/morgan-rag/backups/
-/.pytest_cache/
-.pytest_cache/
-.hypothesis/
-morgan-server/.hypothesis/
-
-# Logs
-logs/
 *.log
-*.logs
-
-# Build artifacts
-*.gz
-*.whl
-/morgan-rag/morgan_rag.egg-info/
-/morgan-server/morgan_server.egg-info/
-/morgan-cli/morgan_cli.egg-info/
-
-# Test outputs
-*.xml
-test_*.txt
-test_output*.log
-
-# Runtime files
-conversations.json
 *.pid
 
-# Archive (deprecated code)
-/archive/
-
-# Test artifacts (MagicMock directories from mocked settings)
-MagicMock/
-**/MagicMock/
-# Claude Code local settings — machine-specific, and the place credentials may legitimately
-# live per the "*.local.json is gitignored" rule. Was tracked, and leaked an API key.
+# Editors and machine-local settings. settings.local.json is where credentials may
+# legitimately live; it was tracked once, and leaked a key.
+.idea/
+.vscode/
 .claude/settings.local.json

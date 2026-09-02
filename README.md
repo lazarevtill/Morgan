@@ -61,7 +61,6 @@ limitations.
 ## Quick start
 
 ```bash
-cd morgan-brain
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env
 #   ↑ point MORGAN_LLM_ENDPOINT at your llama-server; read from every working directory
@@ -82,16 +81,16 @@ loop) live in [`docs/WIRING.md`](docs/WIRING.md).
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — status, milestones, known limitations.
 - [`docs/WIRING.md`](docs/WIRING.md) — how to run, endpoints, config, the learning loop.
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — at-rest/transport protection, backups, the stack.
-- [`morgan-brain/README.md`](morgan-brain/README.md) — package layout, topology, build/test/run.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — topology, package layout, the two loops.
 - [`CLAUDE.md`](CLAUDE.md) — architecture map + non-negotiable invariants.
-- [The local-first reshape design](docs/superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md)
+- [The local-first reshape design](docs/design/local-first-reshape.md)
   — diagnosis, target architecture, milestone plan.
-- [Dual-brain memory + the pattern register](docs/superpowers/specs/2026-08-31-dual-brain-memory-and-pattern-register-design.md)
+- [Dual-brain memory + the pattern register](docs/design/dual-brain-memory-and-pattern-register.md)
   — what was taken from [VoiceMem](https://arxiv.org/abs/2608.26005) and
   [Ouroboros](https://github.com/razzant/ouroboros), and what was deliberately left behind.
-- Decision records (under `docs/superpowers/specs/`):
-  [self-learning](docs/superpowers/specs/2026-06-08-self-learning-decision.md) ·
-  [platform architecture](docs/superpowers/specs/2026-06-08-platform-architecture-decision.md).
+- Decision records (under `docs/decisions/`):
+  [self-learning](docs/decisions/self-learning.md) ·
+  [platform architecture](docs/decisions/platform-architecture.md).
 
 > Earlier builds are archived in the git tags **`legacy-v0.0.4-full`** (the platform build this
 > reshape narrowed) and **`legacy-v0.0.3-monolith`** (the pre-platform monolith) — sources for

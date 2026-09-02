@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Morgan is a self-hosted, **self-learning, provider-agnostic personal agent kernel** — it owns its
 owner's identity, memory, learning, and policy, and the chat assistant is one app on top of it, not
-the product. The implementation lives under `morgan-brain/` (one package, two services). Memory is
+the product. One package, `morgan_brain/`, runs as up to two services. Memory is
 **local-first**: one SQLite database under `MORGAN_DATA_DIR` holds episodics, facts, entities,
 vectors (sqlite-vec), the FTS5 keyword index, training signals, session history, and the champion
 prompt registry. Redis and Qdrant are optional extras, not requirements. The default provider is
@@ -21,10 +21,9 @@ any OpenAI-compatible endpoint works; Ollama remains a supported non-default pro
 ### Read these first
 - **Status (authoritative):** `docs/ROADMAP.md`
 - **Run guide / endpoints / config:** `docs/WIRING.md`
-- **Design authority (kernel semantics):** `docs/superpowers/specs/2026-06-07-morgan-brain-design.md`
-- **Local-first reshape design:** `docs/superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md`
-- **Decision records:** `docs/superpowers/specs/2026-06-08-self-learning-decision.md`,
-  `…-platform-architecture-decision.md`
+- **Design authority (kernel semantics):** `docs/design/morgan-brain.md`
+- **Local-first reshape design:** `docs/design/local-first-reshape.md`
+- **Decision records:** `docs/decisions/self-learning.md`, `docs/decisions/platform-architecture.md`
 
 ### Four surfaces
 - **`brain-api`** — the REST/SSE gateway (`/api/chat`, `/api/chat/stream`, `/api/feedback`,
@@ -54,7 +53,7 @@ installable package `morgan_brain` runs as up to two processes:
 those protocols, never on concretions — which is what makes a module swappable and promotable
 (in-proc → its own service) with no code change.
 
-### Package map (`morgan-brain/morgan_brain/`)
+### Package map (`morgan_brain/`)
 Hot path = `brain-api` request path; cold path = `learning-worker`.
 - `config.py` — the single `MORGAN_`-prefixed settings source (`get_settings()`). Derives the
   four role bindings (strong/fast/judge/reflection) and the shared SQLite path from `data_dir`.
@@ -212,7 +211,6 @@ Hot path = `brain-api` request path; cold path = `learning-worker`.
 ## Build & Development Commands
 
 ```bash
-cd morgan-brain
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # point MORGAN_LLM_ENDPOINT at your llama-server
 
@@ -244,7 +242,7 @@ GEPA) · `[scheduling]` (APScheduler) · `[tracing]` (slim mlflow-tracing) · `[
 
 ## Configuration
 
-All env vars are `MORGAN_`-prefixed (see `morgan-brain/.env.example` for the full list). They are
+All env vars are `MORGAN_`-prefixed (see `.env.example` for the full list). They are
 read from `~/.config/morgan/.env` (`$XDG_CONFIG_HOME/morgan/.env`), then `./.env`, then the
 environment, later sources winning — the CLI runs from any repository, so its configuration
 cannot live in one. `MORGAN_DATA_DIR` defaults to `~/.local/share/morgan/` for the same reason:

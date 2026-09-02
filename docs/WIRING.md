@@ -10,7 +10,7 @@ project-scoped reads/writes, and an eval-gated (disarmed by default) learning lo
 > Ollama and other OpenAI-compatible endpoints remain supported non-default provider keys.
 
 ## 1. Prerequisites
-- Python 3.12, the repo, deps: `cd morgan-brain && pip install -e ".[dev]"`.
+- Python 3.12, the repo, deps: `pip install -e ".[dev]"` from the repository root.
 - A running **`llama-server`** (from [llama.cpp](https://github.com/ggml-org/llama.cpp)) serving
   a chat model and an embedding model. `llama-server` only serves one model per process, so run
   two instances (or point separate roles at separate ports/hosts):
@@ -28,10 +28,10 @@ project-scoped reads/writes, and an eval-gated (disarmed by default) learning lo
   GEPA), `".[scheduling]"` (cron for nightly consolidation).
 
 ## 2. Configure (`.env`, all `MORGAN_`-prefixed)
-Copy `morgan-brain/.env.example` → **`~/.config/morgan/.env`** (`$XDG_CONFIG_HOME/morgan/.env`).
+Copy `.env.example` → **`~/.config/morgan/.env`** (`$XDG_CONFIG_HOME/morgan/.env`).
 That file is read from every working directory, which is what the `morgan` CLI needs — it is
 meant to be run from inside whichever repository you are working in. A `./.env` in the current
-directory is read after it and overrides it (a `morgan-brain` checkout keeps its dev settings
+directory is read after it and overrides it (a checkout of this repo keeps its dev settings
 that way), and real environment variables override both. Then set:
 ```bash
 # Identity
@@ -73,7 +73,6 @@ The **judge** role should be a *different model family* than the assistant (eval
 
 ## 3. Verify — `morgan doctor`
 ```bash
-cd morgan-brain
 morgan doctor
 ```
 Reports, independently per subsystem so one failure doesn't hide the rest: the database path,
@@ -126,7 +125,6 @@ config examples (`.mcp.json`, `claude mcp add`).
 
 ## 6. Use it — `brain-api` (REST/SSE gateway)
 ```bash
-cd morgan-brain
 python -m morgan_brain.apps.brain_api          # http://localhost:8080
 curl -s localhost:8080/health
 curl -s -X POST localhost:8080/api/chat -H 'content-type: application/json' \
@@ -220,5 +218,5 @@ your database" (`tables_skipped`) so a fresh install doesn't read as a bug.
 
 ## 12. What remains
 - **LoRA fine-tuning** — deliberately deferred; only build it if the 4-condition escalation test in
-  the [self-learning decision](superpowers/specs/2026-06-08-self-learning-decision.md) ever fires.
+  the [self-learning decision](decisions/self-learning.md) ever fires.
   RAG + the GEPA-optimized champion preprompt are the default and cover the vast majority of gains.

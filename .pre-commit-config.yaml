@@ -6,9 +6,9 @@
 #
 # This file mirrors the CI gate (.github/workflows/lint.yml + test.yml) rather than
 # running a second, differently-configured one.  Ruff is the single linter *and* the
-# single formatter, and mypy reads the same strict settings from
-# morgan-brain/pyproject.toml that CI does.  A hook whose rules disagree with CI is
-# worse than no hook: it either blocks work CI would accept, or passes work CI rejects.
+# single formatter, and mypy reads the same strict settings from pyproject.toml that
+# CI does.  A hook whose rules disagree with CI is worse than no hook: it either
+# blocks work CI would accept, or passes work CI rejects.
 
 repos:
   # General file hygiene.
@@ -36,17 +36,15 @@ repos:
 
   # Ruff: the lint gate and the formatter.  No black, no isort -- `I` (import order)
   # and `ruff format` cover both, and two formatters over one tree fight each other.
-  # The rule set and line length come from morgan-brain/pyproject.toml; nothing is
-  # passed on the command line, so the hook cannot drift from CI.  Bandit is not a
-  # separate hook either: its checks are ruff's `S` family, already selected there.
+  # The rule set and line length come from pyproject.toml; nothing is passed on the
+  # command line, so the hook cannot drift from CI.  Bandit is not a separate hook
+  # either: its checks are ruff's `S` family, already selected there.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.5
     hooks:
       - id: ruff-check
         args: ['--fix']
-        files: ^morgan-brain/
       - id: ruff-format
-        files: ^morgan-brain/
 
   # Mypy, strict, against the package -- the same invocation CI runs.  It needs the
   # project's own dependencies to resolve, so it runs from the local environment
@@ -55,10 +53,10 @@ repos:
     hooks:
       - id: mypy
         name: mypy (strict)
-        entry: bash -c 'cd morgan-brain && mypy morgan_brain'
+        entry: mypy morgan_brain
         language: system
         pass_filenames: false
-        files: ^morgan-brain/morgan_brain/.*\.py$
+        files: ^morgan_brain/.*\.py$
 
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.33.0
@@ -72,25 +70,6 @@ repos:
     hooks:
       - id: hadolint-docker
         args: ['--ignore', 'DL3008', '--ignore', 'DL3013', '--ignore', 'DL3015']
-
-  - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.9.0.6
-    hooks:
-      - id: shellcheck
-        args: ['--severity=warning']
-
-  - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.39.0
-    hooks:
-      - id: markdownlint
-        args: ['--fix']
-
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.4.0
-    hooks:
-      - id: detect-secrets
-        args: ['--baseline', '.secrets.baseline']
-        exclude: ^(\.env\.example|.*\.md)$
 
 default_language_version:
   python: python3.12

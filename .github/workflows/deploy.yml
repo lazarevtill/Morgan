@@ -2,7 +2,7 @@ name: Deploy
 
 # Manual-only. Real deployment (push to a private registry + SSH to hosts)
 # depends on infrastructure reachable only over a private overlay network, and
-# must be re-wired for the `morgan-brain` layout before re-enabling on push.
+# must be re-wired before re-enabling on push.
 #
 # The composite actions that set up that overlay network were deleted: no
 # workflow referenced them, and they hardcoded a private management endpoint in
@@ -26,8 +26,8 @@ jobs:
       - name: Build morgan-brain image (no push)
         uses: docker/build-push-action@v5
         with:
-          context: ./morgan-brain
-          file: ./morgan-brain/Dockerfile
+          context: .
+          file: ./Dockerfile
           push: false
           tags: morgan-brain:ci
           cache-from: type=gha

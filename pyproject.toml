@@ -1,0 +1,160 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "morgan-brain"
+version = "0.1.0"
+description = "Self-hosted personal assistant that knows and learns from you (MAPLE + SkillOpt)."
+requires-python = ">=3.12"
+# An SPDX expression, not a file reference: the text lives at the repository root, one level
+# above this package, and a path outside the project directory is not available to a build
+# from an sdist or inside the Docker build context.
+license = "Apache-2.0"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "httpx>=0.27",
+    "openai>=1.0",
+    "structlog>=24.4",
+    "sqlite-vec>=0.1.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "hypothesis>=6.0",
+    # Upper-bounded on purpose: a linter/type-checker minor release adds rules,
+    # so an open range makes CI fail on someone else's release date.  Raise the
+    # bound deliberately, with the findings fixed in the same change.
+    "ruff>=0.16,<0.17",
+    "mypy>=1.13,<2.0",
+    # The suite exercises every optional surface it ships -- the MCP server, the
+    # Qdrant vector index, the Redis-Streams bus, the scheduler -- so `dev` pulls
+    # them in rather than leaving them to the CI command.  `pip install -e
+    # ".[dev]"` must be enough to run exactly the suite the gate runs; anything
+    # less makes the result depend on install state instead of on the code.
+    "morgan-brain[mcp,scale,scheduling]",
+]
+# Deferred / phase-gated extras
+scale = ["redis>=5.2", "qdrant-client>=1.12"]
+scheduling = ["apscheduler>=3.10"]
+tokens = ["tiktoken>=0.8"]
+# Learning lifecycle — MLflow-backed PromptRegistry + GEPA optimizer (Wave 1/5).
+# Core deps intentionally excluded; install this extra when enabling learning_backend="mlflow".
+learning = ["mlflow>=3.4"]
+# Slim tracing-only package for the hot-path service layer (much smaller than full mlflow).
+tracing = ["mlflow-tracing"]
+# MCP server port (Task 17A) -- other AI tools calling in to Morgan over the Model Context
+# Protocol. Capped below 2.0: mcp 2.0 is a breaking rewrite that swaps httpx for an
+# incompatible httpx2 package, which would collide with every other httpx consumer in this repo.
+mcp = ["mcp>=1.0,<2.0"]
+
+[project.scripts]
+morgan = "morgan_brain.cli.__main__:main"
+morgan-mcp = "morgan_brain.ports.mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["morgan_brain"]
+artifacts = [
+    "morgan_brain/eval/data/*.json",
+    "morgan_brain/providers/data/*.json",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Prose is not source: the fenced snippets in the design documents and the agent
+# definitions are illustrations, and reformatting them changes what they illustrate.
+extend-exclude = ["docs", ".claude"]
+
+# The rule set is declared explicitly on purpose.  Ruff's *default* selection
+# changes between releases, so a repo that relies on it has a lint gate that
+# silently moves under it -- CI turns red on a linter release rather than on a
+# code change.  Pinning the families here (and the ruff version range in the
+# dev extra) makes the gate a property of this repo, not of whichever ruff a
+# runner happened to resolve.
+[tool.ruff.lint]
+select = [
+    "E", "W", "F",   # pycodestyle + pyflakes
+    "I",             # import ordering
+    "UP",            # pyupgrade -- keep the 3.12 idioms current
+    "B", "BLE",      # bugbear + blind-except
+    "C4",            # comprehensions
+    "DTZ",           # naive datetimes: a bi-temporal store must not have any
+    "ASYNC",         # blocking calls on the async hot path
+    "S",             # bandit
+    "SIM",
+    "TRY",
+    "FURB",
+    "RUF",
+    "PLE",           # pylint errors only; the refactor/convention sets are noise here
+]
+ignore = [
+    # FastAPI expresses dependency injection as a call in the default argument.
+    # It is the framework's documented idiom, not an accidental shared mutable.
+    "B008",
+    # Ruff wants every raise to carry a short message and a separate exception
+    # class.  Morgan's errors are read by humans in logs; the long-form message
+    # is the useful part.
+    "TRY003",
+    # `class X(str, Enum)` is deliberate, not a 3.12 oversight.  StrEnum changes
+    # what `str(member)` returns ("user" instead of "Role.USER"), and these enums
+    # are serialised onto the event bus, into SQLite, and into provider payloads.
+    # Migrating them is a wire-format change that needs its own tested commit,
+    # not a lint autofix.
+    "UP042",
+    # Ambiguous-unicode.  The rule guards against homoglyph smuggling; here it
+    # only ever fires on deliberate typography -- en dashes in prose, the real
+    # minus sign in the calibration formulae, x in "4.4x fewer tokens" -- and on
+    # the Cyrillic fixtures that exist precisely to prove the FTS5 tokeniser
+    # handles a non-Latin script.  Flagging those is noise, not a finding.
+    "RUF001", "RUF002", "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert, spawn subprocesses with a known argv, and bind throwaway
+# sockets.  Those are the point of the test, not a finding.
+"tests/**" = ["S101", "S603", "S607", "S104", "S105", "S106", "S108"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+# Optional extras.  Whether these import cleanly depends on which extras are
+# installed, so without an explicit override `mypy` reports a different result
+# on a `[dev]` runner than on a developer box with `[mcp,scale]` -- i.e. the
+# type gate would depend on install state rather than on the code.  The modules
+# that import them are already guarded at their own import site.
+[[tool.mypy.overrides]]
+module = [
+    "mcp.*",
+    "redis.*",
+    "qdrant_client.*",
+    "apscheduler.*",
+    "mlflow.*",
+    "tiktoken.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "timeout: mark test with a wall-clock timeout in seconds (requires pytest-timeout; skipped if not installed)",
+    "live: mark test as requiring live external services (Qdrant, Redis); skipped by default",
+]
+
+[tool.bandit]
+# Production code only. Bandit reads pytest's idiom as a vulnerability -- `assert` is B101
+# (1300+ in tests), the CLI integration tests' subprocess calls are B603/B607, and the
+# "0.0.0.0" literal in the tests that prove Morgan *refuses* that bind is B104. Scanning
+# morgan_brain is the scan that matters; it reports zero findings.
+exclude_dirs = ["tests"]

@@ -28,9 +28,6 @@ jobs:
   code-security:
     name: Code Security Analysis (bandit)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: morgan-brain
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

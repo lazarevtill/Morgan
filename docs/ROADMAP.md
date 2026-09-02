@@ -6,9 +6,9 @@
 > other OpenAI-compatible endpoint remain supported non-default provider keys) and never requires
 > a third-party model endpoint. Single-owner first, multi-tenant-ready. Quality over speed.
 >
-> Authoritative design: [`docs/superpowers/specs/2026-06-07-morgan-brain-design.md`](superpowers/specs/2026-06-07-morgan-brain-design.md)
+> Authoritative design: [`docs/design/morgan-brain.md`](design/morgan-brain.md)
 > (kernel semantics — memory, learning, personalization). Current direction:
-> [the local-first reshape design](superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md)
+> [the local-first reshape design](design/local-first-reshape.md)
 > (diagnosis, target architecture, milestone plan; supersedes the earlier Personal Agent OS
 > horizon plan). Run guide: [`docs/WIRING.md`](WIRING.md).
 >
@@ -45,7 +45,7 @@ Morgan learns from them continuously and safely.
 
 ## Self-learning mechanism — DECISION (research, 2026-06-08)
 
-Full rationale + citations: [`docs/superpowers/specs/2026-06-08-self-learning-decision.md`](superpowers/specs/2026-06-08-self-learning-decision.md).
+Full rationale + citations: [`docs/decisions/self-learning.md`](decisions/self-learning.md).
 
 **Decision: memory/RAG-first + an auto-optimized "champion" preprompt (GEPA-style reflection). No
 LoRA by default.** Evidence: on the LaMP personalization benchmark, RAG gives **+14.92%** vs
@@ -81,7 +81,7 @@ assistant may consolidate.
 
 ## Platform decisions (research, 2026-06-08)
 
-Full rationale + citations: [`docs/superpowers/specs/2026-06-08-platform-architecture-decision.md`](superpowers/specs/2026-06-08-platform-architecture-decision.md).
+Full rationale + citations: [`docs/decisions/platform-architecture.md`](decisions/platform-architecture.md).
 The reshape narrowed the scope this research covers — the two points below are the parts that
 still hold; the multi-agent-platform and envelope-encryption ambitions the same document explored
 did not survive the reshape (§6, §10 of the reshape design) and are not part of the current plan.
@@ -106,7 +106,7 @@ did not survive the reshape (§6, §10 of the reshape design) and are not part o
 
 ## Status
 
-The current plan is the [local-first reshape](superpowers/specs/2026-08-02-morgan-reshape-local-first-design.md),
+The current plan is the [local-first reshape](design/local-first-reshape.md),
 sequenced as milestones M0–M3.
 
 | Milestone | Deliverable | State |
@@ -121,7 +121,7 @@ ECE) added to the eval gate, report-only for now — groundwork for M3's promoti
 wired to a pass/fail decision.
 
 And the **dual-brain memory + governance graft**
-([design](superpowers/specs/2026-08-31-dual-brain-memory-and-pattern-register-design.md)), from
+([design](design/dual-brain-memory-and-pattern-register.md)), from
 VoiceMem (arXiv:2608.26005) and Ouroboros:
 
 | Graft | What it does | State |
