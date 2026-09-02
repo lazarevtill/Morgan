@@ -32,6 +32,7 @@ import structlog
 from morgan_brain.bus import get_event_bus
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.interfaces.events import Event, EventType, Handler
+from morgan_brain.logging_setup import configure_logging
 from morgan_brain.models.memory import DEFAULT_PROJECT
 from morgan_brain.models.message import Conversation, Message, Role
 
@@ -247,6 +248,7 @@ async def run(settings: Settings | None = None) -> None:
 
 
 def main() -> None:
+    configure_logging()
     asyncio.run(run())
 
 

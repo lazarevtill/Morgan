@@ -44,6 +44,7 @@ from starlette.responses import JSONResponse, Response
 
 from morgan_brain.cli.__main__ import cmd_ask, cmd_facts, cmd_forget, cmd_recall, cmd_remember
 from morgan_brain.config import Settings, get_settings
+from morgan_brain.logging_setup import configure_logging
 from morgan_brain.models.memory import DEFAULT_PROJECT
 from morgan_brain.security.network import (
     api_key_is_configured,
@@ -190,6 +191,9 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Over stdio, stdout *is* the JSON-RPC channel: a log line there is a framing error in
+    # the client. Configured before anything that might log -- including reading settings.
+    configure_logging()
     settings = get_settings()
     parser = argparse.ArgumentParser(
         prog="morgan-mcp",

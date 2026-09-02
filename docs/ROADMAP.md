@@ -138,6 +138,13 @@ The accuracy numbers behind the first four are the **paper's**, on LoCoMo/LongMe
 They have not been reproduced here and cannot be until `tests/memory_quality/` runs against a real
 embedder — see M3's noise-floor work.
 
+Usage-readiness pass (2026-09-02): configuration and the one database moved to per-user
+locations (`~/.config/morgan/.env`, `~/.local/share/morgan/`) so the CLI finds the same brain
+from every repository; a model server that is down is reported by name on every surface
+(`ProviderUnreachable` → `502` / in-band stream error / CLI and MCP messages); all logs go to
+stderr so `--json` and the MCP stdio transport stay parseable; the Docker image builds again;
+`/api/chat/stream` streams token by token through a model without tool support.
+
 ### Known limitations (see [`CLAUDE.md`](../CLAUDE.md) and [`WIRING.md`](WIRING.md) for detail)
 - `recall` has no relevance floor — a query against a non-empty project always returns something.
 - `forget()` does not erase vectors under `vector_backend=qdrant` (the `sqlite` default is fully covered).

@@ -289,3 +289,70 @@ def test_receipts_on_a_fresh_install_says_so(tmp_path):
     out = _run(["receipts"], _hash_env(tmp_path), tmp_path)
     assert out.returncode == 0, out.stderr
     assert "No promotion decisions recorded yet." in out.stdout
+
+
+def _env_without_morgan(**extra: str) -> dict[str, str]:
+    """The developer's own MORGAN_* variables must not leak into a test about defaults."""
+    base = {k: v for k, v in os.environ.items() if not k.startswith("MORGAN_")}
+    return {**base, **extra}
+
+
+def test_the_same_brain_is_found_from_every_working_directory(tmp_path):
+    """The point of the CLI is running it from any repository. Two repositories, no
+    MORGAN_DATA_DIR anywhere: a memory stored from one must be recalled from the other
+    (cross-project, explicitly), and neither must grow a ./data of its own."""
+    share = tmp_path / "share"
+    repo_a, repo_b = tmp_path / "alpha", tmp_path / "beta"
+    for repo in (repo_a, repo_b):
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    env = _env_without_morgan(XDG_DATA_HOME=str(share), MORGAN_EMBEDDING_BACKEND="hash")
+
+    assert _run(["remember", "the deploy key lives in the vault"], env, repo_a).returncode == 0
+    out = _run(["recall", "vault", "--all-projects", "--json"], env, repo_b)
+    assert out.returncode == 0, out.stderr
+    assert "vault" in json.loads(out.stdout)["results"][0]["content"]
+
+    assert (share / "morgan" / "morgan.db").exists()
+    assert not (repo_a / "data").exists()
+    assert not (repo_b / "data").exists()
+
+
+def test_the_user_config_file_is_read_from_any_working_directory(tmp_path):
+    """~/.config/morgan/.env configures the CLI everywhere; a ./.env in the working
+    directory overrides it; a real environment variable overrides both."""
+    config_home = tmp_path / "config"
+    (config_home / "morgan").mkdir(parents=True)
+    (config_home / "morgan" / ".env").write_text(
+        f"MORGAN_DATA_DIR={tmp_path / 'from-user-config'}\nMORGAN_EMBEDDING_BACKEND=hash\n"
+    )
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    env = _env_without_morgan(XDG_CONFIG_HOME=str(config_home))
+
+    report = json.loads(_run(["doctor", "--json"], env, elsewhere).stdout)
+    assert report["config_file"] == str(config_home / "morgan" / ".env")
+    assert report["config_file_present"] is True
+    assert report["database"].startswith(str(tmp_path / "from-user-config"))
+    assert report["embedding_backend"] == "hash"
+
+    (elsewhere / ".env").write_text(f"MORGAN_DATA_DIR={tmp_path / 'from-cwd'}\n")
+    report = json.loads(_run(["doctor", "--json"], env, elsewhere).stdout)
+    assert report["database"].startswith(str(tmp_path / "from-cwd"))
+
+    env["MORGAN_DATA_DIR"] = str(tmp_path / "from-env")
+    report = json.loads(_run(["doctor", "--json"], env, elsewhere).stdout)
+    assert report["database"].startswith(str(tmp_path / "from-env"))
+
+
+def test_json_stdout_stays_json_when_something_is_logged(tmp_path):
+    """A warning is logged when the embedder cannot be probed. It belongs on stderr: a
+    script reading --json output must never find a log line in front of the document."""
+    env = _env_without_morgan(
+        MORGAN_DATA_DIR=str(tmp_path), MORGAN_LLM_ENDPOINT="http://127.0.0.1:1/v1"
+    )
+    out = _run(["remember", "x", "--json"], env, tmp_path)
+    assert out.returncode == 1
+    payload = json.loads(out.stdout)  # the whole of stdout is the document
+    assert "127.0.0.1:1" in payload["error"]
+    assert "embedding-dim-probe" in out.stderr

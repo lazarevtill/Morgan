@@ -103,13 +103,20 @@ class ReasoningModule:
     async def stream(self, request: ReasoningRequest) -> AsyncIterator[str]:
         """Streaming variant.
 
-        When tools are present: runs the (non-streaming) tool-call loop to completion
-        then yields the final answer as a single chunk.  Full streaming of tool-call
-        deltas is a later refinement.
+        When tools are present *and* a tool-capable binding exists for the role: runs the
+        (non-streaming) tool-call loop to completion, then yields the final answer as a
+        single chunk. Full streaming of tool-call deltas is a later refinement.
 
-        When no tools: streams token deltas as they arrive (original behaviour).
+        Otherwise: streams token deltas as they arrive. The capability check matters --
+        built-in tools are always registered, so without it every stream through a model
+        that cannot call tools would silently degrade to one chunk at the end.
         """
         has_tools = bool(request.tools) and self._executor is not None
+        if has_tools:
+            try:
+                self._router.chat_for(self._role, needs_tools=True)
+            except LookupError:
+                has_tools = False
 
         if has_tools:
             # Run the full loop synchronously, then yield the result.

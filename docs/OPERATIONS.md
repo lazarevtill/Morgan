@@ -2,7 +2,8 @@
 
 ## At-rest protection
 
-Morgan stores everything in one SQLite database under `MORGAN_DATA_DIR`: episodics, facts,
+Morgan stores everything in one SQLite database under `MORGAN_DATA_DIR` (default
+`~/.local/share/morgan/`, the same from every working directory): episodics, facts,
 session history, training signals, vectors, the semantic index and its co-retrieval statistics,
 the persona graph, the correction-class register, the champion prompt registry, and the decision
 receipts. There is no field-level encryption: it cannot coexist with the FTS5 keyword index, and
@@ -28,8 +29,10 @@ terminate TLS at a reverse proxy. Never expose it on a public interface with the
 
 ## Backups
 
-Back up the single database file with `sqlite3 morgan.db ".backup 'morgan-backup.db'"` while the
-service runs — a filesystem copy of a WAL-mode database mid-write is not consistent.
+Back up the single database file with
+`sqlite3 ~/.local/share/morgan/morgan.db ".backup 'morgan-backup.db'"` (or wherever
+`MORGAN_DATA_DIR` points — `morgan doctor` prints the resolved path) while the service runs — a
+filesystem copy of a WAL-mode database mid-write is not consistent.
 
 One file is the whole backup, and that is the point of the one-database invariant: there is no
 second store to fall out of step with it. It is also the whole exposure — see *At-rest

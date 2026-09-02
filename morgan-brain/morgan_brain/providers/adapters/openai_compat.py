@@ -3,7 +3,7 @@
 This covers Ollama /v1, vLLM, llama.cpp, LM Studio, OpenRouter, and remote OpenAI.
 SDK internal retries are disabled (max_retries=0) — fallback is handled by RoleFallback.
 
-Implements both ``ChatClient`` and ``Embedder`` protocols.
+Implements the ``ChatClient`` protocol. Embeddings live in ``embeddings.py``.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
+from morgan_brain.interfaces.llm import ProviderUnreachable
 from morgan_brain.providers.wire import (
     ChatMessage,
     ChatResult,
@@ -76,6 +77,9 @@ class OpenAICompatAdapter:
             max_retries=0,
             timeout=timeout,
         )
+        # Connection refused, DNS failure, and a request that timed out all subclass this
+        # one SDK error. Held on the instance so the SDK stays imported in exactly one place.
+        self._connection_error: type[Exception] = openai.APIConnectionError
 
     # ------------------------------------------------------------------
     # ChatClient protocol
@@ -99,7 +103,10 @@ class OpenAICompatAdapter:
         if response_format:
             kwargs["response_format"] = response_format
 
-        response = await self._client.chat.completions.create(**kwargs)
+        try:
+            response = await self._client.chat.completions.create(**kwargs)
+        except self._connection_error as exc:
+            raise ProviderUnreachable(self._base_url, str(exc)) from exc
         choice = response.choices[0]
         msg = choice.message
 
@@ -148,7 +155,11 @@ class OpenAICompatAdapter:
         if tools:
             kwargs["tools"] = _to_openai_tools(tools)
 
-        async with await self._client.chat.completions.create(**kwargs) as stream:
+        try:
+            stream = await self._client.chat.completions.create(**kwargs)
+        except self._connection_error as exc:
+            raise ProviderUnreachable(self._base_url, str(exc)) from exc
+        async with stream:
             async for chunk in stream:
                 if not chunk.choices:
                     # usage chunk (some providers send a final chunk with usage only)
@@ -192,15 +203,3 @@ class OpenAICompatAdapter:
                         kind="finish",
                         finish_reason=choice.finish_reason,
                     )
-
-    # ------------------------------------------------------------------
-    # Embedder protocol
-    # ------------------------------------------------------------------
-
-    async def aembed(self, texts: list[str]) -> list[list[float]]:
-        """Embed texts using the /v1/embeddings endpoint."""
-        response = await self._client.embeddings.create(
-            model=self._base_url,  # will be overridden per model; kept for compat
-            input=texts,
-        )
-        return [item.embedding for item in response.data]

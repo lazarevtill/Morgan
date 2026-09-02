@@ -6,15 +6,49 @@ Access it via ``get_settings()``.
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def default_data_dir() -> str:
+    """Where the one database lives when ``MORGAN_DATA_DIR`` is not set.
+
+    ``$XDG_DATA_HOME/morgan`` (``~/.local/share/morgan``) -- a location that does not move
+    with the working directory. The previous default, ``./data``, was relative to wherever
+    the process happened to be started, which for the ``morgan`` CLI is *any* repository the
+    owner is working in: every project silently got its own empty brain, and the one under
+    ``morgan-brain/`` was only ever seen from ``morgan-brain/``. A brain that is supposed to
+    be reachable from every project needs a home that is the same from every project.
+    """
+    base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return str(Path(base) / "morgan")
+
+
+def user_config_file() -> Path:
+    """The owner's persistent configuration: ``$XDG_CONFIG_HOME/morgan/.env``.
+
+    Read before the working directory's ``.env`` (which overrides it, so a checkout of
+    ``morgan-brain/`` keeps its local dev overrides). Same reason as ``default_data_dir``:
+    a ``.env`` that is only found in one directory configures the CLI in exactly that one
+    directory, and the CLI's whole point is running from every other one.
+    """
+    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(base) / "morgan" / ".env"
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="MORGAN_", env_file=".env", extra="ignore")
+    # Later files win: the owner's ~/.config/morgan/.env is the baseline, a ./.env in the
+    # working directory overrides it, and real environment variables override both.
+    model_config = SettingsConfigDict(
+        env_prefix="MORGAN_",
+        env_file=(str(user_config_file()), ".env"),
+        extra="ignore",
+    )
 
     # --- Identity (single-owner now; multi-tenant-ready) ---
     owner_user_id: str = "owner"
@@ -56,13 +90,13 @@ class Settings(BaseSettings):
     # --- Stores ---
     # data_dir is the single directory every durable store derives its path from: the shared
     # SQLite database (temporal facts, vectors, FTS, entities, episodics, signals, history) lives
-    # at ``{data_dir}/morgan.db`` unless temporal_db_url is overridden explicitly.
-    data_dir: str = "./data"
+    # at ``{data_dir}/morgan.db`` unless temporal_db_url is overridden explicitly. Defaults to
+    # ``$XDG_DATA_HOME/morgan`` (see ``default_data_dir``); ``~`` is expanded.
+    data_dir: str = Field(default_factory=default_data_dir)
     qdrant_url: str = "http://localhost:6333"
     redis_url: str = "redis://localhost:6379/0"
     # "" → derived from data_dir (sqlite:///{data_dir}/morgan.db); see _fill_data_dir_defaults.
     temporal_db_url: str = ""
-    workspace_path: str = "./data/workspace"
 
     # --- Event bus ---
     event_bus: Literal["inproc", "redis"] = "inproc"
@@ -119,7 +153,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _fill_data_dir_defaults(self) -> Settings:
-        """Derive temporal_db_url from data_dir when not explicitly overridden."""
+        """Expand ``~`` in data_dir and derive temporal_db_url from it when not overridden."""
+        self.data_dir = str(Path(self.data_dir).expanduser())
         if not self.temporal_db_url:
             self.temporal_db_url = f"sqlite:///{self.data_dir}/morgan.db"
         return self

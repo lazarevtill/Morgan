@@ -28,7 +28,11 @@ project-scoped reads/writes, and an eval-gated (disarmed by default) learning lo
   GEPA), `".[scheduling]"` (cron for nightly consolidation).
 
 ## 2. Configure (`.env`, all `MORGAN_`-prefixed)
-Copy `morgan-brain/.env.example` → `.env` and set:
+Copy `morgan-brain/.env.example` → **`~/.config/morgan/.env`** (`$XDG_CONFIG_HOME/morgan/.env`).
+That file is read from every working directory, which is what the `morgan` CLI needs — it is
+meant to be run from inside whichever repository you are working in. A `./.env` in the current
+directory is read after it and overrides it (a `morgan-brain` checkout keeps its dev settings
+that way), and real environment variables override both. Then set:
 ```bash
 # Identity
 MORGAN_OWNER_USER_ID=you
@@ -47,8 +51,9 @@ MORGAN_EMBEDDING_MODEL=mxbai-embed-large
 MORGAN_EMBEDDING_DIM=1024           # must match the model's output dim
 
 # Where the shared database lives (episodics, facts, vectors, FTS5, entities, signals, history,
-# champion prompt registry — one SQLite file at {MORGAN_DATA_DIR}/morgan.db)
-MORGAN_DATA_DIR=./data
+# champion prompt registry — one SQLite file at {MORGAN_DATA_DIR}/morgan.db). The default is
+# per-user and the same from every working directory; only override it to move the brain.
+# MORGAN_DATA_DIR=~/.local/share/morgan
 
 # Learning lifecycle (champion prompt registry + optimizer)
 MORGAN_LEARNING_BACKEND=local        # 'local' (SQLite, dependency-light) or 'mlflow'
@@ -72,8 +77,10 @@ cd morgan-brain
 morgan doctor
 ```
 Reports, independently per subsystem so one failure doesn't hide the rest: the database path,
-whether `sqlite-vec` and FTS5 loaded, whether the configured LLM endpoint is reachable, and row
-counts for the current project (or `--all-projects`). This is the standard first check after any
+which config file was consulted and whether it exists, whether `sqlite-vec` and FTS5 loaded,
+whether the configured LLM endpoint is reachable, and row counts for the current project (or
+`--all-projects`). The first two answer "why is my brain empty?" — a database or config file
+somewhere other than where you expect. This is the standard first check after any
 config change — run it before filing a wiring problem as a bug.
 
 ## 4. Use it — the `morgan` CLI
@@ -135,6 +142,12 @@ same project. `/api/chat/stream` returns Server-Sent Events (`data: {"delta": ".
 `/health` is open; every other `/api/*` route requires `Authorization: Bearer <MORGAN_API_KEY>`
 (or `X-API-Key`) **when a key is set** — the default `change-me` leaves it open for local dev.
 
+**When the model server is down**, `/api/chat` answers `502` with
+`{"error": "...", "endpoint": "<the URL it could not reach>"}`. `/api/chat/stream` does the same
+if the failure comes before the first token; after the first token the status is already sent,
+so the failure arrives in-band as `data: {"error": ..., "endpoint": ...}` followed by the
+terminal `data: [DONE]`. The CLI and the MCP tools report the same message, naming the endpoint.
+
 The listener binds `MORGAN_API_HOST`:`MORGAN_API_PORT`, loopback by default. Any other host
 without a real `MORGAN_API_KEY` refuses to start rather than serving an unauthenticated memory
 store — so the remote deployment is `MORGAN_API_HOST=<overlay address>` plus a real key. Network
@@ -192,6 +205,10 @@ a clean sweep. The report also distinguishes "erased zero rows" from "this table
 your database" (`tables_skipped`) so a fresh install doesn't read as a bug.
 
 ## 11. Known limitations
+- **Streaming is real only for a model that cannot call tools.** Built-in tools are always
+  registered, so with a tool-capable model `/api/chat/stream` runs the tool loop to completion
+  and delivers the reply as one chunk; a model without tool support streams token by token.
+  Streaming tool-call deltas is a later refinement.
 - **`recall` has no relevance floor.** Vector, FTS5, and entity search each return their top-k
   regardless of score, and all currently-valid facts are always included — once a project holds
   anything, a query always returns something. There is no "no matches" state except on an empty

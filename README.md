@@ -62,12 +62,17 @@ limitations.
 
 ```bash
 cd morgan-brain
-cp .env.example .env                 # point MORGAN_LLM_ENDPOINT at your llama-server
 pip install -e ".[dev]"
+mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env
+#   ↑ point MORGAN_LLM_ENDPOINT at your llama-server; read from every working directory
 morgan doctor                        # diagnose the install — no Redis/Qdrant/Docker required
+cd ~/src/any-other-repo              # the brain is the same from every repository
 morgan remember "prefers terse, code-first answers"
 morgan recall "how do I like answers"
 ```
+
+Everything lives in one file, `~/.local/share/morgan/morgan.db` (`MORGAN_DATA_DIR`), and the
+project a memory belongs to is the current git repository's directory name.
 
 Full instructions (llama-server setup, all four roles, the MCP server, `brain-api`, the learning
 loop) live in [`docs/WIRING.md`](docs/WIRING.md).

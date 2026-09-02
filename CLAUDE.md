@@ -133,8 +133,15 @@ Hot path = `brain-api` request path; cold path = `learning-worker`.
   and ids, judge model, scorer set, epsilon); a candidate scored on a different or weaker gate is
   refused, and a candidate whose body addresses the evaluator is refused *before* it is scored.
   Every promotion decision — including rejections and why — is recorded as a receipt.
+- **A model server that is down is reported by name.** Every adapter raises
+  `interfaces.llm.ProviderUnreachable` carrying the endpoint; brain-api maps it to a `502` (or an
+  in-band error event once a stream has started), the CLI and MCP tools print its message. A
+  bare 500 or an empty stream is a regression.
+- **stdout is a protocol on two surfaces.** The CLI's `--json` output and the MCP server's stdio
+  transport are parsed by machines; every entrypoint calls `logging_setup.configure_logging()`
+  so all logs go to stderr. Never `print()` diagnostics from library code.
 - **One of each.** One config system, one event-bus interface, one permission model, one
-  `structlog` logger, one SQLite database, one entity extractor
+  `structlog` logger (configured once, in `logging_setup.py`), one SQLite database, one entity extractor
   (`modules/perception/text/entities.py`, used by both the hot and the cold path), one
   `SemanticIndex` instance per assembly.
 - **Provider SDKs are isolated to `providers/adapters/`.** Nothing above the provider layer imports
@@ -172,6 +179,9 @@ Hot path = `brain-api` request path; cold path = `learning-worker`.
   brain, so an attitude toward something the turn implies but does not name still surfaces.
 
 ### Known limitations (current state, not regressions)
+- **Streaming is real only for a model that cannot call tools.** With a tool-capable binding,
+  `/api/chat/stream` runs the tool loop to completion and yields the reply as one chunk; a model
+  without tool support streams token by token (`modules/reasoning/reasoner.py::stream`).
 - **`recall` has no relevance floor.** Vector, FTS5, and entity search each return their top-k
   regardless of score, and all currently-valid facts are always included — once a project holds
   anything, a query always returns something. There is no "no matches" state except on an empty
@@ -203,8 +213,8 @@ Hot path = `brain-api` request path; cold path = `learning-worker`.
 
 ```bash
 cd morgan-brain
-cp .env.example .env                            # point MORGAN_LLM_ENDPOINT at your llama-server
 pip install -e ".[dev]"
+mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # point MORGAN_LLM_ENDPOINT at your llama-server
 
 # The CLI — no Redis/Qdrant/Docker required, just a reachable llama-server (or
 # MORGAN_EMBEDDING_BACKEND=hash for memory commands with no model server at all)
@@ -218,7 +228,7 @@ python -m morgan_brain.apps.brain_api                                  # http://
 MORGAN_ENABLE_SCHEDULING=true python -m morgan_brain.apps.learning_worker
 
 # Tests
-pytest -q                                       # 945 passed, 8 skipped
+pytest -q                                       # 963 passed, 8 skipped
 pytest tests/unit/test_foundation.py            # one file
 pytest tests/unit/test_foundation.py::test_everything_is_user_scoped -v
 
@@ -234,7 +244,11 @@ GEPA) · `[scheduling]` (APScheduler) · `[tracing]` (slim mlflow-tracing) · `[
 
 ## Configuration
 
-All env vars are `MORGAN_`-prefixed (see `morgan-brain/.env.example` for the full list). Notable:
+All env vars are `MORGAN_`-prefixed (see `morgan-brain/.env.example` for the full list). They are
+read from `~/.config/morgan/.env` (`$XDG_CONFIG_HOME/morgan/.env`), then `./.env`, then the
+environment, later sources winning — the CLI runs from any repository, so its configuration
+cannot live in one. `MORGAN_DATA_DIR` defaults to `~/.local/share/morgan/` for the same reason:
+a relative default gave every repository its own empty brain. Notable:
 `MORGAN_API_KEY` (INBOUND, required for any non-loopback bind), `MORGAN_API_HOST`/`MORGAN_API_PORT`
 and `MORGAN_MCP_HOST`/`MORGAN_MCP_PORT` (listener binds, loopback by default), `MORGAN_DATA_DIR` (where the
 shared `morgan.db` and workspace files live), `MORGAN_LLM_ENDPOINT`/`MORGAN_LLM_API_KEY`

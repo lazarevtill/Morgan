@@ -29,10 +29,11 @@ from morgan_brain.composition import (
     build_vector_index,
     sqlite_path,
 )
-from morgan_brain.config import Settings, get_settings
+from morgan_brain.config import Settings, get_settings, user_config_file
 from morgan_brain.interfaces.memory import ForgetReport
 from morgan_brain.learning.history import session_key
 from morgan_brain.learning.receipts import ReceiptStore
+from morgan_brain.logging_setup import configure_logging
 from morgan_brain.models.memory import Memory, MemoryQuery, MemorySource, TemporalFact
 from morgan_brain.modules.memory.retrieval.entities import EntityIndex
 from morgan_brain.modules.memory.retrieval.fts import FtsIndex
@@ -168,8 +169,12 @@ def _collect_local_probes(
     offloads through a function that is blocking from top to bottom.
     """
     db_path = sqlite_path(settings.temporal_db_url)
+    config_file = user_config_file()
     report: dict[str, Any] = {
         "database": db_path if db_path == ":memory:" else str(Path(db_path).resolve()),
+        # The first question after "why is my brain empty?" is "which config did it read?"
+        "config_file": str(config_file),
+        "config_file_present": config_file.is_file(),
         "project": project,
         "all_projects": all_projects,
         "embedding_backend": settings.embedding_backend,
@@ -613,6 +618,8 @@ async def _dispatch(args: argparse.Namespace, settings: Settings, project: str) 
 
 
 def main(argv: list[str] | None = None) -> int:
+    # stdout is the --json contract; every log line belongs on stderr.
+    configure_logging()
     parser = build_parser()
     args = parser.parse_args(argv)
     settings = get_settings()

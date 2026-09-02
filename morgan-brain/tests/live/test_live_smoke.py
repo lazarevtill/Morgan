@@ -1,18 +1,19 @@
 """Live smoke tests — require real external services.
 
 ALL tests in this file are marked ``@pytest.mark.live`` and are SKIPPED BY DEFAULT.
-Run them only when Ollama + Qdrant + Redis are available:
+Run them only when a model server (+ Qdrant + Redis, if configured) is available:
 
     python -m pytest --live tests/live/test_live_smoke.py -v
 
 These tests are a manual confidence check before deployment — NOT CI gates.
 They build the production app stack and run a minimal /api/chat turn, asserting
-a non-empty, non-error reply from the real Ollama model.
+a non-empty, non-error reply from the real model.
 
 Prerequisites
 -------------
-- Ollama running at MORGAN_LLM_ENDPOINT (default: http://localhost:11434/v1)
-  with MORGAN_LLM_MODEL loaded (default: qwen2.5:7b)
+- An OpenAI-compatible model server (llama-server by default; Ollama's /v1 shim works too)
+  at MORGAN_LLM_ENDPOINT (default: http://localhost:8081/v1) serving MORGAN_LLM_MODEL
+  (default: qwen2.5:7b) and MORGAN_EMBEDDING_MODEL
 - Qdrant running at MORGAN_QDRANT_URL (default: http://localhost:6333)
   if MORGAN_VECTOR_BACKEND=qdrant; otherwise not required.
 - Redis running at MORGAN_REDIS_URL (default: redis://localhost:6379/0)
@@ -22,7 +23,7 @@ Prerequisites
 
 Usage
 -----
-    # Minimal: just Ollama + in-memory vector
+    # Minimal: just the model server + in-memory vector
     MORGAN_LLM_MODEL=qwen2.5:7b \\
     MORGAN_VECTOR_BACKEND=memory \\
     MORGAN_EVENT_BUS=inproc \\
@@ -55,7 +56,7 @@ def _build_live_app():  # type: ignore[return]
     """Build the production FastAPI app using the real create_app() factory.
 
     Reads configuration from environment variables (MORGAN_* prefix).
-    Requires live Ollama (and optionally Qdrant/Redis) to be reachable.
+    Requires a live model server (and optionally Qdrant/Redis) to be reachable.
     """
     # Invalidate the lru_cache so the live test reads fresh env-vars.
     from morgan_brain.config import get_settings

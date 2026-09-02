@@ -7,7 +7,10 @@ name = "morgan-brain"
 version = "0.1.0"
 description = "Self-hosted personal assistant that knows and learns from you (MAPLE + SkillOpt)."
 requires-python = ">=3.12"
-license = { file = "../LICENSE" }
+# An SPDX expression, not a file reference: the text lives at the repository root, one level
+# above this package, and a path outside the project directory is not available to a build
+# from an sdist or inside the Docker build context.
+license = "Apache-2.0"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",

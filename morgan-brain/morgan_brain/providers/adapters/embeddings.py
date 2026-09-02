@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import httpx
 
+from morgan_brain.interfaces.llm import ProviderUnreachable
+
 
 class OpenAICompatEmbedder:
     """Embeddings over any OpenAI-compatible ``/embeddings`` endpoint.
@@ -52,12 +54,16 @@ class OpenAICompatEmbedder:
         return (await self.embed_batch([text]))[0]
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.post(
-                self._url,
-                json={"model": self._model, "input": texts},
-                headers=self._headers,
-            )
-            resp.raise_for_status()
-            data = resp.json()["data"]
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.post(
+                    self._url,
+                    json={"model": self._model, "input": texts},
+                    headers=self._headers,
+                )
+        except httpx.TransportError as exc:
+            # Connection refused, DNS failure, timeout: the endpoint gave no answer.
+            raise ProviderUnreachable(self._url, f"{type(exc).__name__}: {exc}") from exc
+        resp.raise_for_status()
+        data = resp.json()["data"]
         return [item["embedding"] for item in data]

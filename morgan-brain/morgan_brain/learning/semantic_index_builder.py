@@ -29,11 +29,12 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
+from morgan_brain.interfaces.llm import ProviderUnreachable
 from morgan_brain.models.memory import Memory
 from morgan_brain.modules.memory.retrieval.semantic_index import SemanticIndex
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import RoleRouter
-from morgan_brain.providers.structured import generate_structured
+from morgan_brain.providers.structured import StructuredError, generate_structured
 from morgan_brain.providers.wire import ChatMessage
 
 logger = logging.getLogger(__name__)
@@ -192,11 +193,14 @@ class LLMSchemaClassifier:
                 schema=AssignmentBatch,
                 descriptor=self._reg.get(provider, model),
             )
-        except Exception:
+        except (StructuredError, ProviderUnreachable) as exc:
             # An outage or an unparseable answer costs index quality for this batch. It
-            # must not take the nightly run down with it -- but it is logged with the
-            # traceback, because silently degrading to keyword classification every night
+            # must not take the nightly run down with it -- but it is logged, with the
+            # reason, because silently degrading to keyword classification every night
             # is indistinguishable from the model never having been configured.
+            logger.warning("semantic-index: classification failed, using keywords: %s", exc)
+            return await self._fallback.classify(names, schemas=schemas, samples=samples)
+        except Exception:
             logger.exception("semantic-index: classification failed; using the keyword classifier")
             return await self._fallback.classify(names, schemas=schemas, samples=samples)
         return {a.entity.lower(): a.schema_name for a in batch.assignments}

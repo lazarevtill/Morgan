@@ -27,11 +27,12 @@ from typing import Protocol
 
 from pydantic import BaseModel, Field
 
+from morgan_brain.interfaces.llm import ProviderUnreachable
 from morgan_brain.models.message import Message, Role
 from morgan_brain.modules.personalization.persona_graph import PersonaGraph
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import RoleRouter
-from morgan_brain.providers.structured import generate_structured
+from morgan_brain.providers.structured import StructuredError, generate_structured
 from morgan_brain.providers.wire import ChatMessage
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,11 @@ class LLMAttributor:
                 schema=ObservationBatch,
                 descriptor=self._reg.get(provider, model),
             )
+        except (StructuredError, ProviderUnreachable) as exc:
+            # The model answered badly or not at all. Expected with a small model or a
+            # server that is down: one line with the reason, on every turn it happens.
+            logger.warning("persona-attribution: reading failed, recording nothing: %s", exc)
+            return ObservationBatch()
         except Exception:
             logger.exception("persona-attribution: reading failed; recording nothing this turn")
             return ObservationBatch()

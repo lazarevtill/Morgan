@@ -10,10 +10,12 @@ from __future__ import annotations
 import uvicorn
 
 from morgan_brain.config import get_settings
+from morgan_brain.logging_setup import configure_logging
 from morgan_brain.security.network import assert_safe_bind
 
 
 def main() -> None:
+    configure_logging()
     settings = get_settings()
     assert_safe_bind(host=settings.api_host, api_key=settings.api_key, surface="brain-api")
     uvicorn.run(

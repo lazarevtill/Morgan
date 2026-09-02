@@ -12,6 +12,8 @@ services:
       # brain-api refuses to start. That refusal is the point: a published port with
       # authentication disabled is an open memory store.
       MORGAN_API_HOST: 0.0.0.0
+      # The mounted volume below, not the per-user default the CLI uses outside a container.
+      MORGAN_DATA_DIR: /app/data
       # Redis carries events between the two processes; that is what it is here for.
       MORGAN_EVENT_BUS: redis
       MORGAN_REDIS_URL: redis://redis:6379/0
@@ -29,6 +31,7 @@ services:
     command: python -m morgan_brain.apps.learning_worker
     env_file: [.env]
     environment:
+      MORGAN_DATA_DIR: /app/data
       MORGAN_EVENT_BUS: redis
       MORGAN_REDIS_URL: redis://redis:6379/0
       # Run the nightly consolidation + eval-gated optimizer loop.

@@ -30,7 +30,7 @@ run in one process (`MORGAN_EVENT_BUS=inproc`).
 
 | Package | Responsibility |
 |---------|----------------|
-| `config.py` | The single `MORGAN_`-prefixed settings source (`get_settings()`). |
+| `config.py` | The single `MORGAN_`-prefixed settings source (`get_settings()`). Reads `~/.config/morgan/.env`, then `./.env`, then the environment; the one database defaults to `~/.local/share/morgan/`. |
 | `interfaces/` | Protocols — the contracts every module implements (llm, memory, learning, personalization, reasoning, skills, tools, perception, events). |
 | `models/` | Shared domain models; everything that persists is `user_id`-keyed (`UserScoped`). |
 | `bus/` | Event bus — in-proc + Redis-Streams backends behind one interface. |
@@ -49,6 +49,7 @@ run in one process (`MORGAN_EVENT_BUS=inproc`).
 | `core/` | The thin cognitive-loop orchestrator (coordinates only; owns no domain logic). |
 | `composition.py` | Wires concrete implementations into the orchestrator + app context. |
 | `apps/` | Entrypoints: `brain_api`, `learning_worker`. |
+| `logging_setup.py` | The one logging configuration: every entrypoint logs to stderr, because the CLI's stdout is its `--json` contract and the MCP server's stdout is the JSON-RPC channel. |
 | `cli/` | The `morgan` terminal client — `remember`/`recall`/`facts`/`forget`/`ask`/`doctor`/`receipts`; project auto-detected from the current git repository. |
 | `ports/` | `morgan-mcp` — five MCP tools over stdio or streamable-HTTP, calling the same command handlers the CLI does. |
 
@@ -71,14 +72,16 @@ beats-current win** (versioned for instant rollback). No learned update ever deg
 
 ```bash
 cd morgan-brain
-cp .env.example .env                 # set MORGAN_API_KEY before any remote exposure
 pip install -e ".[dev]"
+mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env
+#   ↑ read from every working directory; a ./.env here overrides it for a dev checkout.
+#     Set MORGAN_API_KEY before any remote exposure.
 
 # Quality (CI runs these on Python 3.12)
 ruff check .
 ruff format --check .
 mypy morgan_brain                    # strict
-pytest -q                            # 945 passed, 8 skipped
+pytest -q                            # 963 passed, 8 skipped
 
 # Run (two-process)
 docker compose up -d redis qdrant
@@ -100,7 +103,7 @@ pip install -e ".[tokens]"       # tiktoken
 
 ## Status
 
-**945 tests pass** (8 skipped), mypy-strict clean over 121 source files, ruff clean, bandit clean —
+**963 tests pass** (8 skipped), mypy-strict clean over 122 source files, ruff clean, bandit clean —
 all verified in a venv built from `pip install -e ".[dev]"` and nothing else, which is exactly what
 CI runs.
 

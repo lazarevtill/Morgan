@@ -45,10 +45,11 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
+from morgan_brain.interfaces.llm import ProviderUnreachable
 from morgan_brain.modules.memory.retrieval.semantic_index import SemanticIndex
 from morgan_brain.providers.capability import CapabilityRegistry
 from morgan_brain.providers.router import RoleRouter
-from morgan_brain.providers.structured import generate_structured
+from morgan_brain.providers.structured import StructuredError, generate_structured
 from morgan_brain.providers.wire import ChatMessage
 
 logger = logging.getLogger(__name__)
@@ -186,6 +187,9 @@ class LLMEmergenceJudge:
                 schema=Verdict,
                 descriptor=self._reg.get(provider, model),
             )
+        except (StructuredError, ProviderUnreachable) as exc:
+            logger.warning("cluster-emergence: judge failed, promoting nothing: %s", exc)
+            return Verdict(reason="judge call failed")
         except Exception:
             logger.exception("cluster-emergence: judge failed; promoting nothing this run")
             return Verdict(reason="judge call failed")

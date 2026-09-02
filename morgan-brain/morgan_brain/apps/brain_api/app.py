@@ -10,14 +10,15 @@ import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from morgan_brain import __version__
 from morgan_brain.apps.brain_api.auth import require_api_key
 from morgan_brain.composition import AppContext, ChampionCache, build_app_context
-from morgan_brain.config import get_settings
+from morgan_brain.config import Settings, get_settings
+from morgan_brain.interfaces.llm import ProviderUnreachable
 from morgan_brain.learning.history import session_key
 
 
@@ -50,13 +51,27 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         await ctx.bus.stop()
 
 
-def create_app() -> FastAPI:
-    settings = get_settings()
-    ctx = build_app_context(settings)
+def create_app(settings: Settings | None = None, ctx: AppContext | None = None) -> FastAPI:
+    """Build the gateway over *ctx*, or over the production wiring when none is given.
+
+    Accepting a context is what lets a test run the real routes -- the exception mapping,
+    the SSE framing, the champion cache -- over fakes, instead of a copy of them.
+    """
+    settings = settings or get_settings()
+    ctx = ctx or build_app_context(settings)
     app = FastAPI(title="morgan-brain", version=__version__, lifespan=_lifespan)
     app.state.ctx = ctx
     orchestrator = ctx.orchestrator
     _auth = Depends(require_api_key(settings))
+
+    @app.exception_handler(ProviderUnreachable)
+    async def _provider_unreachable(_: Request, exc: ProviderUnreachable) -> JSONResponse:
+        # The model server is a separate upstream; its absence is a bad gateway, not an
+        # internal error, and the body says which endpoint so the owner can go look.
+        return JSONResponse(
+            status_code=502,
+            content={"error": str(exc), "endpoint": exc.endpoint},
+        )
 
     # Live champion preprompt: the learning-worker promotes the gated, eval-validated
     # system prompt into the shared registry; the cache refreshes on a short TTL so a
@@ -94,22 +109,30 @@ def create_app() -> FastAPI:
         user_id = req.user_id or settings.owner_user_id
 
         hkey = session_key(user_id, req.session_id)
+        history = ctx.history_store.recent(hkey, project=req.project) if ctx.history_store else []
+        deltas = orchestrator.stream_turn(
+            user_id=user_id,
+            project=req.project,
+            text=req.message,
+            session_id=req.session_id,
+            history=history,
+            system_override=await _champion.body(),
+        )
+        # Pull the first delta before committing to a 200: the pre-reasoning pipeline and the
+        # connection to the model server both happen here, and a model server that is down
+        # must be a 502 the client can act on, not an empty stream that looks like an answer
+        # with no words in it. Once bytes are out, the status is fixed -- a failure after
+        # that is reported in-band, as an error event before the terminal sentinel.
+        first = await anext(deltas, None)
 
         async def _event_stream() -> AsyncIterator[str]:
-            history = (
-                ctx.history_store.recent(hkey, project=req.project) if ctx.history_store else []
-            )
-            champion = await _champion.body()
-            async for delta in orchestrator.stream_turn(
-                user_id=user_id,
-                project=req.project,
-                text=req.message,
-                session_id=req.session_id,
-                history=history,
-                system_override=champion,
-            ):
-                payload = json.dumps({"delta": delta})
-                yield f"data: {payload}\n\n"
+            if first is not None:
+                yield f"data: {json.dumps({'delta': first})}\n\n"
+                try:
+                    async for delta in deltas:
+                        yield f"data: {json.dumps({'delta': delta})}\n\n"
+                except ProviderUnreachable as exc:
+                    yield f"data: {json.dumps({'error': str(exc), 'endpoint': exc.endpoint})}\n\n"
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(_event_stream(), media_type="text/event-stream")

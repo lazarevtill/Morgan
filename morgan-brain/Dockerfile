@@ -6,8 +6,10 @@ WORKDIR /app
 FROM base AS runtime
 COPY pyproject.toml ./
 COPY morgan_brain ./morgan_brain
-COPY clients ./clients
 RUN pip install --no-cache-dir -e .
+# The one database. docker-compose mounts ./data here; keep the path explicit rather than
+# relying on the per-user default, which inside a container would be /root/.local/share.
+ENV MORGAN_DATA_DIR=/app/data
 EXPOSE 8080
 # Default command is overridden per-service in docker-compose.
 CMD ["python", "-m", "morgan_brain.apps.brain_api"]
