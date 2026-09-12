@@ -19,7 +19,15 @@ import pytest
 
 from morgan_brain.composition import build_memory_module
 from morgan_brain.config import Settings
-from morgan_brain.eval.retrieval import ProbeKind, load_probe_set, run_probes, score_run
+from morgan_brain.eval.retrieval import (
+    ProbeKind,
+    ProbeSet,
+    Split,
+    load_probe_set,
+    probe_split,
+    run_probes,
+    score_run,
+)
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.store.db import open_db
@@ -77,3 +85,41 @@ async def test_recall_finds_the_right_memory_when_the_query_shares_no_words_with
     # Ranking, not just retrieval: a corpus this size returns the answer somewhere for
     # almost any query, so the position is what says the ranking means something.
     assert card.mrr >= 0.55, card.format(K)
+
+
+@pytest.mark.live
+async def test_report_what_each_relevance_floor_would_cost(tmp_path, capsys):
+    """Not an assertion -- the fitting procedure, runnable.
+
+    The floor's threshold is the one number that cannot be borrowed: it depends on the corpus
+    and the embedding model. This prints what each candidate keeps and what it silences, over
+    the fit half only, so a value can be chosen without the sealed probes ever informing it.
+    Choose from the middle of a stable stretch rather than the peak: a threshold at the peak
+    of a small sweep is fitted to the sweep.
+    """
+    settings = Settings()
+    embedder = build_embedder(settings)
+    conn = open_db(str(tmp_path / "morgan.db"))
+    probe_set = load_probe_set(PROBES)
+
+    # Embed the corpus once; every threshold below is scored against this same database.
+    seed = build_memory_module(conn=conn, embedder=embedder, dim=settings.embedding_dim)
+    await run_probes(ProbeSet(probe_set.corpus, ()), gate=MemoryGate(seed), user_id="owner", k=K)
+
+    fit_half = ProbeSet({}, tuple(p for p in probe_set.probes if probe_split(p.id) is Split.FIT))
+    lines = [f"{'margin':>7} {'recall@8':>9} {'abstains':>9} {'mrr':>6}"]
+    for margin in (None, 0.05, 0.08, 0.10, 0.11, 0.12, 0.13, 0.15, 0.20):
+        module = build_memory_module(
+            conn=conn, embedder=embedder, dim=settings.embedding_dim, floor_margin=margin
+        )
+        card = score_run(
+            await run_probes(fit_half, gate=MemoryGate(module), user_id="owner", k=K), k=K
+        )
+        label = "off" if margin is None else f"{margin:.2f}"
+        lines.append(
+            f"{label:>7} {card.recall_at_k:>9.2f} {card.abstain_rate:>9.2f} {card.mrr:>6.2f}"
+        )
+
+    with capsys.disabled():
+        print(f"\nrelevance floor, fit half only ({len(fit_half.probes)} probes):")
+        print("\n".join(lines))

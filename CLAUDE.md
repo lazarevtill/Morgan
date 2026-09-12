@@ -85,7 +85,9 @@ come in" are answered by the directory names.
 
 ## Known limitations
 
-- `recall` has no relevance floor: once a project holds anything, a query returns something.
+- `recall` can decline to answer, but the floor is off unless `MORGAN_RECALL_FLOOR_MARGIN`
+  is set: the threshold fitted on the probe corpus did not transfer to a real one. Until it
+  is fitted per corpus, a query against a non-empty project returns something.
 - Schema classification for the upper index is keyword-based and an entity is classified once.
 - Entity extraction is deterministic and cased-script only; scripts without letter case
   (Chinese, Japanese, Arabic, Hebrew) yield nothing rather than a guess.

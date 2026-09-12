@@ -39,17 +39,17 @@ The full build is at the tag **`legacy-v0.1.0-kernel`**, its designs and decisio
 
 ## What retrieval actually measures
 
-`tests/memory_quality/` holds 22 labelled probes over a 40-memory corpus, half of it
+`tests/memory_quality/` holds 60 labelled probes over an 86-memory corpus, half of it
 Russian, with every query written to share few or no words with its target so the keyword
 signal cannot carry it. `pytest --live` runs them against a real embedding endpoint.
 
 | | recall@8 | MRR | stale-first | abstain |
 |---|---|---|---|---|
-| overall | 0.94 | 0.68 | 0.75 | 0.00 |
-| single-hop | 1.00 | 0.78 | — | — |
-| temporal | 1.00 | 1.00 | — | — |
-| knowledge-update | 1.00 | 0.58 | 0.75 | — |
-| multi-hop | 0.50 | 0.12 | — | — |
+| overall | 0.85 | 0.48 | 0.50 | 0.00 |
+| single-hop | 0.95 | 0.57 | — | — |
+| temporal | 1.00 | 0.65 | — | — |
+| knowledge-update | 0.90 | 0.49 | 0.50 | — |
+| multi-hop | 0.38 | 0.08 | — | — |
 | unanswerable | — | — | — | 0.00 |
 
 Stale-first measures order, not presence: the same memory is forbidden by "where do I live
@@ -61,8 +61,13 @@ languages. Two categories do not, and both are open work rather than regressions
 
 ## Next
 
-- **A relevance floor for recall.** A non-empty project always answers: on six deliberately
-  unanswerable questions it returned eight memories every time and abstained on none. Reciprocal rank fusion keeps ranks and discards scores, so
+- **Fit the relevance floor to a real corpus.** Recall can now decline to answer, and the
+  mechanism is validated: fitted on half the probes and reported on the sealed half, it
+  silenced every unanswerable question there for 11 points of recall. It is off by default
+  because that fitted number did not transfer -- against 184 real imported memories it let
+  two of three plainly unanswerable questions through. The probes are short single
+  sentences and real memories are long conversation turns, so the margin spreads
+  differently. Finishing the import and fitting against that corpus is the work. Reciprocal rank fusion keeps ranks and discards scores, so
   the floor belongs on each signal before fusion, and its thresholds have to come from the
   measurement above rather than from a guess.
 - **A superseded memory outranks the current one**, three times in four: the old answer
