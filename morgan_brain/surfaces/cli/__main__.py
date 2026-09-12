@@ -25,6 +25,7 @@ from morgan_brain.surfaces.cli.commands import (
     cmd_doctor,
     cmd_facts,
     cmd_forget,
+    cmd_import,
     cmd_recall,
     cmd_remember,
 )
@@ -41,6 +42,7 @@ HANDLERS = {
     "ask": cmd_ask,
     "consolidate": cmd_consolidate,
     "doctor": cmd_doctor,
+    "import": cmd_import,
 }
 
 # Commands where --all-projects is meaningless: a write or a single chat turn always
@@ -103,6 +105,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_doctor = sub.add_parser("doctor", help="Diagnose the local Morgan installation.")
     _add_common(p_doctor)
 
+    # No --project: the destination follows the holdout rule, not the caller's working
+    # directory, and offering a flag that cannot be honoured would be worse than omitting it.
+    p_import = sub.add_parser(
+        "import", help="Seed memory from a ChatGPT conversations.json export."
+    )
+    p_import.add_argument("path", help="Path to the export's conversations.json.")
+    p_import.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON instead of human text."
+    )
+
     return parser
 
 
@@ -144,7 +156,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     settings = get_settings()
-    project = args.project or detect_project(Path.cwd())
+    # getattr: not every verb takes --project. `import` decides the destination from the
+    # holdout rule, so it deliberately has no such flag to read.
+    project = getattr(args, "project", None) or detect_project(Path.cwd())
     return asyncio.run(_dispatch(args, settings, project))
 
 

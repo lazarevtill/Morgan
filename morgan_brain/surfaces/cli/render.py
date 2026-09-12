@@ -68,6 +68,14 @@ def _render_doctor(data: dict[str, Any]) -> str:
 
 #: The human-readable form of each verb's payload. Rendering only -- which handler
 #: produced the payload is the dispatcher's business, not this module's.
+def _render_import(data: dict[str, Any]) -> str:
+    return (
+        f"Imported {data['memories']} memories from {data['conversations']} conversations "
+        f"into {data['archive_project']!r}; {data['held_out']} conversations held out in "
+        f"{data['holdout_project']!r}, {data['skipped_turns']} turns skipped."
+    )
+
+
 RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "remember": _render_remember,
     "recall": _render_recall,
@@ -76,4 +84,5 @@ RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "ask": _render_ask,
     "consolidate": _render_consolidate,
     "doctor": _render_doctor,
+    "import": _render_import,
 }

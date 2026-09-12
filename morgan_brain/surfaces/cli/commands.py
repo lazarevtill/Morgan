@@ -8,8 +8,14 @@ here rather than reimplementing a single memory operation between them.
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 from typing import Any
 
+from morgan_brain.app.chatgpt_import import (
+    ARCHIVE_PROJECT,
+    HOLDOUT_PROJECT,
+    import_chatgpt,
+)
 from morgan_brain.composition import (
     build_app_context,
     build_memory_context,
@@ -144,3 +150,27 @@ async def cmd_consolidate(
 
 async def cmd_doctor(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
     return await build_doctor_report(settings, project=project, all_projects=args.all_projects)
+
+
+async def cmd_import(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
+    """Seed memory from a ChatGPT export.
+
+    *project* is ignored on purpose: the import decides where each conversation lands from
+    the holdout rule, so honouring a caller's project would put held-out conversations
+    somewhere consolidation can reach.
+    """
+    ctx = build_memory_context(settings)
+    try:
+        report = await import_chatgpt(
+            Path(args.path), gate=ctx.gate, user_id=settings.owner_user_id
+        )
+    finally:
+        ctx.conn.close()
+    return {
+        "archive_project": ARCHIVE_PROJECT,
+        "holdout_project": HOLDOUT_PROJECT,
+        "conversations": report.conversations,
+        "held_out": report.held_out,
+        "memories": report.memories,
+        "skipped_turns": report.skipped_turns,
+    }

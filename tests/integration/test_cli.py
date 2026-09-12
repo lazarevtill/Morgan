@@ -293,3 +293,39 @@ def test_json_output_survives_a_non_utf8_parent_encoding(tmp_path):
 
     assert out.returncode == 0, out.stderr
     assert "Ромашка" in json.loads(out.stdout)["results"][0]["content"]
+
+
+def test_import_seeds_the_archive_project_from_an_export(tmp_path):
+    """The import is a memory operation: no model server, and the result is recallable
+    through the ordinary project-scoped path rather than a special reader."""
+    export = tmp_path / "conversations.json"
+    export.write_text(
+        json.dumps(
+            [
+                {
+                    "conversation_id": "c0",
+                    "title": "t",
+                    "mapping": {
+                        "m0": {
+                            "id": "m0",
+                            "message": {
+                                "id": "m0",
+                                "author": {"role": "user"},
+                                "create_time": 1700000000.0,
+                                "content": {"content_type": "text", "parts": ["harbor mirror"]},
+                            },
+                        }
+                    },
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    env = _hash_env(tmp_path)
+
+    out = _run(["import", str(export), "--json"], env, tmp_path)
+
+    assert out.returncode == 0, out.stderr
+    assert json.loads(out.stdout)["memories"] == 1
+    found = _run(["recall", "harbor", "--project", "archive/chatgpt", "--json"], env, tmp_path)
+    assert json.loads(found.stdout)["results"][0]["content"] == "harbor mirror"
