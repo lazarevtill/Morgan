@@ -7,8 +7,10 @@ that answer different questions, which is why none of them is dropped:
 * **recall@k** -- did the right memory arrive at all, within the window a reader sees.
 * **MRR** -- and how near the top. A hit at rank eight is not the same product as a hit at
   rank one, and recall alone cannot tell them apart.
-* **leak rate** -- how often a superseded memory came back. A run can score perfect recall
-  and still be wrong, because returning both the new answer and the old one is wrong.
+* **stale-first rate** -- how often a superseded memory outranked the current one. Order,
+  not presence: the same memory is forbidden by "where do I live now" and expected by
+  "where did I live before", so a metric counting its presence could only be satisfied by
+  suppressing it, which breaks the question that asks for it.
 
 Broken down per probe kind, because one average hides a category that fails completely:
 temporal questions can return nothing while single-hop recall carries the mean.
@@ -45,7 +47,8 @@ class Probe:
     query: str
     #: Memory keys any one of which counts as recalling the answer.
     expected: tuple[str, ...]
-    #: Memory keys that must not come back -- the superseded side of an update.
+    #: Memory keys that must not outrank ``expected`` -- the superseded side of an update.
+    #: They may still be returned: another probe may legitimately ask for exactly these.
     forbidden: tuple[str, ...] = ()
     #: When true, every key in ``expected`` must arrive, not just one. A multi-hop answer
     #: needs both its halves; scoring it on either would count half an answer as a whole one
@@ -80,7 +83,7 @@ class Scorecard:
     n: int = 0
     recall_at_k: float = 0.0
     mrr: float = 0.0
-    leak_rate: float = 0.0
+    stale_first_rate: float = 0.0
     #: Over probes with no right answer, how often the run correctly returned nothing.
     #: Recall cannot measure a relevance floor -- a system that answers everything scores
     #: perfect recall -- so abstaining needs a number of its own.
@@ -91,13 +94,13 @@ class Scorecard:
         """The card as a reader would want it: the headline, then what it is hiding."""
         lines = [
             f"n={self.n}  recall@{k}={self.recall_at_k:.2f}  "
-            f"mrr={self.mrr:.2f}  leak={self.leak_rate:.2f}  "
+            f"mrr={self.mrr:.2f}  stale1st={self.stale_first_rate:.2f}  "
             f"abstain={self.abstain_rate:.2f}"
         ]
         for kind, card in sorted(self.by_kind.items(), key=lambda kv: kv[0].value):
             lines.append(
                 f"  {kind.value:<17} n={card.n:<4} recall@{k}={card.recall_at_k:.2f}  "
-                f"mrr={card.mrr:.2f}  leak={card.leak_rate:.2f}  "
+                f"mrr={card.mrr:.2f}  stale1st={card.stale_first_rate:.2f}  "
                 f"abstain={card.abstain_rate:.2f}"
             )
         return "\n".join(lines)
@@ -122,6 +125,17 @@ def _reciprocal_rank(result: ProbeResult, k: int) -> float:
     return 0.0
 
 
+def _stale_outranks_current(result: ProbeResult, k: int) -> bool:
+    """True when a superseded memory arrives before the current one, or instead of it."""
+    window = result.retrieved[:k]
+    stale = [window.index(key) for key in result.probe.forbidden if key in window]
+    if not stale:
+        return False
+    current = [window.index(key) for key in result.probe.expected if key in window]
+    # No current answer at all is the worst case, not an exempt one.
+    return not current or min(stale) < min(current)
+
+
 def _card(results: Sequence[ProbeResult], k: int) -> Scorecard:
     if not results:
         return Scorecard()
@@ -131,18 +145,14 @@ def _card(results: Sequence[ProbeResult], k: int) -> Scorecard:
     answerable = [r for r in results if r.probe.expected]
     unanswerable = [r for r in results if not r.probe.expected]
     ranks = [_reciprocal_rank(r, k) for r in answerable]
-    leaks = [
-        any(key in r.probe.forbidden for key in r.retrieved[:k])
-        for r in results
-        if r.probe.forbidden
-    ]
+    stale_first = [_stale_outranks_current(r, k) for r in results if r.probe.forbidden]
     return Scorecard(
         n=len(results),
         recall_at_k=(sum(1 for rank in ranks if rank > 0) / len(ranks)) if ranks else 0.0,
         mrr=(sum(ranks) / len(ranks)) if ranks else 0.0,
-        # Probes with nothing forbidden cannot leak, and averaging them in would dilute the
-        # rate towards zero and hide the updates that did come back stale.
-        leak_rate=(sum(leaks) / len(leaks)) if leaks else 0.0,
+        # Probes with nothing forbidden cannot go stale-first, and averaging them in would
+        # dilute the rate towards zero and hide the updates that did come back wrong.
+        stale_first_rate=(sum(stale_first) / len(stale_first)) if stale_first else 0.0,
         abstain_rate=(
             sum(1 for r in unanswerable if not r.retrieved[:k]) / len(unanswerable)
             if unanswerable
@@ -163,7 +173,7 @@ def score_run(results: Sequence[ProbeResult], *, k: int) -> Scorecard:
         n=overall.n,
         recall_at_k=overall.recall_at_k,
         mrr=overall.mrr,
-        leak_rate=overall.leak_rate,
+        stale_first_rate=overall.stale_first_rate,
         abstain_rate=overall.abstain_rate,
         by_kind=by_kind,
     )

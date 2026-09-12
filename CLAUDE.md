@@ -87,9 +87,9 @@ come in" are answered by the directory names.
 - Schema classification for the upper index is keyword-based and an entity is classified once.
 - Entity extraction is deterministic and cased-script only; scripts without letter case
   (Chinese, Japanese, Arabic, Hebrew) yield nothing rather than a guess.
-- Recall returns a superseded memory alongside the current one: every knowledge-update
-  probe leaks, and the current answer is not reliably first. Supersession lives on facts;
-  the probes store episodics, which carry none.
+- A superseded memory outranks the current one in three knowledge-update probes out of
+  four. Fusion is rank-only and carries no recency term. Supersession lives on facts; the
+  probes store episodics, which carry none.
 - Multi-hop questions are not answered. Recall ranks memories and has no mechanism to
   compose two of them; measured recall@8 is 0.50 against 1.00 for single-hop.
 
@@ -99,7 +99,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 262 passed, 2 skipped (the live ones)
+pytest -q                     # 263 passed, 2 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

@@ -45,18 +45,6 @@ def test_reciprocal_rank_rewards_the_position_of_the_first_hit():
     assert score_run(results, k=5).mrr == 0.75
 
 
-def test_a_superseded_memory_in_the_results_is_counted_as_a_leak():
-    """The knowledge-update case: after a fact changes, the old one must not come back. A
-    run that recalls both the new and the old answer scores full recall and is still wrong.
-    """
-    results = [_result("a", ProbeKind.KNOWLEDGE_UPDATE, ["target", "stale"], forbidden=["stale"])]
-
-    card = score_run(results, k=5)
-
-    assert card.recall_at_k == 1.0
-    assert card.leak_rate == 1.0
-
-
 def test_the_scorecard_breaks_results_down_by_probe_kind():
     """One number hides which kind of recall is broken: temporal questions can fail
     completely while single-hop carries the average."""
@@ -77,7 +65,7 @@ def test_an_empty_run_scores_zero_rather_than_dividing_by_zero():
 
     assert card.recall_at_k == 0.0
     assert card.mrr == 0.0
-    assert card.leak_rate == 0.0
+    assert card.stale_first_rate == 0.0
 
 
 def test_a_multi_hop_probe_is_only_recalled_when_every_piece_arrives():
@@ -131,3 +119,44 @@ def test_unanswerable_probes_do_not_drag_down_recall():
 
     assert card.recall_at_k == 1.0
     assert card.abstain_rate == 1.0
+
+
+def test_a_superseded_memory_below_the_current_one_is_not_counted_against_the_run():
+    """The metric has to measure order, not presence.
+
+    ``city_old`` is forbidden by "where do I live now?" and expected by "where did I live
+    before?" -- the same memory, wanted by one question and not the other. A metric that
+    counts its mere presence as a failure can only be satisfied by suppressing it, which
+    breaks the question that asks for it. What actually goes wrong is the stale answer
+    arriving *first*.
+    """
+    current_first = ProbeResult(
+        probe=Probe(
+            id="a",
+            kind=ProbeKind.KNOWLEDGE_UPDATE,
+            query="q",
+            expected=("new",),
+            forbidden=("old",),
+        ),
+        retrieved=("new", "old"),
+    )
+    stale_first = ProbeResult(probe=current_first.probe, retrieved=("old", "new"))
+
+    assert score_run([current_first], k=5).stale_first_rate == 0.0
+    assert score_run([stale_first], k=5).stale_first_rate == 1.0
+
+
+def test_a_run_that_returns_only_the_stale_answer_counts_as_stale_first():
+    """Never returning the current answer is the worst case, not an exempt one."""
+    only_stale = ProbeResult(
+        probe=Probe(
+            id="a",
+            kind=ProbeKind.KNOWLEDGE_UPDATE,
+            query="q",
+            expected=("new",),
+            forbidden=("old",),
+        ),
+        retrieved=("old", "unrelated"),
+    )
+
+    assert score_run([only_stale], k=5).stale_first_rate == 1.0

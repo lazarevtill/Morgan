@@ -39,18 +39,22 @@ The full build is at the tag **`legacy-v0.1.0-kernel`**, its designs and decisio
 
 ## What retrieval actually measures
 
-`tests/memory_quality/` holds 16 labelled probes over a 40-memory corpus, half of it
+`tests/memory_quality/` holds 22 labelled probes over a 40-memory corpus, half of it
 Russian, with every query written to share few or no words with its target so the keyword
 signal cannot carry it. `pytest --live` runs them against a real embedding endpoint.
 
-| | recall@8 | MRR | leak | abstain |
+| | recall@8 | MRR | stale-first | abstain |
 |---|---|---|---|---|
-| overall | 0.94 | 0.68 | 1.00 | 0.00 |
+| overall | 0.94 | 0.68 | 0.75 | 0.00 |
 | single-hop | 1.00 | 0.78 | — | — |
 | temporal | 1.00 | 1.00 | — | — |
-| knowledge-update | 1.00 | 0.58 | 1.00 | — |
+| knowledge-update | 1.00 | 0.58 | 0.75 | — |
 | multi-hop | 0.50 | 0.12 | — | — |
 | unanswerable | — | — | — | 0.00 |
+
+Stale-first measures order, not presence: the same memory is forbidden by "where do I live
+now" and expected by "where did I live before", so a metric counting presence could only be
+satisfied by suppressing it, which breaks the question that asks for it.
 
 Semantic retrieval works: a query and its answer sharing no token find each other, in both
 languages. Two categories do not, and both are open work rather than regressions.
@@ -61,11 +65,11 @@ languages. Two categories do not, and both are open work rather than regressions
   unanswerable questions it returned eight memories every time and abstained on none. Reciprocal rank fusion keeps ranks and discards scores, so
   the floor belongs on each signal before fusion, and its thresholds have to come from the
   measurement above rather than from a guess.
-- **A superseded memory still comes back.** Every knowledge-update probe returned the old
-  answer alongside the new one, and the new one is not reliably first. The probes store
-  episodics only, so this is the honest state of the *episodic* path: supersession lives on
-  facts, and nothing has consolidated these. Whether that is enough in practice is the next
-  thing to measure, with consolidation in the loop.
+- **A superseded memory outranks the current one**, three times in four: the old answer
+  comes back at rank 1 and the current one below it. Fusion is rank-only and carries no
+  recency term, so nothing orders new above old. The probes store episodics, which have no
+  validity interval at all -- supersession lives on facts, and nothing has consolidated
+  these.
 - **Multi-hop composition does not happen.** Recall ranks memories; it has no mechanism to
   combine two of them into one answer, and the numbers say so.
 - **Model-backed entity extraction** for scripts without letter case.
