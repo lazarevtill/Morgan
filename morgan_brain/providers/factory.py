@@ -32,7 +32,7 @@ def build_embedder(settings: Settings) -> Embedder:
     if settings.embedding_backend == "hash":
         return FakeEmbedder(dim=settings.embedding_dim)
     return OpenAICompatEmbedder(
-        settings.llm_endpoint,
+        settings.embedding_endpoint or settings.llm_endpoint,
         settings.embedding_model,
         timeout=settings.llm_timeout_seconds,
         api_key=settings.llm_api_key or None,

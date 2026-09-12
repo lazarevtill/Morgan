@@ -17,6 +17,10 @@ def _run(args: list[str], env: dict[str, str], cwd) -> subprocess.CompletedProce
         [sys.executable, "-m", "morgan_brain.cli", *args],
         capture_output=True,
         text=True,
+        # The CLI's stdout is UTF-8 by contract, so decode it as UTF-8 rather than with
+        # this machine's locale -- otherwise the assertions read mojibake on any host
+        # whose console codepage is not UTF-8.
+        encoding="utf-8",
         env=env,
         cwd=cwd,
         check=False,
@@ -266,3 +270,18 @@ def test_json_stdout_stays_json_when_something_is_logged(tmp_path):
     payload = json.loads(out.stdout)  # the whole of stdout is the document
     assert "127.0.0.1:1" in payload["error"]
     assert "embedding-dim-probe" in out.stderr
+
+
+def test_json_output_survives_a_non_utf8_parent_encoding(tmp_path):
+    """stdout is a protocol, and both protocols on it are UTF-8 by specification: JSON
+    (RFC 8259) and the MCP stdio framing. The CLI must therefore set its own output
+    encoding rather than inherit whatever single-byte codepage the platform hands it --
+    otherwise a Cyrillic memory is an unhandled UnicodeEncodeError instead of a result.
+    """
+    env = _hash_env(tmp_path, PYTHONIOENCODING="cp1252")
+    assert _run(["remember", "Ромашка лежит на верхней полке"], env, tmp_path).returncode == 0
+
+    out = _run(["recall", "Ромашка", "--json"], env, tmp_path)
+
+    assert out.returncode == 0, out.stderr
+    assert "Ромашка" in json.loads(out.stdout)["results"][0]["content"]

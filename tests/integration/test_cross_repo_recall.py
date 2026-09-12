@@ -44,6 +44,9 @@ def _morgan(
         [sys.executable, "-m", "morgan_brain.cli", *args],
         capture_output=True,
         text=True,
+        # The CLI's stdout is UTF-8 by contract; decode it as UTF-8 rather than with this
+        # machine's locale, which mangles the Cyrillic this file deliberately stores.
+        encoding="utf-8",
         env=env,
         cwd=cwd,
         check=False,

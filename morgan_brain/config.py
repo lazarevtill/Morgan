@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     llm_endpoint: str = "http://localhost:8081/v1"
     llm_model: str = "qwen2.5:7b"
     embedding_model: str = "mxbai-embed-large"
+    #: Where embeddings are requested. Empty means the chat endpoint above serves both,
+    #: which is the common single-server case. Set it when the chat server has embeddings
+    #: disabled: llama-server loads one model per process, so an embedding model is a
+    #: second server at a second address, and without this there is no way to say so.
+    embedding_endpoint: str = ""
     #: OUTBOUND: the key Morgan presents TO the model server (llama-server's ``--api-key``).
     #: Not ``api_key`` above -- the two point in opposite directions. Empty by default.
     llm_api_key: str = ""
@@ -94,7 +99,9 @@ class Settings(BaseSettings):
         """Expand ``~`` in data_dir and derive temporal_db_url from it when not overridden."""
         self.data_dir = str(Path(self.data_dir).expanduser())
         if not self.temporal_db_url:
-            self.temporal_db_url = f"sqlite:///{self.data_dir}/morgan.db"
+            # as_posix(): the path component of a URL uses forward slashes on every
+            # platform. Interpolating the native path mixed separators on Windows.
+            self.temporal_db_url = f"sqlite:///{(Path(self.data_dir) / 'morgan.db').as_posix()}"
         return self
 
 
