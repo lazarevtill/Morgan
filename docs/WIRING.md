@@ -34,8 +34,9 @@ read after it and overrides it; real environment variables override both.
 ```bash
 MORGAN_LLM_ENDPOINT=http://localhost:8081/v1   # the chat model
 MORGAN_LLM_MODEL=qwen2.5-7b-instruct
-MORGAN_EMBEDDING_MODEL=mxbai-embed-large      # served at the same endpoint, or override
+MORGAN_EMBEDDING_MODEL=mxbai-embed-large      # the embedding model
 MORGAN_EMBEDDING_DIM=1024                     # must match the embedding model
+# MORGAN_EMBEDDING_ENDPOINT=http://localhost:8082/v1   # only if it is a separate server
 # MORGAN_LLM_API_KEY=                         # only if the server enforces --api-key
 # MORGAN_LLM_JSON_MODE=json_schema            # how consolidation asks for JSON
 # MORGAN_DATA_DIR=~/.local/share/morgan       # the one database
@@ -45,9 +46,10 @@ MORGAN_EMBEDDING_DIM=1024                     # must match the embedding model
 Two keys point in opposite directions: `MORGAN_LLM_API_KEY` is what Morgan presents *to* the
 model server; `MORGAN_API_KEY` is what MCP clients present *to* Morgan over HTTP.
 
-If chat and embeddings are served from different ports, set `MORGAN_LLM_ENDPOINT` to the chat
-server; the embedding model name is looked up there. (Serving both from one endpoint, as
-Ollama does, needs nothing more.)
+When one server answers both, leave `MORGAN_EMBEDDING_ENDPOINT` empty and everything goes to
+`MORGAN_LLM_ENDPOINT`. Set it when they are separate, which is the common case:
+`llama-server` loads one model per process, and a chat server started without `--embedding`
+answers `/embeddings` with a 501.
 
 ## 4. Check: `morgan doctor`
 
@@ -79,7 +81,14 @@ morgan facts                                              # currently-valid fact
 morgan ask "what do you know about the deploy"            # chat model: recall, answer, remember
 morgan consolidate                                        # chat model: memories → facts
 morgan forget                                             # everything under this project
+morgan import ~/Downloads/conversations.json              # seed from a ChatGPT export
 ```
+
+`import` seeds memory from a ChatGPT export so a fresh brain is not an empty box. It writes
+to `archive/chatgpt`, not to your working project, and takes no `--project`: a fifth of the
+conversations go to `archive/chatgpt-holdout` instead, reserved for evaluating the memory
+against conversations nothing has learned from. Expect it to take a while, since every turn
+costs an embedding call; progress goes to stderr. Re-running updates in place.
 
 `MORGAN_EMBEDDING_BACKEND=hash` replaces the embedding call with a deterministic stub, so the
 memory commands run with no model server at all (keyword and entity search still work; vector

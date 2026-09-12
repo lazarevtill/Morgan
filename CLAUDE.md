@@ -39,6 +39,8 @@ come in" are answered by the directory names.
     `fusion` (reciprocal rank, rank-only).
   - `knowledge/` — `extract`, `schema_classifier`, `surprise`, `fact_ops`, `consolidation`.
     The work that costs a model call or a full pass, and never runs inside a recall.
+- `eval/` — measuring what recall returns: labelled probes, recall@k, MRR and leak rate,
+  scored per probe kind. Run with `pytest --live` against a real embedding endpoint.
 - `providers/` — the only place a model SDK is imported: `openai_compat.py` (chat),
   `embeddings.py`, `structured.py` (JSON-validated output), `factory.py` (settings → adapters),
   `wire.py` (message types, `ChatClient`, `ProviderUnreachable`).
@@ -85,9 +87,13 @@ come in" are answered by the directory names.
 - Schema classification for the upper index is keyword-based and an entity is classified once.
 - Entity extraction is deterministic and cased-script only; scripts without letter case
   (Chinese, Japanese, Arabic, Hebrew) yield nothing rather than a guess.
-- Retrieval quality is unmeasured: the suite runs over a hash embedder and proves plumbing,
-  not relevance. `tests/integration/test_cross_repo_recall.py::test_real_embedder_round_trip`
-  is the one live check (`pytest --live`).
+- Recall returns a superseded memory alongside the current one: every knowledge-update
+  probe leaks, and the current answer is not reliably first. Supersession lives on facts;
+  the probes store episodics, which carry none.
+- Multi-hop questions are not answered. Recall ranks memories and has no mechanism to
+  compose two of them; measured recall@8 is 0.50 against 1.00 for single-hop.
+- Surprise gating tokenises with `[a-z0-9]+`, so Cyrillic episodics yield an empty token
+  set and are dropped before consolidation rather than scored.
 
 ## Build, test, run
 
@@ -95,7 +101,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 236 passed, 1 skipped (the live one)
+pytest -q                     # 258 passed, 2 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

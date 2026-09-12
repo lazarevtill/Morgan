@@ -1,0 +1,77 @@
+{
+  "_about": [
+    "Labelled probes for the retrieval measurement. Every query is written to share few or",
+    "no tokens with its target, so the keyword signal cannot carry it and the number says",
+    "something about semantic retrieval rather than about string matching.",
+    "Roughly half the set is Russian, matching the owner's corpus, which is 71% Cyrillic.",
+    "Decoys exist to make ranking mean something: with a handful of memories an unfloored",
+    "top-k returns the target for any query at all."
+  ],
+  "corpus": {
+    "deploy_blocked": "the release never went out because the container registry mirror was stale",
+    "laptop_specs": "my work machine is a ThinkPad X1 Carbon with 32 GB of RAM",
+    "review_language": "Anna asked that pull request comments be written in English",
+    "standup_time": "the daily sync was moved to 10:15 so the Berlin team can attend",
+    "folder_location": "жёлтая папка с договорами лежит на верхней полке в шкафу",
+    "coffee_habit": "перестал пить кофе после обеда, иначе потом долго не могу уснуть",
+    "car_service": "машину надо поставить на техобслуживание до конца марта",
+    "keyboard_pref": "я печатаю на механической клавиатуре с тихими переключателями",
+
+    "city_old": "I lived in Prague for four years before the move",
+    "city_new": "I have been living in Berlin since last spring",
+    "lang_old": "раньше я писал в основном на Java",
+    "lang_new": "сейчас мой основной рабочий язык — Go",
+
+    "db_old": "our production database runs PostgreSQL 14",
+    "db_new": "the upgrade is finished, production now runs PostgreSQL 16",
+    "phone_old": "мой рабочий номер заканчивается на 47",
+    "phone_new": "сменил рабочий номер, теперь он заканчивается на 82",
+
+    "mh_lead": "Anna is the tech lead of the payments team",
+    "mh_owns": "the payments team owns the refund service",
+    "mh_infra": "Сергей отвечает за инфраструктуру в нашем отделе",
+    "mh_monitor": "весь мониторинг живёт на инфраструктуре отдела",
+
+    "d_espresso": "the espresso machine on the second floor only takes coins",
+    "d_parking": "парковка у офиса платная после шести вечера",
+    "d_bike": "I service the bicycle every autumn before it gets cold",
+    "d_dentist": "запись к стоматологу перенесли на следующий четверг",
+    "d_books": "I keep unread books on the shelf by the window",
+    "d_plants": "цветы на кухне надо поливать раз в три дня",
+    "d_vpn": "the office VPN drops every time the laptop sleeps",
+    "d_invoice": "счёт за интернет приходит в начале каждого месяца",
+    "d_music": "I listen to instrumental music while concentrating",
+    "d_train": "поезд до аэропорта идёт сорок минут",
+    "d_backup": "backups run at night and nobody has ever restored one",
+    "d_kettle": "чайник на кухне свистит слишком громко",
+    "d_monitor_hw": "the second monitor is connected over a single USB-C cable",
+    "d_umbrella": "зонт всегда лежит в левом кармане рюкзака",
+    "d_passwords": "I moved every password into the manager last winter",
+    "d_lunch": "обед в столовой заканчивается в три часа",
+    "d_ssh": "the jump host refuses keys older than the rotation",
+    "d_gym": "в зал хожу по вторникам и четвергам",
+    "d_camera": "the webcam has a physical shutter I keep closed",
+    "d_taxes": "декларацию подаю в конце апреля каждый год"
+  },
+  "probes": [
+    {"id": "sh_rollout", "kind": "single_hop", "query": "what stopped the rollout?", "expected": ["deploy_blocked"]},
+    {"id": "sh_memory", "kind": "single_hop", "query": "how much memory does my computer have?", "expected": ["laptop_specs"]},
+    {"id": "sh_review", "kind": "single_hop", "query": "which language should I write review comments in?", "expected": ["review_language"]},
+    {"id": "sh_meeting", "kind": "single_hop", "query": "when does the team gather every morning?", "expected": ["standup_time"]},
+    {"id": "sh_docs_ru", "kind": "single_hop", "query": "где хранятся бумаги?", "expected": ["folder_location"]},
+    {"id": "sh_drink_ru", "kind": "single_hop", "query": "что я изменил в напитках?", "expected": ["coffee_habit"]},
+    {"id": "sh_auto_ru", "kind": "single_hop", "query": "что нужно сделать с автомобилем?", "expected": ["car_service"]},
+    {"id": "sh_typing_ru", "kind": "single_hop", "query": "на чём я набираю текст?", "expected": ["keyboard_pref"]},
+
+    {"id": "mh_refunds", "kind": "multi_hop", "query": "who is responsible for refunds?", "expected": ["mh_lead", "mh_owns"], "require_all": true},
+    {"id": "mh_monitoring_ru", "kind": "multi_hop", "query": "к кому идти по поводу мониторинга?", "expected": ["mh_infra", "mh_monitor"], "require_all": true},
+
+    {"id": "t_city", "kind": "temporal", "query": "where did I live before the move?", "expected": ["city_old"]},
+    {"id": "t_lang_ru", "kind": "temporal", "query": "на каком языке я программировал раньше?", "expected": ["lang_old"]},
+
+    {"id": "ku_db", "kind": "knowledge_update", "query": "which version of the database is in production?", "expected": ["db_new"], "forbidden": ["db_old"]},
+    {"id": "ku_phone_ru", "kind": "knowledge_update", "query": "какой у меня рабочий телефон?", "expected": ["phone_new"], "forbidden": ["phone_old"]},
+    {"id": "ku_city", "kind": "knowledge_update", "query": "where do I live now?", "expected": ["city_new"], "forbidden": ["city_old"]},
+    {"id": "ku_lang_ru", "kind": "knowledge_update", "query": "на чём я пишу сейчас?", "expected": ["lang_new"], "forbidden": ["lang_old"]}
+  ]
+}

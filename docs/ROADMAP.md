@@ -37,12 +37,39 @@ The full build is at the tag **`legacy-v0.1.0-kernel`**, its designs and decisio
 - Bi-temporal facts with actor attribution, and the consolidation that produces them.
 - The reachability contract: a model server that is down is reported by name on every surface.
 
+## What retrieval actually measures
+
+`tests/memory_quality/` holds 16 labelled probes over a 40-memory corpus, half of it
+Russian, with every query written to share few or no words with its target so the keyword
+signal cannot carry it. `pytest --live` runs them against a real embedding endpoint.
+
+| | recall@8 | MRR | leak |
+|---|---|---|---|
+| overall | 0.94 | 0.68 | 1.00 |
+| single-hop | 1.00 | 0.78 | — |
+| temporal | 1.00 | 1.00 | — |
+| knowledge-update | 1.00 | 0.58 | 1.00 |
+| multi-hop | 0.50 | 0.12 | — |
+
+Semantic retrieval works: a query and its answer sharing no token find each other, in both
+languages. Two categories do not, and both are open work rather than regressions.
+
 ## Next
 
-- **Measure retrieval.** The one live test proves an embedding model bridges a query and a
-  memory that share no token. A real harness (LoCoMo/LongMemEval-style, over a real embedder)
-  is what would let the semantic index's benefit be observed rather than assumed.
-- **A relevance floor for recall.** Today a non-empty project always answers.
+- **A relevance floor for recall.** A non-empty project always answers, and with 40 memories
+  every query returns 8 of them. Reciprocal rank fusion keeps ranks and discards scores, so
+  the floor belongs on each signal before fusion, and its thresholds have to come from the
+  measurement above rather than from a guess.
+- **A superseded memory still comes back.** Every knowledge-update probe returned the old
+  answer alongside the new one, and the new one is not reliably first. The probes store
+  episodics only, so this is the honest state of the *episodic* path: supersession lives on
+  facts, and nothing has consolidated these. Whether that is enough in practice is the next
+  thing to measure, with consolidation in the loop.
+- **Multi-hop composition does not happen.** Recall ranks memories; it has no mechanism to
+  combine two of them into one answer, and the numbers say so.
+- **Surprise gating cannot see Cyrillic.** It tokenises with `[a-z0-9]+`, so a Russian
+  episodic yields an empty token set and is dropped before consolidation instead of scored.
+  About 71% of the owner's corpus is Cyrillic.
 - **Model-backed entity extraction** for scripts without letter case.
 - **Bring learning back only against a sound gate.** Anything from the archived kernel returns
   designed against this core, gated by an evaluation with enough items and a real statistical
