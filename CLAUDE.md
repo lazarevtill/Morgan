@@ -92,8 +92,6 @@ come in" are answered by the directory names.
   the probes store episodics, which carry none.
 - Multi-hop questions are not answered. Recall ranks memories and has no mechanism to
   compose two of them; measured recall@8 is 0.50 against 1.00 for single-hop.
-- Surprise gating tokenises with `[a-z0-9]+`, so Cyrillic episodics yield an empty token
-  set and are dropped before consolidation rather than scored.
 
 ## Build, test, run
 
@@ -101,7 +99,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 258 passed, 2 skipped (the live ones)
+pytest -q                     # 260 passed, 2 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

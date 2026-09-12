@@ -53,3 +53,31 @@ def test_results_ordered_most_surprising_first_and_capped() -> None:
     episodics = [_ep(f"novel statement number {i} about topic {i}") for i in range(40)]
     kept = keep_surprising(episodics, facts, max_keep=10)
     assert len(kept) == 10  # capped
+
+
+def test_a_cyrillic_episodic_is_scored_rather_than_silently_dropped() -> None:
+    """The gate tokenised with an ASCII-only pattern, so a Russian episodic produced an
+    empty token set and was skipped before it could be scored. It never reached
+    consolidation, so it could never become a fact -- silently, for about 71% of this
+    owner's corpus. The same defect was already fixed twice below this layer: in the FTS5
+    tokenizer and in the entity extractor.
+    """
+    kept = keep_surprising([_ep("жёлтая папка лежит на верхней полке")], [])
+
+    assert [m.content for m in kept] == ["жёлтая папка лежит на верхней полке"]
+
+
+def test_novelty_is_actually_computed_in_cyrillic_not_just_waved_through() -> None:
+    """Keeping every Russian episodic would pass the test above and still be wrong: the
+    gate exists to drop what the facts already predict. This fails both for the original
+    bug, which dropped both, and for a fix that merely stops dropping anything.
+    """
+    facts = [_fact("пользователь", "живёт_в", "Берлине")]
+    episodics = [
+        _ep("пользователь живёт в Берлине"),
+        _ep("купил новый велосипед вчера"),
+    ]
+
+    kept = [m.content for m in keep_surprising(episodics, facts)]
+
+    assert kept == ["купил новый велосипед вчера"]

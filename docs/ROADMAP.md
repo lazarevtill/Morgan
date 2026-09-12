@@ -67,9 +67,6 @@ languages. Two categories do not, and both are open work rather than regressions
   thing to measure, with consolidation in the loop.
 - **Multi-hop composition does not happen.** Recall ranks memories; it has no mechanism to
   combine two of them into one answer, and the numbers say so.
-- **Surprise gating cannot see Cyrillic.** It tokenises with `[a-z0-9]+`, so a Russian
-  episodic yields an empty token set and is dropped before consolidation instead of scored.
-  About 71% of the owner's corpus is Cyrillic.
 - **Model-backed entity extraction** for scripts without letter case.
 - **Bring learning back only against a sound gate.** Anything from the archived kernel returns
   designed against this core, gated by an evaluation with enough items and a real statistical

@@ -11,10 +11,17 @@ import re
 
 from morgan_brain.models import Memory, TemporalFact
 
+#: A word is a run of letters or digits in any script. ``[^\W_]`` is Unicode-aware for
+#: str patterns, so Cyrillic, Greek and CJK all tokenise; the underscore is excluded so a
+#: fact's ``lives_in`` predicate splits into the words an episodic would use. The ASCII
+#: pattern this replaced produced an empty set for any non-Latin text, and an episodic
+#: with no tokens was skipped before it could be scored.
+_WORD = re.compile(r"[^\W_]+")
+
 
 def _tokens(text: str) -> set[str]:
-    """Lowercased alphanumeric word tokens — the unit of the surprise heuristic."""
-    return set(re.findall(r"[a-z0-9]+", text.lower()))
+    """Lowercased word tokens in any script — the unit of the surprise heuristic."""
+    return set(_WORD.findall(text.lower()))
 
 
 def keep_surprising(
