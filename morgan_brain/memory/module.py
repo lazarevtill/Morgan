@@ -18,16 +18,16 @@ from collections.abc import Callable
 from datetime import datetime
 
 from morgan_brain.memory.embedder import Embedder
-from morgan_brain.memory.entities import EntityIndex
-from morgan_brain.memory.episodic import EpisodicStore
-from morgan_brain.memory.extract import extract_entity_names
-from morgan_brain.memory.fts import FtsIndex
-from morgan_brain.memory.fusion import reciprocal_rank_fusion
 from morgan_brain.memory.gate import ForgetReport
-from morgan_brain.memory.schema_classifier import SemanticIndexBuilder
-from morgan_brain.memory.semantic_index import SemanticIndex
-from morgan_brain.memory.temporal import SqliteTemporalStore
-from morgan_brain.memory.vectors import SqliteVectorIndex, VectorRecord
+from morgan_brain.memory.knowledge.extract import extract_entity_names
+from morgan_brain.memory.knowledge.schema_classifier import SemanticIndexBuilder
+from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
+from morgan_brain.memory.recall.semantic_index import SemanticIndex
+from morgan_brain.memory.store.entities import EntityIndex
+from morgan_brain.memory.store.episodic import EpisodicStore
+from morgan_brain.memory.store.fts import FtsIndex
+from morgan_brain.memory.store.temporal import SqliteTemporalStore
+from morgan_brain.memory.store.vectors import SqliteVectorIndex, VectorRecord
 from morgan_brain.models import (
     DEFAULT_PROJECT,
     Entity,

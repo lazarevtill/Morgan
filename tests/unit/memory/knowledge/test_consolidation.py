@@ -13,16 +13,16 @@ from datetime import UTC, datetime
 import pytest
 
 from morgan_brain.composition import build_memory_module
-from morgan_brain.memory.consolidation import (
+from morgan_brain.memory.embedder import FakeEmbedder
+from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.knowledge.consolidation import (
     FactOp,
     FactOpBatch,
     FactOpKind,
     MemoryConsolidator,
 )
-from morgan_brain.memory.db import open_db
-from morgan_brain.memory.embedder import FakeEmbedder
-from morgan_brain.memory.gate import MemoryGate
-from morgan_brain.memory.temporal import SqliteTemporalStore
+from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.models import Memory, MemoryKind, MemorySource, TemporalFact
 from tests.fakes import FakeChatClient
 

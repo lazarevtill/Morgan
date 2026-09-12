@@ -18,21 +18,24 @@ from typing import Any
 
 import structlog
 
-from morgan_brain.chat import Chat
+from morgan_brain.app.chat import Chat
 from morgan_brain.config import Settings, get_settings
-from morgan_brain.memory.consolidation import MemoryConsolidator
-from morgan_brain.memory.db import open_db
 from morgan_brain.memory.embedder import Embedder
-from morgan_brain.memory.entities import EntityIndex
-from morgan_brain.memory.episodic import EpisodicStore
-from morgan_brain.memory.fts import FtsIndex
 from morgan_brain.memory.gate import MemoryGate
-from morgan_brain.memory.history import SessionHistoryStore
+from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
+from morgan_brain.memory.knowledge.schema_classifier import (
+    KeywordSchemaClassifier,
+    SemanticIndexBuilder,
+)
 from morgan_brain.memory.module import MemoryModule
-from morgan_brain.memory.schema_classifier import KeywordSchemaClassifier, SemanticIndexBuilder
-from morgan_brain.memory.semantic_index import SemanticIndex
-from morgan_brain.memory.temporal import SqliteTemporalStore
-from morgan_brain.memory.vectors import SqliteVectorIndex
+from morgan_brain.memory.recall.semantic_index import SemanticIndex
+from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store.entities import EntityIndex
+from morgan_brain.memory.store.episodic import EpisodicStore
+from morgan_brain.memory.store.fts import FtsIndex
+from morgan_brain.memory.store.history import SessionHistoryStore
+from morgan_brain.memory.store.temporal import SqliteTemporalStore
+from morgan_brain.memory.store.vectors import SqliteVectorIndex
 from morgan_brain.providers.factory import build_chat_client, build_embedder
 from morgan_brain.providers.openai_compat import OpenAICompatAdapter
 from morgan_brain.providers.wire import ProviderUnreachable

@@ -16,10 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from morgan_brain.memory.db import open_db
-from morgan_brain.memory.entities import EntityIndex
-from morgan_brain.memory.fts import FtsIndex
-from morgan_brain.memory.vectors import SqliteVectorIndex, VectorRecord
+from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store.entities import EntityIndex
+from morgan_brain.memory.store.fts import FtsIndex
+from morgan_brain.memory.store.vectors import SqliteVectorIndex, VectorRecord
 
 
 @pytest.fixture

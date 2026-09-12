@@ -8,7 +8,7 @@ A missing session_id falls back to a *per-user* bucket, never a global one
 
 from __future__ import annotations
 
-from morgan_brain.memory.history import SessionHistoryStore, session_key
+from morgan_brain.memory.store.history import SessionHistoryStore, session_key
 from morgan_brain.models import Message, Role
 
 

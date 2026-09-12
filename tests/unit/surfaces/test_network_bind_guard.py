@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from morgan_brain.network import (
+from morgan_brain.surfaces.network import (
     UNSET_API_KEY_SENTINEL,
     api_key_is_configured,
     assert_safe_bind,

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from morgan_brain.memory.temporal import SqliteTemporalStore
+from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.models import TemporalFact
 
 

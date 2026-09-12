@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from morgan_brain.memory.history import SessionHistoryStore
+from morgan_brain.memory.store.history import SessionHistoryStore
 from morgan_brain.models import Entity, Memory, MemoryQuery, Message, Role, TemporalFact
 from tests.unit.memory.conftest import build_memory_module as _module
 

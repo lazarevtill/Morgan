@@ -1,5 +1,5 @@
-from morgan_brain.memory.db import open_db
-from morgan_brain.memory.fts import FtsIndex, to_match_query
+from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store.fts import FtsIndex, to_match_query
 
 
 def _idx(tmp_path):

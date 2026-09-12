@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from morgan_brain.memory.semantic_index import SemanticIndex
+from morgan_brain.memory.recall.semantic_index import SemanticIndex
 from morgan_brain.models import Memory
 
 #: Where an entity goes when its slot cannot be established. `knowledge` is the widest of

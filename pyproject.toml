@@ -33,8 +33,8 @@ dev = [
 ]
 
 [project.scripts]
-morgan = "morgan_brain.cli.__main__:main"
-morgan-mcp = "morgan_brain.mcp_server:main"
+morgan = "morgan_brain.surfaces.cli.__main__:main"
+morgan-mcp = "morgan_brain.surfaces.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["morgan_brain"]

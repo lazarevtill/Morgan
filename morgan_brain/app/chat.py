@@ -11,7 +11,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from morgan_brain.memory.gate import MemoryGate
-from morgan_brain.memory.history import SessionHistoryStore, session_key
+from morgan_brain.memory.store.history import SessionHistoryStore, session_key
 from morgan_brain.models import Memory, MemoryQuery, MemorySource, Message, Role
 from morgan_brain.providers.wire import ChatClient, ChatMessage
 

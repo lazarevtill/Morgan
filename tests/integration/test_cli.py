@@ -14,7 +14,7 @@ import pytest
 
 def _run(args: list[str], env: dict[str, str], cwd) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "morgan_brain.cli", *args],
+        [sys.executable, "-m", "morgan_brain.surfaces.cli", *args],
         capture_output=True,
         text=True,
         # The CLI's stdout is UTF-8 by contract, so decode it as UTF-8 rather than with
@@ -97,13 +97,13 @@ def test_doctor_vector_rows_catches_an_unwired_vector_store(tmp_path):
 
 def test_project_defaults_to_the_git_repo_name(tmp_path):
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    from morgan_brain.cli.project import detect_project
+    from morgan_brain.surfaces.cli.project import detect_project
 
     assert detect_project(tmp_path) == tmp_path.name
 
 
 def test_project_falls_back_to_default_outside_a_repo(tmp_path):
-    from morgan_brain.cli.project import DEFAULT_PROJECT, detect_project
+    from morgan_brain.surfaces.cli.project import DEFAULT_PROJECT, detect_project
 
     outside = tmp_path / "no-git-here"
     outside.mkdir()
@@ -145,7 +145,7 @@ def test_forget_reports_skipped_tables_not_a_false_zero(tmp_path):
 
 def test_remember_rejects_all_projects():
     out = subprocess.run(
-        [sys.executable, "-m", "morgan_brain.cli", "remember", "x", "--all-projects"],
+        [sys.executable, "-m", "morgan_brain.surfaces.cli", "remember", "x", "--all-projects"],
         capture_output=True,
         text=True,
         env={**os.environ},
@@ -158,7 +158,15 @@ def test_remember_rejects_all_projects_as_json_when_json_requested():
     """Rejecting --all-projects is correct; breaking the --json contract while doing it is
     not -- a script parsing stdout must see JSON regardless of which path failed."""
     out = subprocess.run(
-        [sys.executable, "-m", "morgan_brain.cli", "remember", "x", "--all-projects", "--json"],
+        [
+            sys.executable,
+            "-m",
+            "morgan_brain.surfaces.cli",
+            "remember",
+            "x",
+            "--all-projects",
+            "--json",
+        ],
         capture_output=True,
         text=True,
         env={**os.environ},
@@ -194,7 +202,7 @@ def test_ask_from_a_temp_cwd_does_not_fail_on_database_access(tmp_path):
     "command", ["remember", "recall", "facts", "forget", "ask", "doctor", "consolidate"]
 )
 def test_every_command_accepts_project_all_projects_and_json_flags(command):
-    from morgan_brain.cli.__main__ import build_parser
+    from morgan_brain.surfaces.cli.__main__ import build_parser
 
     parser = build_parser()
     # Just confirm argparse accepts the flags without raising SystemExit for a bogus parse --

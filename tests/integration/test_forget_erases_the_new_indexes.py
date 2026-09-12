@@ -12,8 +12,8 @@ from datetime import UTC, datetime
 import pytest
 
 from morgan_brain.composition import build_memory_module
-from morgan_brain.memory.db import open_db
 from morgan_brain.memory.embedder import FakeEmbedder
+from morgan_brain.memory.store.db import open_db
 from morgan_brain.models import Entity, Memory
 
 U = "u1"

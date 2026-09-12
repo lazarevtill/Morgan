@@ -9,9 +9,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from morgan_brain.composition import build_memory_module as _build
-from morgan_brain.memory.db import open_db
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.module import MemoryModule
+from morgan_brain.memory.store.db import open_db
 
 
 def build_memory_module(path: str, *, dim: int = 4) -> MemoryModule:

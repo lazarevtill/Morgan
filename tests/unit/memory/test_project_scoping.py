@@ -7,8 +7,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from morgan_brain.memory.db import open_db
-from morgan_brain.memory.vectors import SqliteVectorIndex, VectorRecord
+from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store.vectors import SqliteVectorIndex, VectorRecord
 from morgan_brain.models import Memory, MemoryQuery, TemporalFact
 from tests.unit.memory.conftest import build_memory_module as _module
 

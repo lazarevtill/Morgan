@@ -41,7 +41,7 @@ def _morgan(
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
-        [sys.executable, "-m", "morgan_brain.cli", *args],
+        [sys.executable, "-m", "morgan_brain.surfaces.cli", *args],
         capture_output=True,
         text=True,
         # The CLI's stdout is UTF-8 by contract; decode it as UTF-8 rather than with this

@@ -11,9 +11,9 @@ from typing import Any
 
 import pytest
 
-from morgan_brain import mcp_server
 from morgan_brain.config import get_settings
-from morgan_brain.network import UNSET_API_KEY_SENTINEL
+from morgan_brain.surfaces import mcp_server
+from morgan_brain.surfaces.network import UNSET_API_KEY_SENTINEL
 
 
 @pytest.fixture(autouse=True)

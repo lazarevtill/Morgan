@@ -19,7 +19,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from morgan_brain.cli.project import detect_project
 from morgan_brain.composition import (
     build_app_context,
     build_memory_context,
@@ -28,11 +27,12 @@ from morgan_brain.composition import (
 )
 from morgan_brain.config import Settings, get_settings, user_config_file
 from morgan_brain.logging_setup import configure_logging
-from morgan_brain.memory.db import open_db
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.gate import ForgetReport
+from morgan_brain.memory.store.db import open_db
 from morgan_brain.models import Memory, MemoryQuery, MemorySource, TemporalFact
 from morgan_brain.providers.factory import check_llm_reachable
+from morgan_brain.surfaces.cli.project import detect_project
 
 # ---------------------------------------------------------------------------
 # Serialization helpers

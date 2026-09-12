@@ -11,7 +11,7 @@ from __future__ import annotations
 from starlette.testclient import TestClient
 
 from morgan_brain.config import Settings
-from morgan_brain.network import UNSET_API_KEY_SENTINEL
+from morgan_brain.surfaces.network import UNSET_API_KEY_SENTINEL
 
 REMOTE = ("172.23.27.215", 51234)
 LOOPBACK = ("127.0.0.1", 51234)
@@ -23,7 +23,7 @@ def test_mcp_open_mode_refuses_a_remote_peer() -> None:
     from starlette.responses import JSONResponse as _JSONResponse
     from starlette.routing import Route
 
-    from morgan_brain.mcp_server import _BearerAuthMiddleware
+    from morgan_brain.surfaces.mcp_server import _BearerAuthMiddleware
 
     async def _tool(request: object) -> _JSONResponse:
         return _JSONResponse({"served": True})
@@ -44,7 +44,7 @@ def test_mcp_enforces_the_bearer_token_when_a_key_is_set() -> None:
     from starlette.responses import JSONResponse as _JSONResponse
     from starlette.routing import Route
 
-    from morgan_brain.mcp_server import _BearerAuthMiddleware
+    from morgan_brain.surfaces.mcp_server import _BearerAuthMiddleware
 
     async def _tool(request: object) -> _JSONResponse:
         return _JSONResponse({"served": True})

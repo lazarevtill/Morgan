@@ -17,10 +17,10 @@ def test_wheel_contains_the_package_and_the_entry_points(tmp_path: Path) -> None
     wheel = zipfile.ZipFile(next(tmp_path.glob("morgan_brain-*.whl")))
     names = set(wheel.namelist())
 
-    assert "morgan_brain/cli/__main__.py" in names
-    assert "morgan_brain/mcp_server.py" in names
+    assert "morgan_brain/surfaces/cli/__main__.py" in names
+    assert "morgan_brain/surfaces/mcp_server.py" in names
     assert not any(n.startswith("tests/") for n in names)
     entry_points = next(n for n in names if n.endswith("entry_points.txt"))
     scripts = wheel.read(entry_points).decode()
-    assert "morgan = morgan_brain.cli.__main__:main" in scripts
-    assert "morgan-mcp = morgan_brain.mcp_server:main" in scripts
+    assert "morgan = morgan_brain.surfaces.cli.__main__:main" in scripts
+    assert "morgan-mcp = morgan_brain.surfaces.mcp_server:main" in scripts

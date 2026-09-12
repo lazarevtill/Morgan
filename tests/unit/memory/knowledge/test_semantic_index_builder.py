@@ -6,13 +6,13 @@ from __future__ import annotations
 
 import pytest
 
-from morgan_brain.memory.db import open_db
-from morgan_brain.memory.entities import EntityIndex
-from morgan_brain.memory.schema_classifier import (
+from morgan_brain.memory.knowledge.schema_classifier import (
     KeywordSchemaClassifier,
     SemanticIndexBuilder,
 )
-from morgan_brain.memory.semantic_index import PRESET_SCHEMAS, SemanticIndex
+from morgan_brain.memory.recall.semantic_index import PRESET_SCHEMAS, SemanticIndex
+from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.models import Entity, Memory
 
 U = "u1"
