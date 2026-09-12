@@ -1,27 +1,25 @@
-"""Phase 2B — Bi-temporal consolidation worker.
+"""Episodics into valid-time facts.
 
-``MemoryConsolidator`` reads recent episodics + current facts, asks an LLM
-(via the role router) to propose ``FactOp`` operations, and applies them to
-the bi-temporal store through the MemoryGate.
+``MemoryConsolidator`` reads the recent episodics a project's current facts do not already
+predict, asks the model to propose ``FactOp`` operations as schema-validated JSON, and
+applies them through the gate.
 
-Design invariants:
-- Contradiction → close old interval (valid_to = now), never hard-delete.
-- Deterministic: clock injected, no datetime.now() calls.
-- Provider-agnostic: uses roles, never model names directly.
-- Dedup pre-filter: ADD whose (subject, predicate, object) matches a currently-
-  valid fact is silently skipped (treated as NOOP).
+What it must keep doing:
+- A contradiction closes the old interval (``valid_to = now``); nothing is hard-deleted.
+- The clock is injected. No ``datetime.now()`` call appears here, so a run is reproducible.
+- An ADD whose (subject, predicate, object) already matches a currently-valid fact is a
+  NOOP, not a duplicate row.
+- It runs when asked. Nothing here is on the path of a recall.
 """
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from datetime import UTC, datetime
-from enum import Enum
-
-from pydantic import BaseModel, Field
 
 from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.knowledge.fact_ops import FactOp, FactOpBatch, FactOpKind
+from morgan_brain.memory.knowledge.surprise import keep_surprising
 from morgan_brain.models import (
     Memory,
     MemoryKind,
@@ -31,35 +29,6 @@ from morgan_brain.models import (
 )
 from morgan_brain.providers.structured import JsonMode, generate_structured
 from morgan_brain.providers.wire import ChatClient, ChatMessage
-
-# ---------------------------------------------------------------------------
-# Domain types
-# ---------------------------------------------------------------------------
-
-
-class FactOpKind(str, Enum):
-    ADD = "ADD"
-    UPDATE = "UPDATE"
-    DELETE = "DELETE"
-    NOOP = "NOOP"
-
-
-class FactOp(BaseModel):
-    """A single fact operation proposed by the LLM."""
-
-    op: FactOpKind
-    subject: str
-    predicate: str
-    object: str = ""
-    confidence: float = Field(default=0.8, ge=0.0, le=1.0)
-    reason: str = ""
-
-
-class FactOpBatch(BaseModel):
-    """Batch of fact operations — the schema passed to ``generate_structured``."""
-
-    ops: list[FactOp]
-
 
 # ---------------------------------------------------------------------------
 # Consolidator
@@ -249,7 +218,7 @@ class MemoryConsolidator:
         # Neuro-grounded (the hippocampus preferentially encodes prediction errors): episodics
         # whose content is already covered by current facts carry little new signal, so we skip
         # them and focus the LLM call on the surprising remainder — cheaper and better-targeted.
-        episodics = _surprise_filter(episodics, existing_facts)
+        episodics = keep_surprising(episodics, existing_facts)
 
         batch = await self.propose(user_id, episodics, existing_facts)
         return await self.apply(user_id, batch, project=project)
@@ -333,49 +302,6 @@ class MemoryConsolidator:
                 stale.append(fact)
 
         return stale
-
-
-# ---------------------------------------------------------------------------
-# Timezone normalisation helper
-# ---------------------------------------------------------------------------
-
-
-def _tokens(text: str) -> set[str]:
-    """Lowercased alphanumeric word tokens — the unit of the surprise heuristic."""
-    return set(re.findall(r"[a-z0-9]+", text.lower()))
-
-
-def _surprise_filter(
-    episodics: list[Memory],
-    facts: list[TemporalFact],
-    *,
-    min_novelty: float = 0.5,
-    max_keep: int = 30,
-) -> list[Memory]:
-    """Keep only episodics the current fact base did not already predict (surprise-gating).
-
-    ``novelty`` = fraction of an episodic's tokens absent from the union of current-fact
-    tokens. Episodics with ``novelty < min_novelty`` are already-known (low prediction error)
-    and dropped; the rest are returned most-surprising-first, capped at ``max_keep``. At cold
-    start (no facts) every episodic is fully novel, so nothing is dropped. The heuristic is
-    deliberately lexical and conservative — it drops near-duplicates, never borderline-novel
-    content — and adds zero LLM cost.
-    """
-    known: set[str] = set()
-    for f in facts:
-        known |= _tokens(f"{f.subject} {f.predicate} {f.object}")
-
-    scored: list[tuple[float, Memory]] = []
-    for m in episodics:
-        toks = _tokens(m.content)
-        if not toks:
-            continue
-        novelty = len(toks - known) / len(toks)
-        if novelty >= min_novelty:
-            scored.append((novelty, m))
-
-    scored.sort(key=lambda pair: pair[0], reverse=True)
-    return [m for _, m in scored[:max_keep]]
 
 
 def _ensure_comparable(ref: datetime, now: datetime) -> datetime:

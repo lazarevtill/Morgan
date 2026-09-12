@@ -15,30 +15,39 @@ Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
 `docs/ROADMAP.md` (what was cut and why). The archived kernel this was cut from is at the
 tag `legacy-v0.1.0-kernel` with its designs under `docs/archive/`.
 
-## Package map (`morgan_brain/`, ~4,500 lines)
+## Package map (`morgan_brain/`, ~4,700 lines)
+
+The tree is grouped by what a file does, so "where does a write go" and "where does a request
+come in" are answered by the directory names.
 
 - `config.py` — the single `MORGAN_`-prefixed settings source (`get_settings()`). Reads
   `~/.config/morgan/.env`, then `./.env`, then the environment. The database defaults to
-  `~/.local/share/morgan/`.
+  `~/.local/share/morgan/`. `MORGAN_EMBEDDING_ENDPOINT` addresses embeddings separately when
+  the chat server does not serve them.
 - `models.py` — the domain models. Everything that persists is `user_id`- and
   `project`-keyed. `Memory` carries a `MemorySource`; `TemporalFact` carries
   `valid_from`/`valid_to`/`superseded_by`.
-- `memory/` — the core. `gate.py` (`MemoryGate`, the only door), `module.py` (the one write
-  path and the fused recall), the stores (`episodic`, `temporal`, `vectors`, `fts`,
-  `entities`, `history`), `semantic_index.py` + `schema_classifier.py` (the upper index and
-  how entities are filed into it), `extract.py` (the one entity extractor),
-  `consolidation.py` (episodics → facts).
+- `logging_setup.py` — process output. stdout is UTF-8 because the protocols on it are; logs
+  go to stderr. One call per entrypoint.
+- `composition.py` — opens the database and wires the above. `build_memory_context` needs no
+  chat model; `build_app_context` adds it.
+- `memory/` — the core. `gate.py` is the only door and `module.py` is the one write path and
+  the fused recall; `embedder.py` is the embedding seam. Below them:
+  - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
+    `history`. Each owns its schema and its queries; none of them ranks anything.
+  - `recall/` — `semantic_index` (routing, which may cost precision but never recall) and
+    `fusion` (reciprocal rank, rank-only).
+  - `knowledge/` — `extract`, `schema_classifier`, `surprise`, `fact_ops`, `consolidation`.
+    The work that costs a model call or a full pass, and never runs inside a recall.
 - `providers/` — the only place a model SDK is imported: `openai_compat.py` (chat),
   `embeddings.py`, `structured.py` (JSON-validated output), `factory.py` (settings → adapters),
   `wire.py` (message types, `ChatClient`, `ProviderUnreachable`).
-- `chat.py` — one turn: recall, answer, remember.
-- `composition.py` — opens the database and wires the above. `build_memory_context` needs no
-  chat model; `build_app_context` adds it.
-- `cli/` — `remember`/`recall`/`facts`/`forget`/`ask`/`consolidate`/`doctor`.
-- `mcp_server.py` — five MCP tools over stdio or streamable-HTTP with a bearer token, calling
-  the CLI's command handlers.
-- `network.py` — the bind guard: no listener beyond loopback without a real key.
-- `logging_setup.py` — every entrypoint logs to stderr.
+- `app/chat.py` — one turn: recall, answer, remember. Not a surface: the one use-case both
+  surfaces call.
+- `surfaces/` — where requests come in. `cli/` (`__main__` parses and dispatches, `commands`
+  answers, `payloads` shapes the result, `render` prints it, `doctor` diagnoses),
+  `mcp_server.py` (five MCP tools over stdio or streamable-HTTP, calling those same command
+  handlers), and `network.py`, the bind guard that protects the HTTP one.
 
 ## Invariants
 
@@ -86,7 +95,7 @@ tag `legacy-v0.1.0-kernel` with its designs under `docs/archive/`.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 232 passed, 1 skipped (the live one)
+pytest -q                     # 236 passed, 1 skipped (the live one)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

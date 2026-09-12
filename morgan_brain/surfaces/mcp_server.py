@@ -45,7 +45,7 @@ from starlette.responses import JSONResponse, Response
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.logging_setup import configure_logging
 from morgan_brain.models import DEFAULT_PROJECT
-from morgan_brain.surfaces.cli.__main__ import (
+from morgan_brain.surfaces.cli.commands import (
     cmd_ask,
     cmd_facts,
     cmd_forget,

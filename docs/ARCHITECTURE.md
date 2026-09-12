@@ -17,22 +17,21 @@ morgan-mcp ──┘        │                 ├─ FTS5 keyword index      o
 
 | Module | Responsibility |
 |---|---|
-| `config.py` | The single `MORGAN_`-prefixed settings source. Reads `~/.config/morgan/.env`, then `./.env`, then the environment; the database defaults to `~/.local/share/morgan/`. |
+| `config.py` | The single `MORGAN_`-prefixed settings source. Reads `~/.config/morgan/.env`, then `./.env`, then the environment; the database defaults to `~/.local/share/morgan/`. Chat and embeddings are addressed separately when one server does not serve both. |
 | `models.py` | `Memory`, `TemporalFact`, `MemoryQuery`, `Message`. Everything that persists is `user_id`- and `project`-keyed. |
-| `memory/gate.py` | `MemoryGate`: the only door to memory. Refuses an empty user or project. `ForgetReport`. |
-| `memory/module.py` | `MemoryModule`: the one write path (every index in one call, entities extracted if absent) and the fused recall (three signals, reciprocal rank fusion, current facts first). `forget()` in one transaction. |
-| `memory/episodic.py`, `temporal.py`, `vectors.py`, `fts.py`, `entities.py`, `history.py` | The stores, all over the one connection. Vectors are scoped *inside* the KNN via vec0 metadata columns, not filtered afterwards. |
-| `memory/semantic_index.py` | The upper index: schemas route coarsely, entities locate concretely, one-hop co-occurrence expands. `route()` returns `None`, never an empty pool, when it has nothing useful to say. |
-| `memory/schema_classifier.py` | Files entities into schema slots (keyword cues, deterministic) and records co-occurrence. An entity is classified once. |
-| `memory/extract.py` | The one entity extractor: cased words, acronyms, CamelCase, Latin and Cyrillic. |
-| `memory/consolidation.py` | Episodics → facts. Asks the model for ADD/UPDATE/DELETE/NOOP operations as validated JSON, applies them through the gate: supersede, never overwrite. Skips episodics current facts already cover. |
-| `providers/` | `openai_compat.py` (chat over the `openai` SDK), `embeddings.py` (`/embeddings` over httpx), `structured.py` (JSON-schema, JSON-object or prompted, validated, re-asked), `factory.py`, `wire.py` (`ChatClient`, `ProviderUnreachable`). Nothing above imports a model SDK. |
-| `chat.py` | One turn: recall → prompt → answer → remember both halves, attributed. |
+| `logging_setup.py` | Process output: stdout is UTF-8 because the protocols on it are; every log line goes to stderr. |
 | `composition.py` | Opens the database and wires everything. `build_memory_context` for the memory commands; `build_app_context` adds the chat client. |
-| `cli/` | `morgan` with `remember`, `recall`, `facts`, `forget`, `ask`, `consolidate`, `doctor`. Project = the current git repository's directory name. |
-| `mcp_server.py` | `morgan-mcp`: `remember`, `recall`, `facts`, `forget`, `ask_morgan` over stdio or streamable-HTTP with a bearer token. Calls the CLI's handlers; `project` is a tool argument. |
-| `network.py` | The bind guard. |
-| `logging_setup.py` | All logs to stderr; stdout is `--json` and JSON-RPC. |
+| `memory/gate.py` | `MemoryGate`: the only door to memory. Refuses an empty user or project. `ForgetReport`. |
+| `memory/module.py` | `MemoryModule`: the one write path (every index in one call, entities extracted if absent) and the fused recall. `forget()` in one transaction. |
+| `memory/embedder.py` | The `Embedder` protocol and the deterministic hash stub that stands in for a model server. |
+| `memory/store/` | Persistence, one file per table family, all over the one connection: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`, `history`. Vectors are scoped *inside* the KNN via vec0 metadata columns, not filtered afterwards. |
+| `memory/recall/` | `semantic_index` routes a query to a candidate pool and returns `None`, never an empty pool, when it has nothing useful to say. `fusion` merges the three rankings by reciprocal rank. Rank-only, so a relevance threshold cannot live downstream of it. |
+| `memory/knowledge/` | `extract` (the one entity extractor: cased words, acronyms, CamelCase, Latin and Cyrillic), `schema_classifier` (files entities into slots by keyword cue, once), `surprise` (drops episodics the facts already predict), `fact_ops` (the operation schema the model is constrained to), `consolidation` (applies them: supersede, never overwrite). |
+| `providers/` | `openai_compat.py` (chat over the `openai` SDK), `embeddings.py` (`/embeddings` over httpx), `structured.py` (JSON-schema, JSON-object or prompted, validated, re-asked), `factory.py`, `wire.py` (`ChatClient`, `ProviderUnreachable`). Nothing above imports a model SDK. |
+| `app/chat.py` | One turn: recall → prompt → answer → remember both halves, attributed. The one use-case both surfaces share. |
+| `surfaces/cli/` | `morgan`: `__main__` parses and dispatches, `commands` answers, `payloads` shapes the result, `render` prints it, `doctor` diagnoses the install. Project = the current git repository's directory name. |
+| `surfaces/mcp_server.py` | `morgan-mcp`: `remember`, `recall`, `facts`, `forget`, `ask_morgan` over stdio or streamable-HTTP with a bearer token. Calls the CLI's command handlers; `project` is a tool argument. |
+| `surfaces/network.py` | The bind guard: no listener beyond loopback without a real key. |
 
 ## Recall
 
