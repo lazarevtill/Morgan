@@ -23,6 +23,9 @@ overwritten. Everything lives in one SQLite file on hardware you own.
   fact records who asserted it: you, or the model's inference.
 - **Answers with what it knows.** `morgan ask` recalls first, answers, and remembers the
   exchange.
+- **Starts from your history, not from nothing.** `morgan import` seeds memory from a ChatGPT
+  export. A fifth of the conversations are held back in a separate project, so the memory can
+  later be evaluated against conversations nothing has learned from.
 - **Forgets completely.** `morgan forget` erases a project from every table in one
   transaction, including vectors and the derived index, and reports exactly what it touched.
 - **Talks to any model server.** Any OpenAI-compatible endpoint: llama-server by default,
@@ -43,6 +46,7 @@ morgan remember "prefers terse, code-first answers"
 morgan recall "how do I like answers"  # needs only the embedding model
 morgan ask "what do you know about me" # needs the chat model
 morgan consolidate                      # recent memories → dated facts
+morgan import ~/Downloads/conversations.json   # optional: seed from a ChatGPT export
 ```
 
 Give Claude Code the same memory:
@@ -53,6 +57,15 @@ claude mcp add morgan -- morgan-mcp --transport stdio
 
 The database is `~/.local/share/morgan/morgan.db` (`MORGAN_DATA_DIR`). The memory
 commands work with no model server at all under `MORGAN_EMBEDDING_BACKEND=hash`.
+
+## Is the recall any good?
+
+Measured, not assumed. `tests/memory_quality/` holds labelled probes — half of them Russian,
+every query written to share few or no words with its answer — and `pytest --live` scores them
+against a real embedding endpoint: recall@k, where in the ranking the answer landed, whether a
+superseded memory came back with it, and whether an unanswerable question was correctly met
+with silence. [`docs/ROADMAP.md`](docs/ROADMAP.md) carries the current numbers, including the
+two categories that do not yet work.
 
 ## Documentation
 
