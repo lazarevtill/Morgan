@@ -41,10 +41,15 @@ morgan-mcp ──┘        │                 ├─ FTS5 keyword index      o
    search everything, and cross-project queries are never routed.
 2. Vector, FTS5 and entity search each return their top-k *inside* that pool.
 3. Reciprocal rank fusion merges the three rankings.
-4. Currently-valid facts for the project are placed first; the fused episodics follow, cut
-   to `top_k`.
+4. Currently-valid facts for the project are placed first, but budgeted: episodics keep half
+   the window whenever they have hits, and the facts that survive a narrow budget are the
+   ones the query mentions. Facts fill the whole window only when little else came back.
 
 There is no relevance floor: a non-empty project always answers.
+
+Facts never suppress episodics. Prepending every fact and then truncating meant that once
+a project held `top_k` facts, no memory could be returned however exactly it matched --
+silently, since the fact count only grows as consolidation runs.
 
 ## Consolidation (`morgan consolidate`)
 

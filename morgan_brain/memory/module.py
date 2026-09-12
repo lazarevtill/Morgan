@@ -19,7 +19,7 @@ from datetime import datetime
 
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.gate import ForgetReport
-from morgan_brain.memory.knowledge.extract import extract_entity_names
+from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.knowledge.schema_classifier import SemanticIndexBuilder
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
 from morgan_brain.memory.recall.semantic_index import SemanticIndex
@@ -152,9 +152,13 @@ class MemoryModule:
         if not query.all_projects:
             episodic = [m for m in episodic if m.project == query.project]
 
-        # Currently-valid facts are authoritative; surface them alongside episodic recall.
-        # Phase 1 includes all current facts (volume is small until Phase 2 extraction);
-        # relevance-ranking of facts is a Phase 2 concern.
+        # Currently-valid facts are authoritative, so they are surfaced alongside episodic
+        # recall -- but alongside, never instead of. This used to prepend every fact and then
+        # truncate, so once a project held top_k facts no episodic memory could be returned
+        # at all, however exactly it matched. current_facts has no limit, so that threshold
+        # is crossed silently as consolidation runs, and the probe harness stores no facts
+        # and could never see it. Verbatim memories also measure better than extracted
+        # artifacts on the published comparisons, so crowding them out loses twice.
         facts = await self._temporal.current_facts(user_id=query.user_id, project=project)
         fact_memories = [
             Memory(
@@ -166,7 +170,7 @@ class MemoryModule:
             )
             for f in facts
         ]
-        return (fact_memories + episodic)[: query.top_k]
+        return _merge_facts_and_episodics(fact_memories, episodic, query.text, query.top_k)
 
     def _route(self, query: MemoryQuery) -> list[str] | None:
         """Ask the semantic upper index for a candidate pool, or ``None`` to search all.
@@ -300,3 +304,29 @@ class MemoryModule:
 
         conn.execute("VACUUM")  # cannot run inside a transaction
         return report
+
+
+#: The share of the window episodic memories are guaranteed when they exist. Facts may use
+#: the whole window when little else comes back, so the reservation costs nothing on a
+#: project with no episodic hits -- it only stops facts from evicting memories that matched.
+_EPISODIC_RESERVE = 0.5
+
+
+def _merge_facts_and_episodics(
+    facts: list[Memory], episodic: list[Memory], query_text: str, top_k: int
+) -> list[Memory]:
+    """Facts first, but never so many that a matching memory is pushed out of the window.
+
+    Facts are ranked by how much of the query they mention, so the ones that survive a narrow
+    budget are the ones asked about. Ordering them arbitrarily would drop the relevant fact as
+    readily as an irrelevant one, trading one silent failure for another.
+    """
+    reserved = min(len(episodic), int(top_k * _EPISODIC_RESERVE))
+    budget = max(top_k - reserved, 0)
+    if len(facts) > budget:
+        terms = {t for t in words(query_text.lower()) if t}
+        facts = sorted(
+            facts,
+            key=lambda m: -len(terms & set(words(m.content.lower()))),
+        )[:budget]
+    return (facts + episodic)[:top_k]

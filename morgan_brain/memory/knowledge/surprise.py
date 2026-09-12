@@ -7,21 +7,13 @@ drops near-duplicates, never borderline-novel content, and costs nothing to run.
 
 from __future__ import annotations
 
-import re
-
+from morgan_brain.memory.knowledge.extract import words
 from morgan_brain.models import Memory, TemporalFact
-
-#: A word is a run of letters or digits in any script. ``[^\W_]`` is Unicode-aware for
-#: str patterns, so Cyrillic, Greek and CJK all tokenise; the underscore is excluded so a
-#: fact's ``lives_in`` predicate splits into the words an episodic would use. The ASCII
-#: pattern this replaced produced an empty set for any non-Latin text, and an episodic
-#: with no tokens was skipped before it could be scored.
-_WORD = re.compile(r"[^\W_]+")
 
 
 def _tokens(text: str) -> set[str]:
     """Lowercased word tokens in any script — the unit of the surprise heuristic."""
-    return set(_WORD.findall(text.lower()))
+    return set(words(text.lower()))
 
 
 def keep_surprising(
@@ -42,7 +34,10 @@ def keep_surprising(
     """
     known: set[str] = set()
     for f in facts:
-        known |= _tokens(f"{f.subject} {f.predicate} {f.object}")
+        # Underscores become spaces first: a predicate is a snake_case identifier standing
+        # for a phrase, and "lives_in" has to meet "lives in" as written in a memory.
+        # Recall renders a fact the same way when it surfaces one.
+        known |= _tokens(f"{f.subject} {f.predicate} {f.object}".replace("_", " "))
 
     scored: list[tuple[float, Memory]] = []
     for m in episodics:

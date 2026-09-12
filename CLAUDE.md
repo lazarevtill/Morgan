@@ -65,6 +65,8 @@ come in" are answered by the directory names.
   everything") whenever it has nothing useful to say, never an empty pool. The pool is pushed
   into each signal's query, never applied to its output. Cross-project recall is never routed.
 - **Facts evolve, they don't overwrite.** Update = close the old interval, open a new one.
+- **Facts are surfaced alongside episodics, never instead of them.** Recall budgets the
+  fact block so a matching memory cannot be pushed out of the window by fact volume.
 - **Actor attribution.** Every memory records its `MemorySource`. The reply to `ask` is
   stored as `agent_inferred`; never treat an inference as a user statement.
 - **A model server that is down is reported by name.** Adapters raise
@@ -99,7 +101,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 263 passed, 2 skipped (the live ones)
+pytest -q                     # 266 passed, 2 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

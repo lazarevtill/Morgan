@@ -229,6 +229,17 @@ def _is_candidate(word: str) -> bool:
     return any(c.isupper() for c in word[1:])
 
 
+def words(text: str) -> list[str]:
+    """Every word in *text*, in any script, in order.
+
+    The one tokenizer. There were three -- here, in surprise gating, and inline in recall --
+    and each had to be taught about non-Latin scripts separately. Two were; the third was not,
+    and every Cyrillic memory was silently dropped before consolidation for months. A second
+    definition of "word" is how that happens again.
+    """
+    return [m.group(0) for m in _WORD.finditer(text)]
+
+
 def extract_entity_names(text: str) -> list[str]:
     """Return the entity names in *text*, in order of first appearance, deduplicated.
 
