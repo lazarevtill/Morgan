@@ -12,6 +12,7 @@ from morgan_brain.app.chatgpt_import import (
     HOLDOUT_PROJECT,
     import_chatgpt,
     is_held_out,
+    split_for_embedding,
 )
 from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.embedder import FakeEmbedder
@@ -138,3 +139,56 @@ async def test_reimport_updates_in_place_rather_than_duplicating(gate, tmp_path)
     await import_chatgpt(path, gate=gate, user_id="owner")
 
     assert await _contents(gate, ARCHIVE_PROJECT) == ["only once"]
+
+
+def test_a_turn_within_budget_is_left_whole():
+    text = "a paragraph\n\nand another"
+
+    assert split_for_embedding(text, budget=100) == [text]
+
+
+def test_a_long_turn_is_split_without_losing_or_duplicating_a_character():
+    """The export's longest turn is 87,000 characters, and an embedding server refuses
+    anything over its context. Truncating would leave the memory searchable by keyword and
+    invisible to the vector signal -- the exact "visible to one signal, not another" failure
+    the one-write-path invariant exists to prevent. So it is split, and nothing is dropped.
+    """
+    text = "\n\n".join(f"paragraph {i} " + "word " * 200 for i in range(6))
+
+    chunks = split_for_embedding(text, budget=1000)
+
+    assert len(chunks) > 1
+    assert all(chunk.strip() for chunk in chunks)
+    assert "".join("".join(c.split()) for c in chunks) == "".join(text.split())
+
+
+def test_a_split_prefers_a_paragraph_boundary_over_a_word_boundary():
+    text = "first paragraph here\n\n" + "second paragraph " * 40
+
+    chunks = split_for_embedding(text, budget=60)
+
+    assert chunks[0] == "first paragraph here"
+
+
+def test_an_unbroken_run_longer_than_the_budget_is_still_split():
+    """Log dumps and base64 blobs arrive as one unbroken run. A splitter that only cuts on
+    whitespace would hand the server a chunk over its context and fail the whole import."""
+    chunks = split_for_embedding("x" * 5000, budget=1000)
+
+    assert chunks and all(len(c) <= 1000 for c in chunks)
+    assert "".join(chunks) == "x" * 5000
+
+
+async def test_a_long_turn_is_stored_as_several_memories_and_reimport_does_not_duplicate(
+    gate, tmp_path
+):
+    long_turn = "\n\n".join(f"section {i} " + "word " * 400 for i in range(8))
+    path = _export(tmp_path / "c.json", [_conversation(KEPT, ("user", long_turn))])
+
+    first = await import_chatgpt(path, gate=gate, user_id="owner")
+    second = await import_chatgpt(path, gate=gate, user_id="owner")
+
+    assert first.memories > 1
+    assert second.memories == first.memories
+    stored = await _contents(gate, ARCHIVE_PROJECT)
+    assert len(stored) == first.memories

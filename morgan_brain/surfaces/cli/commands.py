@@ -8,6 +8,7 @@ here rather than reimplementing a single memory operation between them.
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -159,12 +160,19 @@ async def cmd_import(args: argparse.Namespace, settings: Settings, project: str)
     the holdout rule, so honouring a caller's project would put held-out conversations
     somewhere consolidation can reach.
     """
+
+    def progress(done: int, total: int) -> None:
+        # stderr, because stdout is the --json contract. A seed of a few thousand turns is
+        # minutes of embedding calls, and a silent run is indistinguishable from a hung one.
+        print(f"\rimporting conversation {done}/{total}", end="", file=sys.stderr, flush=True)
+
     ctx = build_memory_context(settings)
     try:
         report = await import_chatgpt(
-            Path(args.path), gate=ctx.gate, user_id=settings.owner_user_id
+            Path(args.path), gate=ctx.gate, user_id=settings.owner_user_id, progress=progress
         )
     finally:
+        print(file=sys.stderr)
         ctx.conn.close()
     return {
         "archive_project": ARCHIVE_PROJECT,

@@ -41,6 +41,17 @@ HOLDOUT_PROJECT = "archive/chatgpt-holdout"
 #: draw 100+ labelled items from while leaving the bulk of the corpus usable.
 HOLDOUT_EVERY = 5
 
+#: The most text one memory may carry, so its embedding fits the model server's context.
+#: Budgeted in characters rather than tokens because the import must not depend on a
+#: tokenizer it does not own, and sized for the worst case measured on this corpus: Russian
+#: costs about three characters per token, so 6,000 characters is about 2,000 tokens -- well
+#: inside the 8,192 a default llama-server offers, with room for a smaller one.
+MAX_EMBED_CHARS = 6_000
+
+#: Where a split is allowed to fall, best first. A paragraph break is a real boundary in the
+#: text; a line break is usually one; a space rarely is but beats cutting a word in half.
+_BOUNDARIES = ("\n\n", "\n", " ")
+
 #: Which roles become memories, and what attribution each one carries. A tool result is the
 #: environment talking, not the owner and not the assistant's reasoning, and carries no
 #: preference worth recalling -- so it is skipped rather than mis-attributed.
@@ -71,9 +82,42 @@ def is_held_out(conversation_id: str) -> bool:
     return int.from_bytes(digest[:8], "big") % HOLDOUT_EVERY == 0
 
 
-def _memory_id(message_id: str) -> str:
-    """A stable memory id for a message, so a second import updates rather than duplicates."""
-    return hashlib.sha256(f"chatgpt:{message_id}".encode()).hexdigest()[:32]
+def split_for_embedding(text: str, budget: int = MAX_EMBED_CHARS) -> list[str]:
+    """Split *text* into pieces of at most *budget* characters, losing nothing.
+
+    A turn longer than the embedding server's context is refused outright, and truncating it
+    instead would index the whole text for keyword search while the vector saw only its
+    opening -- a memory visible to one signal and not another, which is the failure the one
+    write path exists to prevent. Splitting keeps every character reachable by both.
+
+    Cuts fall on the latest boundary in range, preferring a paragraph break to a line break
+    to a space. An unbroken run longer than the budget -- a log dump, a base64 blob -- has no
+    boundary to find, so it is cut at the budget rather than handed over intact and rejected.
+    """
+    remaining = text.strip()
+    if len(remaining) <= budget:
+        return [remaining] if remaining else []
+
+    chunks: list[str] = []
+    while len(remaining) > budget:
+        window = remaining[:budget]
+        cut = next((c for c in (window.rfind(b) for b in _BOUNDARIES) if c > 0), -1)
+        if cut <= 0:
+            cut = budget
+        chunks.append(remaining[:cut].strip())
+        remaining = remaining[cut:].strip()
+    if remaining:
+        chunks.append(remaining)
+    return [c for c in chunks if c]
+
+
+def _memory_id(message_id: str, part: int) -> str:
+    """A stable memory id for one piece of a message.
+
+    Derived from the message id so a second import replaces rather than duplicates, and from
+    the piece's index so a split turn keeps one id per piece across runs.
+    """
+    return hashlib.sha256(f"chatgpt:{message_id}#{part}".encode()).hexdigest()[:32]
 
 
 def _turn_text(message: dict[str, Any]) -> str:
@@ -127,19 +171,21 @@ async def import_chatgpt(
             if source is None or not text:
                 skipped += 1
                 continue
-            await gate.store(
-                Memory(
-                    id=_memory_id(str(message.get("id") or f"{conversation_id}-{stored}")),
-                    user_id=user_id,
-                    project=project,
-                    kind=MemoryKind.EPISODIC,
-                    content=text,
-                    source=source,
-                    created_at=_created_at(message),
+            message_id = str(message.get("id") or f"{conversation_id}-{stored}")
+            for part, piece in enumerate(split_for_embedding(text)):
+                await gate.store(
+                    Memory(
+                        id=_memory_id(message_id, part),
+                        user_id=user_id,
+                        project=project,
+                        kind=MemoryKind.EPISODIC,
+                        content=piece,
+                        source=source,
+                        created_at=_created_at(message),
+                    )
                 )
-            )
-            stored += 1
-            wrote_any = True
+                stored += 1
+                wrote_any = True
 
         if wrote_any:
             held += project == HOLDOUT_PROJECT
