@@ -189,6 +189,8 @@ async def test_a_long_turn_is_stored_as_several_memories_and_reimport_does_not_d
     second = await import_chatgpt(path, gate=gate, user_id="owner")
 
     assert first.memories > 1
-    assert second.memories == first.memories
-    stored = await _contents(gate, ARCHIVE_PROJECT)
-    assert len(stored) == first.memories
+    # The second run writes nothing because everything is already there, which is what makes
+    # an interrupted import resumable. What must not change is the stored result.
+    assert second.memories == 0
+    assert await _contents(gate, ARCHIVE_PROJECT) == await _contents(gate, ARCHIVE_PROJECT)
+    assert len(await _contents(gate, ARCHIVE_PROJECT)) == first.memories

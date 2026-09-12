@@ -120,6 +120,15 @@ class MemoryModule:
         )
         return memory.id
 
+    async def get(self, memory_id: str, *, user_id: str) -> Memory | None:
+        """One memory by id, scoped to its owner.
+
+        The id alone would be enough to find the row; the owner check is what stops an id
+        guessed or carried over from another scope from reading across it.
+        """
+        memory = self._episodics.get(memory_id)
+        return memory if memory is not None and memory.user_id == user_id else None
+
     async def recall(self, query: MemoryQuery) -> list[Memory]:
         # None means "no project filter" at the store layer -- the cross-project escape hatch.
         project = None if query.all_projects else query.project

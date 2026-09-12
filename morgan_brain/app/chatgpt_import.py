@@ -68,6 +68,8 @@ class ImportReport:
     conversations: int = 0
     held_out: int = 0
     memories: int = 0
+    #: Turns not stored: tool output, empty content, and pieces an earlier run already
+    #: imported unchanged.
     skipped_turns: int = 0
 
 
@@ -173,9 +175,19 @@ async def import_chatgpt(
                 continue
             message_id = str(message.get("id") or f"{conversation_id}-{stored}")
             for part, piece in enumerate(split_for_embedding(text)):
+                memory_id = _memory_id(message_id, part)
+                # Already imported, unchanged: skip it. Every piece costs an embedding call
+                # and a real export is thousands of them, so an import that redoes finished
+                # work is one that never finishes on a machine that gets interrupted. The
+                # content check keeps a corrected turn from being frozen out by its own id.
+                existing = await gate.get(memory_id, user_id=user_id)
+                if existing is not None and existing.content == piece:
+                    skipped += 1
+                    wrote_any = True
+                    continue
                 await gate.store(
                     Memory(
-                        id=_memory_id(message_id, part),
+                        id=memory_id,
                         user_id=user_id,
                         project=project,
                         kind=MemoryKind.EPISODIC,

@@ -44,6 +44,15 @@ class MemoryGate:
         self._require_scope(memory.user_id)
         return await self._store.store(memory)
 
+    async def get(self, memory_id: str, *, user_id: str) -> Memory | None:
+        """One memory by id, or ``None`` if this owner has no such memory.
+
+        A read like any other, so it comes through the gate: a caller that reached into the
+        episodic store directly would be a caller whose scope nobody checked.
+        """
+        self._require_scope(user_id)
+        return await self._store.get(memory_id, user_id=user_id)
+
     async def recall(self, query: MemoryQuery) -> list[Memory]:
         self._require_scope(query.user_id)
         return await self._store.recall(query)
