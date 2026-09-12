@@ -33,6 +33,7 @@ class ProbeKind(str, Enum):
     MULTI_HOP = "multi_hop"  # the answer needs two memories together
     TEMPORAL = "temporal"  # "where did I *used* to live"
     KNOWLEDGE_UPDATE = "knowledge_update"  # a fact changed; the latest must win
+    UNANSWERABLE = "unanswerable"  # the corpus does not hold the answer; say nothing
 
 
 @dataclass(frozen=True)
@@ -80,18 +81,24 @@ class Scorecard:
     recall_at_k: float = 0.0
     mrr: float = 0.0
     leak_rate: float = 0.0
+    #: Over probes with no right answer, how often the run correctly returned nothing.
+    #: Recall cannot measure a relevance floor -- a system that answers everything scores
+    #: perfect recall -- so abstaining needs a number of its own.
+    abstain_rate: float = 0.0
     by_kind: dict[ProbeKind, Scorecard] = field(default_factory=dict)
 
     def format(self, k: int) -> str:
         """The card as a reader would want it: the headline, then what it is hiding."""
         lines = [
             f"n={self.n}  recall@{k}={self.recall_at_k:.2f}  "
-            f"mrr={self.mrr:.2f}  leak={self.leak_rate:.2f}"
+            f"mrr={self.mrr:.2f}  leak={self.leak_rate:.2f}  "
+            f"abstain={self.abstain_rate:.2f}"
         ]
         for kind, card in sorted(self.by_kind.items(), key=lambda kv: kv[0].value):
             lines.append(
                 f"  {kind.value:<17} n={card.n:<4} recall@{k}={card.recall_at_k:.2f}  "
-                f"mrr={card.mrr:.2f}  leak={card.leak_rate:.2f}"
+                f"mrr={card.mrr:.2f}  leak={card.leak_rate:.2f}  "
+                f"abstain={card.abstain_rate:.2f}"
             )
         return "\n".join(lines)
 
@@ -118,7 +125,12 @@ def _reciprocal_rank(result: ProbeResult, k: int) -> float:
 def _card(results: Sequence[ProbeResult], k: int) -> Scorecard:
     if not results:
         return Scorecard()
-    ranks = [_reciprocal_rank(r, k) for r in results]
+    # A probe with no right answer is asking a different question, so it is scored on its own
+    # terms and kept out of recall -- otherwise the headline blends two measurements and hides
+    # movement in both.
+    answerable = [r for r in results if r.probe.expected]
+    unanswerable = [r for r in results if not r.probe.expected]
+    ranks = [_reciprocal_rank(r, k) for r in answerable]
     leaks = [
         any(key in r.probe.forbidden for key in r.retrieved[:k])
         for r in results
@@ -126,11 +138,16 @@ def _card(results: Sequence[ProbeResult], k: int) -> Scorecard:
     ]
     return Scorecard(
         n=len(results),
-        recall_at_k=sum(1 for rank in ranks if rank > 0) / len(results),
-        mrr=sum(ranks) / len(results),
+        recall_at_k=(sum(1 for rank in ranks if rank > 0) / len(ranks)) if ranks else 0.0,
+        mrr=(sum(ranks) / len(ranks)) if ranks else 0.0,
         # Probes with nothing forbidden cannot leak, and averaging them in would dilute the
         # rate towards zero and hide the updates that did come back stale.
         leak_rate=(sum(leaks) / len(leaks)) if leaks else 0.0,
+        abstain_rate=(
+            sum(1 for r in unanswerable if not r.retrieved[:k]) / len(unanswerable)
+            if unanswerable
+            else 0.0
+        ),
     )
 
 
@@ -147,6 +164,7 @@ def score_run(results: Sequence[ProbeResult], *, k: int) -> Scorecard:
         recall_at_k=overall.recall_at_k,
         mrr=overall.mrr,
         leak_rate=overall.leak_rate,
+        abstain_rate=overall.abstain_rate,
         by_kind=by_kind,
     )
 

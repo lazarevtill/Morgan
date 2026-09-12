@@ -99,3 +99,35 @@ def test_a_multi_hop_probe_is_only_recalled_when_every_piece_arrives():
 
     assert score_run([both], k=5).recall_at_k == 1.0
     assert score_run([half], k=5).recall_at_k == 0.0
+
+
+def test_an_unanswerable_probe_is_scored_on_whether_the_run_returned_nothing():
+    """The relevance floor's own metric. Recall cannot measure a floor -- a system that
+    answers everything scores perfect recall -- so the question "did it correctly say
+    nothing" needs a number of its own.
+    """
+    silent = ProbeResult(
+        probe=Probe(id="u1", kind=ProbeKind.UNANSWERABLE, query="q", expected=()),
+        retrieved=(),
+    )
+    talked = ProbeResult(probe=silent.probe, retrieved=("some_unrelated_memory",))
+
+    assert score_run([silent], k=5).abstain_rate == 1.0
+    assert score_run([talked], k=5).abstain_rate == 0.0
+
+
+def test_unanswerable_probes_do_not_drag_down_recall():
+    """They have no right answer, so counting them as recall misses would make the headline
+    number a blend of two different questions and hide movement in both."""
+    results = [
+        _result("a", ProbeKind.SINGLE_HOP, ["target"]),
+        ProbeResult(
+            probe=Probe(id="u1", kind=ProbeKind.UNANSWERABLE, query="q", expected=()),
+            retrieved=(),
+        ),
+    ]
+
+    card = score_run(results, k=5)
+
+    assert card.recall_at_k == 1.0
+    assert card.abstain_rate == 1.0

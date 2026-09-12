@@ -43,21 +43,22 @@ The full build is at the tag **`legacy-v0.1.0-kernel`**, its designs and decisio
 Russian, with every query written to share few or no words with its target so the keyword
 signal cannot carry it. `pytest --live` runs them against a real embedding endpoint.
 
-| | recall@8 | MRR | leak |
-|---|---|---|---|
-| overall | 0.94 | 0.68 | 1.00 |
-| single-hop | 1.00 | 0.78 | — |
-| temporal | 1.00 | 1.00 | — |
-| knowledge-update | 1.00 | 0.58 | 1.00 |
-| multi-hop | 0.50 | 0.12 | — |
+| | recall@8 | MRR | leak | abstain |
+|---|---|---|---|---|
+| overall | 0.94 | 0.68 | 1.00 | 0.00 |
+| single-hop | 1.00 | 0.78 | — | — |
+| temporal | 1.00 | 1.00 | — | — |
+| knowledge-update | 1.00 | 0.58 | 1.00 | — |
+| multi-hop | 0.50 | 0.12 | — | — |
+| unanswerable | — | — | — | 0.00 |
 
 Semantic retrieval works: a query and its answer sharing no token find each other, in both
 languages. Two categories do not, and both are open work rather than regressions.
 
 ## Next
 
-- **A relevance floor for recall.** A non-empty project always answers, and with 40 memories
-  every query returns 8 of them. Reciprocal rank fusion keeps ranks and discards scores, so
+- **A relevance floor for recall.** A non-empty project always answers: on six deliberately
+  unanswerable questions it returned eight memories every time and abstained on none. Reciprocal rank fusion keeps ranks and discards scores, so
   the floor belongs on each signal before fusion, and its thresholds have to come from the
   measurement above rather than from a guess.
 - **A superseded memory still comes back.** Every knowledge-update probe returned the old
