@@ -21,13 +21,14 @@ from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.gate import ForgetReport
 from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.knowledge.schema_classifier import SemanticIndexBuilder
+from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
 from morgan_brain.memory.recall.semantic_index import SemanticIndex
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
 from morgan_brain.memory.store.fts import FtsIndex
 from morgan_brain.memory.store.temporal import SqliteTemporalStore
-from morgan_brain.memory.store.vectors import SqliteVectorIndex, VectorRecord
+from morgan_brain.memory.store.vectors import SqliteVectorIndex, VectorHit, VectorRecord
 from morgan_brain.models import (
     DEFAULT_PROJECT,
     Entity,
@@ -70,6 +71,7 @@ class MemoryModule:
         episodics: EpisodicStore,
         semantic: SemanticIndex,
         index_builder: SemanticIndexBuilder,
+        floor_margin: float | None = None,
     ) -> None:
         self._embedder = embedder
         self._vectors = vectors
@@ -80,6 +82,7 @@ class MemoryModule:
         self._episodics = episodics
         self._semantic = semantic
         self._index_builder = index_builder
+        self._floor_margin = floor_margin
 
     async def store(self, memory: Memory) -> str:
         """Write *memory* to every index at once.
@@ -137,8 +140,10 @@ class MemoryModule:
             project=project,
             restrict_ids=restrict_ids,
         )
+        # words(), not split(): the index matches a name exactly, and a raw split leaves the
+        # punctuation attached, so "harbor?" at the end of a question never matched "harbor".
         entity_ranking = self._entities.search(
-            set(query.text.split()),
+            set(words(query.text)),
             user_id=query.user_id,
             top_k=query.top_k * 2,
             project=project,
@@ -170,7 +175,27 @@ class MemoryModule:
             )
             for f in facts
         ]
-        return _merge_facts_and_episodics(fact_memories, episodic, query.text, query.top_k)
+        merged = _merge_facts_and_episodics(fact_memories, episodic, query.text, query.top_k)
+        if not self._answer_is_worth_returning(vec_hits, entity_ranking):
+            return []
+        return merged
+
+    def _answer_is_worth_returning(
+        self, vec_hits: list[VectorHit], entity_ranking: list[str]
+    ) -> bool:
+        """Whether this query found anything, or only the nearest of many unrelated things.
+
+        Off unless a threshold is configured: the right value depends on the corpus and the
+        embedding model, and shipping someone else's constant would reject real answers
+        quietly. See ``recall.floor`` for why the test is a margin rather than a similarity.
+        """
+        if self._floor_margin is None:
+            return True
+        return should_answer(
+            margin=answer_margin([h.score for h in vec_hits]),
+            threshold=self._floor_margin,
+            has_exact_match=bool(entity_ranking),
+        )
 
     def _route(self, query: MemoryQuery) -> list[str] | None:
         """Ask the semantic upper index for a candidate pool, or ``None`` to search all.

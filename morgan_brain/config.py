@@ -93,6 +93,12 @@ class Settings(BaseSettings):
     #: "provider" → call the configured embedding endpoint. "hash" → a deterministic sha256
     #: stub, for the memory commands to run with no model server at all.
     embedding_backend: Literal["provider", "hash"] = "provider"
+    #: How far the best match must stand above the weaker results the same query pulled up
+    #: before recall returns anything. Unset means no floor: every question is answered,
+    #: which is what recall has always done. The right value depends on the corpus and the
+    #: embedding model, so there is no default worth shipping -- fit it with the probes in
+    #: tests/memory_quality and set it. See memory/recall/floor.py.
+    recall_floor_margin: float | None = None
 
     @model_validator(mode="after")
     def _fill_data_dir_defaults(self) -> Settings:

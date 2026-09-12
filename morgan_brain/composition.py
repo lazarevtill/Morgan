@@ -118,7 +118,12 @@ class AppContext(MemoryContext):
 
 
 def build_memory_module(
-    conn: sqlite3.Connection, *, embedder: Embedder, dim: int, clock: Any = utcnow
+    conn: sqlite3.Connection,
+    *,
+    embedder: Embedder,
+    dim: int,
+    clock: Any = utcnow,
+    floor_margin: float | None = None,
 ) -> MemoryModule:
     """Every store over one connection. Also the seam tests use with a small fake embedder."""
     semantic = SemanticIndex(conn)
@@ -130,6 +135,7 @@ def build_memory_module(
         fts=FtsIndex(conn),
         entities=EntityIndex(conn),
         episodics=EpisodicStore(conn),
+        floor_margin=floor_margin,
         semantic=semantic,
         index_builder=SemanticIndexBuilder(semantic=semantic, classifier=KeywordSchemaClassifier()),
     )
@@ -143,7 +149,12 @@ def build_memory_context(settings: Settings | None = None) -> MemoryContext:
     conn = open_db(path)
     embedder = build_embedder(settings)
     _probe_embedding_dim(embedder, settings)
-    module = build_memory_module(conn, embedder=embedder, dim=settings.embedding_dim)
+    module = build_memory_module(
+        conn,
+        embedder=embedder,
+        dim=settings.embedding_dim,
+        floor_margin=settings.recall_floor_margin,
+    )
     return MemoryContext(
         gate=MemoryGate(module),
         conn=conn,

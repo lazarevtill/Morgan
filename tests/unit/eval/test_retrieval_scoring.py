@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from morgan_brain.eval.retrieval import Probe, ProbeKind, ProbeResult, score_run
+from morgan_brain.eval.retrieval import (
+    Probe,
+    ProbeKind,
+    ProbeResult,
+    Split,
+    probe_split,
+    score_run,
+)
 
 
 def _result(probe_id: str, kind: ProbeKind, retrieved: list[str], **kw) -> ProbeResult:
@@ -160,3 +167,15 @@ def test_a_run_that_returns_only_the_stale_answer_counts_as_stale_first():
     )
 
     assert score_run([only_stale], k=5).stale_first_rate == 1.0
+
+
+def test_which_probes_are_sealed_is_decided_by_hash_not_by_choice():
+    """A threshold fitted on the probes that later judge it reports its own training score.
+    Deciding the split by hashing the id means whoever authors a probe cannot steer it onto
+    the side that flatters them, and the split is the same on every machine and every run.
+    """
+    ids = [f"probe-{i}" for i in range(300)]
+    sealed = [p for p in ids if probe_split(p) is Split.SEALED]
+
+    assert [probe_split(p) for p in ids] == [probe_split(p) for p in ids]
+    assert 0.2 < len(sealed) / len(ids) < 0.5

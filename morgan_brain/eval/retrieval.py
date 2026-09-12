@@ -18,6 +18,7 @@ temporal questions can return nothing while single-hop recall carries the mean.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -26,6 +27,29 @@ from pathlib import Path
 
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.models import Memory, MemoryKind, MemoryQuery, MemorySource
+
+
+class Split(str, Enum):
+    """Which half of the probe set a probe belongs to."""
+
+    FIT = "fit"  # the threshold may be chosen against these
+    SEALED = "sealed"  # reported on, never fitted against
+
+
+#: One probe in this many is sealed.
+_SEAL_EVERY = 3
+
+
+def probe_split(probe_id: str) -> Split:
+    """Which half *probe_id* belongs to, decided by hashing it.
+
+    A threshold fitted on the probes that later judge it reports its own training score. The
+    split is therefore not a choice: whoever authors a probe cannot steer it onto the side
+    that flatters them, and every machine and every run agrees on the same halves. sha256
+    rather than ``hash()``, which is salted per process.
+    """
+    digest = hashlib.sha256(probe_id.encode("utf-8")).digest()
+    return Split.SEALED if int.from_bytes(digest[:8], "big") % _SEAL_EVERY == 0 else Split.FIT
 
 
 class ProbeKind(str, Enum):

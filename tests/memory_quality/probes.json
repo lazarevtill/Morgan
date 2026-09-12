@@ -1,58 +1,112 @@
 {
   "_about": [
     "Labelled probes for the retrieval measurement. Every query is written to share few or",
-    "no tokens with its target, so the keyword signal cannot carry it and the number says",
-    "something about semantic retrieval rather than about string matching.",
-    "Roughly half the set is Russian, matching the owner's corpus, which is 71% Cyrillic.",
-    "Decoys exist to make ranking mean something: with a handful of memories an unfloored",
-    "top-k returns the target for any query at all.",
-    "Unanswerable probes have no expected memory: the corpus does not hold the answer and the right behaviour is to return nothing. They are what a relevance floor is measured against -- recall cannot see a floor, because a system that answers everything scores perfect recall. Two of them are deliberate near misses against a decoy."
+    "no words with its target, so a result cannot come from string matching and the number",
+    "says something about semantic retrieval. Roughly half the set is Russian, matching the",
+    "owner's corpus, which is 71% Cyrillic.",
+    "Decoys make ranking mean something: with a handful of memories an unfloored top-k",
+    "returns the target for any query at all.",
+    "Changed facts appear twice on purpose. 'where do I live now' forbids the old memory and",
+    "'where did I live before' expects it -- the same memory, wanted by one question and not",
+    "the other. That is why the metric measures which of them ranks first, not which came back.",
+    "Unanswerable probes have no expected memory: the corpus does not hold the answer and the",
+    "right behaviour is silence. They are what a relevance floor is measured against, because",
+    "recall cannot see a floor -- a system that answers everything scores perfect recall.",
+    "Which probes are sealed is decided by hashing the probe id, not by choosing: see",
+    "morgan_brain/eval/retrieval.py::probe_split. A threshold is fitted on the fit half and",
+    "reported on the sealed half, so the number that judges it was never used to build it."
   ],
   "corpus": {
     "deploy_blocked": "the release never went out because the container registry mirror was stale",
     "laptop_specs": "my work machine is a ThinkPad X1 Carbon with 32 GB of RAM",
     "review_language": "Anna asked that pull request comments be written in English",
     "standup_time": "the daily sync was moved to 10:15 so the Berlin team can attend",
+    "oncall_rule": "whoever merged last carries the pager for the rest of the week",
+    "ci_timeout": "the pipeline gives up after forty minutes and the slow suite needs fifty",
+    "vpn_sleep": "the office VPN drops every time the laptop suspends",
+    "jump_host": "the bastion refuses any key older than the last rotation",
+    "webcam_shutter": "the camera has a physical cover I keep closed",
+    "monitor_cable": "the second screen runs off a single USB-C cable that also charges",
     "folder_location": "жёлтая папка с договорами лежит на верхней полке в шкафу",
     "coffee_habit": "перестал пить кофе после обеда, иначе потом долго не могу уснуть",
     "car_service": "машину надо поставить на техобслуживание до конца марта",
-    "keyboard_pref": "я печатаю на механической клавиатуре с тихими переключателями",
+    "keyboard_pref": "печатаю на механической клавиатуре с тихими переключателями",
+    "umbrella_spot": "зонт всегда лежит в левом кармане рюкзака",
+    "plants_water": "цветы на кухне надо поливать раз в три дня",
+    "parking_fee": "парковка у офиса становится платной после шести вечера",
+    "taxes_april": "декларацию подаю в конце апреля каждый год",
+    "gym_days": "в зал хожу по вторникам и четвергам",
+    "kettle_noise": "чайник на кухне свистит слишком громко по утрам",
+    "mh_lead": "Anna is the tech lead of the payments team",
+    "mh_owns": "the payments team owns the refund service",
+    "mh_sergey": "Сергей отвечает за инфраструктуру в нашем отделе",
+    "mh_monitor": "мониторинг развёрнут на инфраструктуре отдела",
+    "mh_marina": "Marina keeps the signing certificates",
+    "mh_release_sign": "every release has to be signed before it ships",
+    "mh_pavel": "Павел ведёт договоры с подрядчиками",
+    "mh_contract_folder": "договоры с подрядчиками лежат в жёлтой папке",
+    "mh_db_owner": "the platform team runs the production database",
+    "mh_db_upgrade": "the database upgrade window is the first Sunday of the month",
+    "mh_office_key": "ключ от переговорной у администратора на ресепшене",
+    "mh_meeting_room": "большие встречи проводим в переговорной на третьем этаже",
+    "mh_backup_owner": "Anna set up the nightly backups",
+    "mh_backup_untested": "nobody has ever restored one of those backups",
+    "mh_vpn_admin": "сеть и VPN настраивает тот же человек, что и почту",
+    "mh_mail_admin": "почтовый сервер держит Сергей",
+    "db_old": "our production database runs PostgreSQL 14",
+    "db_new": "the upgrade is finished, production now runs PostgreSQL 16",
     "city_old": "I lived in Prague for four years before the move",
     "city_new": "I have been living in Berlin since last spring",
     "lang_old": "раньше я писал в основном на Java",
     "lang_new": "сейчас мой основной рабочий язык — Go",
-    "db_old": "our production database runs PostgreSQL 14",
-    "db_new": "the upgrade is finished, production now runs PostgreSQL 16",
     "phone_old": "мой рабочий номер заканчивается на 47",
     "phone_new": "сменил рабочий номер, теперь он заканчивается на 82",
-    "mh_lead": "Anna is the tech lead of the payments team",
-    "mh_owns": "the payments team owns the refund service",
-    "mh_infra": "Сергей отвечает за инфраструктуру в нашем отделе",
-    "mh_monitor": "весь мониторинг живёт на инфраструктуре отдела",
+    "editor_old": "I used Sublime Text for everything",
+    "editor_new": "I switched my editor to Neovim last year",
+    "bank_old": "зарплату получал на карту зелёного банка",
+    "bank_new": "перевёл зарплатный счёт в другой банк весной",
+    "gym_place_old": "I trained at the gym next to the old office",
+    "gym_place_new": "I moved my training to the club near home",
+    "car_old": "ездил на старой Шкоде почти десять лет",
+    "car_new": "теперь у меня гибрид, взял прошлой осенью",
+    "laptop_os_old": "the work laptop ran Ubuntu for years",
+    "laptop_os_new": "the work laptop is on Fedora now",
+    "standup_slot_old": "стендап был в девять утра",
+    "standup_slot_new": "стендап перенесли на половину одиннадцатого",
     "d_espresso": "the espresso machine on the second floor only takes coins",
-    "d_parking": "парковка у офиса платная после шести вечера",
     "d_bike": "I service the bicycle every autumn before it gets cold",
-    "d_dentist": "запись к стоматологу перенесли на следующий четверг",
     "d_books": "I keep unread books on the shelf by the window",
-    "d_plants": "цветы на кухне надо поливать раз в три дня",
-    "d_vpn": "the office VPN drops every time the laptop sleeps",
-    "d_invoice": "счёт за интернет приходит в начале каждого месяца",
     "d_music": "I listen to instrumental music while concentrating",
-    "d_train": "поезд до аэропорта идёт сорок минут",
-    "d_backup": "backups run at night and nobody has ever restored one",
-    "d_kettle": "чайник на кухне свистит слишком громко",
-    "d_monitor_hw": "the second monitor is connected over a single USB-C cable",
-    "d_umbrella": "зонт всегда лежит в левом кармане рюкзака",
+    "d_backup_night": "backups run at night and finish before anyone arrives",
+    "d_lunch_end": "обед в столовой заканчивается в три часа",
+    "d_dentist": "запись к стоматологу перенесли на следующий четверг",
+    "d_train_airport": "поезд до аэропорта идёт сорок минут",
+    "d_invoice": "счёт за интернет приходит в начале каждого месяца",
     "d_passwords": "I moved every password into the manager last winter",
-    "d_lunch": "обед в столовой заканчивается в три часа",
-    "d_ssh": "the jump host refuses keys older than the rotation",
-    "d_gym": "в зал хожу по вторникам и четвергам",
-    "d_camera": "the webcam has a physical shutter I keep closed",
-    "d_taxes": "декларацию подаю в конце апреля каждый год"
+    "d_stairs": "лифт в подъезде часто не работает, хожу пешком",
+    "d_window": "the meeting room window does not close properly",
+    "d_printer": "принтер на этаже печатает только с двух сторон",
+    "d_badge": "the door badge stops working if it sits next to a phone",
+    "d_tea": "зелёный чай завариваю не кипятком, а чуть остывшей водой",
+    "d_screens": "I keep the terminal font larger than the editor font",
+    "d_cat": "кот спит на подоконнике почти весь день",
+    "d_shoes": "зимние ботинки стоят в кладовке до ноября",
+    "d_notes": "I write meeting notes by hand and type them up after",
+    "d_charger": "запасной зарядник лежит в ящике стола",
+    "d_holiday": "отпуск обычно беру в конце лета",
+    "d_bus": "автобус от дома идёт реже по выходным",
+    "d_glasses": "очки для чтения держу рядом с кроватью",
+    "d_calendar": "I block the first hour of the day for deep work",
+    "d_bread": "хлеб покупаю в пекарне на углу",
+    "d_ssh_agent": "I keep the ssh agent unlocked only while working",
+    "d_umbrella_two": "второй зонт оставил в машине на всякий случай",
+    "d_photos": "фотографии с телефона копирую на диск раз в месяц",
+    "d_desk": "the standing desk is at its lowest setting most days",
+    "d_socks": "носки складываю парами сразу после стирки"
   },
   "probes": [
     {
-      "id": "sh_rollout",
+      "id": "sh_deploy_blocked",
       "kind": "single_hop",
       "query": "what stopped the rollout?",
       "expected": [
@@ -60,7 +114,7 @@
       ]
     },
     {
-      "id": "sh_memory",
+      "id": "sh_laptop_specs",
       "kind": "single_hop",
       "query": "how much memory does my computer have?",
       "expected": [
@@ -68,7 +122,7 @@
       ]
     },
     {
-      "id": "sh_review",
+      "id": "sh_review_language",
       "kind": "single_hop",
       "query": "which language should I write review comments in?",
       "expected": [
@@ -76,7 +130,7 @@
       ]
     },
     {
-      "id": "sh_meeting",
+      "id": "sh_standup_time",
       "kind": "single_hop",
       "query": "when does the team gather every morning?",
       "expected": [
@@ -84,7 +138,55 @@
       ]
     },
     {
-      "id": "sh_docs_ru",
+      "id": "sh_oncall_rule",
+      "kind": "single_hop",
+      "query": "who takes the pager?",
+      "expected": [
+        "oncall_rule"
+      ]
+    },
+    {
+      "id": "sh_ci_timeout",
+      "kind": "single_hop",
+      "query": "why does the build keep failing near the end?",
+      "expected": [
+        "ci_timeout"
+      ]
+    },
+    {
+      "id": "sh_vpn_sleep",
+      "kind": "single_hop",
+      "query": "why do I lose the connection after closing the lid?",
+      "expected": [
+        "vpn_sleep"
+      ]
+    },
+    {
+      "id": "sh_jump_host",
+      "kind": "single_hop",
+      "query": "why is my ssh access denied?",
+      "expected": [
+        "jump_host"
+      ]
+    },
+    {
+      "id": "sh_webcam_shutter",
+      "kind": "single_hop",
+      "query": "how is the camera blocked?",
+      "expected": [
+        "webcam_shutter"
+      ]
+    },
+    {
+      "id": "sh_monitor_cable",
+      "kind": "single_hop",
+      "query": "how is the extra display connected?",
+      "expected": [
+        "monitor_cable"
+      ]
+    },
+    {
+      "id": "sh_folder_location",
       "kind": "single_hop",
       "query": "где хранятся бумаги?",
       "expected": [
@@ -92,7 +194,7 @@
       ]
     },
     {
-      "id": "sh_drink_ru",
+      "id": "sh_coffee_habit",
       "kind": "single_hop",
       "query": "что я изменил в напитках?",
       "expected": [
@@ -100,7 +202,7 @@
       ]
     },
     {
-      "id": "sh_auto_ru",
+      "id": "sh_car_service",
       "kind": "single_hop",
       "query": "что нужно сделать с автомобилем?",
       "expected": [
@@ -108,7 +210,7 @@
       ]
     },
     {
-      "id": "sh_typing_ru",
+      "id": "sh_keyboard_pref",
       "kind": "single_hop",
       "query": "на чём я набираю текст?",
       "expected": [
@@ -116,7 +218,55 @@
       ]
     },
     {
-      "id": "mh_refunds",
+      "id": "sh_umbrella_spot",
+      "kind": "single_hop",
+      "query": "где искать защиту от дождя?",
+      "expected": [
+        "umbrella_spot"
+      ]
+    },
+    {
+      "id": "sh_plants_water",
+      "kind": "single_hop",
+      "query": "как часто ухаживать за растениями?",
+      "expected": [
+        "plants_water"
+      ]
+    },
+    {
+      "id": "sh_parking_fee",
+      "kind": "single_hop",
+      "query": "сколько стоит оставить машину вечером?",
+      "expected": [
+        "parking_fee"
+      ]
+    },
+    {
+      "id": "sh_taxes_april",
+      "kind": "single_hop",
+      "query": "когда я отчитываюсь перед налоговой?",
+      "expected": [
+        "taxes_april"
+      ]
+    },
+    {
+      "id": "sh_gym_days",
+      "kind": "single_hop",
+      "query": "когда я тренируюсь?",
+      "expected": [
+        "gym_days"
+      ]
+    },
+    {
+      "id": "sh_kettle_noise",
+      "kind": "single_hop",
+      "query": "что шумит на кухне?",
+      "expected": [
+        "kettle_noise"
+      ]
+    },
+    {
+      "id": "mh_mh_lead",
       "kind": "multi_hop",
       "query": "who is responsible for refunds?",
       "expected": [
@@ -126,30 +276,74 @@
       "require_all": true
     },
     {
-      "id": "mh_monitoring_ru",
+      "id": "mh_mh_sergey",
       "kind": "multi_hop",
       "query": "к кому идти по поводу мониторинга?",
       "expected": [
-        "mh_infra",
+        "mh_sergey",
         "mh_monitor"
       ],
       "require_all": true
     },
     {
-      "id": "t_city",
-      "kind": "temporal",
-      "query": "where did I live before the move?",
+      "id": "mh_mh_marina",
+      "kind": "multi_hop",
+      "query": "who has to be involved before we ship?",
       "expected": [
-        "city_old"
-      ]
+        "mh_marina",
+        "mh_release_sign"
+      ],
+      "require_all": true
     },
     {
-      "id": "t_lang_ru",
-      "kind": "temporal",
-      "query": "на каком языке я программировал раньше?",
+      "id": "mh_mh_pavel",
+      "kind": "multi_hop",
+      "query": "кто знает, что в жёлтой папке?",
       "expected": [
-        "lang_old"
-      ]
+        "mh_pavel",
+        "mh_contract_folder"
+      ],
+      "require_all": true
+    },
+    {
+      "id": "mh_mh_db_owner",
+      "kind": "multi_hop",
+      "query": "who should I ask about the upgrade window?",
+      "expected": [
+        "mh_db_owner",
+        "mh_db_upgrade"
+      ],
+      "require_all": true
+    },
+    {
+      "id": "mh_mh_office_key",
+      "kind": "multi_hop",
+      "query": "как попасть в комнату для больших встреч?",
+      "expected": [
+        "mh_office_key",
+        "mh_meeting_room"
+      ],
+      "require_all": true
+    },
+    {
+      "id": "mh_mh_backup_owner",
+      "kind": "multi_hop",
+      "query": "who would know whether a restore actually works?",
+      "expected": [
+        "mh_backup_owner",
+        "mh_backup_untested"
+      ],
+      "require_all": true
+    },
+    {
+      "id": "mh_mh_vpn_admin",
+      "kind": "multi_hop",
+      "query": "кто чинит VPN?",
+      "expected": [
+        "mh_vpn_admin",
+        "mh_mail_admin"
+      ],
+      "require_all": true
     },
     {
       "id": "ku_db",
@@ -163,14 +357,11 @@
       ]
     },
     {
-      "id": "ku_phone_ru",
-      "kind": "knowledge_update",
-      "query": "какой у меня рабочий телефон?",
+      "id": "t_db",
+      "kind": "temporal",
+      "query": "which database version did we run before?",
       "expected": [
-        "phone_new"
-      ],
-      "forbidden": [
-        "phone_old"
+        "db_old"
       ]
     },
     {
@@ -185,7 +376,15 @@
       ]
     },
     {
-      "id": "ku_lang_ru",
+      "id": "t_city",
+      "kind": "temporal",
+      "query": "where did I live before the move?",
+      "expected": [
+        "city_old"
+      ]
+    },
+    {
+      "id": "ku_lang",
       "kind": "knowledge_update",
       "query": "на чём я пишу сейчас?",
       "expected": [
@@ -196,13 +395,138 @@
       ]
     },
     {
+      "id": "t_lang",
+      "kind": "temporal",
+      "query": "на каком языке я программировал раньше?",
+      "expected": [
+        "lang_old"
+      ]
+    },
+    {
+      "id": "ku_phone",
+      "kind": "knowledge_update",
+      "query": "какой у меня рабочий телефон?",
+      "expected": [
+        "phone_new"
+      ],
+      "forbidden": [
+        "phone_old"
+      ]
+    },
+    {
+      "id": "t_phone",
+      "kind": "temporal",
+      "query": "какой номер был у меня раньше?",
+      "expected": [
+        "phone_old"
+      ]
+    },
+    {
+      "id": "ku_editor",
+      "kind": "knowledge_update",
+      "query": "what do I edit code in?",
+      "expected": [
+        "editor_new"
+      ],
+      "forbidden": [
+        "editor_old"
+      ]
+    },
+    {
+      "id": "t_editor",
+      "kind": "temporal",
+      "query": "which editor did I use before the switch?",
+      "expected": [
+        "editor_old"
+      ]
+    },
+    {
+      "id": "ku_bank",
+      "kind": "knowledge_update",
+      "query": "куда мне приходит зарплата?",
+      "expected": [
+        "bank_new"
+      ],
+      "forbidden": [
+        "bank_old"
+      ]
+    },
+    {
+      "id": "t_bank",
+      "kind": "temporal",
+      "query": "в каком банке был мой счёт раньше?",
+      "expected": [
+        "bank_old"
+      ]
+    },
+    {
+      "id": "ku_gym_place",
+      "kind": "knowledge_update",
+      "query": "where do I train now?",
+      "expected": [
+        "gym_place_new"
+      ],
+      "forbidden": [
+        "gym_place_old"
+      ]
+    },
+    {
+      "id": "t_gym_place",
+      "kind": "temporal",
+      "query": "where did I train before?",
+      "expected": [
+        "gym_place_old"
+      ]
+    },
+    {
+      "id": "ku_car",
+      "kind": "knowledge_update",
+      "query": "на какой машине я езжу?",
+      "expected": [
+        "car_new"
+      ],
+      "forbidden": [
+        "car_old"
+      ]
+    },
+    {
+      "id": "t_car",
+      "kind": "temporal",
+      "query": "на чём я ездил раньше?",
+      "expected": [
+        "car_old"
+      ]
+    },
+    {
+      "id": "ku_laptop_os",
+      "kind": "knowledge_update",
+      "query": "which operating system is on my work laptop?",
+      "expected": [
+        "laptop_os_new"
+      ],
+      "forbidden": [
+        "laptop_os_old"
+      ]
+    },
+    {
+      "id": "ku_standup_slot",
+      "kind": "knowledge_update",
+      "query": "во сколько сейчас стендап?",
+      "expected": [
+        "standup_slot_new"
+      ],
+      "forbidden": [
+        "standup_slot_old"
+      ]
+    },
+    {
       "id": "un_sister",
       "kind": "unanswerable",
       "query": "what is my sister's birthday?",
       "expected": []
     },
     {
-      "id": "un_salary_ru",
+      "id": "un_salary",
       "kind": "unanswerable",
       "query": "сколько я зарабатываю в месяц?",
       "expected": []
@@ -214,7 +538,7 @@
       "expected": []
     },
     {
-      "id": "un_recipe_ru",
+      "id": "un_recipe",
       "kind": "unanswerable",
       "query": "как готовить плов?",
       "expected": []
@@ -226,9 +550,57 @@
       "expected": []
     },
     {
-      "id": "un_router_ru",
+      "id": "un_router_pw",
       "kind": "unanswerable",
       "query": "какой пароль от роутера?",
+      "expected": []
+    },
+    {
+      "id": "un_blood",
+      "kind": "unanswerable",
+      "query": "what is my blood type?",
+      "expected": []
+    },
+    {
+      "id": "un_school",
+      "kind": "unanswerable",
+      "query": "в какой школе я учился?",
+      "expected": []
+    },
+    {
+      "id": "un_mortgage",
+      "kind": "unanswerable",
+      "query": "how many years are left on the mortgage?",
+      "expected": []
+    },
+    {
+      "id": "un_guitar",
+      "kind": "unanswerable",
+      "query": "сколько лет я играю на гитаре?",
+      "expected": []
+    },
+    {
+      "id": "un_passport",
+      "kind": "unanswerable",
+      "query": "when does my passport expire?",
+      "expected": []
+    },
+    {
+      "id": "un_neighbour",
+      "kind": "unanswerable",
+      "query": "как зовут соседа снизу?",
+      "expected": []
+    },
+    {
+      "id": "un_flight_seat",
+      "kind": "unanswerable",
+      "query": "which seat do I prefer on long flights?",
+      "expected": []
+    },
+    {
+      "id": "un_shoe_size",
+      "kind": "unanswerable",
+      "query": "какой у меня размер обуви?",
       "expected": []
     }
   ]
