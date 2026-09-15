@@ -57,9 +57,11 @@ silently, since the fact count only grows as consolidation runs.
 ## Consolidation (`morgan consolidate`)
 
 Recent episodics minus those current facts already cover → the model proposes fact operations
-as JSON validated against `FactOpBatch` → applied through the gate. UPDATE closes the old
-interval and opens a new one (`valid_to`, `superseded_by`); DELETE closes it; confidence decays
-with age since last confirmation. It runs when asked, never on a schedule of its own.
+as JSON validated against `FactOpBatch` → applied through the gate, in one write transaction
+that re-reads the current facts first, so two runs at once see each other's result. UPDATE
+closes the old interval and opens a new one (`valid_to`, `superseded_by`); DELETE closes it;
+confidence decays with age since last confirmation. It runs when asked, never on a schedule of
+its own.
 
 ## Erasure (`morgan forget`)
 
@@ -74,7 +76,7 @@ this database are named in `tables_skipped` rather than counted as zero. Vacuum 
 `unit/` per module; `integration/` runs the CLI as a subprocess, the MCP server over raw stdio
 pipes and in-process, cross-process durability, two processes upserting the same vectors or
 superseding the same facts at once, a vector delete racing a reinsert, a project erased while
-a memory is being stored, erasure atomicity and completeness, routing end to end, the wheel
-build. One live test (`pytest --live`) needs a real embedding model.
+a memory is being stored, two consolidation runs applying the same facts, erasure atomicity and
+completeness, routing end to end, the wheel build. One live test (`pytest --live`) needs a real embedding model.
 `pip install -e ".[dev]"` installs exactly what the suite needs. `tests/fakes.py` holds the
 scripted chat client; nothing in the package exists only for tests.

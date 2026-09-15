@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from datetime import datetime
 
 from morgan_brain.memory.embedder import Embedder
@@ -89,6 +90,10 @@ class MemoryModule:
     def _conn(self) -> sqlite3.Connection:
         """The one connection every index shares, so a write across indexes is one transaction."""
         return self._episodics._conn
+
+    def write_transaction(self) -> AbstractContextManager[None]:
+        """One atomic write across every call made inside the block. See ``store.db``."""
+        return write_transaction(self._conn)
 
     async def store(self, memory: Memory) -> str:
         """Write *memory* to every index at once, as one transaction.

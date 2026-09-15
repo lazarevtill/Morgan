@@ -131,6 +131,18 @@ class MemoryConsolidator:
         deduped ADDs).
         """
         now = self._clock()
+        # The current facts are read under the same lock the ops are applied with. Two runs
+        # over one database -- a cron job and a manual `morgan consolidate` -- that each read
+        # first both saw a new fact as absent and both added it, and a DELETE could close a
+        # fact that the other run had already replaced. Holding the lock makes the second run
+        # see the first run's result.
+        with self._gate.write_transaction():
+            return await self._apply(user_id, batch, project=project, now=now)
+
+    async def _apply(
+        self, user_id: str, batch: FactOpBatch, *, project: str, now: datetime
+    ) -> list[FactOp]:
+        """``apply``'s body. The caller holds the write transaction."""
         current = await self._gate.current_facts(user_id=user_id, project=project)
         current_set = {(f.subject, f.predicate, f.object) for f in current}
 

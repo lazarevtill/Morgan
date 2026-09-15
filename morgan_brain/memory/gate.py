@@ -7,6 +7,7 @@ later. No caller holds the ``MemoryModule`` directly.
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -89,6 +90,15 @@ class MemoryGate:
     async def distinct_projects(self, user_id: str) -> list[str]:
         self._require_scope(user_id)
         return await self._store.distinct_projects(user_id)
+
+    def write_transaction(self) -> AbstractContextManager[None]:
+        """Make every gate call inside the block one atomic write, under the write lock.
+
+        For a caller whose writes depend on what it reads through the gate: the reads see
+        what other processes committed before the block, and nothing else can write until
+        the block ends. Nothing inside may await real I/O.
+        """
+        return self._store.write_transaction()
 
     async def forget(self, *, user_id: str, project: str) -> ForgetReport:
         self._require_scope(user_id, project)
