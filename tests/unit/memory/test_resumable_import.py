@@ -77,7 +77,7 @@ async def test_a_second_run_does_not_re_embed_what_is_already_stored(gate_and_em
 
 async def test_an_edited_turn_is_rewritten_rather_than_skipped(gate_and_embedder, tmp_path):
     """Skipping by id alone would freeze a correction out of the brain for good."""
-    gate, embedder = gate_and_embedder
+    gate, _ = gate_and_embedder
     path = _export(tmp_path / "c.json", ["the original wording"])
     await import_chatgpt(path, gate=gate, user_id="owner")
 
