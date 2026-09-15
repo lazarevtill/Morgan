@@ -70,7 +70,8 @@ come in" are answered by the directory names.
 - **Routing never costs recall.** `SemanticIndex.route()` returns `None` ("search
   everything") whenever it has nothing useful to say, never an empty pool. The pool is pushed
   into each signal's query, never applied to its output. Cross-project recall is never routed.
-- **Facts evolve, they don't overwrite.** Update = close the old interval, open a new one.
+- **Facts evolve, they don't overwrite.** Update = close the old interval, open a new one. A
+  key has at most one current fact, and a unique index on `facts` enforces it.
 - **Facts are surfaced alongside episodics, never instead of them.** Recall budgets the
   fact block so a matching memory cannot be pushed out of the window by fact volume.
 - **Actor attribution.** Every memory records its `MemorySource`. The reply to `ask` is
@@ -113,7 +114,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 287 passed, 3 skipped (the live ones)
+pytest -q                     # 293 passed, 3 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

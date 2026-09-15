@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime
+from itertools import pairwise
 
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.models import DEFAULT_PROJECT, MemorySource, TemporalFact
@@ -32,9 +33,27 @@ CREATE TABLE IF NOT EXISTS facts (
 );
 """
 
-_INDEX_SCHEMA = """
-CREATE INDEX IF NOT EXISTS idx_facts_current
-    ON facts (user_id, project, subject, predicate) WHERE valid_to IS NULL;
+#: A key has at most one currently-valid fact. The index enforces it, so a write that would
+#: leave two -- the race upsert_fact now holds the lock against -- fails instead of succeeding
+#: silently. It replaces the plain index of the same shape, which only served lookups.
+_ONE_CURRENT_FACT_INDEX = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_facts_one_current "
+    "ON facts (user_id, project, subject, predicate) WHERE valid_to IS NULL"
+)
+
+#: Every currently-valid fact whose key has another one, oldest first within each key.
+_DUPLICATED_CURRENT_FACTS = """
+SELECT f.id, f.user_id, f.project, f.subject, f.predicate, f.valid_from
+FROM facts f
+JOIN (
+    SELECT user_id, project, subject, predicate FROM facts
+    WHERE valid_to IS NULL
+    GROUP BY user_id, project, subject, predicate
+    HAVING COUNT(*) > 1
+) d ON f.user_id = d.user_id AND f.project = d.project
+   AND f.subject = d.subject AND f.predicate = d.predicate
+WHERE f.valid_to IS NULL
+ORDER BY f.user_id, f.project, f.subject, f.predicate, f.valid_from, f.rowid
 """
 
 
@@ -58,8 +77,7 @@ class SqliteTemporalStore:
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
         self._migrate_project_column()
-        self._conn.executescript(_INDEX_SCHEMA)
-        self._conn.commit()
+        self._enforce_one_current_fact_per_key()
 
     def _migrate_project_column(self) -> None:
         """Idempotent upgrade for a database written before project scoping existed."""
@@ -68,10 +86,39 @@ class SqliteTemporalStore:
             self._conn.execute(
                 f"ALTER TABLE facts ADD COLUMN project TEXT NOT NULL DEFAULT '{DEFAULT_PROJECT}'"
             )
-            # The old index doesn't cover `project`; drop it so the index script below (run
-            # after this migration) recreates it with the new column.
+            # The old index doesn't cover `project`; drop it so the index created after this
+            # migration covers the new column.
             self._conn.execute("DROP INDEX IF EXISTS idx_facts_current")
             self._conn.commit()
+
+    def _enforce_one_current_fact_per_key(self) -> None:
+        """Repair keys left with more than one current fact, then index so none can be again.
+
+        Before upsert_fact took the write lock, two processes asserting the same key at once
+        could both insert, leaving the key with two currently-valid facts. Each such key keeps
+        its newest; every older one is closed at the moment the next one became valid and
+        marked as superseded by it -- what a serial run would have written. Nothing is deleted.
+        Idempotent, and done under the write lock so two processes opening at once repair once.
+        """
+        indexed = self._conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_facts_one_current'"
+        ).fetchone()
+        if indexed is not None:
+            return
+        with write_transaction(self._conn):
+            rows = self._conn.execute(_DUPLICATED_CURRENT_FACTS).fetchall()
+            for older, newer in pairwise(rows):
+                same_key = all(
+                    older[c] == newer[c] for c in ("user_id", "project", "subject", "predicate")
+                )
+                if same_key:
+                    self._conn.execute(
+                        "UPDATE facts SET valid_to = ?, superseded_by = ? WHERE id = ?",
+                        (newer["valid_from"], newer["id"], older["id"]),
+                    )
+            # The plain index of the same shape only served lookups; the unique one does both.
+            self._conn.execute("DROP INDEX IF EXISTS idx_facts_current")
+            self._conn.execute(_ONE_CURRENT_FACT_INDEX)
 
     def _row_to_fact(self, row: sqlite3.Row) -> TemporalFact:
         return TemporalFact(
@@ -106,6 +153,13 @@ class SqliteTemporalStore:
             if fact.valid_from is None:
                 fact.valid_from = now
             fact.last_confirmed = now
+            # Closed before the new fact is inserted: a key may hold one current fact at a time,
+            # and the unique index checks that at each statement, not at commit.
+            for old_id in existing:
+                self._conn.execute(
+                    "UPDATE facts SET valid_to=?, superseded_by=? WHERE id=?",
+                    (_iso(now), fact.id, old_id),
+                )
             self._conn.execute(
                 "INSERT INTO facts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
@@ -123,11 +177,6 @@ class SqliteTemporalStore:
                     _iso(fact.last_confirmed),
                 ),
             )
-            for old_id in existing:
-                self._conn.execute(
-                    "UPDATE facts SET valid_to=?, superseded_by=? WHERE id=?",
-                    (_iso(now), fact.id, old_id),
-                )
         return fact.id
 
     async def current_facts(
