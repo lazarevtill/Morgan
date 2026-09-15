@@ -18,6 +18,7 @@ import sqlite3
 from collections.abc import Callable
 from datetime import datetime
 
+from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.models import DEFAULT_PROJECT, Message, Role
 
 
@@ -97,21 +98,22 @@ class SessionHistoryStore:
         runs after the reply is already sent to the caller.
         """
         created_at = self._clock().isoformat() if self._clock else None
-        self._conn.execute(
-            """
-            INSERT INTO session_history (session_id, user_id, project, role, content, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                session_id,
-                message.user_id,
-                project,
-                message.role.value,
-                message.content,
-                created_at,
-            ),
-        )
-        self._conn.commit()
+        with write_transaction(self._conn):
+            self._conn.execute(
+                """
+                INSERT INTO session_history
+                    (session_id, user_id, project, role, content, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    session_id,
+                    message.user_id,
+                    project,
+                    message.role.value,
+                    message.content,
+                    created_at,
+                ),
+            )
 
     def recent(self, session_id: str, *, project: str, limit: int = 10) -> list[Message]:
         """Return the *limit* most-recent messages for *session_id* **in *project***.

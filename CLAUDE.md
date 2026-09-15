@@ -34,7 +34,8 @@ come in" are answered by the directory names.
 - `memory/` — the core. `gate.py` is the only door and `module.py` is the one write path and
   the fused recall; `embedder.py` is the embedding seam. Below them:
   - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
-    `history`. Each owns its schema and its queries; none of them ranks anything.
+    `history`. Each owns its schema and its queries; none of them ranks anything. Every write
+    goes through `db.write_transaction`.
   - `recall/` — `semantic_index` (routing, which may cost precision but never recall) and
     `fusion` (reciprocal rank, rank-only).
   - `knowledge/` — `extract`, `schema_classifier`, `surprise`, `fact_ops`, `consolidation`.
@@ -57,10 +58,15 @@ come in" are answered by the directory names.
 - **Every read and write is project-scoped.** `Memory` and `TemporalFact` carry a required
   `project`; the gate rejects an empty one. `all_projects=True` is the explicit cross-project
   escape hatch, never the default.
-- **One write path.** `MemoryModule.store` writes every index at once: episodic row, vector,
-  FTS5, entity index, semantic upper index. Entities are extracted there when the caller gave
-  none. A memory visible to one signal and not another is the failure routing turns into lost
-  recall.
+- **One write path.** `MemoryModule.store` writes every index in one transaction: episodic
+  row, vector, FTS5, entity index, semantic upper index. Entities are extracted there when the
+  caller gave none. A memory visible to one signal and not another is the failure routing turns
+  into lost recall.
+- **Every write holds the lock from its first statement.** Other processes share the database
+  file, so a write that reads before acting takes the lock before the read:
+  `store/db.py::write_transaction` opens `BEGIN IMMEDIATE`, and a write inside another one
+  joins it as a savepoint. Nothing awaits while the lock is held -- embedding and schema
+  classification happen before it is taken -- and no store method commits on its own.
 - **Routing never costs recall.** `SemanticIndex.route()` returns `None` ("search
   everything") whenever it has nothing useful to say, never an empty pool. The pool is pushed
   into each signal's query, never applied to its output. Cross-project recall is never routed.
@@ -79,8 +85,8 @@ come in" are answered by the directory names.
 - **No listener beyond loopback without a key.** `network.assert_safe_bind` refuses to start
   `morgan-mcp --transport http` on a non-loopback host while `MORGAN_API_KEY` is unset or the
   placeholder.
-- **One of each.** One settings object, one database, one gate, one entity extractor, one
-  `SemanticIndex` per assembly, one logging configuration.
+- **One of each.** One settings object, one database, one way to write to it, one gate, one
+  entity extractor, one `SemanticIndex` per assembly, one logging configuration.
 - **Never hardcode the owner.** Everything is keyed by `user_id`; single-owner is a config fact.
 
 ## Known limitations

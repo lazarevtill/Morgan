@@ -8,6 +8,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 
+from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.models import DEFAULT_PROJECT, MemorySource, TemporalFact
 
 # The index is created separately, after the project-column migration below runs -- for a
@@ -89,16 +90,12 @@ class SqliteTemporalStore:
         )
 
     async def upsert_fact(self, fact: TemporalFact, *, now: datetime) -> str:
-        # The write lock is taken BEFORE the current facts are looked up, not at the first
-        # write. Two processes can share this database file -- two `morgan consolidate` runs,
-        # say -- and a bare SELECT leaves a window in which both find the same current fact,
-        # both insert, and both close it: the key is left with two currently-valid facts, and
-        # nothing raises because the schema does not forbid it. BEGIN IMMEDIATE holds the lock
-        # across the lookup, the insert and the closing updates, as upsert in vectors.py and
-        # forget() do. It raises if this connection already has a transaction open, so
-        # upsert_fact must be called outside one.
-        self._conn.execute("BEGIN IMMEDIATE")
-        try:
+        # The current facts are looked up inside the write transaction, which holds the lock
+        # from its first statement. Two processes can share this database file -- two
+        # `morgan consolidate` runs, say -- and a lookup made before the lock leaves a window
+        # in which both find the same current fact, both insert, and both close it: the key is
+        # left with two currently-valid facts.
+        with write_transaction(self._conn):
             cur = self._conn.execute(
                 "SELECT id FROM facts WHERE user_id=? AND project=? AND subject=? AND predicate=? "
                 "AND valid_to IS NULL",
@@ -131,10 +128,6 @@ class SqliteTemporalStore:
                     "UPDATE facts SET valid_to=?, superseded_by=? WHERE id=?",
                     (_iso(now), fact.id, old_id),
                 )
-            self._conn.commit()
-        except Exception:
-            self._conn.rollback()
-            raise
         return fact.id
 
     async def current_facts(
@@ -171,12 +164,12 @@ class SqliteTemporalStore:
         project is left untouched even if its id is known, so this is a no-op (not an
         error) both when *fact_id* doesn't exist and when it exists but is out of scope.
         """
-        self._conn.execute(
-            "UPDATE facts SET valid_to=? WHERE id=? AND user_id=? AND project=? "
-            "AND valid_to IS NULL",
-            (_iso(now), fact_id, user_id, project),
-        )
-        self._conn.commit()
+        with write_transaction(self._conn):
+            self._conn.execute(
+                "UPDATE facts SET valid_to=? WHERE id=? AND user_id=? AND project=? "
+                "AND valid_to IS NULL",
+                (_iso(now), fact_id, user_id, project),
+            )
 
     async def set_confidence(
         self, fact_id: str, *, user_id: str, project: str, value: float
@@ -185,8 +178,8 @@ class SqliteTemporalStore:
 
         Used by the decay worker to persist decayed confidence scores.
         """
-        self._conn.execute(
-            "UPDATE facts SET confidence=? WHERE id=? AND user_id=? AND project=?",
-            (value, fact_id, user_id, project),
-        )
-        self._conn.commit()
+        with write_transaction(self._conn):
+            self._conn.execute(
+                "UPDATE facts SET confidence=? WHERE id=? AND user_id=? AND project=?",
+                (value, fact_id, user_id, project),
+            )

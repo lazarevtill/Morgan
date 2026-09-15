@@ -22,9 +22,9 @@ morgan-mcp ──┘        │                 ├─ FTS5 keyword index      o
 | `logging_setup.py` | Process output: stdout is UTF-8 because the protocols on it are; every log line goes to stderr. |
 | `composition.py` | Opens the database and wires everything. `build_memory_context` for the memory commands; `build_app_context` adds the chat client. |
 | `memory/gate.py` | `MemoryGate`: the only door to memory. Refuses an empty user or project. `ForgetReport`. |
-| `memory/module.py` | `MemoryModule`: the one write path (every index in one call, entities extracted if absent) and the fused recall. `forget()` in one transaction. |
+| `memory/module.py` | `MemoryModule`: the one write path (every index in one transaction, entities extracted if absent) and the fused recall. `forget()` in one transaction. |
 | `memory/embedder.py` | The `Embedder` protocol and the deterministic hash stub that stands in for a model server. |
-| `memory/store/` | Persistence, one file per table family, all over the one connection: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`, `history`. Vectors are scoped *inside* the KNN via vec0 metadata columns, not filtered afterwards. |
+| `memory/store/` | Persistence, one file per table family, all over the one connection: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`, `history`. Every write goes through `db.write_transaction`, which holds the write lock from the first statement and nests as a savepoint, so a store method is atomic alone and inside a larger write. Vectors are scoped *inside* the KNN via vec0 metadata columns, not filtered afterwards. |
 | `memory/recall/` | `semantic_index` routes a query to a candidate pool and returns `None`, never an empty pool, when it has nothing useful to say. `fusion` merges the three rankings by reciprocal rank. Rank-only, so a relevance threshold cannot live downstream of it. |
 | `memory/knowledge/` | `extract` (the one entity extractor: cased words, acronyms, CamelCase, Latin and Cyrillic), `schema_classifier` (files entities into slots by keyword cue, once), `surprise` (drops episodics the facts already predict), `fact_ops` (the operation schema the model is constrained to), `consolidation` (applies them: supersede, never overwrite). |
 | `providers/` | `openai_compat.py` (chat over the `openai` SDK), `embeddings.py` (`/embeddings` over httpx), `structured.py` (JSON-schema, JSON-object or prompted, validated, re-asked), `factory.py`, `wire.py` (`ChatClient`, `ProviderUnreachable`). Nothing above imports a model SDK. |
@@ -63,17 +63,18 @@ with age since last confirmation. It runs when asked, never on a schedule of its
 
 ## Erasure (`morgan forget`)
 
-One `BEGIN IMMEDIATE`, then: memories, FTS rows, entity rows, vectors (`vec_items` +
-`vec_meta`), facts, the semantic index (nodes, edges, schemas), session history. Tables that
-were never created on this database are named in `tables_skipped` rather than counted as
-zero. Vacuum afterwards.
+One write transaction, holding the lock before the memory ids are read, then: memories, FTS
+rows, entity rows, vectors (`vec_items` + `vec_meta`), facts, the semantic index (nodes, edges,
+schemas), session history. A memory being stored by another process is either entirely erased
+or entirely kept, because storing is one transaction too. Tables that were never created on
+this database are named in `tables_skipped` rather than counted as zero. Vacuum afterwards.
 
 ## Tests (`tests/`)
 
 `unit/` per module; `integration/` runs the CLI as a subprocess, the MCP server over raw stdio
 pipes and in-process, cross-process durability, two processes upserting the same vectors or
-superseding the same facts at once, a vector delete racing a reinsert, erasure atomicity and
-completeness, routing end to end, the wheel build. One live test (`pytest --live`) needs a real
-embedding model.
+superseding the same facts at once, a vector delete racing a reinsert, a project erased while
+a memory is being stored, erasure atomicity and completeness, routing end to end, the wheel
+build. One live test (`pytest --live`) needs a real embedding model.
 `pip install -e ".[dev]"` installs exactly what the suite needs. `tests/fakes.py` holds the
 scripted chat client; nothing in the package exists only for tests.

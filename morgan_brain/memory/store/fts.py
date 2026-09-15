@@ -16,6 +16,7 @@ import json
 import re
 import sqlite3
 
+from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.models import DEFAULT_PROJECT
 
 _TOKEN = re.compile(r"\w+", re.UNICODE)
@@ -84,12 +85,13 @@ class FtsIndex:
     def add(
         self, memory_id: str, content: str, *, user_id: str, project: str = DEFAULT_PROJECT
     ) -> None:
-        self._conn.execute("DELETE FROM fts_memories WHERE memory_id = ?", (memory_id,))
-        self._conn.execute(
-            "INSERT INTO fts_memories (memory_id, user_id, project, content) VALUES (?, ?, ?, ?)",
-            (memory_id, user_id, project, content),
-        )
-        self._conn.commit()
+        with write_transaction(self._conn):
+            self._conn.execute("DELETE FROM fts_memories WHERE memory_id = ?", (memory_id,))
+            self._conn.execute(
+                "INSERT INTO fts_memories (memory_id, user_id, project, content) "
+                "VALUES (?, ?, ?, ?)",
+                (memory_id, user_id, project, content),
+            )
 
     def search(
         self,
@@ -125,6 +127,6 @@ class FtsIndex:
         return [str(r["memory_id"]) for r in rows]
 
     def delete(self, ids: list[str]) -> None:
-        for mid in ids:
-            self._conn.execute("DELETE FROM fts_memories WHERE memory_id = ?", (mid,))
-        self._conn.commit()
+        with write_transaction(self._conn):
+            for mid in ids:
+                self._conn.execute("DELETE FROM fts_memories WHERE memory_id = ?", (mid,))

@@ -41,6 +41,8 @@ import json
 import sqlite3
 from collections.abc import Iterable, Sequence
 
+from morgan_brain.memory.store.db import write_transaction
+
 #: The six coarse slots VoiceMem starts from (§5, "six preset slots"). They are a
 #: starting partition, not the final one: emergent clustering re-partitions across these
 #: boundaries later, which is why `mem_schemas.emerged` exists from the start.
@@ -125,22 +127,22 @@ class SemanticIndex:
         self, *, user_id: str, project: str, names: Sequence[str] = PRESET_SCHEMAS
     ) -> None:
         """Create the preset slots for this scope. Idempotent."""
-        self._conn.executemany(
-            "INSERT OR IGNORE INTO mem_schemas (user_id, project, name) VALUES (?, ?, ?)",
-            [(user_id, project, n) for n in names],
-        )
-        self._conn.commit()
+        with write_transaction(self._conn):
+            self._conn.executemany(
+                "INSERT OR IGNORE INTO mem_schemas (user_id, project, name) VALUES (?, ?, ?)",
+                [(user_id, project, n) for n in names],
+            )
 
     def add_emergent_schema(
         self, *, user_id: str, project: str, name: str, description: str = ""
     ) -> None:
         """Register a slot that emerged from retrieval patterns rather than the presets."""
-        self._conn.execute(
-            "INSERT OR REPLACE INTO mem_schemas (user_id, project, name, description, emerged) "
-            "VALUES (?, ?, ?, ?, 1)",
-            (user_id, project, name, description),
-        )
-        self._conn.commit()
+        with write_transaction(self._conn):
+            self._conn.execute(
+                "INSERT OR REPLACE INTO mem_schemas (user_id, project, name, description, emerged) "
+                "VALUES (?, ?, ?, ?, 1)",
+                (user_id, project, name, description),
+            )
 
     def schemas(self, *, user_id: str, project: str) -> list[str]:
         rows = self._conn.execute(
@@ -168,22 +170,24 @@ class SemanticIndex:
         never has to traverse: reassignment moves the entity, it does not add a second
         membership that a query would then have to reconcile.
         """
-        known = self._conn.execute(
-            "SELECT 1 FROM mem_schemas WHERE user_id = ? AND project = ? AND name = ?",
-            (user_id, project, schema_name),
-        ).fetchone()
-        if known is None:
-            raise ValueError(f"unknown schema {schema_name!r} for project {project!r}")
-        self._conn.execute(
-            "INSERT INTO mem_entity_nodes (user_id, project, name, schema_name, description) "
-            "VALUES (?, ?, ?, ?, ?) "
-            "ON CONFLICT (user_id, project, name) DO UPDATE SET "
-            "schema_name = excluded.schema_name, "
-            "description = CASE WHEN excluded.description != '' "
-            "THEN excluded.description ELSE mem_entity_nodes.description END",
-            (user_id, project, entity.lower(), schema_name, description),
-        )
-        self._conn.commit()
+        # The schema is checked under the same lock as the write, so an erasure of the project
+        # cannot remove it in between and leave a node filed under a slot that no longer exists.
+        with write_transaction(self._conn):
+            known = self._conn.execute(
+                "SELECT 1 FROM mem_schemas WHERE user_id = ? AND project = ? AND name = ?",
+                (user_id, project, schema_name),
+            ).fetchone()
+            if known is None:
+                raise ValueError(f"unknown schema {schema_name!r} for project {project!r}")
+            self._conn.execute(
+                "INSERT INTO mem_entity_nodes (user_id, project, name, schema_name, description) "
+                "VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT (user_id, project, name) DO UPDATE SET "
+                "schema_name = excluded.schema_name, "
+                "description = CASE WHEN excluded.description != '' "
+                "THEN excluded.description ELSE mem_entity_nodes.description END",
+                (user_id, project, entity.lower(), schema_name, description),
+            )
 
     def observe_cooccurrence(self, *, user_id: str, project: str, names: Iterable[str]) -> None:
         """Record that these entities appeared in the same memory.
@@ -192,37 +196,41 @@ class SemanticIndex:
         would route into an entity with no schema, which is a pool member no query can
         explain -- so unknown names are dropped rather than half-registered.
         """
-        known = self._known_entities(user_id=user_id, project=project, names=names)
-        if len(known) < 2:
-            return
-        ordered = sorted(known)
-        for i, a in enumerate(ordered):
-            for b in ordered[i + 1 :]:
-                src, dst = _pair(a, b)
-                self._conn.execute(
-                    "INSERT INTO mem_entity_edges (user_id, project, src, dst, weight) "
-                    "VALUES (?, ?, ?, ?, 1) "
-                    "ON CONFLICT (user_id, project, src, dst) DO UPDATE SET "
-                    "weight = weight + 1",
-                    (user_id, project, src, dst),
+        # The nodes are read under the same lock as the edge writes, so an erasure cannot
+        # remove them in between and leave edges pointing at nodes that no longer exist.
+        with write_transaction(self._conn):
+            known = self._known_entities(user_id=user_id, project=project, names=names)
+            if len(known) < 2:
+                return
+            ordered = sorted(known)
+            for i, a in enumerate(ordered):
+                for b in ordered[i + 1 :]:
+                    src, dst = _pair(a, b)
+                    self._conn.execute(
+                        "INSERT INTO mem_entity_edges (user_id, project, src, dst, weight) "
+                        "VALUES (?, ?, ?, ?, 1) "
+                        "ON CONFLICT (user_id, project, src, dst) DO UPDATE SET "
+                        "weight = weight + 1",
+                        (user_id, project, src, dst),
+                    )
+            schemas = {
+                s
+                for s in (
+                    self._schema_of(user_id=user_id, project=project, entity=e) for e in ordered
                 )
-        schemas = {
-            s
-            for s in (self._schema_of(user_id=user_id, project=project, entity=e) for e in ordered)
-            if s is not None
-        }
-        ordered_schemas = sorted(schemas)
-        for i, a in enumerate(ordered_schemas):
-            for b in ordered_schemas[i + 1 :]:
-                src, dst = _pair(a, b)
-                self._conn.execute(
-                    "INSERT INTO mem_schema_edges (user_id, project, src, dst, weight) "
-                    "VALUES (?, ?, ?, ?, 1) "
-                    "ON CONFLICT (user_id, project, src, dst) DO UPDATE SET "
-                    "weight = weight + 1",
-                    (user_id, project, src, dst),
-                )
-        self._conn.commit()
+                if s is not None
+            }
+            ordered_schemas = sorted(schemas)
+            for i, a in enumerate(ordered_schemas):
+                for b in ordered_schemas[i + 1 :]:
+                    src, dst = _pair(a, b)
+                    self._conn.execute(
+                        "INSERT INTO mem_schema_edges (user_id, project, src, dst, weight) "
+                        "VALUES (?, ?, ?, ?, 1) "
+                        "ON CONFLICT (user_id, project, src, dst) DO UPDATE SET "
+                        "weight = weight + 1",
+                        (user_id, project, src, dst),
+                    )
 
     # ------------------------------------------------------------------
     # Routing (hot path, read-only)

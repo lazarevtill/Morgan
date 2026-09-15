@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+import pytest
+
 from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.module import MemoryModule
@@ -69,3 +71,30 @@ async def test_recall_facts_are_user_scoped():
     )
     hits = await m.recall(MemoryQuery(user_id="u2", text="anything", top_k=5))
     assert hits == []
+
+
+async def test_a_store_that_fails_part_way_leaves_nothing_behind():
+    """Storing writes five indexes as one unit: all of them, or none.
+
+    An embedding of the wrong size -- an embedding model swapped under an existing database --
+    is refused by the vector index, which is written after the episodic row. Were each index
+    its own transaction, the memory would be left stored but unfindable by meaning, and every
+    later write of it would fail the same way.
+    """
+    conn = open_db(":memory:")
+    m = build_memory_module(conn, embedder=FakeEmbedder(dim=8), dim=16)
+
+    with pytest.raises(ValueError, match="dimension"):
+        await m.store(
+            Memory(
+                user_id="u1",
+                kind=MemoryKind.EPISODIC,
+                content="the Harbor mirror blocked the deploy",
+                entities=[Entity(name="Harbor")],
+            )
+        )
+
+    tables = ("memories", "vec_meta", "vec_items", "fts_memories", "memory_entities")
+    left = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in tables}  # noqa: S608
+    assert left == dict.fromkeys(tables, 0)
+    assert not conn.in_transaction

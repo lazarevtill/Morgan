@@ -111,16 +111,12 @@ class SqliteVectorIndex:
                 f"embedding dimension {len(record.vector)} does not match store dimension "
                 f"{self._dim}"
             )
-        # The write lock is taken BEFORE the id is looked up, not at the first write. Several
-        # processes share this database file -- morgan-mcp stays open while the CLI or
-        # `morgan import` writes -- and a bare SELECT leaves a window in which another one
-        # stores the same id: both see it absent, both insert, and the second dies on
-        # `UNIQUE constraint failed: vec_meta.id`. BEGIN IMMEDIATE holds the lock across the
-        # lookup and the writes to both tables, as forget() does for its select-then-delete.
-        # It raises if this connection already has a transaction open, so upsert must be
-        # called outside one.
-        self._conn.execute("BEGIN IMMEDIATE")
-        try:
+        # The id is looked up inside the write transaction, which holds the lock from its
+        # first statement. Several processes share this database file -- morgan-mcp stays open
+        # while the CLI or `morgan import` writes -- and a lookup made before the lock leaves a
+        # window in which another one stores the same id: both see it absent, both insert, and
+        # the second dies on `UNIQUE constraint failed: vec_meta.id`.
+        with write_transaction(self._conn):
             cur = self._conn.execute("SELECT rowid FROM vec_meta WHERE id = ?", (record.id,))
             row = cur.fetchone()
             if row is not None:
@@ -140,10 +136,6 @@ class SqliteVectorIndex:
                 "INSERT INTO vec_items (rowid, embedding, user_id, project) VALUES (?, ?, ?, ?)",
                 (rowid, _pack(record.vector), record.user_id, record.project),
             )
-            self._conn.commit()
-        except Exception:
-            self._conn.rollback()
-            raise
 
     async def search(
         self,

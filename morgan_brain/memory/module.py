@@ -24,6 +24,7 @@ from morgan_brain.memory.knowledge.schema_classifier import SemanticIndexBuilder
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
 from morgan_brain.memory.recall.semantic_index import SemanticIndex
+from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
 from morgan_brain.memory.store.fts import FtsIndex
@@ -84,8 +85,13 @@ class MemoryModule:
         self._index_builder = index_builder
         self._floor_margin = floor_margin
 
+    @property
+    def _conn(self) -> sqlite3.Connection:
+        """The one connection every index shares, so a write across indexes is one transaction."""
+        return self._episodics._conn
+
     async def store(self, memory: Memory) -> str:
-        """Write *memory* to every index at once.
+        """Write *memory* to every index at once, as one transaction.
 
         Entities are extracted here when the caller supplied none, and the memory is filed
         into the semantic upper index in the same call. There is exactly one write path on
@@ -96,28 +102,37 @@ class MemoryModule:
             memory.created_at = self._clock()
         if not memory.entities:
             memory.entities = [Entity(name=n) for n in extract_entity_names(memory.content)]
+        # Everything that awaits real work -- the embedding, the schema classification --
+        # happens before the write lock is taken, so the lock is never held across a model call.
         vector = await self._embedder.embed(memory.content)
         memory.embedding = vector
-        self._episodics.put(memory)
-        await self._vectors.upsert(
-            VectorRecord(
-                id=memory.id,
-                user_id=memory.user_id,
-                project=memory.project,
-                vector=vector,
-                payload={"content": memory.content, "user_id": memory.user_id},
-            )
-        )
-        self._fts.add(memory.id, memory.content, user_id=memory.user_id, project=memory.project)
-        self._entities.add(
-            memory.id,
-            [e.name for e in memory.entities],
-            user_id=memory.user_id,
-            project=memory.project,
-        )
-        await self._index_builder.index(
+        plan = await self._index_builder.plan(
             user_id=memory.user_id, project=memory.project, memories=[memory]
         )
+        # One transaction for all five indexes. Written one at a time, an erasure of the
+        # project from another process could land between two of them and leave the rest --
+        # with the memory's text -- behind for a memory that no longer exists; and a failure
+        # part-way left a memory stored in some indexes and missing from others. The vector
+        # upsert is awaited but never suspends: it is SQL on this connection, nothing else.
+        with write_transaction(self._conn):
+            self._episodics.put(memory)
+            await self._vectors.upsert(
+                VectorRecord(
+                    id=memory.id,
+                    user_id=memory.user_id,
+                    project=memory.project,
+                    vector=vector,
+                    payload={"content": memory.content, "user_id": memory.user_id},
+                )
+            )
+            self._fts.add(memory.id, memory.content, user_id=memory.user_id, project=memory.project)
+            self._entities.add(
+                memory.id,
+                [e.name for e in memory.entities],
+                user_id=memory.user_id,
+                project=memory.project,
+            )
+            self._index_builder.apply(plan)
         return memory.id
 
     async def get(self, memory_id: str, *, user_id: str) -> Memory | None:
@@ -266,21 +281,19 @@ class MemoryModule:
 
         Every index lives in the same SQLite database, so the affected memory ids are
         collected first and every dependent row -- including the vectors -- is deleted inside
-        a single ``BEGIN IMMEDIATE``. ``session_history`` is optional (present once a
+        a single write transaction. ``session_history`` is optional (present once a
         ``SessionHistoryStore`` has opened on this connection); when absent it is named in
         ``report.tables_skipped`` rather than counted as zero.
         """
-        conn = self._episodics._conn  # forget() owns the whole database
+        conn = self._conn
 
-        # The write lock is taken BEFORE the ids are selected, not after. Selecting first left
-        # a window in which another process could insert a memory for this project between
-        # the SELECT and the DELETE: the new row is absent from `ids`, survives the erasure,
-        # and forget() still reports success. On the documented 2-process topology the worker
-        # writes memories off the bus continuously, so "erase this project" racing an in-flight
-        # turn is the normal case, not an exotic one. BEGIN IMMEDIATE blocks other writers for
-        # the whole read-then-delete sequence, which is what makes the id list authoritative.
-        conn.execute("BEGIN IMMEDIATE")
-        try:
+        # The ids are selected inside the write transaction, which holds the lock from its
+        # first statement. Selecting before the lock left a window in which another process --
+        # morgan-mcp storing a memory while `morgan forget` runs -- could insert a memory for
+        # this project between the SELECT and the DELETE: the new row is absent from `ids`,
+        # survives the erasure, and forget() still reports success. Holding the lock for the
+        # whole read-then-delete sequence is what makes the id list authoritative.
+        with write_transaction(conn):
             ids = [
                 str(r["id"])
                 for r in conn.execute(
@@ -338,10 +351,6 @@ class MemoryModule:
                     "DELETE FROM session_history WHERE user_id = ? AND project = ?",
                     (user_id, project),
                 ).rowcount
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
 
         conn.execute("VACUUM")  # cannot run inside a transaction
         return report

@@ -12,6 +12,7 @@ import sqlite3
 from datetime import datetime
 from typing import ClassVar
 
+from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.models import DEFAULT_PROJECT, Entity, Memory, MemoryKind, MemorySource
 
 
@@ -43,25 +44,25 @@ class EpisodicStore:
             conn.commit()
 
     def put(self, memory: Memory) -> None:
-        self._conn.execute(
-            """
-            INSERT OR REPLACE INTO memories
-                (id, user_id, project, kind, source, content, importance, entities, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                memory.id,
-                memory.user_id,
-                memory.project,
-                memory.kind.value,
-                memory.source.value,
-                memory.content,
-                memory.importance,
-                json.dumps([{"name": e.name, "type": e.type} for e in memory.entities]),
-                memory.created_at.isoformat() if memory.created_at else None,
-            ),
-        )
-        self._conn.commit()
+        with write_transaction(self._conn):
+            self._conn.execute(
+                """
+                INSERT OR REPLACE INTO memories
+                    (id, user_id, project, kind, source, content, importance, entities, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    memory.id,
+                    memory.user_id,
+                    memory.project,
+                    memory.kind.value,
+                    memory.source.value,
+                    memory.content,
+                    memory.importance,
+                    json.dumps([{"name": e.name, "type": e.type} for e in memory.entities]),
+                    memory.created_at.isoformat() if memory.created_at else None,
+                ),
+            )
 
     def get(self, memory_id: str) -> Memory | None:
         row = self._conn.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
@@ -80,9 +81,9 @@ class EpisodicStore:
         )
 
     def delete(self, ids: list[str]) -> None:
-        for mid in ids:
-            self._conn.execute("DELETE FROM memories WHERE id = ?", (mid,))
-        self._conn.commit()
+        with write_transaction(self._conn):
+            for mid in ids:
+                self._conn.execute("DELETE FROM memories WHERE id = ?", (mid,))
 
     #: Every project-keyed table `forget()` erases from. `memories` alone is not the answer:
     #: `facts`, `interaction_signals` and `session_history` are independently project-keyed,

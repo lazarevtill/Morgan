@@ -10,6 +10,7 @@ import json
 import sqlite3
 from collections.abc import Iterable
 
+from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.models import DEFAULT_PROJECT
 
 
@@ -62,13 +63,13 @@ class EntityIndex:
         user_id: str,
         project: str = DEFAULT_PROJECT,
     ) -> None:
-        self._conn.execute("DELETE FROM memory_entities WHERE memory_id = ?", (memory_id,))
-        self._conn.executemany(
-            "INSERT OR IGNORE INTO memory_entities (memory_id, user_id, project, name) "
-            "VALUES (?, ?, ?, ?)",
-            [(memory_id, user_id, project, n.lower()) for n in names],
-        )
-        self._conn.commit()
+        with write_transaction(self._conn):
+            self._conn.execute("DELETE FROM memory_entities WHERE memory_id = ?", (memory_id,))
+            self._conn.executemany(
+                "INSERT OR IGNORE INTO memory_entities (memory_id, user_id, project, name) "
+                "VALUES (?, ?, ?, ?)",
+                [(memory_id, user_id, project, n.lower()) for n in names],
+            )
 
     def search(
         self,
@@ -116,6 +117,6 @@ class EntityIndex:
         return [str(r["memory_id"]) for r in rows]
 
     def delete(self, ids: list[str]) -> None:
-        for mid in ids:
-            self._conn.execute("DELETE FROM memory_entities WHERE memory_id = ?", (mid,))
-        self._conn.commit()
+        with write_transaction(self._conn):
+            for mid in ids:
+                self._conn.execute("DELETE FROM memory_entities WHERE memory_id = ?", (mid,))
