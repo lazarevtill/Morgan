@@ -94,7 +94,14 @@ async def test_a_store_that_fails_part_way_leaves_nothing_behind():
             )
         )
 
-    tables = ("memories", "vec_meta", "vec_items", "fts_memories", "memory_entities")
-    left = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in tables}  # noqa: S608
-    assert left == dict.fromkeys(tables, 0)
+    # One literal statement per table: a table name cannot be a bound parameter.
+    count = {
+        "memories": "SELECT COUNT(*) FROM memories",
+        "vec_meta": "SELECT COUNT(*) FROM vec_meta",
+        "vec_items": "SELECT COUNT(*) FROM vec_items",
+        "fts_memories": "SELECT COUNT(*) FROM fts_memories",
+        "memory_entities": "SELECT COUNT(*) FROM memory_entities",
+    }
+    left = {table: conn.execute(sql).fetchone()[0] for table, sql in count.items()}
+    assert left == dict.fromkeys(count, 0)
     assert not conn.in_transaction
