@@ -68,8 +68,8 @@ zero. Vacuum afterwards.
 ## Tests (`tests/`)
 
 `unit/` per module; `integration/` runs the CLI as a subprocess, the MCP server over raw stdio
-pipes and in-process, cross-process durability, two processes upserting the same vectors at
-once, erasure atomicity and completeness, routing end to end, the wheel build. One live test
-(`pytest --live`) needs a real embedding model.
+pipes and in-process, cross-process durability, two processes upserting the same vectors or
+superseding the same facts at once, erasure atomicity and completeness, routing end to end, the
+wheel build. One live test (`pytest --live`) needs a real embedding model.
 `pip install -e ".[dev]"` installs exactly what the suite needs. `tests/fakes.py` holds the
 scripted chat client; nothing in the package exists only for tests.

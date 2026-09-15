@@ -89,39 +89,52 @@ class SqliteTemporalStore:
         )
 
     async def upsert_fact(self, fact: TemporalFact, *, now: datetime) -> str:
-        cur = self._conn.execute(
-            "SELECT id FROM facts WHERE user_id=? AND project=? AND subject=? AND predicate=? "
-            "AND valid_to IS NULL",
-            (fact.user_id, fact.project, fact.subject, fact.predicate),
-        )
-        existing = [r["id"] for r in cur.fetchall()]
-        fact = fact.model_copy(deep=True)
-        if fact.valid_from is None:
-            fact.valid_from = now
-        fact.last_confirmed = now
-        self._conn.execute(
-            "INSERT INTO facts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                fact.id,
-                fact.user_id,
-                fact.project,
-                fact.subject,
-                fact.predicate,
-                fact.object,
-                fact.source.value,
-                fact.confidence,
-                _iso(fact.valid_from),
-                _iso(fact.valid_to),
-                fact.superseded_by,
-                _iso(fact.last_confirmed),
-            ),
-        )
-        for old_id in existing:
-            self._conn.execute(
-                "UPDATE facts SET valid_to=?, superseded_by=? WHERE id=?",
-                (_iso(now), fact.id, old_id),
+        # The write lock is taken BEFORE the current facts are looked up, not at the first
+        # write. Two processes can share this database file -- two `morgan consolidate` runs,
+        # say -- and a bare SELECT leaves a window in which both find the same current fact,
+        # both insert, and both close it: the key is left with two currently-valid facts, and
+        # nothing raises because the schema does not forbid it. BEGIN IMMEDIATE holds the lock
+        # across the lookup, the insert and the closing updates, as upsert in vectors.py and
+        # forget() do. It raises if this connection already has a transaction open, so
+        # upsert_fact must be called outside one.
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            cur = self._conn.execute(
+                "SELECT id FROM facts WHERE user_id=? AND project=? AND subject=? AND predicate=? "
+                "AND valid_to IS NULL",
+                (fact.user_id, fact.project, fact.subject, fact.predicate),
             )
-        self._conn.commit()
+            existing = [r["id"] for r in cur.fetchall()]
+            fact = fact.model_copy(deep=True)
+            if fact.valid_from is None:
+                fact.valid_from = now
+            fact.last_confirmed = now
+            self._conn.execute(
+                "INSERT INTO facts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    fact.id,
+                    fact.user_id,
+                    fact.project,
+                    fact.subject,
+                    fact.predicate,
+                    fact.object,
+                    fact.source.value,
+                    fact.confidence,
+                    _iso(fact.valid_from),
+                    _iso(fact.valid_to),
+                    fact.superseded_by,
+                    _iso(fact.last_confirmed),
+                ),
+            )
+            for old_id in existing:
+                self._conn.execute(
+                    "UPDATE facts SET valid_to=?, superseded_by=? WHERE id=?",
+                    (_iso(now), fact.id, old_id),
+                )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
         return fact.id
 
     async def current_facts(
