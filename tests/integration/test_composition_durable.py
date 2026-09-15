@@ -23,7 +23,6 @@ def test_every_store_shares_one_database_file(tmp_path, monkeypatch):
         "fts_memories",
         "memory_entities",
         "vec_meta",
-        "mem_entity_nodes",
         "session_history",
     } <= tables, tables
 

@@ -1,9 +1,7 @@
 """Entity extraction — the single definition of "entity" in the codebase.
 
-Both paths need it and they must agree. The hot path calls it through
-``TextPerception.analyze`` to populate ``FusedPerception.entities`` (which drives trait
-selection). The cold path calls it directly to populate ``Memory.entities``, which is
-what ``EntityIndex`` indexes and therefore what the semantic upper index routes over. Two
+``MemoryModule.store`` calls it to fill ``Memory.entities``, which is what ``EntityIndex``
+indexes, and ``migrations`` calls it to re-extract a database stored under an older rule. Two
 extractors would build two indexes that disagree about what is in them, which is the
 duplication the "one of each" invariant exists to prevent.
 
@@ -17,8 +15,8 @@ Greek and Latin all work without a per-script rule.
 **Known limit, stated rather than hidden.** Scripts without letter case -- Chinese,
 Japanese, Arabic, Hebrew -- carry no capitalisation signal, so a deterministic extractor
 finds nothing in them. This function returns an empty list there rather than guessing.
-Closing that gap needs the model-backed extractor the semantic-index job layers on top;
-this is the floor it falls back to, and the floor is honest about where it ends.
+Closing that gap needs a model-backed extractor; this is the floor it would fall back to,
+and the floor is honest about where it ends.
 """
 
 from __future__ import annotations

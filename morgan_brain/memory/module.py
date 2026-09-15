@@ -21,10 +21,8 @@ from datetime import datetime
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.gate import ForgetReport
 from morgan_brain.memory.knowledge.extract import extract_entity_names, words
-from morgan_brain.memory.knowledge.schema_classifier import SemanticIndexBuilder
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
-from morgan_brain.memory.recall.semantic_index import SemanticIndex
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
@@ -39,16 +37,6 @@ from morgan_brain.models import (
     MemoryQuery,
     TemporalFact,
 )
-
-#: Everything `forget()` erases that is *derived* from the memories it is erasing: the
-#: semantic upper index. Each entry is a literal statement rather than a table name to
-#: interpolate -- see the note at the call site.
-_DERIVED_TABLE_DELETES: dict[str, str] = {
-    "mem_entity_edges": "DELETE FROM mem_entity_edges WHERE user_id = ? AND project = ?",
-    "mem_schema_edges": "DELETE FROM mem_schema_edges WHERE user_id = ? AND project = ?",
-    "mem_entity_nodes": "DELETE FROM mem_entity_nodes WHERE user_id = ? AND project = ?",
-    "mem_schemas": "DELETE FROM mem_schemas WHERE user_id = ? AND project = ?",
-}
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
@@ -71,8 +59,6 @@ class MemoryModule:
         fts: FtsIndex,
         entities: EntityIndex,
         episodics: EpisodicStore,
-        semantic: SemanticIndex,
-        index_builder: SemanticIndexBuilder,
         floor_margin: float | None = None,
     ) -> None:
         # store() and forget() are each one transaction on the episodic store's connection. An
@@ -83,8 +69,6 @@ class MemoryModule:
             "temporal": temporal._conn,
             "fts": fts._conn,
             "entities": entities._conn,
-            "semantic": semantic._conn,
-            "index_builder": index_builder._semantic._conn,
         }
         strays = sorted(name for name, c in index_connections.items() if c is not episodics._conn)
         if strays:
@@ -99,8 +83,6 @@ class MemoryModule:
         self._fts = fts
         self._entities = entities
         self._episodics = episodics
-        self._semantic = semantic
-        self._index_builder = index_builder
         self._floor_margin = floor_margin
 
     @property
@@ -115,23 +97,19 @@ class MemoryModule:
     async def store(self, memory: Memory) -> str:
         """Write *memory* to every index at once, as one transaction.
 
-        Entities are extracted here when the caller supplied none, and the memory is filed
-        into the semantic upper index in the same call. There is exactly one write path on
-        purpose: a memory indexed by one signal and invisible to another is the failure
-        that routing turns into lost recall.
+        Entities are extracted here when the caller supplied none. There is exactly one write
+        path on purpose: a memory indexed by one signal and invisible to another is found by a
+        search that should not find it, or missed by one that should.
         """
         if memory.created_at is None:
             memory.created_at = self._clock()
         if not memory.entities:
             memory.entities = [Entity(name=n) for n in extract_entity_names(memory.content)]
-        # Everything that awaits real work -- the embedding, the schema classification --
-        # happens before the write lock is taken, so the lock is never held across a model call.
+        # The embedding awaits a model server, so it happens before the write lock is taken: the
+        # lock is never held across a model call.
         vector = await self._embedder.embed(memory.content)
         memory.embedding = vector
-        plan = await self._index_builder.plan(
-            user_id=memory.user_id, project=memory.project, memories=[memory]
-        )
-        # One transaction for all five indexes. Written one at a time, an erasure of the
+        # One transaction for all four indexes. Written one at a time, an erasure of the
         # project from another process could land between two of them and leave the rest --
         # with the memory's text -- behind for a memory that no longer exists; and a failure
         # part-way left a memory stored in some indexes and missing from others. The vector
@@ -154,7 +132,6 @@ class MemoryModule:
                 user_id=memory.user_id,
                 project=memory.project,
             )
-            self._index_builder.apply(plan)
         return memory.id
 
     async def get(self, memory_id: str, *, user_id: str) -> Memory | None:
@@ -169,14 +146,12 @@ class MemoryModule:
     async def recall(self, query: MemoryQuery) -> list[Memory]:
         # None means "no project filter" at the store layer -- the cross-project escape hatch.
         project = None if query.all_projects else query.project
-        restrict_ids = self._route(query)
         q_vector = await self._embedder.embed(query.text)
         vec_hits = await self._vectors.search(
             user_id=query.user_id,
             vector=q_vector,
             top_k=query.top_k * 2,
             project=project,
-            restrict_ids=restrict_ids,
         )
         vector_ranking = [h.id for h in vec_hits]
         fts_ranking = self._fts.search(
@@ -184,7 +159,6 @@ class MemoryModule:
             user_id=query.user_id,
             top_k=query.top_k * 2,
             project=project,
-            restrict_ids=restrict_ids,
         )
         # words(), not split(): the index matches a name exactly, and a raw split leaves the
         # punctuation attached, so "harbor?" at the end of a question never matched "harbor".
@@ -193,7 +167,6 @@ class MemoryModule:
             user_id=query.user_id,
             top_k=query.top_k * 2,
             project=project,
-            restrict_ids=restrict_ids,
         )
 
         fused_ids = reciprocal_rank_fusion([vector_ranking, fts_ranking, entity_ranking])
@@ -248,23 +221,6 @@ class MemoryModule:
             margin=answer_margin([h.score for h in vec_hits]),
             threshold=self._floor_margin,
             has_exact_match=any(memory_id in ranked for memory_id in entity_ranking),
-        )
-
-    def _route(self, query: MemoryQuery) -> list[str] | None:
-        """Ask the semantic upper index for a candidate pool, or ``None`` to search all.
-
-        Cross-project recall is deliberately never routed: the index is built per
-        ``(user_id, project)``, so a pool derived from one project would narrow a search
-        that was explicitly asked to cross them -- turning the escape hatch into a
-        stricter filter than the default. ``None`` here is the honest answer.
-
-        The pool is advisory in one direction only. Every signal treats ``None`` as
-        "search everything", so a routing miss costs precision, never recall.
-        """
-        if query.all_projects:
-            return None
-        return self._semantic.route(
-            query.text.split(), user_id=query.user_id, project=query.project
         )
 
     async def upsert_fact(self, fact: TemporalFact) -> str:
@@ -367,15 +323,6 @@ class MemoryModule:
             report.facts = conn.execute(
                 "DELETE FROM facts WHERE user_id = ? AND project = ?", (user_id, project)
             ).rowcount
-            # The semantic upper index is *derived* from the memories above, so it belongs
-            # inside the same transaction rather than being cleaned up afterwards. Each
-            # statement is a literal, keyed by table name rather than assembled by
-            # interpolating one: a table name cannot be a bound parameter.
-            for table, statement in _DERIVED_TABLE_DELETES.items():
-                if _table_exists(conn, table):
-                    report.index_entries += conn.execute(statement, (user_id, project)).rowcount
-                elif table not in report.tables_skipped:
-                    report.tables_skipped.append(table)
             if has_history:
                 report.history = conn.execute(
                     "DELETE FROM session_history WHERE user_id = ? AND project = ?",

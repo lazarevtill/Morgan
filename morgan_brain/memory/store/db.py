@@ -48,7 +48,7 @@ def write_transaction(conn: sqlite3.Connection) -> Iterator[None]:
 
     A block opened while this connection is already inside one joins it as a savepoint, so a
     store method is atomic on its own and also composes into a larger write -- storing a
-    memory writes five indexes as one unit. A nested block that raises undoes only its own
+    memory writes four indexes as one unit. A nested block that raises undoes only its own
     statements; the outer block decides whether the whole write commits.
 
     Nothing inside may await real I/O. The connection is shared, so a coroutine that ran

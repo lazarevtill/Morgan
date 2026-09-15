@@ -1,4 +1,4 @@
-"""A database written under an older extraction rule is brought up to date when it is opened.
+"""A database written by an older Morgan is brought up to date when it is opened.
 
 Entities are derived from a memory's content once, when it is stored. Changing the rule changes
 nothing already stored: without an upgrade, every memory written before the change keeps the
@@ -95,6 +95,35 @@ async def test_an_upgrade_that_fails_part_way_leaves_the_old_rows(tmp_path, monk
     module = _module(path)  # the next open runs the whole upgrade again, with the real rule
     for memory_id, names in zip(ids, NEW_NAMES, strict=True):
         assert _indexed_names(module, memory_id) == sorted(n.lower() for n in names)
+
+
+#: The retired semantic index's tables, as a database written before its removal holds them.
+_SEMANTIC_INDEX_TABLES = (
+    "CREATE TABLE mem_schemas (user_id TEXT, project TEXT, name TEXT)",
+    "CREATE TABLE mem_entity_nodes (user_id TEXT, project TEXT, name TEXT, schema_name TEXT)",
+    "CREATE TABLE mem_entity_edges (user_id TEXT, project TEXT, src TEXT)",
+    "CREATE TABLE mem_schema_edges (user_id TEXT, project TEXT, src TEXT)",
+)
+
+
+async def test_opening_a_database_drops_the_retired_semantic_index(tmp_path):
+    """Its entity names are the owner's words. Nothing reads or erases them any more, so a
+    table left behind would keep them on disk through every ``forget``."""
+    path = str(tmp_path / "m.db")
+    module = _module(path)
+    conn = module._conn
+    for create in _SEMANTIC_INDEX_TABLES:
+        conn.execute(create)
+    conn.execute("INSERT INTO mem_entity_nodes VALUES ('u', 'p', 'harbor', 'work')")
+    conn.execute("PRAGMA user_version = 1")  # re-extracted, from before the index was removed
+    conn.commit()
+    conn.close()
+
+    reopened = _module(path)._conn
+    left = reopened.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mem\\_%' ESCAPE '\\'"
+    ).fetchall()
+    assert [r["name"] for r in left] == []
 
 
 async def test_the_upgrade_runs_once(tmp_path, monkeypatch):

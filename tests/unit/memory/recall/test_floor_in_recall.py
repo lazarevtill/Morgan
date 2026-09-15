@@ -34,10 +34,8 @@ class PlacedEmbedder:
         return [await self.embed(t) for t in texts]
 
 
-#: Every memory names the Office, so routing on "ubuntu" reaches all seven through that shared
-#: entity and the vector search has a background to judge against. On a real corpus a common
-#: word is stored on dozens of memories; routing to the one Ubuntu memory alone would leave the
-#: floor too few results to judge, which is a different path.
+#: Equally mediocre neighbours, so the vector search has a background to judge the margin
+#: against: the floor needs at least five results before it judges at all.
 BACKGROUND = [f"the Office grocery list number {n} for the weekend" for n in range(6)]
 
 

@@ -30,7 +30,7 @@ class Stores(NamedTuple):
     entities: EntityIndex
 
 
-def _reextract_entities(stores: Stores) -> None:
+def _reextract_entities(conn: sqlite3.Connection, stores: Stores) -> None:
     """Re-extract every memory's entities under the current rule.
 
     Both copies are rewritten: the entity index recall searches, and the list stored on the
@@ -52,10 +52,23 @@ def _reextract_entities(stores: Stores) -> None:
         )
 
 
+def _drop_the_semantic_index(conn: sqlite3.Connection, stores: Stores) -> None:
+    """Drop the tables of the semantic upper index, which recall no longer has.
+
+    Nothing reads, writes or erases them now, and the entity names in them are the owner's
+    words: left in place they would outlive every ``forget``.
+    """
+    conn.execute("DROP TABLE IF EXISTS mem_entity_edges")
+    conn.execute("DROP TABLE IF EXISTS mem_schema_edges")
+    conn.execute("DROP TABLE IF EXISTS mem_entity_nodes")
+    conn.execute("DROP TABLE IF EXISTS mem_schemas")
+
+
 #: In order. Step *n* brings a database from ``user_version`` *n - 1* to *n*; append only.
-_STEPS: tuple[Callable[[Stores], None], ...] = (
+_STEPS: tuple[Callable[[sqlite3.Connection, Stores], None], ...] = (
     # A capital counts as a name only where its position does not explain it.
     _reextract_entities,
+    _drop_the_semantic_index,
 )
 
 
@@ -71,6 +84,6 @@ def upgrade(conn: sqlite3.Connection, stores: Stores) -> None:
         # Read again under the lock: another process may have upgraded since the check above.
         done = _version(conn)
         for number, step in enumerate(_STEPS[done:], start=done + 1):
-            step(stores)
+            step(conn, stores)
             # PRAGMA takes no bound parameters; the value is an int this function counted.
             conn.execute(f"PRAGMA user_version = {int(number)}")

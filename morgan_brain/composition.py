@@ -23,13 +23,8 @@ from morgan_brain.config import Settings, get_settings
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
-from morgan_brain.memory.knowledge.schema_classifier import (
-    KeywordSchemaClassifier,
-    SemanticIndexBuilder,
-)
 from morgan_brain.memory.migrations import Stores, upgrade
 from morgan_brain.memory.module import MemoryModule
-from morgan_brain.memory.recall.semantic_index import SemanticIndex
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
@@ -130,7 +125,6 @@ def build_memory_module(
 
     Also the seam tests use with a small fake embedder.
     """
-    semantic = SemanticIndex(conn)
     entities = EntityIndex(conn)
     episodics = EpisodicStore(conn)
     module = MemoryModule(
@@ -142,8 +136,6 @@ def build_memory_module(
         entities=entities,
         episodics=episodics,
         floor_margin=floor_margin,
-        semantic=semantic,
-        index_builder=SemanticIndexBuilder(semantic=semantic, classifier=KeywordSchemaClassifier()),
     )
     upgrade(conn, Stores(episodics=episodics, entities=entities))
     return module

@@ -4,12 +4,7 @@ import pytest
 
 from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.embedder import FakeEmbedder
-from morgan_brain.memory.knowledge.schema_classifier import (
-    KeywordSchemaClassifier,
-    SemanticIndexBuilder,
-)
 from morgan_brain.memory.module import MemoryModule
-from morgan_brain.memory.recall.semantic_index import SemanticIndex
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
@@ -84,7 +79,7 @@ async def test_recall_facts_are_user_scoped():
 
 
 async def test_a_store_that_fails_part_way_leaves_nothing_behind():
-    """Storing writes five indexes as one unit: all of them, or none.
+    """Storing writes four indexes as one unit: all of them, or none.
 
     An embedding of the wrong size -- an embedding model swapped under an existing database --
     is refused by the vector index, which is written after the episodic row. Were each index
@@ -117,7 +112,7 @@ async def test_a_store_that_fails_part_way_leaves_nothing_behind():
     assert not conn.in_transaction
 
 
-@pytest.mark.parametrize("stray", ["vectors", "temporal", "fts", "entities", "semantic"])
+@pytest.mark.parametrize("stray", ["vectors", "temporal", "fts", "entities"])
 def test_every_index_must_share_the_one_connection(stray):
     """store() and forget() each run as one transaction on one connection. An index built on
     another connection would commit on its own, outside that transaction, and forget() would
@@ -127,7 +122,6 @@ def test_every_index_must_share_the_one_connection(stray):
     def conn_for(name: str):
         return other if name == stray else shared
 
-    semantic = SemanticIndex(conn_for("semantic"))
     with pytest.raises(ValueError, match=stray):
         MemoryModule(
             embedder=FakeEmbedder(dim=4),
@@ -137,8 +131,4 @@ def test_every_index_must_share_the_one_connection(stray):
             fts=FtsIndex(conn_for("fts")),
             entities=EntityIndex(conn_for("entities")),
             episodics=EpisodicStore(shared),
-            semantic=semantic,
-            index_builder=SemanticIndexBuilder(
-                semantic=semantic, classifier=KeywordSchemaClassifier()
-            ),
         )

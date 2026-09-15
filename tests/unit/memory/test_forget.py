@@ -93,7 +93,6 @@ async def test_forget_empties_every_underlying_table(tmp_path):
     assert report.memories == 1
     assert report.facts == 1
     assert report.history == 1
-    assert report.index_entries > 0
 
     for table, where in [
         ("memories", "user_id = 'u' AND project = 'p'"),
@@ -102,8 +101,6 @@ async def test_forget_empties_every_underlying_table(tmp_path):
         ("vec_meta", "user_id = 'u' AND project = 'p'"),
         ("facts", "user_id = 'u' AND project = 'p'"),
         ("session_history", "user_id = 'u' AND project = 'p'"),
-        ("mem_entity_nodes", "user_id = 'u' AND project = 'p'"),
-        ("mem_schemas", "user_id = 'u' AND project = 'p'"),
     ]:
         # The table name and predicate come from the literal list above, not from data.
         sql = f"SELECT COUNT(*) AS n FROM {table} WHERE {where}"  # noqa: S608

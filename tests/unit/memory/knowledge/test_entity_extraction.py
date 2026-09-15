@@ -1,7 +1,7 @@
-"""The entity extractor is the leaf level of the semantic index, so what it can see
-bounds what can ever be routed. Two properties matter: it must not be tied to one
-script, and it must be the single definition of "entity" that the hot path and the
-cold path both use -- two extractors would build two disagreeing indexes.
+"""The entity extractor decides what the entity index holds, so what it can see bounds what
+an exact name match can ever find. Two properties matter: it must not be tied to one script,
+and it must be the single definition of "entity" -- two extractors would build two
+disagreeing indexes.
 """
 
 from __future__ import annotations

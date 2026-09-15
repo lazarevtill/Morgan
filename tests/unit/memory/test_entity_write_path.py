@@ -58,11 +58,3 @@ async def test_entities_are_scoped_to_the_memory_project(wiring):
     await _remember(gate, "yesterday Harbor blocked the deploy")
     rows = conn.execute("SELECT DISTINCT project FROM memory_entities").fetchall()
     assert [r["project"] for r in rows] == ["acme"]
-
-
-async def test_the_semantic_index_is_filed_in_the_same_write(wiring):
-    """A memory that reaches the entity index but not the upper index is invisible to
-    routing -- and a pool that excludes it would cut it from recall."""
-    _conn, module, gate = wiring
-    await _remember(gate, "yesterday Harbor blocked the deploy")
-    assert module._semantic.schema_of(user_id="u1", project="acme", entity="harbor") == "work"

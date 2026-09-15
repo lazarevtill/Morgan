@@ -12,7 +12,6 @@ Two traps this module exists to handle:
 
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
 
@@ -100,16 +99,8 @@ class FtsIndex:
         user_id: str,
         top_k: int,
         project: str | None = DEFAULT_PROJECT,
-        restrict_ids: list[str] | None = None,
     ) -> list[str]:
-        """Rank memories by keyword match.
-
-        *restrict_ids* narrows the searched set to the semantic index's candidate pool.
-        It is applied inside the query, before ``LIMIT``, so a memory that would rank
-        below the cut in the whole store can still be returned when the pool is small --
-        which is the reason routing exists. Filtering the result afterwards would give a
-        different (worse) answer. ``None`` means no pool: search everything.
-        """
+        """Rank memories by keyword match."""
         match = to_match_query(text)
         if not match:
             return []
@@ -118,9 +109,6 @@ class FtsIndex:
         if project is not None:
             sql += " AND project = ?"
             params.append(project)
-        if restrict_ids is not None:
-            sql += " AND memory_id IN (SELECT value FROM json_each(?))"
-            params.append(json.dumps(restrict_ids))
         sql += " ORDER BY rank LIMIT ?"
         params.append(top_k)
         rows = self._conn.execute(sql, params).fetchall()

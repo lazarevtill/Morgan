@@ -31,9 +31,6 @@ class ForgetReport:
     memories: int = 0
     facts: int = 0
     history: int = 0
-    #: Rows erased from the semantic upper index -- entity nodes, their co-occurrence edges,
-    #: and the schemas of this scope. All derived from the memories being erased.
-    index_entries: int = 0
     tables_skipped: list[str] = field(default_factory=list)
 
 

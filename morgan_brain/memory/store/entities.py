@@ -78,14 +78,8 @@ class EntityIndex:
         user_id: str,
         top_k: int,
         project: str | None = DEFAULT_PROJECT,
-        restrict_ids: list[str] | None = None,
     ) -> list[str]:
-        """Rank memories by how many of *terms* they mention.
-
-        *restrict_ids* is the semantic index's candidate pool, applied inside the query
-        before ``LIMIT`` for the same reason as in ``FtsIndex.search``. ``None`` means
-        search everything.
-        """
+        """Rank memories by how many of *terms* they mention."""
         wanted = [t.lower() for t in terms]
         if not wanted:
             return []
@@ -99,7 +93,6 @@ class EntityIndex:
             WHERE user_id = ?
               AND name IN (SELECT value FROM json_each(?))
               AND (? OR project = ?)
-              AND (? OR memory_id IN (SELECT value FROM json_each(?)))
             GROUP BY memory_id
             ORDER BY hits DESC, memory_id ASC
             LIMIT ?
@@ -109,8 +102,6 @@ class EntityIndex:
                 json.dumps(wanted),
                 project is None,
                 project,
-                restrict_ids is None,
-                json.dumps(restrict_ids or []),
                 top_k,
             ),
         ).fetchall()
