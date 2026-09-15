@@ -21,6 +21,7 @@ import struct
 from dataclasses import dataclass, field
 from typing import Any
 
+from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.models import DEFAULT_PROJECT
 
 
@@ -187,15 +188,21 @@ class SqliteVectorIndex:
         ]
 
     async def delete(self, ids: list[str]) -> None:
-        """Protocol-level delete, for callers outside the single-database path.
+        """Delete the vectors stored under *ids*; ids with no vector are ignored.
 
-        ``forget()`` deletes these rows with plain SQL inside its own transaction instead —
-        see Task 16 — because committing here would break its atomicity.
+        The rows are found by id inside the same locked statements that delete them, never by
+        a rowid read beforehand. ``vec_meta.rowid`` has no ``AUTOINCREMENT``, so SQLite gives
+        the highest deleted rowid to the next insert: a rowid looked up first could belong to
+        a different id by the time it was deleted, and the delete would erase that id's
+        vector instead.
         """
-        for mid in ids:
-            row = self._conn.execute("SELECT rowid FROM vec_meta WHERE id = ?", (mid,)).fetchone()
-            if row is None:
-                continue
-            self._conn.execute("DELETE FROM vec_items WHERE rowid = ?", (row["rowid"],))
-            self._conn.execute("DELETE FROM vec_meta WHERE rowid = ?", (row["rowid"],))
-        self._conn.commit()
+        id_json = json.dumps(ids)
+        with write_transaction(self._conn):
+            self._conn.execute(
+                "DELETE FROM vec_items WHERE rowid IN "
+                "(SELECT rowid FROM vec_meta WHERE id IN (SELECT value FROM json_each(?)))",
+                (id_json,),
+            )
+            self._conn.execute(
+                "DELETE FROM vec_meta WHERE id IN (SELECT value FROM json_each(?))", (id_json,)
+            )
