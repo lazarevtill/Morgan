@@ -95,18 +95,15 @@ class Settings(BaseSettings):
     embedding_backend: Literal["provider", "hash"] = "provider"
     #: How far the best match must stand above the weaker results the same query pulled up
     #: before recall returns anything at all. ``None`` -- the default -- means no floor, and
-    #: every question is answered, which is what recall did before this existed.
+    #: every question is answered.
     #:
-    #: There is no default value because a fitted one did not survive contact with a real
-    #: corpus. Swept over the labelled probes it behaved well, and on probes held back from
-    #: that fit it silenced every unanswerable question for 11 points of recall. Against 184
-    #: real imported memories the same number let two of three plainly unanswerable questions
-    #: through. The probes are short single-sentence memories; real ones are long, varied
-    #: conversation turns, and a margin measured among the first spreads differently among the
-    #: second. Shipping the fitted number would have exported that mismatch to every install.
-    #:
-    #: Fit it on your own corpus: ``pytest tests/memory_quality --live`` prints what each
-    #: threshold keeps and silences. See memory/recall/floor.py for what the number means.
+    #: The right value belongs to the embedding model, and the default model is a setting, so
+    #: none is shipped. For Qwen3-Embedding-0.6B it is 0.11: fitted on the bundled probes and
+    #: again on ~2,000 real conversation turns with 128 labelled questions, where on the half
+    #: held out of the fit it kept 24 of 25 answers and silenced 12 of 13 unanswerable
+    #: questions. Another model needs its own sweep; ``pytest tests/memory_quality --live``
+    #: prints what each threshold keeps and silences on the bundled probes. See
+    #: memory/recall/floor.py for what the number means.
     recall_floor_margin: float | None = None
 
     @field_validator("recall_floor_margin", mode="before")

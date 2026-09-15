@@ -59,18 +59,36 @@ satisfied by suppressing it, which breaks the question that asks for it.
 Semantic retrieval works: a query and its answer sharing no token find each other, in both
 languages. Two categories do not, and both are open work rather than regressions.
 
+The bundled probes are built so the keyword signal cannot carry them, and as a result they
+cannot see the entity signal or routing either: the entity list fires on 1 of 60 and routing
+on none. A real archive measures both.
+
+### On a real archive
+
+~2,000 imported conversation turns, 90 questions a chat model wrote from sampled turns (each
+labelled with its source) and 38 authored questions the keyword index confirms the archive
+never mentions. Qwen3-Embedding-0.6B.
+
+| recall signals | recall@8 | MRR |
+|---|---|---|
+| vector only | 0.92 | 0.77 |
+| vector + keyword | 0.90 | 0.72 |
+| vector + keyword + entity, routed (as shipped) | 0.83 | 0.56 |
+
+The relevance floor separates the two kinds of question: a random answerable question has
+the wider margin 97% of the time. At 0.11, on the half of the questions held out of the fit,
+it kept 24 of 25 answers and silenced 12 of 13 unanswerable questions.
+
 ## Next
 
-- **Fit the relevance floor to a real corpus.** Recall can now decline to answer, and the
-  mechanism is validated: fitted on half the probes and reported on the sealed half, it
-  silenced every unanswerable question there for 11 points of recall. It is off by default
-  because that fitted number did not transfer -- against 184 real imported memories it let
-  two of three plainly unanswerable questions through. The probes are short single
-  sentences and real memories are long conversation turns, so the margin spreads
-  differently. Finishing the import and fitting against that corpus is the work. Reciprocal rank fusion keeps ranks and discards scores, so
-  the floor belongs on each signal before fusion, and its thresholds have to come from the
-  measurement above rather than from a guess.
-- **A superseded memory outranks the current one**, three times in four: the old answer
+- **The entity signal and routing cost recall on real memories.** The extractor stores
+  sentence openers and code words as names (13,677 of them; the most common are "на", "для",
+  "for", "true"), so the entity list is non-empty for 88 of 90 questions and holds the answer
+  for 24. Routing narrowed two questions and cut the answer out of both. A cleaner extractor
+  alone makes it worse -- recall@8 0.76 -- because a sparser index lets routing narrow more
+  often. Lookups by exact name, host or part number are where these signals should pay, and
+  that is unmeasured; measuring it decides what changes.
+- **A superseded memory outranks the current one** in half the probes: the old answer
   comes back at rank 1 and the current one below it. Fusion is rank-only and carries no
   recency term, so nothing orders new above old. The probes store episodics, which have no
   validity interval at all -- supersession lives on facts, and nothing has consolidated

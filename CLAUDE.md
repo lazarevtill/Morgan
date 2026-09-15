@@ -85,17 +85,21 @@ come in" are answered by the directory names.
 
 ## Known limitations
 
-- `recall` can decline to answer, but the floor is off unless `MORGAN_RECALL_FLOOR_MARGIN`
-  is set: the threshold fitted on the probe corpus did not transfer to a real one. Until it
-  is fitted per corpus, a query against a non-empty project returns something.
+- `recall` declines to answer only when `MORGAN_RECALL_FLOOR_MARGIN` is set. The value belongs
+  to the embedding model: 0.11 for Qwen3-Embedding-0.6B, measured on the bundled probes and on
+  a real archive. Other models are unmeasured.
+- On a real archive the entity signal and routing lower recall: recall@8 0.83 as shipped,
+  0.90 with vector and keyword search alone. The extractor stores sentence openers and code
+  words as entities, and routing cut the answer out both times it narrowed. The bundled
+  probes cannot see either signal. See `docs/ROADMAP.md`.
 - Schema classification for the upper index is keyword-based and an entity is classified once.
 - Entity extraction is deterministic and cased-script only; scripts without letter case
   (Chinese, Japanese, Arabic, Hebrew) yield nothing rather than a guess.
-- A superseded memory outranks the current one in three knowledge-update probes out of
-  four. Fusion is rank-only and carries no recency term. Supersession lives on facts; the
-  probes store episodics, which carry none.
+- A superseded memory outranks the current one in half the knowledge-update probes. Fusion
+  is rank-only and carries no recency term. Supersession lives on facts; the probes store
+  episodics, which carry none.
 - Multi-hop questions are not answered. Recall ranks memories and has no mechanism to
-  compose two of them; measured recall@8 is 0.50 against 1.00 for single-hop.
+  compose two of them; measured recall@8 is 0.38 against 0.95 for single-hop.
 
 ## Build, test, run
 
@@ -103,7 +107,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 285 passed, 3 skipped (the live ones)
+pytest -q                     # 287 passed, 3 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

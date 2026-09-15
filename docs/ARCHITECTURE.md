@@ -45,7 +45,10 @@ morgan-mcp ──┘        │                 ├─ FTS5 keyword index      o
    the window whenever they have hits, and the facts that survive a narrow budget are the
    ones the query mentions. Facts fill the whole window only when little else came back.
 
-There is no relevance floor: a non-empty project always answers.
+5. With `MORGAN_RECALL_FLOOR_MARGIN` set, recall returns nothing unless the best vector hit
+   stands that far above the background the same query pulled up (`recall/floor.py`), or an
+   exact entity match lands on a memory the vector search also ranked. Unset, a non-empty
+   project always answers.
 
 Facts never suppress episodics. Prepending every fact and then truncating meant that once
 a project held `top_k` facts, no memory could be returned however exactly it matched --
