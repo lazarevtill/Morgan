@@ -110,26 +110,39 @@ class SqliteVectorIndex:
                 f"embedding dimension {len(record.vector)} does not match store dimension "
                 f"{self._dim}"
             )
-        cur = self._conn.execute("SELECT rowid FROM vec_meta WHERE id = ?", (record.id,))
-        row = cur.fetchone()
-        if row is not None:
-            rowid = row["rowid"]
-            self._conn.execute("DELETE FROM vec_items WHERE rowid = ?", (rowid,))
+        # The write lock is taken BEFORE the id is looked up, not at the first write. Several
+        # processes share this database file -- morgan-mcp stays open while the CLI or
+        # `morgan import` writes -- and a bare SELECT leaves a window in which another one
+        # stores the same id: both see it absent, both insert, and the second dies on
+        # `UNIQUE constraint failed: vec_meta.id`. BEGIN IMMEDIATE holds the lock across the
+        # lookup and the writes to both tables, as forget() does for its select-then-delete.
+        # It raises if this connection already has a transaction open, so upsert must be
+        # called outside one.
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            cur = self._conn.execute("SELECT rowid FROM vec_meta WHERE id = ?", (record.id,))
+            row = cur.fetchone()
+            if row is not None:
+                rowid = row["rowid"]
+                self._conn.execute("DELETE FROM vec_items WHERE rowid = ?", (rowid,))
+                self._conn.execute(
+                    "UPDATE vec_meta SET user_id = ?, project = ?, payload = ? WHERE rowid = ?",
+                    (record.user_id, record.project, json.dumps(record.payload), rowid),
+                )
+            else:
+                cur = self._conn.execute(
+                    "INSERT INTO vec_meta (id, user_id, project, payload) VALUES (?, ?, ?, ?)",
+                    (record.id, record.user_id, record.project, json.dumps(record.payload)),
+                )
+                rowid = int(cur.lastrowid or 0)
             self._conn.execute(
-                "UPDATE vec_meta SET user_id = ?, project = ?, payload = ? WHERE rowid = ?",
-                (record.user_id, record.project, json.dumps(record.payload), rowid),
+                "INSERT INTO vec_items (rowid, embedding, user_id, project) VALUES (?, ?, ?, ?)",
+                (rowid, _pack(record.vector), record.user_id, record.project),
             )
-        else:
-            cur = self._conn.execute(
-                "INSERT INTO vec_meta (id, user_id, project, payload) VALUES (?, ?, ?, ?)",
-                (record.id, record.user_id, record.project, json.dumps(record.payload)),
-            )
-            rowid = int(cur.lastrowid or 0)
-        self._conn.execute(
-            "INSERT INTO vec_items (rowid, embedding, user_id, project) VALUES (?, ?, ?, ?)",
-            (rowid, _pack(record.vector), record.user_id, record.project),
-        )
-        self._conn.commit()
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
 
     async def search(
         self,
