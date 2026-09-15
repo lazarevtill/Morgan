@@ -75,6 +75,23 @@ class MemoryModule:
         index_builder: SemanticIndexBuilder,
         floor_margin: float | None = None,
     ) -> None:
+        # store() and forget() are each one transaction on the episodic store's connection. An
+        # index on any other connection would commit on its own, outside that transaction, and
+        # forget() would never reach it -- so a module assembled that way is refused.
+        index_connections = {
+            "vectors": vectors._conn,
+            "temporal": temporal._conn,
+            "fts": fts._conn,
+            "entities": entities._conn,
+            "semantic": semantic._conn,
+            "index_builder": index_builder._semantic._conn,
+        }
+        strays = sorted(name for name, c in index_connections.items() if c is not episodics._conn)
+        if strays:
+            raise ValueError(
+                "every index must share the episodic store's connection; "
+                f"not shared: {', '.join(strays)}"
+            )
         self._embedder = embedder
         self._vectors = vectors
         self._temporal = temporal

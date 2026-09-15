@@ -4,8 +4,18 @@ import pytest
 
 from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.embedder import FakeEmbedder
+from morgan_brain.memory.knowledge.schema_classifier import (
+    KeywordSchemaClassifier,
+    SemanticIndexBuilder,
+)
 from morgan_brain.memory.module import MemoryModule
+from morgan_brain.memory.recall.semantic_index import SemanticIndex
 from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store.entities import EntityIndex
+from morgan_brain.memory.store.episodic import EpisodicStore
+from morgan_brain.memory.store.fts import FtsIndex
+from morgan_brain.memory.store.temporal import SqliteTemporalStore
+from morgan_brain.memory.store.vectors import SqliteVectorIndex
 from morgan_brain.models import Entity, Memory, MemoryKind, MemoryQuery, TemporalFact
 
 
@@ -105,3 +115,30 @@ async def test_a_store_that_fails_part_way_leaves_nothing_behind():
     left = {table: conn.execute(sql).fetchone()[0] for table, sql in count.items()}
     assert left == dict.fromkeys(count, 0)
     assert not conn.in_transaction
+
+
+@pytest.mark.parametrize("stray", ["vectors", "temporal", "fts", "entities", "semantic"])
+def test_every_index_must_share_the_one_connection(stray):
+    """store() and forget() each run as one transaction on one connection. An index built on
+    another connection would commit on its own, outside that transaction, and forget() would
+    never erase it -- so the module refuses to be assembled that way."""
+    shared, other = open_db(":memory:"), open_db(":memory:")
+
+    def conn_for(name: str):
+        return other if name == stray else shared
+
+    semantic = SemanticIndex(conn_for("semantic"))
+    with pytest.raises(ValueError, match=stray):
+        MemoryModule(
+            embedder=FakeEmbedder(dim=4),
+            vectors=SqliteVectorIndex(conn_for("vectors"), dim=4),
+            temporal=SqliteTemporalStore(conn=conn_for("temporal")),
+            clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
+            fts=FtsIndex(conn_for("fts")),
+            entities=EntityIndex(conn_for("entities")),
+            episodics=EpisodicStore(shared),
+            semantic=semantic,
+            index_builder=SemanticIndexBuilder(
+                semantic=semantic, classifier=KeywordSchemaClassifier()
+            ),
+        )
