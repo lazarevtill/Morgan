@@ -1,7 +1,8 @@
 """MemoryModule — the interfaces.MemoryStore implementation.
 
-Recall is multi-signal: vector (semantic) + FTS5 (keyword) + entity overlap, combined with
-reciprocal rank fusion (the single rerank layer). Facts are delegated to the bi-temporal store.
+Recall is two signals, vector (semantic) and FTS5 (keyword), combined with reciprocal rank
+fusion (the single rerank layer). The entity index is the relevance floor's evidence of an exact
+name match, not a third ranking. Facts are delegated to the bi-temporal store.
 All access is user-scoped; callers reach it only through the MemoryGate.
 
 Every signal is durable: the vector index, the keyword index, the entity index, and the
@@ -160,16 +161,10 @@ class MemoryModule:
             top_k=query.top_k * 2,
             project=project,
         )
-        # words(), not split(): the index matches a name exactly, and a raw split leaves the
-        # punctuation attached, so "harbor?" at the end of a question never matched "harbor".
-        entity_ranking = self._entities.search(
-            set(words(query.text)),
-            user_id=query.user_id,
-            top_k=query.top_k * 2,
-            project=project,
-        )
-
-        fused_ids = reciprocal_rank_fusion([vector_ranking, fts_ranking, entity_ranking])
+        # The entity ranking is not fused. A stored name is in the memory's text, so the keyword
+        # search already counts it; a third vote for the same evidence pushed paraphrased
+        # answers down on a real archive (recall@8 0.83 fused, 0.90 not).
+        fused_ids = reciprocal_rank_fusion([vector_ranking, fts_ranking])
         episodic = [m for m in (self._episodics.get(mid) for mid in fused_ids) if m is not None]
         # Defense in depth: every signal above is already project-scoped, but fusion resolves
         # ids through episodic rehydration, which isn't -- drop anything that slipped through.
@@ -195,12 +190,12 @@ class MemoryModule:
             for f in facts
         ]
         merged = _merge_facts_and_episodics(fact_memories, episodic, query.text, query.top_k)
-        if not self._answer_is_worth_returning(vec_hits, entity_ranking, query.top_k):
+        if not self._answer_is_worth_returning(query, project, vec_hits):
             return []
         return merged
 
     def _answer_is_worth_returning(
-        self, vec_hits: list[VectorHit], entity_ranking: list[str], top_k: int
+        self, query: MemoryQuery, project: str | None, vec_hits: list[VectorHit]
     ) -> bool:
         """Whether this query found anything, or only the nearest of many unrelated things.
 
@@ -209,14 +204,22 @@ class MemoryModule:
         quietly. See ``recall.floor`` for why the test is a margin rather than a similarity.
 
         An exact entity match overrules the margin only when the memory it found is also one
-        the vector search ranked within ``top_k``. The entity signal matches every word of
-        the question, so on a real corpus some word is nearly always stored on some memory:
+        the vector search ranked within ``top_k``. The entity index is searched with every word
+        of the question, so on a real corpus some word is nearly always stored on some memory:
         counting any match let 31 of 38 unanswerable questions through the floor on the
         owner's archive. A genuine identifier hit is ranked by the vector search too.
         """
         if self._floor_margin is None:
             return True
-        ranked = {h.id for h in vec_hits[:top_k]}
+        # words(), not split(): the index matches a name exactly, and a raw split leaves the
+        # punctuation attached, so "harbor?" at the end of a question never matched "harbor".
+        entity_ranking = self._entities.search(
+            set(words(query.text)),
+            user_id=query.user_id,
+            top_k=query.top_k * 2,
+            project=project,
+        )
+        ranked = {h.id for h in vec_hits[: query.top_k]}
         return should_answer(
             margin=answer_margin([h.score for h in vec_hits]),
             threshold=self._floor_margin,

@@ -84,7 +84,7 @@ class MemoryQuery(BaseModel):
 
     user_id: str
     #: min_length matches ``Memory.project``. Without it an empty project reached recall and
-    #: silently matched nothing in all three signals — a wrong answer rather than a refusal,
+    #: silently matched nothing in every signal — a wrong answer rather than a refusal,
     #: in the seam whose whole job is refusing.
     project: str = Field(default=DEFAULT_PROJECT, min_length=1)
     all_projects: bool = False

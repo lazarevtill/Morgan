@@ -1,4 +1,4 @@
-"""Recall must survive a restart on all three signals."""
+"""Recall must survive a restart on every index it reads."""
 
 from __future__ import annotations
 

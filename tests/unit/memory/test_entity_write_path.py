@@ -1,4 +1,4 @@
-"""The entity ranking is one of the three signals `MemoryModule.recall` fuses. It is only
+"""The entity index is the relevance floor's evidence of an exact name match. It is only
 non-empty if the write path extracts entities -- which is why extraction happens inside
 ``store`` for every caller, rather than in whichever caller remembers to do it.
 """
@@ -38,12 +38,12 @@ async def test_a_stored_memory_populates_the_entity_index(wiring):
 
 
 async def test_the_entity_signal_actually_returns_the_memory(wiring):
-    """Populating the table is only half of it -- the third fused ranking has to be
-    non-empty for the same query recall would issue."""
+    """Populating the table is only half of it -- the search the floor issues has to find the
+    memory."""
     _conn, module, gate = wiring
     await _remember(gate, "yesterday Harbor blocked the deploy")
     ranking = module._entities.search({"harbor"}, user_id="u1", top_k=8, project="acme")
-    assert ranking, "entity ranking is empty: the third recall signal is dead"
+    assert ranking, "entity search is empty: the floor can never see an exact match"
 
 
 async def test_cyrillic_memories_are_indexed_too(wiring):

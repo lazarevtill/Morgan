@@ -1,7 +1,7 @@
-"""Persistent entity-overlap index — the third recall signal.
+"""Persistent entity-overlap index — the relevance floor's evidence of an exact name match.
 
 Ordering is defined here rather than left to dict iteration: most matched entities first,
-then memory id, so fusion input is stable across processes.
+then memory id, so two processes agree about the same query.
 """
 
 from __future__ import annotations
