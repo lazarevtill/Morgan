@@ -56,10 +56,12 @@ def answer_margin(scores: list[float]) -> float | None:
 def should_answer(*, margin: float | None, threshold: float, has_exact_match: bool) -> bool:
     """Whether this query's results are worth returning.
 
-    *has_exact_match* overrides the margin. An exact entity match is direct evidence that the
-    corpus contains what was asked about, and it is the case an embedding is worst at: an
-    identifier, a surname or a ticket number carries little of the meaning a sentence
-    embedding captures, so a real hit on one can sit flat against its neighbours.
+    *has_exact_match* overrides the margin. An exact entity match on a memory the vector search
+    also ranked is direct evidence that the corpus contains what was asked about, and it is the
+    case an embedding is worst at: an identifier, a surname or a ticket number carries little of
+    the meaning a sentence embedding captures, so a real hit on one can sit flat against its
+    neighbours. The caller decides what counts; a match on a memory the vector search did not
+    rank is only a shared word, and on a real corpus nearly every question shares one.
     """
     if has_exact_match:
         return True

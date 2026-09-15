@@ -185,25 +185,32 @@ class MemoryModule:
             for f in facts
         ]
         merged = _merge_facts_and_episodics(fact_memories, episodic, query.text, query.top_k)
-        if not self._answer_is_worth_returning(vec_hits, entity_ranking):
+        if not self._answer_is_worth_returning(vec_hits, entity_ranking, query.top_k):
             return []
         return merged
 
     def _answer_is_worth_returning(
-        self, vec_hits: list[VectorHit], entity_ranking: list[str]
+        self, vec_hits: list[VectorHit], entity_ranking: list[str], top_k: int
     ) -> bool:
         """Whether this query found anything, or only the nearest of many unrelated things.
 
         Off unless a threshold is configured: the right value depends on the corpus and the
         embedding model, and shipping someone else's constant would reject real answers
         quietly. See ``recall.floor`` for why the test is a margin rather than a similarity.
+
+        An exact entity match overrules the margin only when the memory it found is also one
+        the vector search ranked within ``top_k``. The entity signal matches every word of
+        the question, so on a real corpus some word is nearly always stored on some memory:
+        counting any match let 31 of 38 unanswerable questions through the floor on the
+        owner's archive. A genuine identifier hit is ranked by the vector search too.
         """
         if self._floor_margin is None:
             return True
+        ranked = {h.id for h in vec_hits[:top_k]}
         return should_answer(
             margin=answer_margin([h.score for h in vec_hits]),
             threshold=self._floor_margin,
-            has_exact_match=bool(entity_ranking),
+            has_exact_match=any(memory_id in ranked for memory_id in entity_ranking),
         )
 
     def _route(self, query: MemoryQuery) -> list[str] | None:
