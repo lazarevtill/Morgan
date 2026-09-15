@@ -77,6 +77,7 @@ this database are named in `tables_skipped` rather than counted as zero. Vacuum 
 pipes and in-process, cross-process durability, two processes upserting the same vectors or
 superseding the same facts at once, a vector delete racing a reinsert, a project erased while
 a memory is being stored, two consolidation runs applying the same facts, erasure atomicity and
-completeness, routing end to end, the wheel build. One live test (`pytest --live`) needs a real embedding model.
+completeness, routing end to end, the wheel build. One live test (`pytest --live`) needs a real
+embedding model.
 `pip install -e ".[dev]"` installs exactly what the suite needs. `tests/fakes.py` holds the
 scripted chat client; nothing in the package exists only for tests.
