@@ -3,8 +3,8 @@
 ## Where this is
 
 Morgan is a project-scoped memory for the owner's AI tools: one SQLite database, a CLI and an
-MCP server over one gate, three-signal recall routed by a semantic index, and on-demand
-consolidation of memories into valid-time facts by a local model. About 4,500 lines, one
+MCP server over one gate, recall that fuses vector and keyword search, and on-demand
+consolidation of memories into valid-time facts by a local model. About 5,000 lines, one
 process, no services beyond a model server.
 
 ## Where it came from
@@ -32,8 +32,6 @@ The full build is at the tag **`legacy-v0.1.0-kernel`**, its designs and decisio
 ## Kept from the kernel, on purpose
 
 - The one-database, one-gate, project-scoped memory with cascading `forget()`.
-- The semantic upper index (from VoiceMem, arXiv:2608.26005): routing that can cost precision,
-  never recall.
 - Bi-temporal facts with actor attribution, and the consolidation that produces them.
 - The reachability contract: a model server that is down is reported by name on every surface.
 
@@ -46,7 +44,7 @@ signal cannot carry it. `pytest --live` runs them against a real embedding endpo
 | | recall@8 | MRR | stale-first | abstain |
 |---|---|---|---|---|
 | overall | 0.85 | 0.48 | 0.50 | 0.00 |
-| single-hop | 0.95 | 0.57 | — | — |
+| single-hop | 0.95 | 0.58 | — | — |
 | temporal | 1.00 | 0.65 | — | — |
 | knowledge-update | 0.90 | 0.49 | 0.50 | — |
 | multi-hop | 0.38 | 0.08 | — | — |
@@ -59,35 +57,37 @@ satisfied by suppressing it, which breaks the question that asks for it.
 Semantic retrieval works: a query and its answer sharing no token find each other, in both
 languages. Two categories do not, and both are open work rather than regressions.
 
-The bundled probes are built so the keyword signal cannot carry them, and as a result they
-cannot see the entity signal or routing either: the entity list fires on 1 of 60 and routing
-on none. A real archive measures both.
+The bundled probes are built so the keyword signal cannot carry them, so they cannot show
+what keyword search or stored names add. A real archive does.
 
 ### On a real archive
 
-~2,000 imported conversation turns, 90 questions a chat model wrote from sampled turns (each
-labelled with its source) and 38 authored questions the keyword index confirms the archive
-never mentions. Qwen3-Embedding-0.6B.
+~2,000 imported conversation turns and three sets of questions: 90 a chat model wrote from
+sampled turns, each labelled with its source; 60 lookups, each naming a term the keyword index
+finds in at most three memories; and 38 authored questions the keyword index confirms the
+archive never mentions. Qwen3-Embedding-0.6B.
 
-| recall signals | recall@8 | MRR |
-|---|---|---|
-| vector only | 0.92 | 0.77 |
-| vector + keyword | 0.90 | 0.72 |
-| vector + keyword + entity, routed (as shipped) | 0.83 | 0.56 |
+| recall signals | paraphrase recall@8 | MRR | lookup recall@8 | MRR |
+|---|---|---|---|---|
+| vector only | 0.92 | 0.77 | 0.88 | 0.65 |
+| **vector + keyword (recall as it is)** | **0.90** | **0.72** | **1.00** | **0.88** |
+| + the entity ranking fused | 0.83 | 0.59 | 1.00 | 0.94 |
+| + the entity ranking, narrowed by a semantic index | 0.76 | 0.53 | 0.97 | 0.91 |
+
+Lookups were chosen by what the keyword index finds, so keyword search finding all of them is
+partly by construction; what they show is that an embedding alone misses one name in eight.
+A stored name is in the memory's text, so fusing the entity ranking counts the keyword match
+twice: it ranks lookups a little higher and paraphrases much lower. Narrowing the search to
+the memories that share a name with the question (VoiceMem's semantic index) cut the answer
+out of questions and put none in.
 
 The relevance floor separates the two kinds of question: a random answerable question has
 the wider margin 97% of the time. At 0.11, on the half of the questions held out of the fit,
-it kept 24 of 25 answers and silenced 12 of 13 unanswerable questions.
+it kept 24 of 25 answers and silenced 12 of 13 unanswerable questions; over all of them, 141
+of 150 answers and 34 of 38 silences.
 
 ## Next
 
-- **The entity signal and routing cost recall on real memories.** The extractor stores
-  sentence openers and code words as names (13,677 of them; the most common are "на", "для",
-  "for", "true"), so the entity list is non-empty for 88 of 90 questions and holds the answer
-  for 24. Routing narrowed two questions and cut the answer out of both. A cleaner extractor
-  alone makes it worse -- recall@8 0.76 -- because a sparser index lets routing narrow more
-  often. Lookups by exact name, host or part number are where these signals should pay, and
-  that is unmeasured; measuring it decides what changes.
 - **A superseded memory outranks the current one** in half the probes: the old answer
   comes back at rank 1 and the current one below it. Fusion is rank-only and carries no
   recency term, so nothing orders new above old. The probes store episodics, which have no

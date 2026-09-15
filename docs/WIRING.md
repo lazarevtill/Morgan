@@ -76,7 +76,7 @@ Every command takes `--project` (default: the current git repository's directory
 
 ```bash
 morgan remember "the Harbor mirror blocked the deploy"   # embedding model only
-morgan recall "what blocked the deploy"                   # vector + FTS5 + entity, fused
+morgan recall "what blocked the deploy"                   # vector + FTS5, fused
 morgan facts                                              # currently-valid facts
 morgan ask "what do you know about the deploy"            # chat model: recall, answer, remember
 morgan consolidate                                        # chat model: memories → facts

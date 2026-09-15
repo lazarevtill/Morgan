@@ -6,8 +6,8 @@ One package, `morgan_brain`, one process, one SQLite file. Two surfaces over one
 morgan CLI ──┐                          ┌─ episodic rows
              ├─▶ MemoryGate ─▶ MemoryModule ─┼─ sqlite-vec vectors
 morgan-mcp ──┘        │                 ├─ FTS5 keyword index      one morgan.db
-                      │                 ├─ entity index
-   Chat (ask) ────────┤                 └─ semantic upper index
+                      │                 └─ entity index
+   Chat (ask) ────────┤
    Consolidator ──────┘   ──▶ valid-time facts
          │
          └──▶ model server (any OpenAI-compatible endpoint)
@@ -24,9 +24,10 @@ morgan-mcp ──┘        │                 ├─ FTS5 keyword index      o
 | `memory/gate.py` | `MemoryGate`: the only door to memory. Refuses an empty user or project. `ForgetReport`. |
 | `memory/module.py` | `MemoryModule`: the one write path (every index in one transaction, entities extracted if absent) and the fused recall. `forget()` in one transaction. |
 | `memory/embedder.py` | The `Embedder` protocol and the deterministic hash stub that stands in for a model server. |
+| `memory/migrations.py` | Upgrades a database written by an older version when it is opened: each step re-derives stored data whose rule changed (entities) or drops what is no longer used. Steps are counted in `user_version` and run in one write transaction, so two processes run each once. |
 | `memory/store/` | Persistence, one file per table family, all over the one connection: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`, `history`. Every write goes through `db.write_transaction`, which holds the write lock from the first statement and nests as a savepoint, so a store method is atomic alone and inside a larger write. A fact key has at most one current fact, enforced by a unique index; opening a database that a race left with two keeps the newest and closes the rest. Vectors are scoped *inside* the KNN via vec0 metadata columns, not filtered afterwards. |
-| `memory/recall/` | `semantic_index` routes a query to a candidate pool and returns `None`, never an empty pool, when it has nothing useful to say. `fusion` merges the three rankings by reciprocal rank. Rank-only, so a relevance threshold cannot live downstream of it. |
-| `memory/knowledge/` | `extract` (the one entity extractor: cased words, acronyms, CamelCase, Latin and Cyrillic), `schema_classifier` (files entities into slots by keyword cue, once), `surprise` (drops episodics the facts already predict), `fact_ops` (the operation schema the model is constrained to), `consolidation` (applies them: supersede, never overwrite). |
+| `memory/recall/` | `fusion` merges the vector and keyword rankings by reciprocal rank. Rank-only, so the relevance threshold, `floor`, judges the vector scores before fusion. |
+| `memory/knowledge/` | `extract` (the one entity extractor: words the text capitalises away from a sentence start, acronyms, CamelCase; Latin and Cyrillic), `surprise` (drops episodics the facts already predict), `fact_ops` (the operation schema the model is constrained to), `consolidation` (applies them: supersede, never overwrite). |
 | `providers/` | `openai_compat.py` (chat over the `openai` SDK), `embeddings.py` (`/embeddings` over httpx), `structured.py` (JSON-schema, JSON-object or prompted, validated, re-asked), `factory.py`, `wire.py` (`ChatClient`, `ProviderUnreachable`). Nothing above imports a model SDK. |
 | `eval/retrieval.py` | Labelled probes, and the recall@k / MRR / leak-rate scorecard they produce. The measurement that turns retrieval quality from an assumption into a number. |
 | `app/chatgpt_import.py` | Seeds memory from a ChatGPT export. Splits a turn too long for the embedding context, and routes a fifth of conversations to a holdout project the optimizer can never mine. |
@@ -37,15 +38,14 @@ morgan-mcp ──┘        │                 ├─ FTS5 keyword index      o
 
 ## Recall
 
-1. The semantic index is asked for a candidate pool from the query's terms. `None` means
-   search everything, and cross-project queries are never routed.
-2. Vector, FTS5 and entity search each return their top-k *inside* that pool.
-3. Reciprocal rank fusion merges the three rankings.
-4. Currently-valid facts for the project are placed first, but budgeted: episodics keep half
+1. Vector and FTS5 search each return their top 2k over the whole project, or every project
+   with `all_projects`.
+2. Reciprocal rank fusion merges the two rankings. The entity index is not a third: a stored
+   name is in the memory's text, which the keyword search already matches.
+3. Currently-valid facts for the project are placed first, but budgeted: episodics keep half
    the window whenever they have hits, and the facts that survive a narrow budget are the
    ones the query mentions. Facts fill the whole window only when little else came back.
-
-5. With `MORGAN_RECALL_FLOOR_MARGIN` set, recall returns nothing unless the best vector hit
+4. With `MORGAN_RECALL_FLOOR_MARGIN` set, recall returns nothing unless the best vector hit
    stands that far above the background the same query pulled up (`recall/floor.py`), or an
    exact entity match lands on a memory the vector search also ranked. Unset, a non-empty
    project always answers.
@@ -66,8 +66,7 @@ its own.
 ## Erasure (`morgan forget`)
 
 One write transaction, holding the lock before the memory ids are read, then: memories, FTS
-rows, entity rows, vectors (`vec_items` + `vec_meta`), facts, the semantic index (nodes, edges,
-schemas), session history. A memory being stored by another process is either entirely erased
+rows, entity rows, vectors (`vec_items` + `vec_meta`), facts, session history. A memory being stored by another process is either entirely erased
 or entirely kept, because storing is one transaction too. Tables that were never created on
 this database are named in `tables_skipped` rather than counted as zero. Vacuum afterwards.
 
@@ -77,7 +76,7 @@ this database are named in `tables_skipped` rather than counted as zero. Vacuum 
 pipes and in-process, cross-process durability, two processes upserting the same vectors or
 superseding the same facts at once, a vector delete racing a reinsert, a project erased while
 a memory is being stored, two consolidation runs applying the same facts, erasure atomicity and
-completeness, routing end to end, the wheel build. One live test (`pytest --live`) needs a real
+completeness, the wheel build. One live test (`pytest --live`) needs a real
 embedding model.
 `pip install -e ".[dev]"` installs exactly what the suite needs. `tests/fakes.py` holds the
 scripted chat client; nothing in the package exists only for tests.

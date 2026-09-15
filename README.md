@@ -12,11 +12,9 @@ overwritten. Everything lives in one SQLite file on hardware you own.
 - **Remembers per project.** Every memory belongs to a project, which the CLI takes from the
   current git repository's directory name. Recall is scoped to it; `--all-projects` is the
   explicit escape hatch.
-- **Recalls by three signals at once.** Vector search (sqlite-vec), full-text search (FTS5,
-  Cyrillic-aware) and entity overlap, fused by reciprocal rank. A semantic index above them
-  routes a query to the memories that share its entities and topics, so a small top-k is
-  dense rather than merely small. When the index has nothing useful to say, recall searches
-  everything: routing can cost precision, never recall.
+- **Recalls by meaning and by keyword.** Vector search (sqlite-vec) and full-text search
+  (FTS5, Cyrillic-aware) over every memory in the project, fused by reciprocal rank. With a
+  relevance floor set, recall can decline a question the project cannot answer.
 - **Consolidates into facts.** `morgan consolidate` asks your model to turn recent memories
   into subject-predicate-object facts with validity intervals. An update closes the old
   interval and opens a new one; nothing is overwritten and history stays queryable. Every
@@ -27,7 +25,7 @@ overwritten. Everything lives in one SQLite file on hardware you own.
   export. A fifth of the conversations are held back in a separate project, so the memory can
   later be evaluated against conversations nothing has learned from.
 - **Forgets completely.** `morgan forget` erases a project from every table in one
-  transaction, including vectors and the derived index, and reports exactly what it touched.
+  transaction, including vectors and the entity index, and reports exactly what it touched.
 - **Talks to any model server.** Any OpenAI-compatible endpoint: llama-server by default,
   Ollama's `/v1`, vLLM. The model server is the only thing Morgan needs that it does not ship.
 - **Two surfaces, one gate.** The `morgan` CLI and the `morgan-mcp` server (stdio, or HTTP

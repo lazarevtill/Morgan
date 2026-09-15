@@ -6,8 +6,7 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 A **project-scoped memory for the owner's AI tools**, consolidated into facts by a local
 model. One SQLite database under `MORGAN_DATA_DIR` holds memories, facts, vectors
-(sqlite-vec), the FTS5 index, the entity index, the semantic upper index and session
-history. Two surfaces, the `morgan` CLI and the `morgan-mcp` server, are thin adapters over
+(sqlite-vec), the FTS5 index, the entity index and session history. Two surfaces, the `morgan` CLI and the `morgan-mcp` server, are thin adapters over
 one `MemoryGate`. The model server is any OpenAI-compatible endpoint (llama-server by
 default). One process, no queue, no worker, no scheduler.
 
@@ -15,7 +14,7 @@ Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
 `docs/ROADMAP.md` (what was cut and why). The archived kernel this was cut from is at the
 tag `legacy-v0.1.0-kernel` with its designs under `docs/archive/`.
 
-## Package map (`morgan_brain/`, ~4,700 lines)
+## Package map (`morgan_brain/`, ~5,000 lines)
 
 The tree is grouped by what a file does, so "where does a write go" and "where does a request
 come in" are answered by the directory names.
@@ -32,13 +31,14 @@ come in" are answered by the directory names.
 - `composition.py` — opens the database and wires the above. `build_memory_context` needs no
   chat model; `build_app_context` adds it.
 - `memory/` — the core. `gate.py` is the only door and `module.py` is the one write path and
-  the fused recall; `embedder.py` is the embedding seam. Below them:
+  the fused recall; `embedder.py` is the embedding seam; `migrations.py` upgrades a database
+  written by an older version when it is opened. Below them:
   - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
     `history`. Each owns its schema and its queries; none of them ranks anything. Every write
     goes through `db.write_transaction`.
-  - `recall/` — `semantic_index` (routing, which may cost precision but never recall) and
-    `fusion` (reciprocal rank, rank-only).
-  - `knowledge/` — `extract`, `schema_classifier`, `surprise`, `fact_ops`, `consolidation`.
+  - `recall/` — `fusion` (reciprocal rank over vector and keyword search, rank-only) and
+    `floor` (the relevance floor, judged on vector scores).
+  - `knowledge/` — `extract`, `surprise`, `fact_ops`, `consolidation`.
     The work that costs a model call or a full pass, and never runs inside a recall.
 - `eval/` — measuring what recall returns: labelled probes, recall@k, MRR and leak rate,
   scored per probe kind. Run with `pytest --live` against a real embedding endpoint.
@@ -59,17 +59,21 @@ come in" are answered by the directory names.
   `project`; the gate rejects an empty one. `all_projects=True` is the explicit cross-project
   escape hatch, never the default.
 - **One write path.** `MemoryModule.store` writes every index in one transaction: episodic
-  row, vector, FTS5, entity index, semantic upper index. Entities are extracted there when the
-  caller gave none. A memory visible to one signal and not another is the failure routing turns
-  into lost recall.
+  row, vector, FTS5, entity index. Entities are extracted there when the caller gave none. A
+  memory visible to one index and not another is found by one search and missed by the next.
 - **Every write holds the lock from its first statement.** Other processes share the database
   file, so a write that reads before acting takes the lock before the read:
   `store/db.py::write_transaction` opens `BEGIN IMMEDIATE`, and a write inside another one
-  joins it as a savepoint. Nothing awaits while the lock is held -- embedding and schema
-  classification happen before it is taken -- and no store method commits on its own.
-- **Routing never costs recall.** `SemanticIndex.route()` returns `None` ("search
-  everything") whenever it has nothing useful to say, never an empty pool. The pool is pushed
-  into each signal's query, never applied to its output. Cross-project recall is never routed.
+  joins it as a savepoint. Nothing awaits while the lock is held -- the embedding happens
+  before it is taken -- and no store method commits on its own.
+- **Recall ranks the whole scope.** Vector and keyword search each rank every memory in the
+  project (or every project, with `all_projects`), fused by rank. Nothing narrows the
+  candidates first: on a real archive a narrowing pool cut answers out and found none. The
+  entity index is the relevance floor's evidence, not a third ranking.
+- **Derived data is upgraded when a database is opened.** Entities are derived from content
+  by `extract`; a change to that rule appends a step to `memory/migrations.py` that re-derives
+  what is stored. Steps are counted in SQLite's `user_version` and run inside one write
+  transaction.
 - **Facts evolve, they don't overwrite.** Update = close the old interval, open a new one. A
   key has at most one current fact, and a unique index on `facts` enforces it.
 - **Facts are surfaced alongside episodics, never instead of them.** Recall budgets the
@@ -87,7 +91,7 @@ come in" are answered by the directory names.
   `morgan-mcp --transport http` on a non-loopback host while `MORGAN_API_KEY` is unset or the
   placeholder.
 - **One of each.** One settings object, one database, one way to write to it, one gate, one
-  entity extractor, one `SemanticIndex` per assembly, one logging configuration.
+  entity extractor, one logging configuration.
 - **Never hardcode the owner.** Everything is keyed by `user_id`; single-owner is a config fact.
 
 ## Known limitations
@@ -95,13 +99,11 @@ come in" are answered by the directory names.
 - `recall` declines to answer only when `MORGAN_RECALL_FLOOR_MARGIN` is set. The value belongs
   to the embedding model: 0.11 for Qwen3-Embedding-0.6B, measured on the bundled probes and on
   a real archive. Other models are unmeasured.
-- On a real archive the entity signal and routing lower recall: recall@8 0.83 as shipped,
-  0.90 with vector and keyword search alone. The extractor stores sentence openers and code
-  words as entities, and routing cut the answer out both times it narrowed. The bundled
-  probes cannot see either signal. See `docs/ROADMAP.md`.
-- Schema classification for the upper index is keyword-based and an entity is classified once.
 - Entity extraction is deterministic and cased-script only; scripts without letter case
-  (Chinese, Japanese, Arabic, Hebrew) yield nothing rather than a guess.
+  (Chinese, Japanese, Arabic, Hebrew) yield nothing rather than a guess. A capitalised word is
+  a name only where the text capitalises it away from a sentence, clause or line start, so a
+  name that only ever opens sentences in a memory is not indexed. Code in a memory still
+  yields words like `true` and `error`.
 - A superseded memory outranks the current one in half the knowledge-update probes. Fusion
   is rank-only and carries no recency term. Supersession lives on facts; the probes store
   episodics, which carry none.
@@ -114,7 +116,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 299 passed, 3 skipped (the live ones)
+pytest -q                     # 270 passed, 3 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 
