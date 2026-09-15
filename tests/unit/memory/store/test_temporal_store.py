@@ -48,8 +48,8 @@ async def test_upsert_does_not_mutate_caller_object():
 
 
 def _database_written_before_one_current_fact_was_enforced(path: str) -> sqlite3.Connection:
-    """The facts table as it was before its current facts were unique per key, with a key that a
-    race between two processes left holding two current facts, and one untouched key."""
+    """The facts table as it was before its current facts were unique per key, with a key that
+    races between processes left holding three current facts, and one untouched key."""
     conn = sqlite3.connect(path)
     conn.executescript(
         """
@@ -68,6 +68,8 @@ def _database_written_before_one_current_fact_was_enforced(path: str) -> sqlite3
              '2026-02-01T00:00:00+00:00', NULL, NULL, NULL),
             ('munich', 'u1', 'p', 'user', 'lives_in', 'Munich', 'user_stated', 1.0,
              '2026-02-01T00:00:05+00:00', NULL, NULL, NULL),
+            ('rome', 'u1', 'p', 'user', 'lives_in', 'Rome', 'user_stated', 1.0,
+             '2026-02-01T00:00:05+00:00', NULL, NULL, NULL),
             ('job', 'u1', 'p', 'user', 'works_at', 'Acme', 'user_stated', 1.0,
              '2026-01-01T00:00:00+00:00', NULL, NULL, NULL);
         """
@@ -76,9 +78,9 @@ def _database_written_before_one_current_fact_was_enforced(path: str) -> sqlite3
     return conn
 
 
-def test_a_key_left_with_two_current_facts_keeps_the_newest_on_open(tmp_path):
-    """The older one is closed when the newer became valid and points at it, as a serial run
-    would have written it. Nothing is deleted."""
+def test_a_key_left_with_several_current_facts_keeps_the_newest_on_open(tmp_path):
+    """Each older one is closed when the next became valid and points at it, as a serial run
+    would have written it; a tie on valid_from goes to the later insert. Nothing is deleted."""
     path = str(tmp_path / "m.db")
     _database_written_before_one_current_fact_was_enforced(path).close()
 
@@ -91,7 +93,8 @@ def test_a_key_left_with_two_current_facts_keeps_the_newest_on_open(tmp_path):
     assert rows == {
         "seed": ("2026-02-01T00:00:00+00:00", "berlin"),
         "berlin": ("2026-02-01T00:00:05+00:00", "munich"),
-        "munich": (None, None),
+        "munich": ("2026-02-01T00:00:05+00:00", "rome"),
+        "rome": (None, None),
         "job": (None, None),
     }
 
@@ -103,7 +106,7 @@ def test_the_database_refuses_a_second_current_fact_for_a_key(tmp_path):
 
     with pytest.raises(sqlite3.IntegrityError):
         store._conn.execute(
-            "INSERT INTO facts VALUES ('rome', 'u1', 'p', 'user', 'lives_in', 'Rome', "
+            "INSERT INTO facts VALUES ('lisbon', 'u1', 'p', 'user', 'lives_in', 'Lisbon', "
             "'user_stated', 1.0, '2026-03-01T00:00:00+00:00', NULL, NULL, NULL)"
         )
 
