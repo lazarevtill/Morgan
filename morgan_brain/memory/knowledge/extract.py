@@ -29,8 +29,8 @@ import re
 #: (``kube-proxy``, ``O'Neill``, ``asyncio_bus``). Punctuation ends a word.
 _WORD = re.compile(r"[^\W_]+(?:[-'’_][^\W_]+)*", re.UNICODE)
 
-#: Sentences start with a capital in cased scripts, so the openers that begin an
-#: instruction or a question would otherwise be extracted from every other turn.
+#: Function words that arrive capitalised where no boundary explains it: after an opening
+#: quote or bracket, or in a title-cased heading.
 _STOPWORDS = frozenset(
     {
         # English sentence/question openers
@@ -206,6 +206,10 @@ _CALENDAR = frozenset(
 _MIN_NAME_LENGTH = 2
 _MIN_ACRONYM_LENGTH = 2
 
+#: What ends a sentence, a clause introduced by a colon, or a line. The word after one is
+#: capitalised by where it stands, not by what it names.
+_BOUNDARY = re.compile(r"[.!?:;\n]")
+
 
 def _is_candidate(word: str) -> bool:
     """True when *word* looks like a name, an acronym, or a CamelCase brand.
@@ -240,21 +244,50 @@ def words(text: str) -> list[str]:
     return [m.group(0) for m in _WORD.finditer(text)]
 
 
+def _words_with_position(text: str) -> list[tuple[str, bool]]:
+    """Every word in *text*, each with whether a sentence, clause or line opens right before it."""
+    positioned: list[tuple[str, bool]] = []
+    previous_end = None
+    for match in _WORD.finditer(text):
+        opens = previous_end is None or bool(_BOUNDARY.search(text, previous_end, match.start()))
+        positioned.append((match.group(0), opens))
+        previous_end = match.end()
+    return positioned
+
+
+def _named_where_it_stands(word: str, opens: bool) -> bool:
+    """True when the capital in *word* is not explained by its position.
+
+    A title-case word that opens a sentence, clause or line is capitalised by grammar. An
+    acronym (GDPR) or an interior capital (GitLab) is not a shape any position produces, so
+    those count wherever they stand.
+    """
+    if not _is_candidate(word):
+        return False
+    return not opens or word.isupper() or any(c.isupper() for c in word[1:])
+
+
 def extract_entity_names(text: str) -> list[str]:
     """Return the entity names in *text*, in order of first appearance, deduplicated.
 
     Order is part of the contract: the caller writes these into ``memory_entities`` and
     the index reads them back, so a set would make the stored order depend on hash seed
     and two processes would disagree about the same memory.
+
+    A word is a name when the text capitalises it somewhere its position does not explain.
+    Every sentence, line and list item opens with a capital; counting those put "Проверь",
+    "Теперь", "Install" and "Check" on every other memory of a real archive. A name that
+    opens one sentence is still found when the same text capitalises it anywhere else.
     """
+    positioned = _words_with_position(text)
+    named = {word.casefold() for word, opens in positioned if _named_where_it_stands(word, opens)}
     seen: set[str] = set()
     names: list[str] = []
-    for match in _WORD.finditer(text):
-        word = match.group(0)
+    for word, _ in positioned:
         folded = word.casefold()
         if folded in _STOPWORDS or folded in _CALENDAR:
             continue
-        if not _is_candidate(word):
+        if folded not in named or not _is_candidate(word):
             continue
         if folded in seen:
             continue

@@ -36,7 +36,7 @@ async def _remember(gate: MemoryGate, text: str) -> None:
 
 async def test_a_stored_memory_files_its_entities_into_the_index(stack):
     gate, semantic = stack
-    await _remember(gate, "Harbor blocked the deploy again")
+    await _remember(gate, "yesterday Harbor blocked the deploy again")
     assert semantic.schema_of(user_id=U, project=P, entity="harbor") == "work"
 
 
@@ -44,12 +44,12 @@ async def test_recall_routes_through_what_was_filed(stack):
     """Two unrelated memories, one query. Without routing the fused ranking would offer
     both; the pool leaves only the one the query points at."""
     gate, _semantic = stack
-    await _remember(gate, "Harbor blocked the deploy again")
+    await _remember(gate, "yesterday Harbor blocked the deploy again")
     await _remember(gate, "the Dentist appointment moved to the gym slot")
 
     hits = await gate.recall(MemoryQuery(user_id=U, project=P, text="Harbor", top_k=8))
     contents = [m.content for m in hits]
-    assert "Harbor blocked the deploy again" in contents
+    assert "yesterday Harbor blocked the deploy again" in contents
     assert "the Dentist appointment moved to the gym slot" not in contents
 
 
@@ -57,7 +57,7 @@ async def test_cross_project_recall_is_never_routed(stack):
     """all_projects=True is the explicit escape hatch. The index is per project, so
     routing it would make the escape hatch stricter than the default."""
     gate, _semantic = stack
-    await _remember(gate, "Harbor blocked the deploy again")
+    await _remember(gate, "yesterday Harbor blocked the deploy again")
     await _remember(gate, "the Dentist appointment moved to the gym slot")
 
     hits = await gate.recall(
@@ -68,7 +68,7 @@ async def test_cross_project_recall_is_never_routed(stack):
 
 async def test_an_unrouted_query_still_recalls_everything(stack):
     gate, _semantic = stack
-    await _remember(gate, "Harbor blocked the deploy again")
+    await _remember(gate, "yesterday Harbor blocked the deploy again")
     await _remember(gate, "the Dentist appointment moved to the gym slot")
 
     hits = await gate.recall(MemoryQuery(user_id=U, project=P, text="moved slot", top_k=8))

@@ -38,7 +38,7 @@ class PlacedEmbedder:
 #: entity and the vector search has a background to judge against. On a real corpus a common
 #: word is stored on dozens of memories; routing to the one Ubuntu memory alone would leave the
 #: floor too few results to judge, which is a different path.
-BACKGROUND = [f"Office grocery list number {n} for the weekend" for n in range(6)]
+BACKGROUND = [f"the Office grocery list number {n} for the weekend" for n in range(6)]
 
 
 async def _gate(tmp_path, *, ubuntu_vector: list[float]) -> MemoryGate:

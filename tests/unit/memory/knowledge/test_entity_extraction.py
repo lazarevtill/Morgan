@@ -17,13 +17,13 @@ def test_extracts_cyrillic_proper_nouns():
     """The reshape rebuilt the keyword index on FTS5 unicode61 so non-Latin scripts stop
     being dropped. An ASCII-only entity extractor reproduces exactly that bug one layer
     up, so this is the case the old `[A-Z][a-z]{2,}` regex fails."""
-    names = extract_entity_names("Ромашка отправила образец в Кувшинку")
+    names = extract_entity_names("Вчера Ромашка отправила образец в Кувшинку")
     assert "Ромашка" in names
     assert "Кувшинку" in names
 
 
 def test_mixed_script_text_yields_both():
-    names = extract_entity_names("Alice сохранила образец в Ромашке")
+    names = extract_entity_names("Образец для Alice сохранён в Ромашке")
     assert {"Alice", "Ромашке"} <= set(names)
 
 
@@ -60,6 +60,23 @@ def test_camelcase_brands_are_entities():
 def test_lowercase_words_are_still_not_entities():
     """The CamelCase rule must stay narrow: ordinary prose has no interior capitals."""
     assert extract_entity_names("the pipeline calls the registry") == []
+
+
+def test_a_capital_that_only_opens_a_sentence_is_not_a_name():
+    """Every sentence, line and list item opens with a capital. Counting those filled a real
+    archive's index with "Проверь", "Теперь", "Install" and "Check", one per turn."""
+    text = "Проверь конфиг. Теперь запусти сервер!\n- Install the package\n- Check logs\nИтог: Ниже"
+    assert extract_entity_names(text) == []
+
+
+def test_a_name_that_opens_a_sentence_counts_when_capitalised_elsewhere_in_the_text():
+    names = extract_entity_names("Berlin was cold. We flew to Berlin again.")
+    assert names == ["Berlin"]
+
+
+def test_acronyms_and_interior_capitals_count_at_a_sentence_start():
+    """Neither shape is how prose opens a sentence, so neither needs a second sighting."""
+    assert extract_entity_names("API ключ истёк. GitLab упал.") == ["API", "GitLab"]
 
 
 def test_empty_text_is_not_an_error():
