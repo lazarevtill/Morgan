@@ -291,6 +291,14 @@ class MemoryModule:
         ``report.tables_skipped`` rather than counted as zero.
         """
         conn = self._conn
+        if conn.in_transaction:
+            # The erasure is followed by a VACUUM, which SQLite refuses inside a transaction.
+            # Nested in a caller's write, forget() would erase, fail at the vacuum, and have the
+            # erasure rolled back with the caller's block -- so it refuses before touching anything.
+            raise RuntimeError(
+                "forget() cannot run inside a write transaction: it vacuums the database once "
+                "the erasure has committed"
+            )
 
         # The ids are selected inside the write transaction, which holds the lock from its
         # first statement. Selecting before the lock left a window in which another process --

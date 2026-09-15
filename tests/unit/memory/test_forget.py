@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
+from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.store.history import SessionHistoryStore
 from morgan_brain.models import Entity, Memory, MemoryQuery, Message, Role, TemporalFact
 from tests.unit.memory.conftest import build_memory_module as _module
@@ -111,3 +114,18 @@ async def test_forget_empties_every_underlying_table(tmp_path):
     # vec_meta, so an empty vec_meta plus an empty vec_items proves nothing is orphaned.
     orphaned = conn.execute("SELECT COUNT(*) AS n FROM vec_items").fetchone()
     assert orphaned["n"] == 0
+
+
+async def test_forget_refuses_to_run_inside_a_write_transaction(tmp_path):
+    """forget() vacuums once its erasure has committed, and SQLite cannot vacuum inside a
+    transaction. Run inside ``MemoryGate.write_transaction()``, it would erase, fail at the
+    vacuum, and have the erasure rolled back by the block. It refuses up front instead, before
+    touching anything."""
+    gate = MemoryGate(_module(str(tmp_path / "m.db")))
+    await gate.store(Memory(user_id="u", project="p", content="harbor mirror secret"))
+
+    with pytest.raises(RuntimeError, match="write transaction"), gate.write_transaction():
+        await gate.forget(user_id="u", project="p")
+
+    left = await gate.recall(MemoryQuery(user_id="u", project="p", text="harbor"))
+    assert [m.content for m in left] == ["harbor mirror secret"]

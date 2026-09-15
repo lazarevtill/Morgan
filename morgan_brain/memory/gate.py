@@ -96,7 +96,8 @@ class MemoryGate:
 
         For a caller whose writes depend on what it reads through the gate: the reads see
         what other processes committed before the block, and nothing else can write until
-        the block ends. Nothing inside may await real I/O.
+        the block ends. Nothing inside may await real I/O. ``forget`` is the exception: it
+        vacuums once its erasure commits, so it refuses to run inside the block.
         """
         return self._store.write_transaction()
 
