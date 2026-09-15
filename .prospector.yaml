@@ -1,0 +1,6 @@
+# Prospector, as Codacy runs it (the "use configuration file" toggle for Prospector must be on
+# in Codacy's Code patterns page). Ruff is this repository's linter and does not check docstring
+# layout; pydocstyle's defaults -- summary on its own line, closing quotes on their own line --
+# would flag the style every module already uses.
+pydocstyle:
+  run: false

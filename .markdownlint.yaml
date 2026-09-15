@@ -1,0 +1,7 @@
+# markdownlint, as Codacy runs it (the "use configuration file" toggle for markdownlint must be
+# on in Codacy's Code patterns page). Prose here wraps at 100 columns, the line length ruff
+# enforces on the code; tables and code blocks keep whatever width their content needs.
+MD013:
+  line_length: 100
+  tables: false
+  code_blocks: false

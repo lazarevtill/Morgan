@@ -1,0 +1,9 @@
+# Codacy's analysis scope. Codacy reads this file from the branch it analyses.
+#
+# A pytest `assert` is how a test states its expectation, not a vulnerability: the Opengrep
+# assert rule flags every one under tests/, which ruff already exempts from the equivalent
+# bandit rule (S101 in pyproject.toml). Production code is scanned in full.
+engines:
+  opengrep:
+    exclude_paths:
+      - "tests/**"
