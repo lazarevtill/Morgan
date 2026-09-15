@@ -27,6 +27,7 @@ from morgan_brain.memory.knowledge.schema_classifier import (
     KeywordSchemaClassifier,
     SemanticIndexBuilder,
 )
+from morgan_brain.memory.migrations import Stores, upgrade
 from morgan_brain.memory.module import MemoryModule
 from morgan_brain.memory.recall.semantic_index import SemanticIndex
 from morgan_brain.memory.store.db import open_db
@@ -125,20 +126,27 @@ def build_memory_module(
     clock: Any = utcnow,
     floor_margin: float | None = None,
 ) -> MemoryModule:
-    """Every store over one connection. Also the seam tests use with a small fake embedder."""
+    """Every store over one connection, upgraded to what this version writes.
+
+    Also the seam tests use with a small fake embedder.
+    """
     semantic = SemanticIndex(conn)
-    return MemoryModule(
+    entities = EntityIndex(conn)
+    episodics = EpisodicStore(conn)
+    module = MemoryModule(
         embedder=embedder,
         vectors=SqliteVectorIndex(conn, dim=dim),
         temporal=SqliteTemporalStore(conn=conn),
         clock=clock,
         fts=FtsIndex(conn),
-        entities=EntityIndex(conn),
-        episodics=EpisodicStore(conn),
+        entities=entities,
+        episodics=episodics,
         floor_margin=floor_margin,
         semantic=semantic,
         index_builder=SemanticIndexBuilder(semantic=semantic, classifier=KeywordSchemaClassifier()),
     )
+    upgrade(conn, Stores(episodics=episodics, entities=entities))
+    return module
 
 
 def build_memory_context(settings: Settings | None = None) -> MemoryContext:

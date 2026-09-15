@@ -80,6 +80,10 @@ class EpisodicStore:
             created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else None,
         )
 
+    def ids(self) -> list[str]:
+        """Every stored memory's id, across users and projects, in a stable order."""
+        return [str(r["id"]) for r in self._conn.execute("SELECT id FROM memories ORDER BY id")]
+
     def delete(self, ids: list[str]) -> None:
         with write_transaction(self._conn):
             for mid in ids:
