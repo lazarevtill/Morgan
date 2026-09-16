@@ -20,6 +20,12 @@ build/
 *.log
 *.pid
 
+# The owner's own chat export, which `morgan import` reads, and the pre-cut code some
+# checkouts keep beside it. Both are local: the export is private, and the old code is at
+# the legacy tags. Root-anchored, so docs/archive/ stays tracked.
+/conversations.json
+/archive/
+
 # Editors and machine-local settings. settings.local.json is where credentials may
 # legitimately live; it was tracked once, and leaked a key.
 .idea/
