@@ -10,8 +10,8 @@ overwritten. Everything lives in one SQLite file on hardware you own.
 ## What it does
 
 - **Remembers per project.** Every memory belongs to a project, which the CLI takes from the
-  current git repository's directory name. Recall is scoped to it; `--all-projects` is the
-  explicit escape hatch.
+  current git repository's name, worktrees included. Recall is scoped to it;
+  `--all-projects` is the explicit escape hatch.
 - **Recalls by meaning and by keyword.** Vector search (sqlite-vec) and full-text search
   (FTS5, Cyrillic-aware) over every memory in the project, fused by reciprocal rank. With a
   relevance floor set, recall can decline a question the project cannot answer.
@@ -47,10 +47,11 @@ morgan consolidate                      # recent memories → dated facts
 morgan import ~/Downloads/conversations.json   # optional: seed from a ChatGPT export
 ```
 
-Give Claude Code the same memory:
+Give Claude Code the same memory, and teach every coding agent here when to use it:
 
 ```bash
 claude mcp add morgan -- morgan-mcp --transport stdio
+morgan install-skill                   # lists what it writes, then asks
 ```
 
 The database is `~/.local/share/morgan/morgan.db` (`MORGAN_DATA_DIR`). The memory

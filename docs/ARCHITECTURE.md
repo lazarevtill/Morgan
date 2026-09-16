@@ -29,11 +29,11 @@ morgan-mcp ──┘        │                 ├─ FTS5 keyword index      o
 | `memory/recall/` | `fusion` merges the vector and keyword rankings by reciprocal rank. Rank-only, so the relevance threshold, `floor`, judges the vector scores before fusion. |
 | `memory/knowledge/` | `extract` (the one entity extractor: words the text capitalises away from a sentence start, acronyms, CamelCase; Latin and Cyrillic), `surprise` (drops episodics the facts already predict), `fact_ops` (the operation schema the model is constrained to), `consolidation` (applies them: supersede, never overwrite). |
 | `providers/` | `openai_compat.py` (chat over the `openai` SDK), `embeddings.py` (`/embeddings` over httpx), `structured.py` (JSON-schema, JSON-object or prompted, validated, re-asked), `factory.py`, `wire.py` (`ChatClient`, `ProviderUnreachable`). Nothing above imports a model SDK. |
-| `eval/retrieval.py` | Labelled probes, and the recall@k / MRR / leak-rate scorecard they produce. The measurement that turns retrieval quality from an assumption into a number. |
+| `eval/retrieval.py` | Labelled probes, and the recall@k / MRR / leak-rate scorecard they produce, printed beside a `RunConfig`: embedding model and width, k, floor, probe file and its digest, corpus size, database upgrade step, commit. Never the endpoint. The measurement that turns retrieval quality from an assumption into a number. |
 | `app/chatgpt_import.py` | Seeds memory from a ChatGPT export. Splits a turn too long for the embedding context, and routes a fifth of conversations to a holdout project the optimizer can never mine. |
 | `app/chat.py` | One turn: recall → prompt → answer → remember both halves, attributed. The one use-case both surfaces share. |
-| `surfaces/cli/` | `morgan`: `__main__` parses and dispatches, `commands` answers, `payloads` shapes the result, `render` prints it, `doctor` diagnoses the install. Project = the current git repository's directory name. |
-| `surfaces/mcp_server.py` | `morgan-mcp`: `remember`, `recall`, `facts`, `forget`, `ask_morgan` over stdio or streamable-HTTP with a bearer token. Calls the CLI's command handlers; `project` is a tool argument. |
+| `surfaces/cli/` | `morgan`: `__main__` parses and dispatches, `commands` answers, `payloads` shapes the result, `render` prints it, `doctor` diagnoses the install, `install_skill` teaches the coding agents installed here when to use Morgan. Project = the enclosing git repository's name; a linked worktree counts as the repository it came from. |
+| `surfaces/mcp_server.py` | `morgan-mcp`: `remember`, `recall`, `facts`, `forget`, `ask_morgan` over stdio or streamable-HTTP with a bearer token. Calls the CLI's command handlers; `project` is a tool argument. Every tool declares MCP's read-only, destructive, idempotent and open-world hints; only `recall` and `facts` claim read-only. |
 | `surfaces/network.py` | The bind guard: no listener beyond loopback without a real key. |
 
 ## Recall

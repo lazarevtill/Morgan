@@ -41,16 +41,18 @@ come in" are answered by the directory names.
   - `knowledge/` — `extract`, `surprise`, `fact_ops`, `consolidation`.
     The work that costs a model call or a full pass, and never runs inside a recall.
 - `eval/` — measuring what recall returns: labelled probes, recall@k, MRR and leak rate,
-  scored per probe kind. Run with `pytest --live` against a real embedding endpoint.
+  scored per probe kind, printed beside the run's configuration. Run with `pytest --live`
+  against a real embedding endpoint.
 - `providers/` — the only place a model SDK is imported: `openai_compat.py` (chat),
   `embeddings.py`, `structured.py` (JSON-validated output), `factory.py` (settings → adapters),
   `wire.py` (message types, `ChatClient`, `ProviderUnreachable`).
 - `app/chat.py` — one turn: recall, answer, remember. Not a surface: the one use-case both
   surfaces call.
 - `surfaces/` — where requests come in. `cli/` (`__main__` parses and dispatches, `commands`
-  answers, `payloads` shapes the result, `render` prints it, `doctor` diagnoses),
-  `mcp_server.py` (five MCP tools over stdio or streamable-HTTP, calling those same command
-  handlers), and `network.py`, the bind guard that protects the HTTP one.
+  answers, `payloads` shapes the result, `render` prints it, `doctor` diagnoses,
+  `install_skill` writes the packaged `skill/SKILL.md` into the coding agents installed
+  here), `mcp_server.py` (five MCP tools over stdio or streamable-HTTP, calling those same
+  command handlers), and `network.py`, the bind guard that protects the HTTP one.
 
 ## Invariants
 
@@ -87,6 +89,12 @@ come in" are answered by the directory names.
   parsed by machines; all logs go to stderr. Never `print()` diagnostics from library code.
 - **Nothing runs a model unasked.** `ask` and `consolidate` call the model; nothing else does,
   and nothing runs on a schedule. Consolidation is on demand (or the owner's own cron).
+- **Every MCP tool declares what it does.** `TOOL_ANNOTATIONS` states all four hints for every
+  tool, and only a tool that changes nothing claims read-only: a client may run those
+  unprompted, and `install-skill` allows exactly those in Claude Code. `ask_morgan` stores the
+  exchange, so it is a write.
+- **A project is a repository.** The CLI names it after the enclosing git repository; a linked
+  worktree belongs to the repository it was created from, a submodule is its own.
 - **No listener beyond loopback without a key.** `network.assert_safe_bind` refuses to start
   `morgan-mcp --transport http` on a non-loopback host while `MORGAN_API_KEY` is unset or the
   placeholder.
@@ -116,7 +124,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 271 passed, 3 skipped (the live ones)
+pytest -q                     # 295 passed, 3 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

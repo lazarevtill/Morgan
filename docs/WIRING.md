@@ -71,8 +71,9 @@ Every probe is independent, so one failure does not hide the rest. The first two
 
 ## 5. The CLI
 
-Every command takes `--project` (default: the current git repository's directory name),
-`--json`, and where it makes sense `--all-projects`.
+Every command takes `--project` (default: the current git repository's name; a linked
+worktree counts as the repository it came from), `--json`, and where it makes sense
+`--all-projects`.
 
 ```bash
 morgan remember "the Harbor mirror blocked the deploy"   # embedding model only
@@ -101,6 +102,8 @@ reach and exits 1; under `--json` the error is the whole of stdout.
 
 The same five operations for any MCP client, through the same gate. `project` is a tool
 argument (the server is a daemon; its own working directory means nothing to a client).
+Every tool declares MCP's hints: `recall` and `facts` are read-only, `remember` and
+`ask_morgan` write (a turn stores the exchange), `forget` is destructive.
 
 ```bash
 claude mcp add morgan -- morgan-mcp --transport stdio      # a client on this machine
@@ -112,14 +115,43 @@ The HTTP transport enforces `MORGAN_API_KEY` as a bearer token. With no key set 
 loopback only, and refuses to start on any other host: these tools include `forget`. See
 [`OPERATIONS.md`](OPERATIONS.md) for client configuration.
 
-## 7. Docker
+## 7. Teach your agents: `morgan install-skill`
+
+The tools say what Morgan can do; the skill says when. It tells an agent to recall before a
+task or a design decision, to remember decisions, corrections, conventions and measured
+conclusions with their evidence, never to store secrets, and which project to name.
+
+```bash
+morgan install-skill                         # lists every path, then asks
+morgan install-skill --yes --json            # for scripts
+morgan install-skill --mcp-server brain      # if morgan-mcp is registered under another name
+```
+
+It writes `morgan/SKILL.md` for each agent installed here: Claude Code (`~/.claude/skills`,
+or `CLAUDE_CONFIG_DIR`), Codex (`~/.agents/skills`), OpenCode
+(`$XDG_CONFIG_HOME/opencode/skills`), Cursor (`~/.cursor/skills`). In Claude Code's
+`settings.json` it allows `mcp__morgan__recall` and `mcp__morgan__facts`, the tools that
+declare themselves read-only, so recalling does not stop for a prompt. A `morgan` skill it did not write is left alone, and
+so is a settings file it cannot parse. Run it again after upgrading Morgan.
+
+**OpenResearch.** Its agent sessions run with their own configuration and load neither the
+skills above nor your MCP servers. The installer puts the skill in OpenResearch's upload
+store (`user-skills/global/morgan/SKILL.md` under `ORX_DATA_DIR`, or
+`~/.local/share/openresearch`), which every session receives, and the skill falls back to the
+`morgan` command when the tools are absent -- so `morgan` must be on the session's `PATH`. A
+session runs in its own git worktree; the command still files memories under the
+repository's project, so a conclusion recorded in one experiment session is recalled in the
+next, and `--all-projects` finds it from another research project. If you moved
+OpenResearch's data folder in its settings, set `ORX_DATA_DIR` before installing.
+
+## 8. Docker
 
 `docker compose up -d` builds the image and runs `morgan-mcp --transport http` on port 8090
 with `./data` mounted as the database directory. Put `MORGAN_LLM_ENDPOINT` and a real
 `MORGAN_API_KEY` in `.env` next to the compose file; the published port is not loopback, so
 the server refuses to start without the key.
 
-## 8. Consolidation on a schedule
+## 9. Consolidation on a schedule
 
 Nothing in Morgan runs a model unasked. If you want nightly consolidation, that is one cron
 line on the machine that holds the database:
