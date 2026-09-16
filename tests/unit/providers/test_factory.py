@@ -2,9 +2,59 @@
 
 from __future__ import annotations
 
+import pytest
+
 from morgan_brain.config import Settings
 from morgan_brain.providers.embeddings import OpenAICompatEmbedder
-from morgan_brain.providers.factory import build_embedder
+from morgan_brain.providers.factory import build_chat_client, build_embedder
+from morgan_brain.providers.wire import ChatMessage, ProviderUnreachable
+
+#: Port 1 on loopback is closed, so every connect is refused at once.
+_CLOSED = "http://127.0.0.1:1/v1"
+
+
+async def test_a_separate_embedding_endpoint_that_is_down_is_named_by_its_own_setting():
+    """The chat endpoint answers fine here; sending the owner to check it is sending them to
+    the one server that is not broken."""
+    embedder = build_embedder(
+        Settings(
+            llm_endpoint="http://chat.invalid/v1",
+            embedding_endpoint=_CLOSED,
+            embedding_backend="provider",
+        )
+    )
+
+    with pytest.raises(ProviderUnreachable) as info:
+        await embedder.embed("hi")
+
+    assert "MORGAN_EMBEDDING_ENDPOINT" in str(info.value)
+    assert "MORGAN_LLM_ENDPOINT" not in str(info.value)
+
+
+async def test_embeddings_sent_to_the_chat_endpoint_name_the_chat_setting():
+    """With no embedding endpoint configured there is no MORGAN_EMBEDDING_ENDPOINT to check:
+    the chat endpoint serves both."""
+    embedder = build_embedder(
+        Settings(llm_endpoint=_CLOSED, embedding_endpoint="", embedding_backend="provider")
+    )
+
+    with pytest.raises(ProviderUnreachable) as info:
+        await embedder.embed("hi")
+
+    assert "MORGAN_LLM_ENDPOINT" in str(info.value)
+    assert "MORGAN_EMBEDDING_ENDPOINT" not in str(info.value)
+
+
+async def test_a_chat_endpoint_that_is_down_is_named_by_its_setting():
+    chat = build_chat_client(
+        Settings(llm_endpoint=_CLOSED, embedding_endpoint="http://embed.invalid/v1")
+    )
+
+    with pytest.raises(ProviderUnreachable) as info:
+        await chat.agenerate([ChatMessage(role="user", content="hi")], model="m")
+
+    assert "MORGAN_LLM_ENDPOINT" in str(info.value)
+    assert "MORGAN_EMBEDDING_ENDPOINT" not in str(info.value)
 
 
 def test_embedder_falls_back_to_the_chat_endpoint_when_unset():

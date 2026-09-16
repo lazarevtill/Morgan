@@ -23,13 +23,16 @@ def test_openai_compat_adapter_constructs_without_network():
         base_url="http://x/v1",
         api_key="k",
         provider="openaicompat",
+        setting="MORGAN_LLM_ENDPOINT",
     )
     assert adapter._provider == "openaicompat"
     assert adapter._base_url == "http://x/v1"
 
 
 def test_openai_compat_adapter_is_chat_client():
-    adapter = OpenAICompatAdapter(base_url="http://x/v1", api_key="k", provider="p")
+    adapter = OpenAICompatAdapter(
+        base_url="http://x/v1", api_key="k", provider="p", setting="MORGAN_LLM_ENDPOINT"
+    )
     assert isinstance(adapter, ChatClient)
 
 

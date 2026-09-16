@@ -67,6 +67,8 @@ def test_doctor_reports_actionable_status(tmp_path):
         "fts5",
         "provider",
         "embedding_dim",
+        "embedding_endpoint",
+        "embedding_provider",
         "llm_endpoint",
         "vector_rows",
         "memory_rows",
@@ -79,6 +81,7 @@ def test_doctor_reports_actionable_status(tmp_path):
     assert report["fts_rows"] == 0
     assert report["vector_rows"] == 0
     assert report["provider"] in ("reachable", "unreachable")
+    assert report["embedding_provider"] == "not used"  # the hash backend
 
 
 def test_a_cli_the_suite_starts_reads_none_of_the_developers_configuration(tmp_path):
@@ -286,6 +289,26 @@ def test_json_stdout_stays_json_when_something_is_logged(tmp_path):
     payload = json.loads(out.stdout)  # the whole of stdout is the document
     assert "127.0.0.1:1" in payload["error"]
     assert "embedding-dim-probe" in out.stderr
+
+
+def test_an_embedding_endpoint_that_is_down_is_named_with_its_setting(tmp_path):
+    """Embeddings have their own endpoint here, and it is down. Every line the owner reads
+    must point at it, not at the chat endpoint, which recall never touches."""
+    env = _env_without_morgan(
+        MORGAN_DATA_DIR=str(tmp_path),
+        MORGAN_LLM_ENDPOINT="http://chat.invalid/v1",
+        MORGAN_EMBEDDING_ENDPOINT="http://127.0.0.1:1/v1",
+    )
+
+    out = _run(["recall", "x", "--json"], env, tmp_path)
+
+    assert out.returncode == 1
+    error = json.loads(out.stdout)["error"]
+    assert "127.0.0.1:1" in error
+    assert "MORGAN_EMBEDDING_ENDPOINT" in error
+    assert "MORGAN_LLM_ENDPOINT" not in error
+    assert "embedding-dim-probe.unreachable" in out.stderr
+    assert "chat.invalid" not in out.stderr
 
 
 def test_json_output_survives_a_non_utf8_parent_encoding(tmp_path):

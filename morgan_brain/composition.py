@@ -32,7 +32,11 @@ from morgan_brain.memory.store.fts import FtsIndex
 from morgan_brain.memory.store.history import SessionHistoryStore
 from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.memory.store.vectors import SqliteVectorIndex
-from morgan_brain.providers.factory import build_chat_client, build_embedder
+from morgan_brain.providers.factory import (
+    build_chat_client,
+    build_embedder,
+    embedding_endpoint_of,
+)
 from morgan_brain.providers.openai_compat import OpenAICompatAdapter
 from morgan_brain.providers.wire import ProviderUnreachable
 
@@ -80,13 +84,12 @@ def _probe_embedding_dim(embedder: Embedder, settings: Settings) -> None:
     try:
         vector = _run_coro_isolated(embedder.embed("probe"))
     except ProviderUnreachable as exc:
-        log.warning(
-            "embedding-dim-probe.unreachable", endpoint=settings.llm_endpoint, error=str(exc)
-        )
+        log.warning("embedding-dim-probe.unreachable", endpoint=exc.endpoint, error=str(exc))
         return
     if len(vector) != settings.embedding_dim:
         raise RuntimeError(
-            f"embedding model {settings.embedding_model!r} at {settings.llm_endpoint} "
+            f"embedding model {settings.embedding_model!r} at "
+            f"{embedding_endpoint_of(settings).url} "
             f"returned a {len(vector)}-dimensional vector but settings.embedding_dim="
             f"{settings.embedding_dim}; the two must agree "
             "(set MORGAN_EMBEDDING_DIM to the model's real output size)"

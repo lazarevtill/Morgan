@@ -36,6 +36,7 @@ class OpenAICompatEmbedder:
         api_key:  Outbound bearer token, if the endpoint enforces one (llama-server's
                   ``--api-key``). ``None``/empty sends no ``Authorization`` header. This is
                   ``MORGAN_LLM_API_KEY``, never ``MORGAN_API_KEY`` — opposite directions.
+        setting:  The variable that addresses ``endpoint``, named when it cannot be reached.
     """
 
     def __init__(
@@ -44,11 +45,14 @@ class OpenAICompatEmbedder:
         model: str,
         timeout: float = 120.0,
         api_key: str | None = None,
+        *,
+        setting: str,
     ) -> None:
         self._url = endpoint.rstrip("/") + "/embeddings"
         self._model = model
         self._timeout = timeout
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        self._setting = setting
 
     async def embed(self, text: str) -> list[float]:
         return (await self.embed_batch([text]))[0]
@@ -63,7 +67,9 @@ class OpenAICompatEmbedder:
                 )
         except httpx.TransportError as exc:
             # Connection refused, DNS failure, timeout: the endpoint gave no answer.
-            raise ProviderUnreachable(self._url, f"{type(exc).__name__}: {exc}") from exc
+            raise ProviderUnreachable(
+                self._url, f"{type(exc).__name__}: {exc}", setting=self._setting
+            ) from exc
         resp.raise_for_status()
         data = resp.json()["data"]
         return [item["embedding"] for item in data]

@@ -57,6 +57,7 @@ class OpenAICompatAdapter:
         provider: Provider name for capability registry lookups (e.g. ``"llamacpp"``).
         timeout:  Request timeout in seconds. Default is sized for a remote server reached
                   over a network (a homelab GPU box under load), not a loopback socket.
+        setting:  The variable that addresses ``base_url``, named when it cannot be reached.
     """
 
     def __init__(
@@ -65,12 +66,15 @@ class OpenAICompatAdapter:
         api_key: str,
         provider: str,
         timeout: float = 120.0,
+        *,
+        setting: str,
     ) -> None:
         # Import here so that the openai SDK is only required if this adapter is used.
         import openai
 
         self._provider = provider
         self._base_url = base_url
+        self._setting = setting
         self._client = openai.AsyncOpenAI(
             base_url=base_url,
             api_key=api_key,
@@ -106,7 +110,7 @@ class OpenAICompatAdapter:
         try:
             response = await self._client.chat.completions.create(**kwargs)
         except self._connection_error as exc:
-            raise ProviderUnreachable(self._base_url, str(exc)) from exc
+            raise ProviderUnreachable(self._base_url, str(exc), setting=self._setting) from exc
         choice = response.choices[0]
         msg = choice.message
 
@@ -158,7 +162,7 @@ class OpenAICompatAdapter:
         try:
             stream = await self._client.chat.completions.create(**kwargs)
         except self._connection_error as exc:
-            raise ProviderUnreachable(self._base_url, str(exc)) from exc
+            raise ProviderUnreachable(self._base_url, str(exc), setting=self._setting) from exc
         async with stream:
             async for chunk in stream:
                 if not chunk.choices:

@@ -79,14 +79,18 @@ class ProviderUnreachable(ConnectionError):
     """The model endpoint could not be reached, or gave no answer in time.
 
     Raised by both adapters (chat and embeddings). Carries the endpoint so the message can
-    name it: "Connection error." tells the owner nothing about *which* server is down.
+    name it: "Connection error." tells the owner nothing about *which* server is down. It also
+    names ``setting``, the variable that addresses the endpoint, which the adapter is given by
+    the factory: embeddings go to the chat endpoint unless MORGAN_EMBEDDING_ENDPOINT is set,
+    so the embedding adapter alone cannot tell which of the two to check.
     """
 
-    def __init__(self, endpoint: str, detail: str) -> None:
+    def __init__(self, endpoint: str, detail: str, *, setting: str) -> None:
         self.endpoint = endpoint
         self.detail = detail
+        self.setting = setting
         super().__init__(
-            f"model endpoint {endpoint} is unreachable ({detail}); check MORGAN_LLM_ENDPOINT "
+            f"model endpoint {endpoint} is unreachable ({detail}); check {setting} "
             "and run `morgan doctor`"
         )
 

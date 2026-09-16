@@ -15,17 +15,23 @@ _CLOSED = "http://127.0.0.1:1/v1"
 _MESSAGES = [ChatMessage(role="user", content="hi")]
 
 
+def _chat() -> OpenAICompatAdapter:
+    return OpenAICompatAdapter(
+        base_url=_CLOSED, api_key="k", provider="p", timeout=2.0, setting="MORGAN_LLM_ENDPOINT"
+    )
+
+
 async def test_chat_names_the_endpoint_it_could_not_reach() -> None:
-    adapter = OpenAICompatAdapter(base_url=_CLOSED, api_key="k", provider="p", timeout=2.0)
     with pytest.raises(ProviderUnreachable) as info:
-        await adapter.agenerate(_MESSAGES, model="m")
+        await _chat().agenerate(_MESSAGES, model="m")
     assert info.value.endpoint == _CLOSED
     assert _CLOSED in str(info.value)
+    assert "MORGAN_LLM_ENDPOINT" in str(info.value)
     assert "morgan doctor" in str(info.value)
 
 
 async def test_stream_raises_before_yielding_anything() -> None:
-    adapter = OpenAICompatAdapter(base_url=_CLOSED, api_key="k", provider="p", timeout=2.0)
+    adapter = _chat()
     received = []
     with pytest.raises(ProviderUnreachable):
         async for delta in adapter.astream(_MESSAGES, model="m"):
@@ -34,10 +40,11 @@ async def test_stream_raises_before_yielding_anything() -> None:
 
 
 async def test_embedder_names_the_endpoint_it_could_not_reach() -> None:
-    embedder = OpenAICompatEmbedder(_CLOSED, "e", timeout=2.0)
+    embedder = OpenAICompatEmbedder(_CLOSED, "e", timeout=2.0, setting="MORGAN_EMBEDDING_ENDPOINT")
     with pytest.raises(ProviderUnreachable) as info:
         await embedder.embed("hi")
     assert info.value.endpoint.startswith(_CLOSED)
+    assert "MORGAN_EMBEDDING_ENDPOINT" in str(info.value)
 
 
 def test_it_is_a_connection_error() -> None:

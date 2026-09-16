@@ -2,11 +2,62 @@
 
 from __future__ import annotations
 
+import json
+import threading
 from collections import deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from morgan_brain.providers.wire import ChatMessage, ChatResult, StreamDelta, ToolSpec
+
+
+@contextmanager
+def model_server(*, embeddings: bool = True, embedding_dim: int = 1024) -> Iterator[str]:
+    """An OpenAI-compatible model server on a free loopback port; yields its ``/v1`` URL.
+
+    It lists no models and embeds every input as a zero vector ``embedding_dim`` wide. With
+    ``embeddings=False`` it answers embedding requests with a 501, as a llama-server started
+    without ``--embeddings`` does. Real sockets, so a probe is tested the way it runs.
+    """
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            if self.path == "/v1/models":
+                self._reply(200, {"object": "list", "data": []})
+            else:
+                self._reply(404, {"error": "not found"})
+
+        def do_POST(self) -> None:
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            if self.path != "/v1/embeddings":
+                self._reply(404, {"error": "not found"})
+            elif not embeddings:
+                self._reply(501, {"error": "this server was started without --embeddings"})
+            else:
+                count = len(body["input"]) if isinstance(body["input"], list) else 1
+                vectors = [{"index": i, "embedding": [0.0] * embedding_dim} for i in range(count)]
+                self._reply(200, {"object": "list", "data": vectors})
+
+        def _reply(self, status: int, payload: dict[str, Any]) -> None:
+            data = json.dumps(payload).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args: Any) -> None:
+            """The suite's output is not a request log."""
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}/v1"
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 class FakeChatClient:

@@ -3,6 +3,11 @@
 Every probe is independent and failure-tolerant, so one broken thing reports itself
 rather than hiding the rest. A table that was never created is named as skipped, never
 counted as an honest zero.
+
+The chat server and the embedding server are probed separately, because they are often two
+servers and fail on their own: ``provider`` is the chat endpoint, which ``ask`` and
+``consolidate`` need, and ``embedding_provider`` is where every ``remember`` and ``recall``
+embeds -- ``"not used"`` under the hash backend, which calls no server.
 """
 
 from __future__ import annotations
@@ -19,7 +24,11 @@ from morgan_brain.composition import (
 from morgan_brain.config import Settings, user_config_file
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.store.db import open_db
-from morgan_brain.providers.factory import check_llm_reachable
+from morgan_brain.providers.factory import (
+    check_embeddings_reachable,
+    check_llm_reachable,
+    embedding_endpoint_of,
+)
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
@@ -41,6 +50,7 @@ def _collect_local_probes(
     """
     db_path = sqlite_path(settings.temporal_db_url)
     config_file = user_config_file()
+    hash_backend = settings.embedding_backend == "hash"
     report: dict[str, Any] = {
         "database": db_path if db_path == ":memory:" else str(Path(db_path).resolve()),
         # The first question after "why is my brain empty?" is "which config did it read?"
@@ -50,11 +60,13 @@ def _collect_local_probes(
         "all_projects": all_projects,
         "embedding_backend": settings.embedding_backend,
         "embedding_dim": settings.embedding_dim,
+        "embedding_endpoint": None if hash_backend else embedding_endpoint_of(settings).url,
         "llm_endpoint": settings.llm_endpoint,
         "llm_model": settings.llm_model,
         "sqlite_vec": None,
         "fts5": False,
         "provider": "unreachable",
+        "embedding_provider": "not used" if hash_backend else "unreachable",
         "vector_rows": None,
         "memory_rows": None,
         "fts_rows": None,
@@ -128,5 +140,17 @@ async def build_doctor_report(
     report = await asyncio.to_thread(
         _collect_local_probes, settings, project=project, all_projects=all_projects
     )
-    report["provider"] = "reachable" if await check_llm_reachable(settings) else "unreachable"
+    chat, embeddings = await asyncio.gather(
+        check_llm_reachable(settings), _embeddings_answer(settings)
+    )
+    report["provider"] = "reachable" if chat else "unreachable"
+    if embeddings is not None:
+        report["embedding_provider"] = "reachable" if embeddings else "unreachable"
     return report
+
+
+async def _embeddings_answer(settings: Settings) -> bool | None:
+    """Whether the embedding endpoint answers; None under the hash backend, which has none."""
+    if settings.embedding_backend == "hash":
+        return None
+    return await check_embeddings_reachable(settings)
