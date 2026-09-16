@@ -73,7 +73,8 @@ two categories that do not yet work.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the package, the write path, recall, consolidation, erasure.
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — at-rest and transport protection, backups, the stack.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — where this came from, what was cut, what is next.
-- [`CLAUDE.md`](CLAUDE.md) — the invariants, for anyone (or anything) changing the code.
+- [`CLAUDE.md`](CLAUDE.md) — the invariants, for anyone (or anything) changing the code;
+  [`AGENTS.md`](AGENTS.md) carries the same text for Codex and the other agents that read it.
 
 ## History
 
