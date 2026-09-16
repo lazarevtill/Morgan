@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -115,6 +116,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Emit machine-readable JSON instead of human text."
     )
 
+    # No --project: the skill is the same for every project, and it goes into the agents'
+    # own folders rather than into the memory.
+    p_skill = sub.add_parser(
+        "install-skill",
+        help="Teach the coding agents installed here when to recall and what to remember.",
+    )
+    p_skill.add_argument("--yes", action="store_true", help="Write without asking first.")
+    p_skill.add_argument(
+        "--mcp-server",
+        default="morgan",
+        help="The name morgan-mcp is registered under in Claude Code (default: morgan).",
+    )
+    p_skill.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON instead of human text."
+    )
+
     return parser
 
 
@@ -155,6 +172,20 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging()
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command == "install-skill":
+        # Touches no memory and needs no settings: it writes into the agents' own folders.
+        from morgan_brain.surfaces.cli.install_skill import run
+
+        return run(
+            yes=args.yes,
+            as_json=args.json,
+            mcp_server=args.mcp_server,
+            home=Path.home(),
+            env=os.environ,
+            stdin=sys.stdin,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
     settings = get_settings()
     # getattr: not every verb takes --project. `import` decides the destination from the
     # holdout rule, so it deliberately has no such flag to read.

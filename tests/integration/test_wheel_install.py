@@ -19,6 +19,8 @@ def test_wheel_contains_the_package_and_the_entry_points(tmp_path: Path) -> None
 
     assert "morgan_brain/surfaces/cli/__main__.py" in names
     assert "morgan_brain/surfaces/mcp_server.py" in names
+    # `morgan install-skill` reads it from the installed package, not from a checkout.
+    assert "morgan_brain/surfaces/cli/skill/SKILL.md" in names
     assert not any(n.startswith("tests/") for n in names)
     entry_points = next(n for n in names if n.endswith("entry_points.txt"))
     scripts = wheel.read(entry_points).decode()
