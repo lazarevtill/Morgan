@@ -20,11 +20,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
+from morgan_brain.config import Settings
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.models import Memory, MemoryKind, MemoryQuery, MemorySource
 
@@ -128,6 +130,72 @@ class Scorecard:
                 f"abstain={card.abstain_rate:.2f}"
             )
         return "\n".join(lines)
+
+
+@dataclass(frozen=True)
+class RunConfig:
+    """What a scorecard was measured under, printed beside it.
+
+    Retrieval numbers move with every field here, so a card without them cannot be compared
+    with the next one. The embedding endpoint is left out on purpose: the model and its width
+    identify the run, and a host name in a log that gets pasted into an issue only publishes
+    where the owner's servers are.
+    """
+
+    embedding_backend: str
+    embedding_model: str
+    embedding_dim: int
+    k: int
+    floor_margin: float | None
+    probe_file: str
+    #: Of the probe file's bytes, so relabelling a probe under the same file name shows.
+    probe_digest: str
+    corpus_size: int
+    probe_count: int
+    #: How many ``memory.migrations`` steps the database has been through.
+    db_upgrade: int
+    commit: str | None
+
+    def format(self) -> str:
+        floor = "off" if self.floor_margin is None else f"{self.floor_margin:.2f}"
+        # The hash stub calls no model, so the configured model name would misname the run.
+        embedding = (
+            f"hash stub (dim {self.embedding_dim})"
+            if self.embedding_backend == "hash"
+            else f"{self.embedding_model} (dim {self.embedding_dim})"
+        )
+        return (
+            f"run: embedding={embedding}  k={self.k}  floor={floor}  "
+            f"probes={self.probe_file}@{self.probe_digest} "
+            f"({self.corpus_size} memories, {self.probe_count} probes)  "
+            f"db-upgrade={self.db_upgrade}  commit={self.commit or 'unknown'}"
+        )
+
+
+def describe_run(
+    *,
+    settings: Settings,
+    probe_path: Path,
+    probe_set: ProbeSet,
+    conn: sqlite3.Connection,
+    k: int,
+    floor_margin: float | None,
+    commit: str | None,
+) -> RunConfig:
+    """Record what a run over *probe_set* is measured under. *conn* is the run's database."""
+    return RunConfig(
+        embedding_backend=settings.embedding_backend,
+        embedding_model=settings.embedding_model,
+        embedding_dim=settings.embedding_dim,
+        k=k,
+        floor_margin=floor_margin,
+        probe_file=probe_path.name,
+        probe_digest=hashlib.sha256(probe_path.read_bytes()).hexdigest()[:12],
+        corpus_size=len(probe_set.corpus),
+        probe_count=len(probe_set.probes),
+        db_upgrade=int(conn.execute("PRAGMA user_version").fetchone()[0]),
+        commit=commit,
+    )
 
 
 def _reciprocal_rank(result: ProbeResult, k: int) -> float:

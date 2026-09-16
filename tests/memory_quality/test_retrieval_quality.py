@@ -13,6 +13,7 @@ and nothing about relevance. These two tests keep those questions apart:
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ from morgan_brain.eval.retrieval import (
     ProbeKind,
     ProbeSet,
     Split,
+    describe_run,
     load_probe_set,
     probe_split,
     run_probes,
@@ -42,6 +44,21 @@ K = 8
 def _gate(tmp_path, embedder, dim):
     conn = open_db(str(tmp_path / "morgan.db"))
     return MemoryGate(build_memory_module(conn=conn, embedder=embedder, dim=dim))
+
+
+def _commit() -> str | None:
+    """The checkout's commit, so a printed card names the code it measured."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path(__file__).parent,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return out.stdout.strip() or None
 
 
 async def test_a_run_completes_and_scores_over_the_labelled_set(tmp_path):
@@ -73,11 +90,25 @@ async def test_recall_finds_the_right_memory_when_the_query_shares_no_words_with
     what happens when a superseded memory has never been consolidated into a fact.
     """
     settings = Settings()
-    gate = _gate(tmp_path, build_embedder(settings), settings.embedding_dim)
+    conn = open_db(str(tmp_path / "morgan.db"))
+    module = build_memory_module(
+        conn=conn, embedder=build_embedder(settings), dim=settings.embedding_dim
+    )
     probe_set = load_probe_set(PROBES)
 
-    card = score_run(await run_probes(probe_set, gate=gate, user_id="owner", k=K), k=K)
-    print("\n" + card.format(K))
+    card = score_run(
+        await run_probes(probe_set, gate=MemoryGate(module), user_id="owner", k=K), k=K
+    )
+    run = describe_run(
+        settings=settings,
+        probe_path=PROBES,
+        probe_set=probe_set,
+        conn=conn,
+        k=K,
+        floor_margin=None,
+        commit=_commit(),
+    )
+    print("\n" + run.format() + "\n" + card.format(K))
 
     # Measured on this 60-probe set with Qwen3-Embedding-0.6B: recall@8 0.85 overall, 0.95
     # single-hop, 1.00 temporal, MRR 0.48. Unanswerable and multi-hop probes count toward the
@@ -123,6 +154,19 @@ async def test_report_what_each_relevance_floor_would_cost(tmp_path, capsys):
             f"{label:>7} {card.recall_at_k:>9.2f} {card.abstain_rate:>9.2f} {card.mrr:>6.2f}"
         )
 
+    run = describe_run(
+        settings=settings,
+        probe_path=PROBES,
+        probe_set=probe_set,
+        conn=conn,
+        k=K,
+        floor_margin=None,
+        commit=_commit(),
+    )
     with capsys.disabled():
-        print(f"\nrelevance floor, fit half only ({len(fit_half.probes)} probes):")
+        print("\n" + run.format())
+        print(
+            f"relevance floor sweep, each row its own floor, fit half only "
+            f"({len(fit_half.probes)} probes):"
+        )
         print("\n".join(lines))
