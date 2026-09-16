@@ -80,7 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_remember.add_argument("text", help="What to remember.")
     _add_common(p_remember)
 
-    p_recall = sub.add_parser("recall", help="Search memory (vector + keyword + entity).")
+    p_recall = sub.add_parser("recall", help="Search memory by meaning and by keyword.")
     p_recall.add_argument("query", help="Search text.")
     p_recall.add_argument("--top-k", type=int, default=8, help="Maximum results to return.")
     _add_common(p_recall)

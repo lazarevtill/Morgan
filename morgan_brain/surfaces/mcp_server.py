@@ -38,6 +38,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -59,6 +60,35 @@ from morgan_brain.surfaces.network import (
 )
 
 TOOL_NAMES: tuple[str, ...] = ("remember", "recall", "facts", "forget", "ask_morgan")
+
+#: What each tool declares to a client, which decides from it whether a call may run without
+#: asking. Read-only is the hint that lets it, so only the tools that read make that claim:
+#: ``ask_morgan`` sounds like a query, but a turn stores both halves of the exchange. Every
+#: tool states every hint, and registering a tool missing from this table fails, so none is
+#: left to a client's defaults. Opening the database can upgrade it (``memory.migrations``);
+#: that re-derives stored data and changes no memory a caller wrote.
+TOOL_ANNOTATIONS: dict[str, ToolAnnotations] = {
+    "remember": ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
+    ),
+    "recall": ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
+    ),
+    "facts": ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
+    ),
+    "forget": ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False
+    ),
+    "ask_morgan": ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
+    ),
+}
+
+#: The tools a client may run without asking, derived from the declarations above.
+READ_ONLY_TOOLS: tuple[str, ...] = tuple(
+    name for name in TOOL_NAMES if TOOL_ANNOTATIONS[name].readOnlyHint
+)
 
 _ToolFn = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -159,7 +189,7 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
         all_projects: bool = False,
         top_k: int = 8,
     ) -> dict[str, Any]:
-        """Multi-signal retrieval (vector + keyword + entity), project-scoped by default."""
+        """Search memories by meaning and by keyword, project-scoped by default."""
         args = argparse.Namespace(query=query, all_projects=all_projects, top_k=top_k)
         return await cmd_recall(args, settings, project or DEFAULT_PROJECT)
 
@@ -191,7 +221,7 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
         "ask_morgan": ask_morgan,
     }
     for name, fn in dispatch.items():
-        mcp.tool(name=name)(fn)
+        mcp.tool(name=name, annotations=TOOL_ANNOTATIONS[name])(fn)
 
     return MorganMcpServer(mcp=mcp, settings=settings, _dispatch=dispatch)
 
