@@ -35,7 +35,7 @@ overwritten. Everything lives in one SQLite file on hardware you own.
 ## Quick start
 
 ```bash
-pip install -e .
+uv tool install --editable .           # morgan and morgan-mcp on PATH, for every agent
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env
 #   ↑ point MORGAN_LLM_ENDPOINT at your model server; read from every working directory
 morgan doctor
@@ -50,7 +50,7 @@ morgan import ~/Downloads/conversations.json   # optional: seed from a ChatGPT e
 Give Claude Code the same memory, and teach every coding agent here when to use it:
 
 ```bash
-claude mcp add morgan -- morgan-mcp --transport stdio
+claude mcp add -s user morgan -- morgan-mcp --transport stdio   # in every project
 morgan install-skill                   # lists what it writes, then asks
 ```
 

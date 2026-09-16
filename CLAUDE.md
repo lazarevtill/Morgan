@@ -124,7 +124,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 298 passed, 3 skipped (the live ones)
+pytest -q                     # 299 passed, 3 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

@@ -5,9 +5,14 @@
 Python 3.12. From the repository root:
 
 ```bash
-pip install -e .            # the CLI and the MCP server
-pip install -e ".[dev]"     # plus pytest, ruff, mypy
+uv tool install --editable .   # morgan and morgan-mcp, on your PATH in every directory
+pip install -e ".[dev]"        # in a virtualenv, to work on Morgan: plus pytest, ruff, mypy
 ```
+
+A tool install gets its own environment and puts both commands on your user `PATH`, which is
+where MCP clients, agents' shells and OpenResearch sessions look for them. A virtualenv's
+commands are on `PATH` only while it is active. The install is editable, so a `git pull` in
+this checkout upgrades it.
 
 ## 2. The model server
 
@@ -58,12 +63,17 @@ database: /home/you/.local/share/morgan/morgan.db
 config_file: /home/you/.config/morgan/.env
 config_file_present: True
 project: my-repo
+all_projects: False
 embedding_backend: provider
+embedding_dim: 1024
 llm_endpoint: http://gpu-box:8081/v1
+llm_model: qwen2.5-7b-instruct
 sqlite_vec: v0.1.9
 fts5: True
 provider: reachable
+vector_rows: 0
 memory_rows: 0
+fts_rows: 0
 ```
 
 Every probe is independent, so one failure does not hide the rest. The first two lines answer
@@ -106,10 +116,14 @@ Every tool declares MCP's hints: `recall` and `facts` are read-only, `remember` 
 `ask_morgan` write (a turn stores the exchange), `forget` is destructive.
 
 ```bash
-claude mcp add morgan -- morgan-mcp --transport stdio      # a client on this machine
+claude mcp add -s user morgan -- morgan-mcp --transport stdio   # Claude Code, every project
 morgan-mcp --transport http                                 # loopback, MORGAN_MCP_HOST/PORT
 MORGAN_API_KEY=… morgan-mcp --transport http --host 100.64.0.7   # other machines, over the overlay
 ```
+
+`-s user` matters: Claude Code's default scope registers a server only for the project the
+command ran in, and a memory meant for every repository would be missing from all the others.
+`claude mcp get morgan` starts the server and reports whether it connected.
 
 The HTTP transport enforces `MORGAN_API_KEY` as a bearer token. With no key set it serves
 loopback only, and refuses to start on any other host: these tools include `forget`. See
@@ -131,8 +145,11 @@ It writes `morgan/SKILL.md` for each agent installed here: Claude Code (`~/.clau
 or `CLAUDE_CONFIG_DIR`), Codex (`~/.agents/skills`), OpenCode
 (`$XDG_CONFIG_HOME/opencode/skills`), Cursor (`~/.cursor/skills`). In Claude Code's
 `settings.json` it allows `mcp__morgan__recall` and `mcp__morgan__facts`, the tools that
-declare themselves read-only, so recalling does not stop for a prompt. A `morgan` skill it did not write is left alone, and
-so is a settings file it cannot parse. Run it again after upgrading Morgan.
+declare themselves read-only, so recalling does not stop for a prompt. The tools that write
+stay behind the prompt, and under `"defaultMode": "dontAsk"`, which refuses every call no
+rule allows, agents cannot `remember` until you allow `mcp__morgan__remember` yourself.
+A `morgan` skill it did not write is left alone, and so is a settings file it cannot parse; both
+are checked again as each file is written. Run it again after upgrading Morgan.
 
 **OpenResearch.** Its agent sessions run with their own configuration and load neither the
 skills above nor your MCP servers. The installer puts the skill in OpenResearch's upload

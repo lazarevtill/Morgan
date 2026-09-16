@@ -3,8 +3,8 @@
 ## At-rest protection
 
 Everything is in one SQLite database under `MORGAN_DATA_DIR` (default
-`~/.local/share/morgan/`): memories, facts, vectors, the keyword and entity indexes, the
-semantic index, session history. There is no field-level encryption: it cannot coexist with
+`~/.local/share/morgan/`): memories, facts, vectors, the keyword and entity indexes, session
+history. There is no field-level encryption: it cannot coexist with
 the FTS5 index and would not cover vectors. At-rest protection is a property of the host:
 encrypt the volume (LUKS or the equivalent).
 
@@ -28,8 +28,11 @@ consistent. One file is the whole backup, and the whole exposure.
 ### On the same machine — stdio
 
 ```bash
-claude mcp add morgan -- morgan-mcp --transport stdio
+claude mcp add -s user morgan -- morgan-mcp --transport stdio
 ```
+
+`-s user` makes it available in every project; Claude Code's default scope is the one project
+the command ran in.
 
 ```json
 { "mcpServers": { "morgan": { "command": "morgan-mcp", "args": ["--transport", "stdio"] } } }
@@ -41,7 +44,7 @@ Run `morgan-mcp --transport http --host <overlay address>` (or set `MORGAN_MCP_H
 is `MORGAN_MCP_PORT`, default 8090) with `MORGAN_API_KEY` set.
 
 ```bash
-claude mcp add --transport http morgan http://<host>:8090/mcp \
+claude mcp add -s user --transport http morgan http://<host>:8090/mcp \
   --header "Authorization: Bearer $MORGAN_API_KEY"
 ```
 
