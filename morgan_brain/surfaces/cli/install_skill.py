@@ -100,18 +100,30 @@ def _read_only_rules(mcp_server: str) -> tuple[str, ...]:
     return tuple(f"mcp__{mcp_server}__{tool}" for tool in READ_ONLY_TOOLS)
 
 
+def _read_settings(settings: Path) -> dict[str, Any] | None:
+    """Claude Code's settings with ``permissions.allow`` in place; None if morgan cannot edit them.
+
+    Missing settings are empty ones. Anything but a JSON object whose ``permissions`` is an
+    object and whose ``allow`` is a list is left alone.
+    """
+    try:
+        data = json.loads(settings.read_text(encoding="utf-8")) if settings.exists() else {}
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    permissions = data.setdefault("permissions", {})
+    if not isinstance(permissions, dict):
+        return None
+    return data if isinstance(permissions.setdefault("allow", []), list) else None
+
+
 def _permissions_action(settings: Path, rules: tuple[str, ...]) -> Action:
     agent = "Claude Code"
-    if not settings.exists():
-        return Action("permissions", agent, settings, "add", rules)
-    try:
-        data = json.loads(settings.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
+    data = _read_settings(settings)
+    if data is None:
         return Action("permissions", agent, settings, "invalid")
-    permissions = data.get("permissions", {}) if isinstance(data, dict) else None
-    allow = permissions.get("allow", []) if isinstance(permissions, dict) else None
-    if not isinstance(allow, list):
-        return Action("permissions", agent, settings, "invalid")
+    allow = data["permissions"]["allow"]
     missing = tuple(rule for rule in rules if rule not in allow)
     return Action("permissions", agent, settings, "add" if missing else "unchanged", missing)
 
@@ -132,27 +144,39 @@ def plan(*, home: Path, env: Mapping[str, str], mcp_server: str) -> Plan:
     return result
 
 
-def _add_rules(settings: Path, rules: tuple[str, ...]) -> None:
-    data: dict[str, Any] = (
-        json.loads(settings.read_text(encoding="utf-8")) if settings.exists() else {}
-    )
-    allow = data.setdefault("permissions", {}).setdefault("allow", [])
+def _add_rules(settings: Path, rules: tuple[str, ...]) -> bool:
+    """Add the rules to the settings as they are now; False if they are no longer editable."""
+    data = _read_settings(settings)
+    if data is None:
+        return False
+    allow = data["permissions"]["allow"]
     allow.extend(rule for rule in rules if rule not in allow)
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_bytes((json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+    return True
 
 
-def apply(result: Plan) -> None:
-    """Carry out every action that writes. Conflicts and unparseable settings are skipped."""
+def apply(result: Plan) -> list[Action]:
+    """Carry out every action that writes, and return the ones written.
+
+    The owner answers after reading the list, and a file can change in between, so each one
+    is read again as it is written: an edit made meanwhile is kept, and a skill of the same
+    name or settings morgan cannot edit that appeared meanwhile are skipped.
+    """
     text = skill_text()
+    written: list[Action] = []
     for action in result.actions:
         if action.status not in _WRITES:
             continue
         if action.kind == "skill":
+            if _skill_status(action.path, text) == "conflict":
+                continue
             action.path.parent.mkdir(parents=True, exist_ok=True)
             action.path.write_bytes(text.encode("utf-8"))
-        else:
-            _add_rules(action.path, action.rules)
+        elif not _add_rules(action.path, action.rules):
+            continue
+        written.append(action)
+    return written
 
 
 _EXPLAIN: dict[str, str] = {
@@ -173,9 +197,10 @@ def _describe(action: Action) -> str:
     return f"{line}  ({note})" if note else line
 
 
-def _report(result: Plan, *, applied: bool) -> dict[str, Any]:
+def _report(result: Plan, *, written: list[Action] | None) -> dict[str, Any]:
+    """``written`` is None when nothing was applied."""
     return {
-        "applied": applied,
+        "applied": written is not None,
         "actions": [
             {
                 "agent": a.agent,
@@ -183,6 +208,7 @@ def _report(result: Plan, *, applied: bool) -> dict[str, Any]:
                 "path": str(a.path),
                 "status": a.status,
                 "rules": list(a.rules),
+                "written": a in (written or ()),
             }
             for a in result.actions
         ],
@@ -213,14 +239,14 @@ def run(
 
     if not pending:
         if as_json:
-            stdout.write(json.dumps(_report(result, applied=False), indent=2) + "\n")
+            stdout.write(json.dumps(_report(result, written=None), indent=2) + "\n")
         else:
             stdout.write("Nothing to write.\n")
         return 0
 
     if not yes:
         if as_json:
-            stdout.write(json.dumps(_report(result, applied=False), indent=2) + "\n")
+            stdout.write(json.dumps(_report(result, written=None), indent=2) + "\n")
             stderr.write("morgan install-skill: nothing written; pass --yes to write.\n")
             return 1
         # The list goes to buffered stdout and the question to stderr; without the flush a
@@ -232,9 +258,14 @@ def run(
             stdout.write("Nothing written.\n")
             return 1
 
-    apply(result)
+    written = apply(result)
     if as_json:
-        stdout.write(json.dumps(_report(result, applied=True), indent=2) + "\n")
+        stdout.write(json.dumps(_report(result, written=written), indent=2) + "\n")
     else:
-        stdout.write(f"Wrote {len(pending)} of {len(result.actions)}.\n")
+        stdout.writelines(
+            f"  skipped   {a.agent:<13} {a.path}  (changed since it was listed; left alone)\n"
+            for a in pending
+            if a not in written
+        )
+        stdout.write(f"Wrote {len(written)} of {len(result.actions)}.\n")
     return 0

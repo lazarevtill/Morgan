@@ -165,6 +165,47 @@ def test_settings_it_cannot_parse_are_not_rewritten(tmp_path):
     assert settings.read_text(encoding="utf-8") == "{ not json"
 
 
+def test_settings_broken_between_the_listing_and_the_yes_are_not_rewritten(tmp_path):
+    """The owner answers after reading the list; the file can change in between."""
+    _agents(tmp_path, "claude")
+    settings = tmp_path / ".claude/settings.json"
+    settings.write_text('{"model": "opus"}', "utf-8")
+    result = plan(home=tmp_path, env={}, mcp_server="morgan")
+    settings.write_text("{ edited, and now not json", "utf-8")
+
+    written = apply(result)
+
+    assert settings.read_text(encoding="utf-8") == "{ edited, and now not json"
+    assert [a.kind for a in written] == ["skill"]
+
+
+def test_settings_edited_between_the_listing_and_the_yes_keep_the_edit(tmp_path):
+    _agents(tmp_path, "claude")
+    settings = tmp_path / ".claude/settings.json"
+    settings.write_text('{"model": "opus"}', "utf-8")
+    result = plan(home=tmp_path, env={}, mcp_server="morgan")
+    settings.write_text('{"model": "sonnet"}', "utf-8")
+
+    apply(result)
+
+    written = json.loads(settings.read_text(encoding="utf-8"))
+    assert written["model"] == "sonnet"
+    assert written["permissions"]["allow"] == ["mcp__morgan__recall", "mcp__morgan__facts"]
+
+
+def test_a_foreign_skill_that_appears_after_the_listing_is_left_alone(tmp_path):
+    _agents(tmp_path, "claude")
+    result = plan(home=tmp_path, env={}, mcp_server="morgan")
+    foreign = tmp_path / ".claude/skills/morgan/SKILL.md"
+    foreign.parent.mkdir(parents=True)
+    foreign.write_text("---\nname: morgan\ndescription: someone else's\n---\n", "utf-8")
+
+    written = apply(result)
+
+    assert "someone else's" in foreign.read_text(encoding="utf-8")
+    assert [a.kind for a in written] == ["permissions"]
+
+
 def test_nothing_is_written_without_a_yes(tmp_path):
     _agents(tmp_path, "claude")
     out, err = io.StringIO(), io.StringIO()
@@ -206,5 +247,5 @@ def test_the_cli_installs_with_yes_and_reports_json(tmp_path, monkeypatch, capsy
     report = json.loads(capsys.readouterr().out)
     assert code == 0
     assert report["applied"] is True
-    assert [a["agent"] for a in report["actions"]] == ["Cursor"]
+    assert [(a["agent"], a["written"]) for a in report["actions"]] == [("Cursor", True)]
     assert (tmp_path / ".cursor/skills/morgan/SKILL.md").exists()
