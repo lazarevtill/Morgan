@@ -56,6 +56,8 @@ answered elsewhere.
 
 ## Do not
 
+- Route around a refusal. If the owner's permissions refuse a Morgan tool, do not run the same
+  operation through the `morgan` command, or the reverse; say it was refused.
 - Call `forget`: it erases an entire project. Only when the user asks for exactly that.
 - Use `ask_morgan` or `morgan ask` for a lookup: it runs a model and stores the exchange.
   Use recall.
