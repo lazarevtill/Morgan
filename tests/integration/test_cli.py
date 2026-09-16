@@ -81,6 +81,14 @@ def test_doctor_reports_actionable_status(tmp_path):
     assert report["provider"] in ("reachable", "unreachable")
 
 
+def test_a_cli_the_suite_starts_reads_none_of_the_developers_configuration(tmp_path):
+    """The developer's ~/.config/morgan/.env points at their real model servers. A test
+    that read it would pass or fail with the contents of their home directory."""
+    out = _run(["doctor", "--json"], _hash_env(tmp_path), tmp_path)
+
+    assert json.loads(out.stdout)["config_file_present"] is False
+
+
 def test_doctor_vector_rows_catches_an_unwired_vector_store(tmp_path):
     """The specific failure mode Task 17 was told to guard: recall works via FTS/vector
     together normally, but if the vector store were never actually written to, vector_rows

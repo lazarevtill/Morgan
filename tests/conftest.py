@@ -2,20 +2,30 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from morgan_brain.config import Settings
 
 
+@pytest.fixture(scope="session")
+def _empty_config_home(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return tmp_path_factory.mktemp("config-home")
+
+
 @pytest.fixture(autouse=True)
-def _no_env_files(monkeypatch: pytest.MonkeyPatch) -> None:
+def _no_env_files(monkeypatch: pytest.MonkeyPatch, _empty_config_home: Path) -> None:
     """Keep the suite independent of the developer's own configuration.
 
     ``Settings`` reads ``~/.config/morgan/.env`` and then ``./.env`` -- exactly what the
     CLI needs, and exactly what a test must never see: a result that changes with the
     contents of the developer's home directory depends on install state, not on the code.
+    A CLI or MCP server the suite starts as a subprocess builds its own settings, so the
+    configuration directory it inherits is an empty one.
     """
     monkeypatch.setitem(Settings.model_config, "env_file", None)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(_empty_config_home))
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
