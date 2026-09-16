@@ -28,11 +28,11 @@ morgan-mcp ──┘        │                 ├─ FTS5 keyword index      o
 | `memory/store/` | Persistence, one file per table family, all over the one connection: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`, `history`. Every write goes through `db.write_transaction`, which holds the write lock from the first statement and nests as a savepoint, so a store method is atomic alone and inside a larger write. A fact key has at most one current fact, enforced by a unique index; opening a database that a race left with two keeps the newest and closes the rest. Vectors are scoped *inside* the KNN via vec0 metadata columns, not filtered afterwards. |
 | `memory/recall/` | `fusion` merges the vector and keyword rankings by reciprocal rank. Rank-only, so the relevance threshold, `floor`, judges the vector scores before fusion. |
 | `memory/knowledge/` | `extract` (the one entity extractor: words the text capitalises away from a sentence start, acronyms, CamelCase; Latin and Cyrillic), `surprise` (drops episodics the facts already predict), `fact_ops` (the operation schema the model is constrained to), `consolidation` (applies them: supersede, never overwrite). |
-| `providers/` | `openai_compat.py` (chat over the `openai` SDK), `embeddings.py` (`/embeddings` over httpx), `structured.py` (JSON-schema, JSON-object or prompted, validated, re-asked), `factory.py`, `wire.py` (`ChatClient`, `ProviderUnreachable`). Nothing above imports a model SDK. |
+| `providers/` | `openai_compat.py` (chat over the `openai` SDK), `embeddings.py` (`/embeddings` over httpx), `structured.py` (JSON-schema, JSON-object or prompted, validated, re-asked), `factory.py` (settings → adapters; the one place that decides where embeddings are sent, and so which setting an unreachable server's error names), `wire.py` (`ChatClient`, `ProviderUnreachable`). Nothing above imports a model SDK. |
 | `eval/retrieval.py` | Labelled probes, and the recall@k / MRR / leak-rate scorecard they produce, printed beside a `RunConfig`: embedding model and width, k, floor, probe file and its digest, corpus size, database upgrade step, commit. Never the endpoint. The measurement that turns retrieval quality from an assumption into a number. |
 | `app/chatgpt_import.py` | Seeds memory from a ChatGPT export. Splits a turn too long for the embedding context, and routes a fifth of conversations to a holdout project the optimizer can never mine. |
 | `app/chat.py` | One turn: recall → prompt → answer → remember both halves, attributed. The one use-case both surfaces share. |
-| `surfaces/cli/` | `morgan`: `__main__` parses and dispatches, `commands` answers, `payloads` shapes the result, `render` prints it, `doctor` diagnoses the install, `install_skill` teaches the coding agents installed here when to use Morgan. Project = the enclosing git repository's name; a linked worktree counts as the repository it came from. |
+| `surfaces/cli/` | `morgan`: `__main__` parses and dispatches, `commands` answers, `payloads` shapes the result, `render` prints it, `doctor` diagnoses the install and probes the chat and embedding servers separately, `install_skill` teaches the coding agents installed here when to use Morgan. Project = the enclosing git repository's name; a linked worktree counts as the repository it came from. |
 | `surfaces/mcp_server.py` | `morgan-mcp`: `remember`, `recall`, `facts`, `forget`, `ask_morgan` over stdio or streamable-HTTP with a bearer token. Calls the CLI's command handlers; `project` is a tool argument. Every tool declares MCP's read-only, destructive, idempotent and open-world hints; only `recall` and `facts` claim read-only. |
 | `surfaces/network.py` | The bind guard: no listener beyond loopback without a real key. |
 
@@ -76,7 +76,7 @@ this database are named in `tables_skipped` rather than counted as zero. Vacuum 
 pipes and in-process, cross-process durability, two processes upserting the same vectors or
 superseding the same facts at once, a vector delete racing a reinsert, a project erased while
 a memory is being stored, two consolidation runs applying the same facts, erasure atomicity and
-completeness, the wheel build. One live test (`pytest --live`) needs a real
-embedding model.
-`pip install -e ".[dev]"` installs exactly what the suite needs. `tests/fakes.py` holds the
-scripted chat client; nothing in the package exists only for tests.
+completeness, the wheel build. Three live tests (`pytest --live`) need a real embedding
+model. `pip install -e ".[dev]"` installs exactly what the suite needs. `tests/fakes.py` holds
+the scripted chat client and a loopback OpenAI-compatible server for the probes that need one
+to answer; nothing in the package exists only for tests.

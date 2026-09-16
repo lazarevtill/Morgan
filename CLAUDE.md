@@ -44,15 +44,17 @@ come in" are answered by the directory names.
   scored per probe kind, printed beside the run's configuration. Run with `pytest --live`
   against a real embedding endpoint.
 - `providers/` — the only place a model SDK is imported: `openai_compat.py` (chat),
-  `embeddings.py`, `structured.py` (JSON-validated output), `factory.py` (settings → adapters),
-  `wire.py` (message types, `ChatClient`, `ProviderUnreachable`).
+  `embeddings.py`, `structured.py` (JSON-validated output), `factory.py` (settings → adapters,
+  and where embeddings are sent), `wire.py` (message types, `ChatClient`,
+  `ProviderUnreachable`).
 - `app/chat.py` — one turn: recall, answer, remember. Not a surface: the one use-case both
   surfaces call.
 - `surfaces/` — where requests come in. `cli/` (`__main__` parses and dispatches, `commands`
-  answers, `payloads` shapes the result, `render` prints it, `doctor` diagnoses,
-  `install_skill` writes the packaged `skill/SKILL.md` into the coding agents installed
-  here), `mcp_server.py` (five MCP tools over stdio or streamable-HTTP, calling those same
-  command handlers), and `network.py`, the bind guard that protects the HTTP one.
+  answers, `payloads` shapes the result, `render` prints it, `doctor` diagnoses and probes the
+  chat and embedding servers separately, `install_skill` writes the packaged `skill/SKILL.md`
+  into the coding agents installed here), `mcp_server.py` (five MCP tools over stdio or
+  streamable-HTTP, calling those same command handlers), and `network.py`, the bind guard that
+  protects the HTTP one.
 
 ## Invariants
 
@@ -83,12 +85,16 @@ come in" are answered by the directory names.
 - **Actor attribution.** Every memory records its `MemorySource`. The reply to `ask` is
   stored as `agent_inferred`; never treat an inference as a user statement.
 - **A model server that is down is reported by name.** Adapters raise
-  `providers.wire.ProviderUnreachable` carrying the endpoint; the CLI and MCP tools print its
-  message. A bare traceback is a regression.
+  `providers.wire.ProviderUnreachable` carrying the endpoint and the setting that addresses
+  it; the CLI and MCP tools print its message. The factory hands each adapter that setting,
+  because embeddings go to the chat endpoint unless `MORGAN_EMBEDDING_ENDPOINT` is set. A bare
+  traceback is a regression, and so is sending the owner to check a server that works.
 - **stdout is a protocol on both surfaces.** `--json` output and the MCP stdio transport are
   parsed by machines; all logs go to stderr. Never `print()` diagnostics from library code.
-- **Nothing runs a model unasked.** `ask` and `consolidate` call the model; nothing else does,
-  and nothing runs on a schedule. Consolidation is on demand (or the owner's own cron).
+- **Nothing runs a model unasked.** `ask` and `consolidate` call the chat model; nothing else
+  does, and nothing runs on a schedule. Consolidation is on demand (or the owner's own cron).
+  Embedding one word is not generation: opening memory does it to check the model's width,
+  and `doctor` to check that embeddings are served.
 - **Every MCP tool declares what it does.** `TOOL_ANNOTATIONS` states all four hints for every
   tool, and only a tool that changes nothing claims read-only: a client may run those
   unprompted, and `install-skill` allows exactly those in Claude Code. `ask_morgan` stores the
@@ -124,7 +130,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 299 passed, 3 skipped (the live ones)
+pytest -q                     # 308 passed, 3 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

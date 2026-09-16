@@ -37,8 +37,9 @@ overwritten. Everything lives in one SQLite file on hardware you own.
 ```bash
 uv tool install --editable .           # morgan and morgan-mcp on PATH, for every agent
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env
-#   ↑ point MORGAN_LLM_ENDPOINT at your model server; read from every working directory
-morgan doctor
+#   ↑ point MORGAN_LLM_ENDPOINT at your model server, and MORGAN_EMBEDDING_ENDPOINT at the
+#     embedding server if it is a separate one; read from every working directory
+morgan doctor                          # the database, the chat server, the embedding server
 cd ~/src/any-repo                      # the brain is the same from every repository
 morgan remember "prefers terse, code-first answers"
 morgan recall "how do I like answers"  # needs only the embedding model

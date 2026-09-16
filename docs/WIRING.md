@@ -66,11 +66,13 @@ project: my-repo
 all_projects: False
 embedding_backend: provider
 embedding_dim: 1024
+embedding_endpoint: http://gpu-box:8082/v1
 llm_endpoint: http://gpu-box:8081/v1
 llm_model: qwen2.5-7b-instruct
 sqlite_vec: v0.1.9
 fts5: True
 provider: reachable
+embedding_provider: reachable
 vector_rows: 0
 memory_rows: 0
 fts_rows: 0
@@ -78,6 +80,11 @@ fts_rows: 0
 
 Every probe is independent, so one failure does not hide the rest. The first two lines answer
 "why is my brain empty?": a database or config file somewhere other than where you expect.
+
+The two model servers are probed separately. `provider` is the chat endpoint, which only
+`ask` and `consolidate` need. `embedding_provider` is the endpoint every `remember` and
+`recall` embeds with, probed by embedding one word, so a chat server that serves no
+embeddings shows as unreachable here; under the hash backend it reads `not used`.
 
 ## 5. The CLI
 
