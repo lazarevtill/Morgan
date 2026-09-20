@@ -283,24 +283,31 @@ async def run_probes(
     user_id: str,
     k: int,
     project: str = EVAL_PROJECT,
+    store_corpus: bool = True,
 ) -> list[ProbeResult]:
-    """Store *probe_set*'s corpus, run every probe through recall, and report what came back.
+    """Run every probe in *probe_set* through recall and report what came back.
 
     Memory ids are the corpus keys, so a result names what a reader labelled rather than a
     hash they would have to resolve. Recall goes through the gate like any other read: a
     harness that reached past it would measure a path no caller uses.
+
+    By default the corpus is stored first. ``store_corpus=False`` skips that and scores the
+    probes against whatever the gate already holds -- an import of the owner's archive, say,
+    where storing the corpus again would write duplicate memories into the file under
+    measurement.
     """
-    for key, text in probe_set.corpus.items():
-        await gate.store(
-            Memory(
-                id=key,
-                user_id=user_id,
-                project=project,
-                kind=MemoryKind.EPISODIC,
-                content=text,
-                source=MemorySource.USER_STATED,
+    if store_corpus:
+        for key, text in probe_set.corpus.items():
+            await gate.store(
+                Memory(
+                    id=key,
+                    user_id=user_id,
+                    project=project,
+                    kind=MemoryKind.EPISODIC,
+                    content=text,
+                    source=MemorySource.USER_STATED,
+                )
             )
-        )
 
     results = []
     for probe in probe_set.probes:
