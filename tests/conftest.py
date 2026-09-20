@@ -35,6 +35,28 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="Run tests that need a reachable model server (marked `live`).",
     )
+    # The three below serve exactly one test, tests/memory_quality/test_holdout_floor_sweep.py.
+    # They default to unset so a bare `pytest --live` still runs every other live test; that
+    # one test's own fixtures skip (not fail) when its option is missing.
+    parser.addoption(
+        "--snapshot-db",
+        action="store",
+        default=None,
+        help="Path to a copy-source morgan.db for the holdout floor sweep. The test copies "
+        "it before opening anything; the path itself is never written.",
+    )
+    parser.addoption(
+        "--holdout-probes",
+        action="store",
+        default=None,
+        help="Path to the 128-label holdout probe set (JSON) for the holdout floor sweep.",
+    )
+    parser.addoption(
+        "--floor-sweep",
+        action="store",
+        default=None,
+        help="Comma-separated relevance-floor margins to sweep, e.g. 0.00,0.04,0.08.",
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -48,3 +70,32 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     for item in items:
         if item.get_closest_marker("live"):
             item.add_marker(skip_live)
+
+
+@pytest.fixture
+def snapshot_db(request: pytest.FixtureRequest) -> Path:
+    """The ``--snapshot-db`` path. Absent is a normal way to run ``pytest --live`` broadly,
+    so this skips rather than fails -- a wrong path, once given, still fails loudly below."""
+    value = request.config.getoption("--snapshot-db")
+    if not value:
+        pytest.skip("holdout floor sweep needs --snapshot-db PATH (a copy-source morgan.db)")
+    return Path(value)
+
+
+@pytest.fixture
+def holdout_probes(request: pytest.FixtureRequest) -> Path:
+    """The ``--holdout-probes`` path. See ``snapshot_db`` for why absence skips."""
+    value = request.config.getoption("--holdout-probes")
+    if not value:
+        pytest.skip("holdout floor sweep needs --holdout-probes PATH (the 128-label set)")
+    return Path(value)
+
+
+@pytest.fixture
+def floor_sweep(request: pytest.FixtureRequest) -> list[float]:
+    """The ``--floor-sweep`` margins, comma-separated. See ``snapshot_db`` for why absence
+    skips rather than fails."""
+    value = request.config.getoption("--floor-sweep")
+    if not value:
+        pytest.skip("holdout floor sweep needs --floor-sweep A,B,C (relevance-floor margins)")
+    return [float(part) for part in value.split(",")]
