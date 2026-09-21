@@ -150,6 +150,8 @@ def test_migrate_registers_the_space_and_says_it_is_unverified_when_the_embedder
     ("status", "reason"),
     [
         (401, "refused the request: HTTP 401"),
+        # A llama-server started without --embeddings: refused at once, never waited on.
+        (501, "the server does not serve embeddings"),
         (503, "answered too slowly or dropped: "),
     ],
 )
