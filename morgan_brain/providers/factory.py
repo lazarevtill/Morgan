@@ -106,6 +106,7 @@ def retry_budget_of(settings: Settings, budget: Budget) -> RetryBudget:
         ),
         unreachable_seconds=settings.embedding_unreachable_budget_seconds,
         backoff_seconds=settings.embedding_retry_backoff_seconds,
+        backoff_cap_seconds=settings.embedding_retry_backoff_max_seconds,
         attempt_seconds=settings.embedding_timeout_seconds,
     )
 

@@ -28,8 +28,23 @@ async def test_a_silent_host_fails_within_the_interactive_budget_not_the_chat_ti
             await build_embedder(_at(settings, url)).embed("x")
         elapsed = time.monotonic() - started
     assert elapsed < 2.0
-    assert "answered too slowly or dropped" in str(exc.value)
+    # Named as the spec names it once a connection was made, never by Python's builtin.
+    assert "answered too slowly or dropped: ReadTimeout after " in str(exc.value)
+    assert "TimeoutError" not in str(exc.value)
     assert "unreachable" not in str(exc.value)
+
+
+async def test_an_answer_that_trickles_in_still_ends_inside_the_budget():
+    """httpx's read timeout restarts with every byte, so a body that arrives a byte at a time
+    never trips it; the bound on the whole attempt does."""
+    settings = _settings(retry_budget=0.6, attempt_timeout=50.0)
+    with silent_model_server(trickle_every=0.05) as url:
+        started = time.monotonic()
+        with pytest.raises(ProviderUnreachable) as exc:
+            await build_embedder(_at(settings, url)).embed("x")
+        elapsed = time.monotonic() - started
+    assert elapsed < 1.5
+    assert "answered too slowly or dropped: ReadTimeout after " in str(exc.value)
 
 
 async def test_the_chat_timeout_no_longer_reaches_the_embedder():

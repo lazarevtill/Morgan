@@ -44,7 +44,11 @@ async def test_embedder_names_the_endpoint_it_could_not_reach() -> None:
         _CLOSED,
         "e",
         budget=RetryBudget(
-            seconds=2.0, unreachable_seconds=0.5, backoff_seconds=0.05, attempt_seconds=2.0
+            seconds=2.0,
+            unreachable_seconds=0.5,
+            backoff_seconds=0.05,
+            backoff_cap_seconds=2.0,
+            attempt_seconds=2.0,
         ),
         setting="MORGAN_EMBEDDING_ENDPOINT",
         key_setting="MORGAN_LLM_API_KEY",

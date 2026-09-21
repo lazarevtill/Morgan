@@ -28,7 +28,11 @@ def _embedder(url: str) -> OpenAICompatEmbedder:
         url,
         "m",
         budget=RetryBudget(
-            seconds=10.0, unreachable_seconds=1.0, backoff_seconds=0.05, attempt_seconds=10.0
+            seconds=10.0,
+            unreachable_seconds=1.0,
+            backoff_seconds=0.05,
+            backoff_cap_seconds=2.0,
+            attempt_seconds=10.0,
         ),
         setting="MORGAN_EMBEDDING_ENDPOINT",
         key_setting="MORGAN_LLM_API_KEY",

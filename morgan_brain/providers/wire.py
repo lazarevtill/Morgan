@@ -130,11 +130,16 @@ class ProviderUnreachable(ConnectionError):
         error: str,
         attempts: int,
         seconds: float,
+        said: str = "",
     ) -> ProviderUnreachable:
-        """The embedder's budget for *outcome* is spent: *attempts* attempts over *seconds*,
-        the last of which failed with *error* (an exception's name, or ``HTTP 503``)."""
+        """The embedder's budget for *outcome* is spent: *attempts* attempts over *seconds*.
+        *error* names the failure the message reports (an exception's name, or ``HTTP 503``)
+        and *said* is that exception's own text, which is what tells a name that does not
+        resolve from a closed port or a failed TLS handshake."""
         plural = "" if attempts == 1 else "s"
         detail = f"{error} after {attempts} attempt{plural} over {seconds:.1f} s"
+        if said:
+            detail = f"{detail} ({said})"
         if outcome == "unreachable":
             verdict = f"is unreachable: {detail}"
         else:
@@ -143,25 +148,29 @@ class ProviderUnreachable(ConnectionError):
 
 
 class ProviderRefused(Exception):
-    """The model endpoint answered, and refused the request: a 4xx other than 429, or a
-    redirect, which is not followed.
+    """The model endpoint answered, and refused the request: a 4xx other than 429, a 501 (the
+    server serves no embeddings), or a redirect, which is not followed.
 
     Not retried -- the same request gets the same answer -- and not a ``ProviderUnreachable``:
     the host is up, so checking whether it runs sends the owner to the wrong place. On a 401
     or 403 ``setting`` is the key setting whose value was sent; on any other status it is the
-    setting that addresses the endpoint. ``detail`` is the start of what the server said,
-    which names the problem when the server does (a model it has never heard of, say).
+    setting that addresses the endpoint. ``detail`` is the start of what the server said, with
+    the key redacted, which names the problem when the server does (a model it has never
+    heard of, say); ``hint`` says what the status means where the status alone does not.
     """
 
-    def __init__(self, endpoint: str, status: int, setting: str, *, detail: str = "") -> None:
+    def __init__(
+        self, endpoint: str, status: int, setting: str, *, detail: str = "", hint: str = ""
+    ) -> None:
         self.endpoint = endpoint
         self.status = status
         self.setting = setting
         self.detail = detail
         said = f" ({detail})" if detail else ""
+        means = f"; {hint}" if hint else ""
         super().__init__(
-            f"model endpoint {endpoint} refused the request: HTTP {status}{said}; check {setting} "
-            "and run `morgan doctor`"
+            f"model endpoint {endpoint} refused the request: HTTP {status}{said}{means}; "
+            f"check {setting} and run `morgan doctor`"
         )
 
 

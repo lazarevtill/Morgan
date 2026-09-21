@@ -7,6 +7,7 @@ import json
 import math
 import socket
 import threading
+import time
 from collections import deque
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
@@ -78,18 +79,25 @@ def flaky_model_server(
     status: int | None,
     *,
     after: int = 0,
+    fail_for: float | None = None,
+    echo_key: bool = False,
     embedding_dim: int = 1024,
     calls: Calls | None = None,
 ) -> Iterator[str]:
     """``model_server``, failing *fail_times* embedding requests in a row; yields its URL.
 
     The first *after* embedding requests are answered, the next *fail_times* fail, and every
-    one after that is answered again. A failure answers with *status* -- a 503 is what
-    llama-server says while it loads a model, a 401 a key it refused -- or, with
-    ``status=None``, closes the connection without a word: a dropped connection, as a host that
-    goes to sleep mid-request gives one. *calls*, when given, counts every request.
+    one after that is answered again. With *fail_for*, every embedding request that arrives
+    within that many seconds of the first one fails too: a host loading its model for a while.
+    A failure answers with *status* -- a 503 is what llama-server says while it loads a model,
+    a 401 a key it refused -- or, with ``status=None``, closes the connection without a word: a
+    dropped connection, as a host that goes to sleep mid-request gives one. With *echo_key* the
+    failure's body repeats the bearer token it was sent, and names another one, as a careless
+    gateway might. *calls*, when given, counts every request.
     """
-    failures = _Failures(after=after, times=fail_times, status=status)
+    failures = _Failures(
+        after=after, times=fail_times, status=status, seconds=fail_for, echo_key=echo_key
+    )
     with _model_server(
         embeddings=True, embedding_dim=embedding_dim, reorder=False, calls=calls, fail=failures
     ) as url:
@@ -97,17 +105,30 @@ def flaky_model_server(
 
 
 @contextmanager
-def silent_model_server() -> Iterator[str]:
+def silent_model_server(*, trickle_every: float | None = None) -> Iterator[str]:
     """A server that accepts every connection and never answers; yields a ``/v1`` URL.
 
     A cold host loading its model looks like this from the client until the model is loaded:
     the connection is made, the request is sent, and nothing comes back. The connections are
-    held open, unread, until the context exits.
+    held open, unread, until the context exits. With *trickle_every*, each connection is sent
+    the head of a 200 and then one byte of its body every that many seconds, for at most five
+    seconds: an answer that is always arriving and never arrives.
     """
     listener = socket.create_server(("127.0.0.1", 0))
     listener.settimeout(0.05)
     held: list[socket.socket] = []
     stop = threading.Event()
+
+    def trickle(conn: socket.socket, every: float) -> None:
+        head = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1000\r\n\r\n"
+        deadline = time.monotonic() + 5.0
+        try:
+            conn.sendall(head)
+            while not stop.is_set() and time.monotonic() < deadline:
+                conn.sendall(b" ")
+                stop.wait(every)
+        except OSError:
+            return
 
     def accept() -> None:
         while not stop.is_set():
@@ -118,6 +139,8 @@ def silent_model_server() -> Iterator[str]:
             except OSError:
                 return
             held.append(conn)
+            if trickle_every is not None:
+                threading.Thread(target=trickle, args=(conn, trickle_every), daemon=True).start()
 
     thread = threading.Thread(target=accept, daemon=True)
     thread.start()
@@ -133,20 +156,35 @@ def silent_model_server() -> Iterator[str]:
 
 class _Failures:
     """Which embedding requests ``flaky_model_server`` fails: numbers *after* + 1 to *after* +
-    *times*, counted across every connection. ``fail()`` counts one request and says whether
-    it is one of them."""
+    *times*, counted across every connection, and any that arrives within *seconds* of the
+    first. ``fail()`` counts one request and says whether it is one of them."""
 
-    def __init__(self, *, after: int, times: int, status: int | None) -> None:
+    def __init__(
+        self,
+        *,
+        after: int,
+        times: int,
+        status: int | None,
+        seconds: float | None = None,
+        echo_key: bool = False,
+    ) -> None:
         self._lock = threading.Lock()
         self._seen = 0
+        self._first: float | None = None
         self._after = after
         self._times = times
+        self._seconds = seconds
         self.status = status
+        self.echo_key = echo_key
 
     def fail(self) -> bool:
         with self._lock:
+            now = time.monotonic()
+            if self._first is None:
+                self._first = now
             self._seen += 1
-            return self._after < self._seen <= self._after + self._times
+            in_window = self._seconds is not None and now - self._first < self._seconds
+            return in_window or self._after < self._seen <= self._after + self._times
 
 
 @contextmanager
@@ -177,6 +215,13 @@ def _model_server(
                 if fail.status is None:
                     # Nothing is written: the handler returns and the server closes the socket.
                     self.close_connection = True
+                elif fail.echo_key:
+                    sent = self.headers.get("Authorization", "")
+                    error = (
+                        f"invalid api key {sent.removeprefix('Bearer ')}; got Authorization: "
+                        f"{sent}; expected Bearer server-side-token"
+                    )
+                    self._reply(fail.status, {"error": error})
                 else:
                     self._reply(fail.status, {"error": f"scripted failure {fail.status}"})
             elif not embeddings:

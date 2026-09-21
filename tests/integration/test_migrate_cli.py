@@ -128,6 +128,7 @@ def test_migrate_registers_the_space_and_says_it_is_unverified_when_the_embedder
     tmp_path, monkeypatch, capsys
 ):
     """The wave does not wait on the embedding host: port 1 refuses, and the migration stands."""
+    _short_budgets(monkeypatch)
     db = _a_version_five_database(tmp_path, monkeypatch, endpoint="http://127.0.0.1:1/v1")
 
     assert main(["migrate"]) == 0
@@ -158,6 +159,7 @@ def test_migrate_says_the_space_is_unverified_when_the_embedder_refuses_or_stays
     """A host that refuses the request, or answers only errors until the budget is spent, is no
     reason to fail a migration that has committed: the space is left for the first call to
     verify, and the line says why."""
+    _short_budgets(monkeypatch)
     with flaky_model_server(fail_times=99, status=status, embedding_dim=4) as url:
         db = _a_version_five_database(tmp_path, monkeypatch, endpoint=url)
         assert main(["migrate"]) == 0
@@ -217,10 +219,6 @@ def _a_version_five_database(
     monkeypatch.setenv("MORGAN_EMBEDDING_ENDPOINT", endpoint)
     monkeypatch.setenv("MORGAN_EMBEDDING_MODEL", _MODEL)
     monkeypatch.setenv("MORGAN_EMBEDDING_DIM", "4")
-    # Budgets for a suite, not a cold host: port 1 and a failing fake give up in under a second.
-    monkeypatch.setenv("MORGAN_EMBEDDING_UNREACHABLE_BUDGET_SECONDS", "0.5")
-    monkeypatch.setenv("MORGAN_EMBEDDING_RETRY_BUDGET_SECONDS", "0.5")
-    monkeypatch.setenv("MORGAN_EMBEDDING_RETRY_BACKOFF_SECONDS", "0.05")
     db = str(data_dir / "morgan.db")
     a_version_five_database(
         db,
@@ -229,6 +227,15 @@ def _a_version_five_database(
         vector=lambda text: _unit_vector(text, 4),
     ).close()
     return db
+
+
+def _short_budgets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Budgets for a suite, not a cold host, for the tests whose embedder never answers: port 1
+    and a failing fake give up in under a second. A test whose embedder answers keeps the
+    defaults, so a loaded machine cannot spend its budget before the answer comes."""
+    monkeypatch.setenv("MORGAN_EMBEDDING_UNREACHABLE_BUDGET_SECONDS", "0.5")
+    monkeypatch.setenv("MORGAN_EMBEDDING_RETRY_BUDGET_SECONDS", "0.5")
+    monkeypatch.setenv("MORGAN_EMBEDDING_RETRY_BACKOFF_SECONDS", "0.05")
 
 
 def _active_space(path: str) -> spaces.EmbeddingSpace | None:
