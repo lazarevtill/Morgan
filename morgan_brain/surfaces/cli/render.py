@@ -142,6 +142,33 @@ def _render_project(project: dict[str, Any]) -> str:
     )
 
 
+def _fmt_cosine(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.4f}"
+
+
+def _render_vector_audit(value: dict[str, Any]) -> str:
+    """``doctor --vectors``'s report: the pooled numbers, then each client's own, then any id
+    the clients disagreed on, then the note about Ollama serialising concurrent clients."""
+    lines = [
+        f"vector_audit: {value['sampled']} sampled, min {_fmt_cosine(value['min'])}, "
+        f"median {_fmt_cosine(value['median'])}, {len(value['below_tolerance'])} below "
+        "tolerance"
+        + (f" ({', '.join(value['below_tolerance'])})" if value["below_tolerance"] else "")
+    ]
+    for label, stats in value["per_client"].items():
+        if stats.get("error"):
+            lines.append(f"  {label}: error ({stats['error']}), {stats['wall_seconds']:.3f} s")
+            continue
+        lines.append(
+            f"  {label}: min {_fmt_cosine(stats['min'])}, median {_fmt_cosine(stats['median'])}, "
+            f"{len(stats['below_tolerance'])} below tolerance, {stats['wall_seconds']:.3f} s"
+        )
+    if value["disagreements"]:
+        lines.append(f"  disagreements between clients: {', '.join(value['disagreements'])}")
+    lines.append(f"  {value['note']}")
+    return "\n".join(lines)
+
+
 def _render_doctor_line(key: str, value: Any, data: dict[str, Any]) -> list[str]:
     """The lines one key of doctor's report prints as. A key whose value another key's line
     already carries prints none."""
@@ -153,6 +180,7 @@ def _render_doctor_line(key: str, value: Any, data: dict[str, Any]) -> list[str]
         "embedding_space_reason",
         "migration_reason",
         "projects_reason",
+        "vector_audit_reason",
     ):
         return []  # folded into the line of the key it describes
     if key == "database":
@@ -177,6 +205,10 @@ def _render_doctor_line(key: str, value: Any, data: dict[str, Any]) -> list[str]
         ]
     if key == "migration":
         return [_render_migration(value, data.get("migration_reason"))]
+    if key == "vector_audit":
+        if value is None:
+            return [f"vector_audit: none ({data.get('vector_audit_reason')})"]
+        return [_render_vector_audit(value)]
     if key == "snapshots" and value is not None:
         return [_render_snapshots(value)]
     if key == "rows" and value is not None:

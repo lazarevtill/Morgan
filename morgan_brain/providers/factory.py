@@ -89,6 +89,7 @@ def build_embedder(
     *,
     conn: sqlite3.Connection | None = None,
     budget: Budget = "interactive",
+    headers: dict[str, str] | None = None,
 ) -> Embedder:
     """The single decision between the live embedding endpoint and the deterministic stub.
 
@@ -105,6 +106,10 @@ def build_embedder(
     the live adapter's own, below the check, so a retried first request still carries the
     fingerprint strings once. ``MORGAN_LLM_TIMEOUT_SECONDS`` is the chat model's; embeddings
     have ``MORGAN_EMBEDDING_TIMEOUT_SECONDS`` per attempt, inside the budget.
+
+    *headers* rides on every request the returned embedder sends, on top of the key above --
+    ``doctor --vectors --clients N`` is the one caller today, tagging each of its concurrent
+    clients so a disagreement can be told apart from another client's answer.
     """
     if settings.embedding_backend == "hash":
         return FakeEmbedder(dim=settings.embedding_dim)
@@ -117,6 +122,7 @@ def build_embedder(
         setting=endpoint.setting,
         key_setting=key.setting,
         api_key=key.api_key,
+        headers=headers,
     )
     if conn is None:
         return inner

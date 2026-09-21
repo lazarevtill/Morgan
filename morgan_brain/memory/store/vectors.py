@@ -300,6 +300,67 @@ def stored_sample(
     return pairs
 
 
+def audit_sample(
+    conn: sqlite3.Connection,
+    *,
+    table_name: str,
+    n: int,
+    user_id: str,
+    project: str,
+    all_projects: bool,
+) -> list[tuple[str, str, list[float]]]:
+    """Up to *n* stored memories in scope, spread evenly across *table_name*'s rowids (and so
+    across its vec0 chunks), each as its id, its text and the vector stored for it. Reads only.
+
+    A sibling of ``stored_sample`` above, for ``doctor --vectors``: that one is random and
+    unscoped, right for what ``checked_embedder.py`` uses it for -- any part of the archive,
+    proving whoever answers wrote it, before a project even exists to scope by. This one
+    reports its findings by id, so it must carry them, and it is scoped like every other
+    doctor read -- *project*, or every project with *all_projects* -- so a caller auditing one
+    project's vectors does not have another project's rows silently mixed in.
+
+    Evenly spread rather than random: a fixed stride across the ordered candidates touches the
+    whole table on every run, not a different random slice each time, which is what a repeat
+    run comparing today against last week wants. An id whose vector or memory row is missing
+    is skipped rather than replaced by a neighbour, so fewer than *n* rows come back only when
+    fewer than *n* memories in scope have both -- as with ``stored_sample``, never an error.
+    """
+    table = _vector_table(table_name)
+    if n <= 0 or not _exists(conn, table):
+        return []
+    sql = (
+        "SELECT m.rowid AS rowid, m.id AS id FROM vec_meta m "
+        "JOIN memories e ON e.id = m.id WHERE m.user_id = ?"
+    )
+    params: list[object] = [user_id]
+    if not all_projects:
+        sql += " AND m.project = ?"
+        params.append(project)
+    sql += " ORDER BY m.rowid"
+    candidates = conn.execute(sql, params).fetchall()
+    total = len(candidates)
+    if total == 0:
+        return []
+    take = min(n, total)
+    # `take` indices spread evenly across [0, total) -- a stride sample, not a prefix, so a
+    # sample smaller than the table touches all of it rather than only its oldest rows.
+    indices = sorted({(i * total) // take for i in range(take)})
+    lookup = f"SELECT embedding FROM {table} WHERE rowid = ?"  # noqa: S608 # nosec B608
+    triples: list[tuple[str, str, list[float]]] = []
+    for idx in indices:
+        candidate = candidates[idx]
+        hit = conn.execute(lookup, (candidate["rowid"],)).fetchone()
+        if hit is None:
+            continue
+        memory = conn.execute(
+            "SELECT content FROM memories WHERE id = ?", (candidate["id"],)
+        ).fetchone()
+        if memory is None:
+            continue
+        triples.append((candidate["id"], memory["content"], _unpack(hit["embedding"])))
+    return triples
+
+
 #: The embedding column of a vec0 table's DDL, as ``SqliteVectorIndex`` writes it.
 _DECLARED_WIDTH = re.compile(r"\bembedding\s+float\[(\d+)\]")
 

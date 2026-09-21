@@ -115,6 +115,20 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(p_cons)
 
     p_doctor = sub.add_parser("doctor", help="Diagnose the local Morgan installation.")
+    p_doctor.add_argument(
+        "--vectors",
+        action="store_true",
+        help="Re-embed a sample of stored vectors and compare the answer against what is "
+        "stored (MORGAN_VECTOR_AUDIT_SAMPLE_ROWS rows). Sends that sample's text to the "
+        "embedding host.",
+    )
+    p_doctor.add_argument(
+        "--clients",
+        type=int,
+        default=1,
+        help="With --vectors, run the sample through this many concurrent embedding clients "
+        "and report any row they disagreed on (default: 1).",
+    )
     _add_common(p_doctor)
 
     # No --project/--all-projects: a snapshot is of the whole database, not one project.

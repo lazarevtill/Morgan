@@ -76,6 +76,82 @@ def model_server(
         yield url
 
 
+@contextmanager
+def vector_audit_server(
+    *, wrong: dict[str, Any] | None = None, embedding_dim: int = 1024
+) -> Iterator[str]:
+    """A model server for ``doctor --vectors``: answers exactly like ``model_server`` -- the
+    same deterministic unit vector per input text -- except for entries named in *wrong*.
+    Yields its ``/v1`` URL.
+
+    *wrong* maps a text to a spec (every client's request for that text gets the scripted
+    answer), or a client label (``"client-1"``, ``"client-2"``, ... -- read from the
+    ``X-Morgan-Audit-Client`` header ``doctor``'s multi-client audit tags each of its
+    requests with) to a nested ``{text: spec}``, so only that one client gets it; every other
+    client, and every other text, gets the normal vector. A spec is ``"wrong"`` (the exact
+    negation of the normal vector -- as far from it as a vector of the same length can be,
+    so a comparison never has to hope a hash landed far enough by chance), ``"zero"`` (the
+    zero vector, which ``fingerprint.cosine`` refuses to compare) or ``"nan"`` (a vector of
+    ``NaN``s, which it also refuses) -- the two answers an audit must report as failing
+    rather than crash on.
+    """
+    wrong = wrong or {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            if self.path != "/v1/embeddings":
+                self._reply(404, {"error": "not found"})
+                return
+            label = self.headers.get("X-Morgan-Audit-Client", "")
+            texts = body["input"] if isinstance(body["input"], list) else [body["input"]]
+            vectors = [
+                {"index": i, "embedding": _scripted_vector(text, label, wrong, embedding_dim)}
+                for i, text in enumerate(texts)
+            ]
+            self._reply(200, {"object": "list", "data": vectors})
+
+        def _reply(self, status: int, payload: dict[str, Any]) -> None:
+            # allow_nan: a "nan" spec answers with a bare NaN token, which Python's json
+            # module writes and reads as an extension of the format -- the live adapter
+            # parses a real server's malformed answer the same way.
+            data = json.dumps(payload, allow_nan=True).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args: Any) -> None:
+            """The suite's output is not a request log."""
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True
+    ).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}/v1"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _scripted_vector(text: str, label: str, wrong: dict[str, Any], dim: int) -> list[float]:
+    spec = wrong.get(text)
+    if spec is None:
+        per_client = wrong.get(label)
+        if isinstance(per_client, dict):
+            spec = per_client.get(text)
+    normal = _unit_vector(text, dim)
+    if spec == "wrong":
+        return [-x for x in normal]
+    if spec == "zero":
+        return [0.0] * dim
+    if spec == "nan":
+        return [math.nan] * dim
+    return normal
+
+
 class Headers:
     """The headers of the last request a ``header_recording_server`` received, lower-cased."""
 

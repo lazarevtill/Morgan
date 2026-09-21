@@ -222,7 +222,13 @@ async def cmd_consolidate(
 
 
 async def cmd_doctor(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
-    return await build_doctor_report(settings, project=project, all_projects=args.all_projects)
+    return await build_doctor_report(
+        settings,
+        project=project,
+        all_projects=args.all_projects,
+        vectors=args.vectors,
+        clients=args.clients,
+    )
 
 
 async def cmd_import(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:

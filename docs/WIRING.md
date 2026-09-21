@@ -154,6 +154,30 @@ migrate` yet, where the columns it counts do not exist. Each `project` line is a
 `projects` table: its classification and whether capture and consolidation are on. A
 `MORGAN_CODE_ROOTS` entry that is not a directory is marked so.
 
+`morgan doctor --vectors` re-embeds a sample of `MORGAN_VECTOR_AUDIT_SAMPLE_ROWS` (180) stored
+vectors, spread evenly across the active embedding space's table, and compares each fresh
+answer against what is stored, at `MORGAN_EMBEDDING_FINGERPRINT_TOLERANCE`. It is the one thing
+`doctor` sends anywhere: a line to stderr says so first -- the host itself is in `data_flow`,
+above -- because stdout still carries `--json`. `--clients N` runs the same sample through N
+independent, concurrent embedders instead of one, and reports each client's own numbers beside
+any id whose fresh vectors disagreed between clients -- catching a server that only sometimes
+answers a request wrong, which one client alone cannot see:
+
+```
+vector_audit: 180 sampled, min 0.9982, median 0.9998, 0 below tolerance
+  client-1: min 0.9985, median 1.0000, 0 below tolerance, 173.786 s
+  client-2: min 0.9982, median 0.9996, 0 below tolerance, 173.537 s
+  Ollama may serialise concurrent clients rather than answer them in parallel, so a slower
+  wall time with --clients than without it can be the host queuing requests.
+```
+
+`--json` gives the same numbers under `vector_audit`: `sampled`, `min`, `median`,
+`below_tolerance` (the ids, pooled across every client), `per_client` (each client's own `min`,
+`median`, `below_tolerance` and `wall_seconds`, or an `error` if that client could not be
+reached at all) and `disagreements` (the ids clients answered differently for). Without
+`--vectors`, or on the hash backend, or before an embedding space is registered, `vector_audit`
+reads `None` and `vector_audit_reason` says why -- nothing runs a model unasked.
+
 ## 5. The CLI
 
 Every command takes `--project` (default: the current git repository's name; a linked

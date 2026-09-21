@@ -31,7 +31,10 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
-from dataclasses import dataclass
+import statistics
+import sys
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -40,9 +43,11 @@ from morgan_brain.composition import sqlite_path
 from morgan_brain.config import Settings
 from morgan_brain.memory import fingerprint, migrations, snapshot
 from morgan_brain.memory.store import projects, spaces
+from morgan_brain.memory.store import vectors as vectors_store
 from morgan_brain.memory.store.db import open_db, open_readonly
 from morgan_brain.providers.factory import (
     Probe,
+    build_embedder,
     chat_endpoint_of,
     check_embeddings_reachable,
     check_llm_reachable,
@@ -172,6 +177,10 @@ class _Local:
 
     report: dict[str, Any]
     space: spaces.EmbeddingSpace | None = None
+    #: ``doctor --vectors``'s sample, drawn while the connection is still open -- id, text and
+    #: stored vector, per ``vectors_store.audit_sample`` -- and re-embedded only after it
+    #: closes, the same way the embedding-space fingerprint check is compared afterward.
+    vector_sample: list[tuple[str, str, list[float]]] = field(default_factory=list)
 
 
 def _collect_library_probes(report: dict[str, Any]) -> None:
@@ -240,9 +249,12 @@ def _database_unread(report: dict[str, Any], why: str) -> None:
         report[reason] = why
 
 
-def _collect_local_probes(settings: Settings, *, project: str, all_projects: bool) -> _Local:
+def _collect_local_probes(
+    settings: Settings, *, project: str, all_projects: bool, vectors: bool
+) -> _Local:
     """Every *local* probe: filesystem, SQLite, sqlite-vec, FTS5, row counts, the migration
-    state, snapshots, the ``projects`` rows and the active embedding space.
+    state, snapshots, the ``projects`` rows, the active embedding space and, with *vectors*,
+    ``doctor --vectors``'s sample.
 
     Synchronous on purpose -- each probe blocks -- so ``build_doctor_report`` hands the
     whole body to a worker thread.
@@ -308,7 +320,9 @@ def _collect_local_probes(settings: Settings, *, project: str, all_projects: boo
         _database_unread(report, f"failed to open database read-only: {exc}")
         return _Local(report)
     try:
-        return _read_database(conn, report, settings, project=project, all_projects=all_projects)
+        return _read_database(
+            conn, report, settings, project=project, all_projects=all_projects, vectors=vectors
+        )
     finally:
         conn.close()
 
@@ -320,6 +334,7 @@ def _read_database(
     *,
     project: str,
     all_projects: bool,
+    vectors: bool,
 ) -> _Local:
     """Every probe of the database itself: SELECTs and PRAGMA reads, nothing else."""
     local = _Local(report)
@@ -350,6 +365,19 @@ def _read_database(
                 report["embedding_space_reason"] = "no active embedding space registered yet"
     except sqlite3.Error as exc:
         report.setdefault("probe_errors", {})["embedding_space"] = str(exc)
+
+    if vectors and local.space is not None and settings.embedding_backend != "hash":
+        try:
+            local.vector_sample = vectors_store.audit_sample(
+                conn,
+                table_name=local.space.table_name,
+                n=settings.vector_audit_sample_rows,
+                user_id=settings.owner_user_id,
+                project=project,
+                all_projects=all_projects,
+            )
+        except sqlite3.Error as exc:
+            report.setdefault("probe_errors", {})["vector_sample"] = str(exc)
 
     try:
         if _table_exists(conn, "projects"):
@@ -493,14 +521,225 @@ def _fingerprint_verdict(
     return f"{word} (min cosine {comparison.min_cosine:.4f})"
 
 
+#: The header ``doctor --vectors --clients N`` tags each of its N concurrent embedders'
+#: requests with, so a fake server in a test -- or a real one's access log -- can tell one
+#: client's requests from another's. Read by ``tests.fakes.vector_audit_server``.
+_CLIENT_HEADER = "X-Morgan-Audit-Client"
+
+#: Printed once, to stderr, before ``doctor --vectors`` sends the sample's text anywhere --
+#: never to stdout, which carries ``--json``.
+_SENDS_TEXT_NOTICE = (
+    "doctor --vectors: sending the sampled memories' text to the embedding host to re-embed "
+    "and compare against what is stored."
+)
+
+#: Carried in the report so ``--json`` says it too, not only the rendered text: a slower wall
+#: time with --clients than with one client alone is not necessarily the comparison's fault.
+_OLLAMA_NOTE = (
+    "Ollama may serialise concurrent clients rather than answer them in parallel, so a slower "
+    "wall time with --clients than without it can be the host queuing requests."
+)
+
+
+def _safe_cosine(a: list[float], b: list[float]) -> float | None:
+    """``fingerprint.cosine``, or ``None`` on a zero or non-finite vector -- reported as a
+    failing row, never raised."""
+    try:
+        return fingerprint.cosine(a, b)
+    except ValueError:
+        return None
+
+
+def _any_pair_disagrees(fresh: list[list[float]], tolerance: float) -> bool:
+    """Whether any two of *fresh* -- one row's vector, fresh from each client -- fall below
+    *tolerance* against each other, or cannot be compared at all."""
+    for i in range(len(fresh)):
+        for j in range(i + 1, len(fresh)):
+            cosine = _safe_cosine(fresh[i], fresh[j])
+            if cosine is None or cosine < tolerance:
+                return True
+    return False
+
+
+async def _client_pass(
+    settings: Settings, texts: list[str], label: str
+) -> tuple[list[list[float]] | None, float, str | None]:
+    """One audit client's whole pass over the sample: one embedder, one ``embed`` call per
+    row, timed as the whole pass.
+
+    Not one ``embed_batch`` call carrying every row: ``MORGAN_EMBEDDING_TIMEOUT_SECONDS``
+    bounds a single attempt, sized for one call's answer, the way every other caller under the
+    import budget sends one. A sample of 180 in one request routinely runs past it -- measured
+    against a real host, every attempt died at the attempt timeout before the server finished,
+    and the retry sent the same doomed request again, spending the whole budget without ever
+    succeeding. One row per request is what the budget was measured against.
+
+    Never raises -- a client that could not be reached at all reports its own error instead of
+    failing the other clients' comparisons.
+    """
+    embedder = build_embedder(settings, conn=None, budget="import", headers={_CLIENT_HEADER: label})
+    started = time.monotonic()
+    fresh: list[list[float]] = []
+    try:
+        for text in texts:
+            fresh.append(await embedder.embed(text))
+    except Exception as exc:  # noqa: BLE001 -- report the failing client, never crash the audit
+        return None, time.monotonic() - started, f"{type(exc).__name__}: {exc}"
+    return fresh, time.monotonic() - started, None
+
+
+async def _compare_sample(
+    sample: list[tuple[str, str, list[float]]], settings: Settings, *, clients: int
+) -> dict[str, Any]:
+    """Re-embed *sample* under *clients* concurrent, independent embedders and compare every
+    answer against what is stored -- and, with more than one client, against each other.
+
+    Top-level ``min``/``median``/``below_tolerance`` pool every client's row comparisons
+    together: the honest reading of "is it safe to import" is the worst any client saw, and it
+    collapses to that one client's own numbers when ``clients`` is 1.
+    """
+    clients = max(1, clients)
+    if not sample:
+        return {
+            "sampled": 0,
+            "min": None,
+            "median": None,
+            "below_tolerance": [],
+            "per_client": {},
+            "disagreements": [],
+            "note": _OLLAMA_NOTE,
+        }
+    print(_SENDS_TEXT_NOTICE, file=sys.stderr)
+    ids = [row_id for row_id, _, _ in sample]
+    texts = [text for _, text, _ in sample]
+    stored = {row_id: vector for row_id, _, vector in sample}
+    tolerance = settings.embedding_fingerprint_tolerance
+    labels = [f"client-{n}" for n in range(1, clients + 1)]
+
+    results = await asyncio.gather(*(_client_pass(settings, texts, label) for label in labels))
+
+    per_client: dict[str, Any] = {}
+    fresh_by_client: dict[str, list[list[float]]] = {}
+    pooled: list[float] = []
+    pooled_below: list[str] = []
+    for label, (fresh, wall_seconds, error) in zip(labels, results, strict=True):
+        if error is not None or fresh is None:
+            per_client[label] = {
+                "min": None,
+                "median": None,
+                "below_tolerance": [],
+                "wall_seconds": round(wall_seconds, 3),
+                "error": error,
+            }
+            continue
+        fresh_by_client[label] = fresh
+        cosines: list[float] = []
+        below: list[str] = []
+        for row_id, vector in zip(ids, fresh, strict=True):
+            cosine = _safe_cosine(vector, stored[row_id])
+            if cosine is None or cosine < tolerance:
+                below.append(row_id)
+                if row_id not in pooled_below:
+                    pooled_below.append(row_id)
+            else:
+                cosines.append(cosine)
+            if cosine is not None:
+                pooled.append(cosine)
+        per_client[label] = {
+            "min": min(cosines) if cosines else None,
+            "median": statistics.median(cosines) if cosines else None,
+            "below_tolerance": below,
+            "wall_seconds": round(wall_seconds, 3),
+        }
+
+    disagreements: list[str] = []
+    ok_labels = list(fresh_by_client)
+    if len(ok_labels) >= 2:
+        for idx, row_id in enumerate(ids):
+            at_row = [fresh_by_client[label][idx] for label in ok_labels]
+            if _any_pair_disagrees(at_row, tolerance):
+                disagreements.append(row_id)
+
+    return {
+        "sampled": len(sample),
+        "min": min(pooled) if pooled else None,
+        "median": statistics.median(pooled) if pooled else None,
+        "below_tolerance": pooled_below,
+        "per_client": per_client,
+        "disagreements": disagreements,
+        "note": _OLLAMA_NOTE,
+    }
+
+
+async def audit_vectors(
+    conn: sqlite3.Connection,
+    settings: Settings,
+    *,
+    table_name: str,
+    project: str,
+    all_projects: bool,
+    clients: int = 1,
+) -> dict[str, Any]:
+    """``doctor --vectors``, over a connection the caller keeps open itself: draw the sample,
+    then re-embed and compare it.
+
+    ``build_doctor_report`` does not call this -- it draws the sample inside the worker thread
+    that reads the database (``_read_database``) and calls ``_compare_sample`` only after that
+    connection is closed, so a read and a network call never share one connection. This is for
+    a caller, such as a test, that wants the whole audit in one call over a connection of its
+    own.
+    """
+    sample = vectors_store.audit_sample(
+        conn,
+        table_name=table_name,
+        n=settings.vector_audit_sample_rows,
+        user_id=settings.owner_user_id,
+        project=project,
+        all_projects=all_projects,
+    )
+    return await _compare_sample(sample, settings, clients=clients)
+
+
+async def _run_vector_audit(
+    report: dict[str, Any], settings: Settings, local: _Local, *, clients: int
+) -> dict[str, Any]:
+    """``vector_audit`` and ``vector_audit_reason``, paired like ``embedding_space`` and its
+    own reason: exactly one of them is not ``None``, so ``--json`` and the render both know
+    why there are no numbers without guessing from an absent key."""
+    if report.get("database_error"):
+        return {
+            "vector_audit": None,
+            "vector_audit_reason": f"database not read: {report['database_error']}",
+        }
+    if settings.embedding_backend == "hash":
+        return {
+            "vector_audit": None,
+            "vector_audit_reason": "the hash backend embeds locally; there is no host to audit",
+        }
+    if local.space is None:
+        return {
+            "vector_audit": None,
+            "vector_audit_reason": report.get("embedding_space_reason")
+            or "no active embedding space registered yet",
+        }
+    if not local.vector_sample:
+        return {"vector_audit": None, "vector_audit_reason": "no stored vectors in scope to sample"}
+    audit = await _compare_sample(local.vector_sample, settings, clients=clients)
+    return {"vector_audit": audit, "vector_audit_reason": None}
+
+
 async def build_doctor_report(
-    settings: Settings, *, project: str, all_projects: bool
+    settings: Settings, *, project: str, all_projects: bool, vectors: bool = False, clients: int = 1
 ) -> dict[str, Any]:
     # The database is read, and its connection closed, in a worker thread while the two
     # servers are asked; the space read there is compared with the answer afterwards.
     local, chat, embeddings = await asyncio.gather(
         asyncio.to_thread(
-            _collect_local_probes, settings, project=project, all_projects=all_projects
+            _collect_local_probes,
+            settings,
+            project=project,
+            all_projects=all_projects,
+            vectors=vectors,
         ),
         check_llm_reachable(settings),
         _embeddings_answer(settings),
@@ -517,6 +756,8 @@ async def build_doctor_report(
             fingerprint=_fingerprint_verdict(local.space, embeddings, settings),
             strings_digest=fingerprint.DIGEST,
         )
+    if vectors:
+        report.update(await _run_vector_audit(report, settings, local, clients=clients))
     return report
 
 

@@ -170,6 +170,10 @@ class Settings(BaseSettings):
     #: has no fingerprint yet: it is recorded only if their fresh vectors match the stored ones.
     #: At least one: zero would record whatever model happened to answer first.
     embedding_fingerprint_sample_rows: int = Field(default=5, ge=1)
+    #: How many stored vectors ``doctor --vectors`` draws for its re-embed-and-compare audit,
+    #: spread evenly across the active space's table. 180 is enough to notice a server that
+    #: answered a handful of rows wrong without re-embedding the whole archive on every run.
+    vector_audit_sample_rows: int = Field(default=180, gt=0)
     #: "provider" → call the configured embedding endpoint. "hash" → a deterministic sha256
     #: stub, for the memory commands to run with no model server at all.
     embedding_backend: Literal["provider", "hash"] = "provider"

@@ -122,6 +122,10 @@ class OpenAICompatEmbedder:
                      ``MORGAN_API_KEY``, which points the other way.
         api_key:     Outbound bearer token, if the endpoint enforces one (llama-server's
                      ``--api-key``). ``None``/empty sends no ``Authorization`` header.
+        headers:     Extra request headers, merged in after ``Authorization``. Empty by
+                     default; ``doctor --vectors --clients N`` tags each client's requests
+                     with one, so a comparison can be correlated with the host's own logs,
+                     and a test double can answer one client differently from another.
     """
 
     def __init__(
@@ -133,12 +137,15 @@ class OpenAICompatEmbedder:
         setting: str,
         key_setting: str,
         api_key: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self._url = endpoint.rstrip("/") + "/embeddings"
         self._model = model
         self._budget = budget
         self._redact = _Redactor(api_key or "")
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        if headers:
+            self._headers.update(headers)
         self._setting = setting
         self._key_setting = key_setting
 
