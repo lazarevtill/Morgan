@@ -19,15 +19,18 @@ from morgan_brain.providers.openai_compat import OpenAICompatAdapter
 #: is waiting on the answer, or an import's, which has thousands of calls to make.
 Budget = Literal["interactive", "import"]
 
-#: The setting whose value is sent as the key to the model server. Embeddings carry the chat
-#: key wherever they are sent, so a refused key is this one whichever endpoint refused it.
-_KEY_SETTING = "MORGAN_LLM_API_KEY"
-
 
 class Endpoint(NamedTuple):
     """A model endpoint, and the variable that addresses it."""
 
     url: str
+    setting: str
+
+
+class Key(NamedTuple):
+    """A key an endpoint's requests carry, and the setting that names it on a 401 or 403."""
+
+    api_key: str | None
     setting: str
 
 
@@ -41,6 +44,22 @@ def embedding_endpoint_of(settings: Settings) -> Endpoint:
     if settings.embedding_endpoint:
         return Endpoint(settings.embedding_endpoint, "MORGAN_EMBEDDING_ENDPOINT")
     return chat_endpoint_of(settings)
+
+
+def embedding_key_of(settings: Settings) -> Key:
+    """The key embedding requests carry, and the setting a refusal names for it.
+
+    A separate ``MORGAN_EMBEDDING_ENDPOINT`` gets its own key, ``MORGAN_EMBEDDING_API_KEY``, so
+    the owner's chat credential never reaches a host that never needed it -- and never appears
+    in that host's logs. Without one, the request goes to the chat host and carries its key,
+    ``MORGAN_LLM_API_KEY``, as it must: there is no second host to give a key to. Follows
+    ``embedding_endpoint_of(settings).setting`` so this one rule covers both the embedder and
+    ``check_embeddings_reachable``. ``api_key`` is ``None`` when empty, so an empty key sends
+    no ``Authorization`` header.
+    """
+    if embedding_endpoint_of(settings).setting == "MORGAN_EMBEDDING_ENDPOINT":
+        return Key(settings.embedding_api_key or None, "MORGAN_EMBEDDING_API_KEY")
+    return Key(settings.llm_api_key or None, "MORGAN_LLM_API_KEY")
 
 
 def build_chat_client(settings: Settings) -> OpenAICompatAdapter:
@@ -80,13 +99,14 @@ def build_embedder(
     if settings.embedding_backend == "hash":
         return FakeEmbedder(dim=settings.embedding_dim)
     endpoint = embedding_endpoint_of(settings)
+    key = embedding_key_of(settings)
     inner = OpenAICompatEmbedder(
         endpoint.url,
         settings.embedding_model,
         budget=retry_budget_of(settings, budget),
         setting=endpoint.setting,
-        key_setting=_KEY_SETTING,
-        api_key=settings.llm_api_key or None,
+        key_setting=key.setting,
+        api_key=key.api_key,
     )
     if conn is None:
         return inner
@@ -114,8 +134,8 @@ def retry_budget_of(settings: Settings, budget: Budget) -> RetryBudget:
 async def _answers(
     method: str,
     url: str,
-    settings: Settings,
     *,
+    api_key: str | None,
     # ASYNC109 wants a cancel scope instead of a timeout parameter. That is trio/anyio
     # advice; here the value goes straight to httpx, which is how asyncio expresses it.
     timeout: float,  # noqa: ASYNC109
@@ -124,7 +144,7 @@ async def _answers(
     """Whether ``url`` answers without a server error. Never raises."""
     import httpx
 
-    headers = {"Authorization": f"Bearer {settings.llm_api_key}"} if settings.llm_api_key else {}
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.request(method, url, headers=headers, json=body)
@@ -138,13 +158,19 @@ async def check_llm_reachable(settings: Settings, *, timeout: float = 5.0) -> bo
     """Best-effort reachability check for ``morgan doctor``: GET the ``/models`` listing,
     which llama-server, vLLM and Ollama's ``/v1`` shim all serve. Never raises."""
     url = chat_endpoint_of(settings).url.rstrip("/") + "/models"
-    return await _answers("GET", url, settings, timeout=timeout)
+    return await _answers("GET", url, api_key=settings.llm_api_key or None, timeout=timeout)
 
 
 async def check_embeddings_reachable(settings: Settings, *, timeout: float = 5.0) -> bool:  # noqa: ASYNC109
     """Best-effort check for ``morgan doctor`` that embeddings are served where they are sent:
     embed one word. Not the ``/models`` listing: a chat server started without embeddings
-    lists its models and answers every embedding request with a 501. Never raises."""
+    lists its models and answers every embedding request with a 501. Never raises.
+
+    Carries the same key ``build_embedder`` would send (``embedding_key_of``): the chat key
+    only when embeddings go to the chat host, its own key when they go to a separate one.
+    """
     url = embedding_endpoint_of(settings).url.rstrip("/") + "/embeddings"
     body = {"model": settings.embedding_model, "input": "probe"}
-    return await _answers("POST", url, settings, timeout=timeout, body=body)
+    return await _answers(
+        "POST", url, api_key=embedding_key_of(settings).api_key, timeout=timeout, body=body
+    )

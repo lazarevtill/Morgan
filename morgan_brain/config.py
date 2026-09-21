@@ -96,6 +96,12 @@ class Settings(BaseSettings):
     #: OUTBOUND: the key Morgan presents TO the model server (llama-server's ``--api-key``).
     #: Not ``api_key`` above -- the two point in opposite directions. Empty by default.
     llm_api_key: str = ""
+    #: OUTBOUND: the key Morgan presents TO the embedding server, when ``embedding_endpoint``
+    #: addresses a separate one. Sent instead of ``llm_api_key`` so the owner's chat credential
+    #: never reaches a host it was never meant for; without a separate endpoint, embeddings go
+    #: to the chat host and carry ``llm_api_key``, as they must -- there is no second host to
+    #: give a key to. Empty by default, like ``llm_api_key``; a secret, never logged or echoed.
+    embedding_api_key: str = ""
     #: Request timeout (seconds) for one chat call. Sized for a network hop under GPU load,
     #: not a loopback socket. Embedding calls do not use it: they have the budgets below.
     llm_timeout_seconds: float = Field(default=120.0, gt=0.0)

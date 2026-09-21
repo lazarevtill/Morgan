@@ -104,8 +104,9 @@ async def test_a_four_hundred_is_not_retried():
 
 @pytest.mark.parametrize("status", [401, 403])
 async def test_a_four_hundred_is_not_retried_and_a_key_error_names_its_setting(status):
-    """The key is named by the setting whose value is sent. Until the embedding host has a key
-    of its own, that is the chat key, whichever endpoint embeddings go to."""
+    """The key is named by the setting whose value is sent. ``_settings`` always gives
+    embeddings their own endpoint, so that is now ``MORGAN_EMBEDDING_API_KEY``, its own key --
+    never the chat key, which this request never carried."""
     calls = Calls()
     with (
         flaky_model_server(fail_times=99, status=status, calls=calls) as url,
@@ -113,7 +114,8 @@ async def test_a_four_hundred_is_not_retried_and_a_key_error_names_its_setting(s
     ):
         await build_embedder(_settings(url)).embed("x")
     assert calls.total == 1
-    assert "MORGAN_LLM_API_KEY" in str(exc.value)
+    assert "MORGAN_EMBEDDING_API_KEY" in str(exc.value)
+    assert "MORGAN_LLM_API_KEY" not in str(exc.value)
 
 
 async def test_a_host_that_fails_fast_past_half_the_budget_is_still_answered():
@@ -308,7 +310,12 @@ def _settings(
     backoff_cap: float = 2.0,
     api_key: str = "",
 ) -> Settings:
-    """The live backend, with embeddings sent to *url* and budgets small enough for a suite."""
+    """The live backend, with embeddings sent to *url* and budgets small enough for a suite.
+
+    *url* is always a separate ``MORGAN_EMBEDDING_ENDPOINT``, so *api_key* -- the key these
+    tests send and check for in a redacted message -- is what actually reaches it:
+    ``MORGAN_EMBEDDING_API_KEY``, never the chat key, which no request here carries.
+    """
     return Settings(
         embedding_backend="provider",
         embedding_endpoint=url,
@@ -317,5 +324,5 @@ def _settings(
         embedding_timeout_seconds=attempt_timeout,
         embedding_retry_backoff_seconds=backoff,
         embedding_retry_backoff_max_seconds=backoff_cap,
-        llm_api_key=api_key,
+        embedding_api_key=api_key,
     )

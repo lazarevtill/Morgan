@@ -44,14 +44,20 @@ MORGAN_LLM_MODEL=qwen2.5-7b-instruct
 MORGAN_EMBEDDING_MODEL=mxbai-embed-large      # the embedding model
 MORGAN_EMBEDDING_DIM=1024                     # must match the embedding model
 # MORGAN_EMBEDDING_ENDPOINT=http://localhost:8082/v1   # only if it is a separate server
-# MORGAN_LLM_API_KEY=                         # only if the server enforces --api-key
+# MORGAN_LLM_API_KEY=                         # only if the chat server enforces --api-key
+# MORGAN_EMBEDDING_API_KEY=                   # only if a separate embedding server enforces one
 # MORGAN_LLM_JSON_MODE=json_schema            # how consolidation asks for JSON
 # MORGAN_DATA_DIR=~/.local/share/morgan       # the one database
 # MORGAN_API_KEY=                             # required before morgan-mcp binds beyond loopback
 ```
 
-Two keys point in opposite directions: `MORGAN_LLM_API_KEY` is what Morgan presents *to* the
-model server; `MORGAN_API_KEY` is what MCP clients present *to* Morgan over HTTP.
+Three keys, and the direction and host each goes to matter: `MORGAN_LLM_API_KEY` is what Morgan
+presents *to* the chat server; `MORGAN_EMBEDDING_API_KEY` is what it presents *to* the embedding
+server, only when `MORGAN_EMBEDDING_ENDPOINT` addresses a separate one -- without one, embeddings
+go to the chat host and carry `MORGAN_LLM_API_KEY`, since there is no second host to give a key
+to. Neither ever reaches the other server: the chat credential does not appear in the embedding
+host's logs, and vice versa. `MORGAN_API_KEY` is unrelated to both -- what MCP clients present
+*to* Morgan over HTTP.
 
 When one server answers both, leave `MORGAN_EMBEDDING_ENDPOINT` empty and everything goes to
 `MORGAN_LLM_ENDPOINT`. Set it when they are separate, which is the common case:

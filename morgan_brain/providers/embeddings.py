@@ -110,10 +110,12 @@ class OpenAICompatEmbedder:
         model:       Embedding model name.
         budget:      How long a call may retry, and how long each attempt may take.
         setting:     The variable that addresses ``endpoint``, named when it fails.
-        key_setting: The variable whose value is sent as ``api_key``, named on a 401 or 403.
+        key_setting: The variable whose value is sent as ``api_key``, named on a 401 or 403 --
+                     ``MORGAN_LLM_API_KEY`` or ``MORGAN_EMBEDDING_API_KEY``, whichever the
+                     factory's ``embedding_key_of`` chose for *endpoint*; never
+                     ``MORGAN_API_KEY``, which points the other way.
         api_key:     Outbound bearer token, if the endpoint enforces one (llama-server's
-                     ``--api-key``). ``None``/empty sends no ``Authorization`` header. This is
-                     ``MORGAN_LLM_API_KEY``, never ``MORGAN_API_KEY`` — opposite directions.
+                     ``--api-key``). ``None``/empty sends no ``Authorization`` header.
     """
 
     def __init__(

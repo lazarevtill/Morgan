@@ -76,6 +76,71 @@ def model_server(
         yield url
 
 
+class Headers:
+    """The headers of the last request a ``header_recording_server`` received, lower-cased."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.last: dict[str, str] = {}
+
+    def record(self, headers: Any) -> None:
+        with self._lock:
+            self.last = {str(k).lower(): str(v) for k, v in headers.items()}
+
+
+@contextmanager
+def header_recording_server(*, embedding_dim: int = 1024) -> Iterator[tuple[str, Headers]]:
+    """A model server that answers every request normally -- chat's ``/models`` and
+    embeddings alike -- and records the headers of the last one it received; yields its
+    ``/v1`` URL and a ``Headers`` whose ``last`` holds them, lower-cased. For asserting which
+    key, if any, a request carried: a wrong key is never why the call fails here, so the test
+    is free to check what was sent rather than only what came back.
+    """
+    headers = Headers()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            headers.record(self.headers)
+            if self.path == "/v1/models":
+                self._reply(200, {"object": "list", "data": []})
+            else:
+                self._reply(404, {"error": "not found"})
+
+        def do_POST(self) -> None:
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            headers.record(self.headers)
+            if self.path != "/v1/embeddings":
+                self._reply(404, {"error": "not found"})
+                return
+            texts = body["input"] if isinstance(body["input"], list) else [body["input"]]
+            vectors = [
+                {"index": i, "embedding": _unit_vector(text, embedding_dim)}
+                for i, text in enumerate(texts)
+            ]
+            self._reply(200, {"object": "list", "data": vectors})
+
+        def _reply(self, status: int, payload: dict[str, Any]) -> None:
+            data = json.dumps(payload).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args: Any) -> None:
+            """The suite's output is not a request log."""
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True
+    ).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}/v1", headers
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 @contextmanager
 def flaky_model_server(
     fail_times: int,
