@@ -67,7 +67,7 @@ def test_the_block_names_everything_the_numbers_depend_on(tmp_path):
         "probes.json@",
         "2 memories",
         "1 probes",
-        "db-upgrade=2",
+        "db-upgrade=3",
         "commit=6795b3d",
     ):
         assert expected in block, (expected, block)

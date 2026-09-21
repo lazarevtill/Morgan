@@ -36,8 +36,10 @@ come in" are answered by the directory names.
   `morgan migrate`; `snapshot.py` writes and lists verified `VACUUM INTO` copies of the
   whole database, and restores one behind a safety snapshot of its own. Below them:
   - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
-    `history`. Each owns its schema and its queries; none of them ranks anything. Every write
-    goes through `db.write_transaction`.
+    `history`, `spaces` (the `embedding_spaces` table and its one-active partial index),
+    `projects` (the `projects` table; its queries land in a later task). Each owns its schema
+    and its queries; none of them ranks anything. Every write goes through
+    `db.write_transaction`.
   - `recall/` — `fusion` (reciprocal rank over vector and keyword search, rank-only) and
     `floor` (the relevance floor, judged on vector scores).
   - `knowledge/` — `extract`, `surprise`, `fact_ops`, `consolidation`.

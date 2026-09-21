@@ -32,6 +32,8 @@ from morgan_brain.memory.knowledge.extract import extract_entity_names
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
+from morgan_brain.memory.store.projects import ProjectStore
+from morgan_brain.memory.store.spaces import EmbeddingSpaceStore
 from morgan_brain.memory.store.tables import PROJECT_TABLES
 from morgan_brain.models import Entity
 
@@ -103,6 +105,18 @@ def _drop_the_semantic_index(conn: sqlite3.Connection, stores: Stores) -> None:
     conn.execute("DROP TABLE IF EXISTS mem_schemas")
 
 
+def _create_embedding_spaces_and_projects(conn: sqlite3.Connection, stores: Stores) -> None:
+    """Add ``embedding_spaces`` and ``projects``. Light: two ``CREATE TABLE``s, no row moved.
+
+    *stores* is unused -- neither table is part of the episodics/entities pair every step
+    receives. The two stores below own this same DDL, so a fresh database (which never runs
+    this function -- ``stamp_if_new`` marks it done first) and an old one upgraded through
+    this step end up with identical schema.
+    """
+    EmbeddingSpaceStore(conn)
+    ProjectStore(conn)
+
+
 #: In order. Step *n* brings a database from ``user_version`` *n - 1* to *n*; append only.
 #: Steps 1 and 2 rewrite and drop, yet stay light: they predate the split, and every Morgan
 #: that shipped them already ran them on open.
@@ -110,6 +124,7 @@ _STEPS: tuple[Step, ...] = (
     # A capital counts as a name only where its position does not explain it.
     Step(1, "reextract entities", False, _reextract_entities),
     Step(2, "drop the semantic index", False, _drop_the_semantic_index),
+    Step(3, "create embedding_spaces and projects", False, _create_embedding_spaces_and_projects),
 )
 
 

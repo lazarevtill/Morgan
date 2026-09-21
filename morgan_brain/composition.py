@@ -31,6 +31,8 @@ from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
 from morgan_brain.memory.store.fts import FtsIndex
 from morgan_brain.memory.store.history import SessionHistoryStore
+from morgan_brain.memory.store.projects import ProjectStore
+from morgan_brain.memory.store.spaces import EmbeddingSpaceStore
 from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.memory.store.vectors import SqliteVectorIndex
 from morgan_brain.providers.factory import (
@@ -142,6 +144,8 @@ def build_memory_module(
     """
     stamp_if_new(conn)
     stores = migration_stores(conn)
+    EmbeddingSpaceStore(conn)
+    ProjectStore(conn)
     module = MemoryModule(
         embedder=embedder,
         vectors=SqliteVectorIndex(conn, dim=dim),
