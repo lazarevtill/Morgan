@@ -11,6 +11,7 @@ from itertools import pairwise
 from typing import Any
 
 from morgan_brain.memory.store.db import write_transaction
+from morgan_brain.memory.store.tables import Erasure
 from morgan_brain.models import PERSONAL_PROJECT, MemorySource, TemporalFact
 
 #: The columns migration step 4 added. ``TemporalFact`` validates each from its stored text.
@@ -251,3 +252,12 @@ class SqliteTemporalStore:
                 "UPDATE facts SET confidence=? WHERE id=? AND user_id=? AND project=?",
                 (value, fact_id, user_id, project),
             )
+
+
+def delete_facts(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """`forget()`'s deleter for ``facts``: every fact of the erased project, current and
+    closed alike."""
+    return conn.execute(
+        "DELETE FROM facts WHERE user_id = ? AND project = ?",
+        (erasure.user_id, erasure.project),
+    ).rowcount

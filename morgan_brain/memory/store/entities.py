@@ -11,6 +11,7 @@ import sqlite3
 from collections.abc import Iterable
 
 from morgan_brain.memory.store.db import write_transaction
+from morgan_brain.memory.store.tables import Erasure
 from morgan_brain.models import PERSONAL_PROJECT
 
 
@@ -112,3 +113,12 @@ class EntityIndex:
         with write_transaction(self._conn):
             for mid in ids:
                 self._conn.execute("DELETE FROM memory_entities WHERE memory_id = ?", (mid,))
+
+
+def delete_entities(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """`forget()`'s deleter for ``memory_entities``: every name indexed for the erased
+    memories."""
+    return conn.execute(
+        "DELETE FROM memory_entities WHERE memory_id IN (SELECT value FROM json_each(?))",
+        (erasure.memory_ids,),
+    ).rowcount

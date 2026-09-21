@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any
 
 from morgan_brain.memory.store.db import write_transaction
-from morgan_brain.memory.store.tables import project_tables
+from morgan_brain.memory.store.tables import Erasure, project_tables
 from morgan_brain.models import PERSONAL_PROJECT, Entity, Memory, MemoryKind, MemorySource
 
 #: The columns migration step 4 added. ``Memory`` validates each from its stored text.
@@ -182,3 +182,11 @@ class EpisodicStore:
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?", (name,)
         ).fetchone()
         return row is not None
+
+
+def delete_memories(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """`forget()`'s deleter for ``memories``: the erased memories' rows."""
+    return conn.execute(
+        "DELETE FROM memories WHERE id IN (SELECT value FROM json_each(?))",
+        (erasure.memory_ids,),
+    ).rowcount

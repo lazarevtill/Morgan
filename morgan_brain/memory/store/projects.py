@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from morgan_brain.memory.store.db import write_transaction
+from morgan_brain.memory.store.tables import Erasure
 
 #: A single statement, run with plain ``execute`` rather than ``executescript`` -- the latter
 #: issues an implicit ``COMMIT`` before it runs anything, which would end migration step 3's
@@ -154,3 +155,9 @@ def seed(conn: sqlite3.Connection, clock: Callable[[], datetime]) -> int:
             if cursor.rowcount > 0:
                 inserted += 1
     return inserted
+
+
+def delete_project(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """`forget()`'s deleter for ``projects``: the erased project's own row, whose remote URL
+    and root path are the owner's data like any other row it erases."""
+    return conn.execute("DELETE FROM projects WHERE name = ?", (erasure.project,)).rowcount

@@ -29,13 +29,23 @@ from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
+from morgan_brain.memory.store import tables as registry
 from morgan_brain.memory.store.db import write_transaction
-from morgan_brain.memory.store.entities import EntityIndex
-from morgan_brain.memory.store.episodic import EpisodicStore
-from morgan_brain.memory.store.fts import FtsIndex
-from morgan_brain.memory.store.tables import NAME_KEYED_PROJECT_TABLES, project_tables
-from morgan_brain.memory.store.temporal import SqliteTemporalStore
-from morgan_brain.memory.store.vectors import SqliteVectorIndex, VectorHit, VectorRecord
+from morgan_brain.memory.store.entities import EntityIndex, delete_entities
+from morgan_brain.memory.store.episodic import EpisodicStore, delete_memories
+from morgan_brain.memory.store.fts import FtsIndex, delete_keywords
+from morgan_brain.memory.store.history import delete_history
+from morgan_brain.memory.store.projects import delete_project
+from morgan_brain.memory.store.tables import Deleter, Erasure
+from morgan_brain.memory.store.temporal import SqliteTemporalStore, delete_facts
+from morgan_brain.memory.store.vectors import (
+    SqliteVectorIndex,
+    VectorHit,
+    VectorRecord,
+    delete_meta,
+    rowids,
+    vector_deleter,
+)
 from morgan_brain.models import (
     PERSONAL_PROJECT,
     Entity,
@@ -56,6 +66,54 @@ def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
         ).fetchone()
         is not None
     )
+
+
+#: Each table ``store/tables.py`` registers, by name, mapped to the deleter of the store that
+#: owns it. An embedding space's vec0 table, named in ``embedding_spaces``, is erased by the
+#: vector store's deleter for that name instead. A store that registers a table maps its
+#: deleter here; ``forget()`` refuses a registered table it finds no deleter for.
+_DELETERS: dict[str, Deleter] = {
+    "memories": delete_memories,
+    "facts": delete_facts,
+    "memory_entities": delete_entities,
+    "vec_meta": delete_meta,
+    "vec_items": vector_deleter("vec_items"),
+    "fts_memories": delete_keywords,
+    "session_history": delete_history,
+    "projects": delete_project,
+}
+
+
+def _erasure_plan(conn: sqlite3.Connection) -> tuple[list[tuple[str, Deleter]], list[str]]:
+    """Each registered table *conn* has, with its store's deleter; and the tables
+    ``project_tables`` registers that *conn* does not have.
+
+    Every table is resolved before ``forget()`` deletes anything, so a present table with no
+    deleter raises here, by name, with nothing erased. An absent table of
+    ``NAME_KEYED_PROJECT_TABLES`` is passed over and not reported: ``tables_skipped`` names
+    the tables with a ``project`` column.
+    """
+    registered = registry.project_tables(conn)
+    skipped = [t for t in registered if not _table_exists(conn, t)]
+    present = [t for t in registered if t not in skipped]
+    present += [t for t in registry.NAME_KEYED_PROJECT_TABLES if _table_exists(conn, t)]
+    spaces = set(registry.space_tables(conn))
+    plan: list[tuple[str, Deleter]] = []
+    unresolved: list[str] = []
+    for table in present:
+        deleter = _DELETERS.get(table)
+        if deleter is None and table in spaces:
+            deleter = vector_deleter(table)
+        if deleter is None:
+            unresolved.append(table)
+        else:
+            plan.append((table, deleter))
+    if unresolved:
+        raise RuntimeError(
+            f"forget() erased nothing: no deleter for {', '.join(unresolved)}, registered in "
+            "store/tables.py; its store's deleter belongs in memory/module.py's _DELETERS"
+        )
+    return plan, skipped
 
 
 class MemoryModule:
@@ -353,11 +411,14 @@ class MemoryModule:
     async def forget(self, *, user_id: str, project: str) -> ForgetReport:
         """Erase everything *user_id* stored under *project*, in one transaction.
 
-        Every index lives in the same SQLite database, so the affected memory ids are
-        collected first and every dependent row -- including the vectors -- is deleted inside
-        a single write transaction. ``session_history`` is optional (present once a
-        ``SessionHistoryStore`` has opened on this connection); when absent it is named in
-        ``report.tables_skipped`` rather than counted as zero.
+        Walks the registry in ``store/tables.py``: each table ``project_tables`` or
+        ``NAME_KEYED_PROJECT_TABLES`` names is erased by the deleter its store owns
+        (``_erasure_plan``). Every table is resolved before any row is deleted, so a
+        registered table with no deleter stops the erasure by name with nothing erased. A
+        registered table absent here -- ``session_history``, opened only by
+        ``build_memory_context`` -- is named in ``report.tables_skipped`` rather than counted
+        as zero. Every index lives in the same SQLite database, so the whole erasure is one
+        write transaction, and the database is vacuumed once it has committed.
         """
         conn = self._conn
         if conn.in_transaction:
@@ -369,13 +430,14 @@ class MemoryModule:
                 "the erasure has committed"
             )
 
-        # The ids are selected inside the write transaction, which holds the lock from its
-        # first statement. Selecting before the lock left a window in which another process --
-        # morgan-mcp storing a memory while `morgan forget` runs -- could insert a memory for
-        # this project between the SELECT and the DELETE: the new row is absent from `ids`,
-        # survives the erasure, and forget() still reports success. Holding the lock for the
-        # whole read-then-delete sequence is what makes the id list authoritative.
         with write_transaction(conn):
+            plan, skipped = _erasure_plan(conn)
+            # The ids are selected inside the write transaction, which holds the lock from its
+            # first statement. Selecting before the lock left a window in which another process
+            # -- morgan-mcp storing a memory while `morgan forget` runs -- could insert a memory
+            # for this project between the SELECT and the DELETE: the new row is absent from
+            # `ids`, survives the erasure, and forget() still reports success. Holding the lock
+            # for the whole read-then-delete sequence is what makes the id list authoritative.
             ids = [
                 str(r["id"])
                 for r in conn.execute(
@@ -383,65 +445,24 @@ class MemoryModule:
                     (user_id, project),
                 )
             ]
-            report = ForgetReport(memories=len(ids))
-            # The id list is bound once as a JSON array and expanded by json_each, so every
-            # statement below stays a literal and a project with more memories than
-            # SQLITE_MAX_VARIABLE_NUMBER still erases in one statement each.
-            id_json = json.dumps(ids)
-            # `store/tables.py::project_tables` is the one registry of project-keyed tables,
-            # shared with `EpisodicStore.distinct_projects`. A name it returns that is absent
-            # here -- `session_history`, opened only by `build_memory_context` -- is named in
-            # `tables_skipped` rather than silently left at an honest-looking zero.
-            report.tables_skipped = [t for t in project_tables(conn) if not _table_exists(conn, t)]
-            has_history = "session_history" not in report.tables_skipped
-
-            if ids:
-                conn.execute(
-                    "DELETE FROM memories WHERE id IN (SELECT value FROM json_each(?))",
-                    (id_json,),
-                )
-                conn.execute(
-                    "DELETE FROM fts_memories WHERE memory_id IN (SELECT value FROM json_each(?))",
-                    (id_json,),
-                )
-                conn.execute(
-                    "DELETE FROM memory_entities "
-                    "WHERE memory_id IN (SELECT value FROM json_each(?))",
-                    (id_json,),
-                )
-                # Vectors live in this same database, so they go inside the transaction.
-                conn.execute(
-                    "DELETE FROM vec_items WHERE rowid IN "
-                    "(SELECT rowid FROM vec_meta WHERE id IN (SELECT value FROM json_each(?)))",
-                    (id_json,),
-                )
-                conn.execute(
-                    "DELETE FROM vec_meta WHERE id IN (SELECT value FROM json_each(?))",
-                    (id_json,),
-                )
-            report.facts = conn.execute(
-                "DELETE FROM facts WHERE user_id = ? AND project = ?", (user_id, project)
-            ).rowcount
-            if has_history:
-                report.history = conn.execute(
-                    "DELETE FROM session_history WHERE user_id = ? AND project = ?",
-                    (user_id, project),
-                ).rowcount
-            # `projects` (and any future table `NAME_KEYED_PROJECT_TABLES` names) is keyed by
-            # the project's own name, not a `project` column, so it takes no part in the
-            # id-based deletes above. Its remote URL and root path are the owner's data like
-            # any other row here; not counted on `report` -- `ForgetReport` counts what the
-            # owner asked to erase (memories, facts, history), and this table holds neither.
-            for table in NAME_KEYED_PROJECT_TABLES:
-                if _table_exists(conn, table):
-                    # `table` is one of the fixed names above, never caller input.
-                    conn.execute(
-                        f"DELETE FROM {table} WHERE name = ?",  # noqa: S608 # nosec B608
-                        (project,),
-                    )
+            memory_ids = json.dumps(ids)
+            erasure = Erasure(
+                user_id=user_id,
+                project=project,
+                memory_ids=memory_ids,
+                vector_rowids=rowids(conn, memory_ids),
+            )
+            erased = {table: delete(conn, erasure) for table, delete in plan}
 
         conn.execute("VACUUM")  # cannot run inside a transaction
-        return report
+        # `ForgetReport` counts what the owner asked to erase: memories, facts and history.
+        # The index rows follow from the memories, and a `projects` row is none of the three.
+        return ForgetReport(
+            memories=len(ids),
+            facts=erased.get("facts", 0),
+            history=erased.get("session_history", 0),
+            tables_skipped=skipped,
+        )
 
 
 #: The share of the window episodic memories are guaranteed when they exist. Facts may use

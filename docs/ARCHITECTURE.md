@@ -127,12 +127,14 @@ schedule of its own.
 ## Erasure (`morgan forget`)
 
 First a `forget` snapshot, the undo. Then one write transaction, holding the lock before the
-memory ids are read: memories, FTS rows, entity rows, vectors (`vec_items` + `vec_meta`),
-facts, session history, and the project's `projects` row. A memory being stored by another
-process is either entirely erased or entirely kept, because storing is one transaction too.
-Tables that were never created on this database are named in `tables_skipped` rather than
-counted as zero. Then `VACUUM`. `store/tables.py` is the registry of the tables this has to
-reach; [`decisions/0001`](decisions/0001-fact-key-and-forget-reach.md) says what it guarantees.
+memory ids are read: memories, FTS rows, entity rows, vectors (`vec_meta` and every embedding
+space's vec0 table, `vec_items` among them), facts, session history, and the project's
+`projects` row. It walks `store/tables.py`, the registry of the tables this has to reach, and
+erases each with the deleter its store owns; a registered table with no deleter stops it by
+name before anything is erased. A memory being stored by another process is either entirely
+erased or entirely kept, because storing is one transaction too. Tables that were never created
+on this database are named in `tables_skipped` rather than counted as zero. Then `VACUUM`.
+[`decisions/0001`](decisions/0001-fact-key-and-forget-reach.md) says what it guarantees.
 
 ## Tests (`tests/`)
 

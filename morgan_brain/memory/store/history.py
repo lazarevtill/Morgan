@@ -19,6 +19,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from morgan_brain.memory.store.db import write_transaction
+from morgan_brain.memory.store.tables import Erasure
 from morgan_brain.models import PERSONAL_PROJECT, Message, Role
 
 
@@ -147,3 +148,12 @@ class SessionHistoryStore:
             Message(user_id=row["user_id"], role=Role(row["role"]), content=row["content"])
             for row in rows
         ]
+
+
+def delete_history(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """`forget()`'s deleter for ``session_history``: every turn recorded under the erased
+    project."""
+    return conn.execute(
+        "DELETE FROM session_history WHERE user_id = ? AND project = ?",
+        (erasure.user_id, erasure.project),
+    ).rowcount

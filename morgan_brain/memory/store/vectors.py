@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from morgan_brain.memory.store.db import write_transaction
+from morgan_brain.memory.store.tables import Deleter, Erasure
 from morgan_brain.models import PERSONAL_PROJECT, MemoryStatus, Scope
 
 
@@ -224,22 +225,16 @@ class SqliteVectorIndex:
     async def delete(self, ids: list[str]) -> None:
         """Delete the vectors stored under *ids*; ids with no vector are ignored.
 
-        The rows are found by id inside the same locked statements that delete them, never by
-        a rowid read beforehand. ``vec_meta.rowid`` has no ``AUTOINCREMENT``, so SQLite gives
-        the highest deleted rowid to the next insert: a rowid looked up first could belong to
-        a different id by the time it was deleted, and the delete would erase that id's
-        vector instead.
+        The rowids are read inside the same write transaction that deletes them, which holds
+        the lock from its first statement. ``vec_meta.rowid`` has no ``AUTOINCREMENT``, so
+        SQLite gives the highest deleted rowid to the next insert: a rowid read before the lock
+        could belong to a different id by the time it was deleted, and the delete would erase
+        that id's vector instead.
         """
         id_json = json.dumps(ids)
         with write_transaction(self._conn):
-            self._conn.execute(
-                "DELETE FROM vec_items WHERE rowid IN "
-                "(SELECT rowid FROM vec_meta WHERE id IN (SELECT value FROM json_each(?)))",
-                (id_json,),
-            )
-            self._conn.execute(
-                "DELETE FROM vec_meta WHERE id IN (SELECT value FROM json_each(?))", (id_json,)
-            )
+            _delete_vectors(self._conn, "vec_items", rowids(self._conn, id_json))
+            _delete_meta(self._conn, id_json)
 
 
 #: A vec0 table name is interpolated into SQL, so it must be a plain identifier. It comes from
@@ -258,6 +253,48 @@ def _exists(conn: sqlite3.Connection, table_name: str) -> bool:
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table_name,)
     ).fetchone()
     return row is not None
+
+
+def rowids(conn: sqlite3.Connection, memory_ids: str) -> str:
+    """The ``vec_meta`` rowids of the memory ids in the JSON array *memory_ids*, as a JSON
+    array. A memory's vector sits at that rowid in every embedding space's vec0 table: it is
+    the rowid ``upsert`` writes ``vec_items`` at, and the one ``stored_sample`` and
+    ``audit_sample`` read any space's table by. Read it under the write lock that deletes by
+    it -- see ``SqliteVectorIndex.delete``."""
+    found = conn.execute(
+        "SELECT rowid FROM vec_meta WHERE id IN (SELECT value FROM json_each(?))", (memory_ids,)
+    )
+    return json.dumps([int(r["rowid"]) for r in found])
+
+
+def _delete_vectors(conn: sqlite3.Connection, table_name: str, vector_rowids: str) -> int:
+    table = _vector_table(table_name)
+    # `table` is `vec_items` or a name from `embedding_spaces.table_name`, which Morgan writes
+    # itself, checked to be a plain identifier by `_vector_table`; never caller input.
+    sql = f"DELETE FROM {table} WHERE rowid IN (SELECT value FROM json_each(?))"  # noqa: S608 # nosec B608
+    return conn.execute(sql, (vector_rowids,)).rowcount
+
+
+def _delete_meta(conn: sqlite3.Connection, memory_ids: str) -> int:
+    return conn.execute(
+        "DELETE FROM vec_meta WHERE id IN (SELECT value FROM json_each(?))", (memory_ids,)
+    ).rowcount
+
+
+def vector_deleter(table_name: str) -> Deleter:
+    """`forget()`'s deleter for *table_name*, ``vec_items`` or another embedding space's vec0
+    table: the erased memories' vectors, at the rowids ``vec_meta`` gives them."""
+    table = _vector_table(table_name)
+
+    def delete(conn: sqlite3.Connection, erasure: Erasure) -> int:
+        return _delete_vectors(conn, table, erasure.vector_rowids)
+
+    return delete
+
+
+def delete_meta(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """`forget()`'s deleter for ``vec_meta``: the erased memories' rows."""
+    return _delete_meta(conn, erasure.memory_ids)
 
 
 def _text_and_vector(

@@ -16,6 +16,7 @@ import re
 import sqlite3
 
 from morgan_brain.memory.store.db import write_transaction
+from morgan_brain.memory.store.tables import Erasure
 from morgan_brain.models import PERSONAL_PROJECT, MemoryStatus, Scope
 
 _TOKEN = re.compile(r"\w+", re.UNICODE)
@@ -141,3 +142,11 @@ class FtsIndex:
         with write_transaction(self._conn):
             for mid in ids:
                 self._conn.execute("DELETE FROM fts_memories WHERE memory_id = ?", (mid,))
+
+
+def delete_keywords(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """`forget()`'s deleter for ``fts_memories``: the erased memories' keyword rows."""
+    return conn.execute(
+        "DELETE FROM fts_memories WHERE memory_id IN (SELECT value FROM json_each(?))",
+        (erasure.memory_ids,),
+    ).rowcount

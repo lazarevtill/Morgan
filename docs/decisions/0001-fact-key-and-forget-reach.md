@@ -48,15 +48,25 @@ has no `project` column for that test to find, so `forget` would never reach it.
 that holds a project's data has a `project` column, or is keyed by the project's name and is
 listed in `NAME_KEYED_PROJECT_TABLES`.
 
-**What the registry test does not check.** `forget()` erases the tables with a `project` column
-by one statement each, written out in `MemoryModule.forget`; `project_tables` decides only
-which of them it reports as absent. (It deletes the project's row from each table in
-`NAME_KEYED_PROJECT_TABLES` by walking that list.)
-`tests/unit/memory/test_forget.py::test_forget_empties_every_underlying_table` checks each
-table against a list of its own. A store that adds a table therefore also adds its delete to
-`forget()` and adds the table to that test's list. A second embedding space's vec0 table, once
-something creates one (a second model's space, for a re-embed), is in `project_tables(conn)`
-but has no delete in `forget()`: `forget()` deletes vectors from `vec_items` only.
+**How `forget` erases a registered table.** `forget()` walks `project_tables(conn)` and
+`NAME_KEYED_PROJECT_TABLES`. Each table is erased by a deleter its store owns, a function in the
+store's module found by the table's name in `_DELETERS` in `memory/module.py`. Each deleter is
+handed one `Erasure` (`store/tables.py`): the owner, the project, the ids of the project's
+memories, and those memories' rowids in `vec_meta`. An embedding space's vec0 table is erased by
+`vectors.vector_deleter` for its name. A memory's vector has the rowid `vec_meta` gives it in
+every space's table, the rowid `vectors.stored_sample` and `vectors.audit_sample` read any
+space's table by. Every table is resolved before any row is deleted. A registered table that
+exists and has no deleter makes `forget()` raise, naming it, with nothing erased. A table in
+`project_tables(conn)` that the database does not have is named in
+`ForgetReport.tables_skipped`. The ids and rowids are selected, and every table is erased, in
+one write transaction; the database is vacuumed once it commits.
+
+A store that adds a table therefore registers it in `tables.py` and maps its deleter in
+`_DELETERS`. `tests/unit/memory/test_forget_reaches_every_project_keyed_table.py` writes rows
+for two projects into every registered table through the stores' own write paths, forgets one,
+and checks each table the registry names: the forgotten project's rows are gone and the other's
+are unchanged. It checks a second embedding space's table the same way. It also checks that a
+registered table with no deleter stops `forget()` before it erases anything.
 
 **Later.** Erasing by session or by date, once `forget` can, cascades through the same
 registry.
