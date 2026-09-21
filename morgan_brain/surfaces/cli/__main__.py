@@ -41,6 +41,17 @@ from morgan_brain.surfaces.cli.maintenance import (
 from morgan_brain.surfaces.cli.project import detect_project
 from morgan_brain.surfaces.cli.render import RENDERERS
 
+
+def _positive_int(value: str) -> int:
+    """An argparse ``type=`` for ``--clients``: an int of at least 1 -- 0 or a negative count
+    of concurrent embedders means nothing, so it is rejected here rather than silently run as
+    1."""
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {parsed}")
+    return parsed
+
+
 #: Every verb the CLI accepts, and the handler that answers it. The renderer for each
 #: lives in ``render.RENDERERS`` under the same key.
 HANDLERS = {
@@ -124,10 +135,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_doctor.add_argument(
         "--clients",
-        type=int,
-        default=1,
+        type=_positive_int,
+        default=None,
         help="With --vectors, run the sample through this many concurrent embedding clients "
-        "and report any row they disagreed on (default: 1).",
+        "and report any row they disagreed on (default: 1). Meaningless, and rejected, "
+        "without --vectors.",
     )
     _add_common(p_doctor)
 
@@ -211,6 +223,14 @@ async def _dispatch(
         )
         # Anything that can fail must still emit JSON under --json, or a script parsing
         # stdout can't tell a rejected flag from a crash.
+        if args.json:
+            print(json.dumps({"error": message}, ensure_ascii=False))
+        else:
+            print(message, file=sys.stderr)
+        return 2
+
+    if args.command == "doctor" and args.clients is not None and not args.vectors:
+        message = "morgan doctor: --clients needs --vectors (it only affects the vector audit)."
         if args.json:
             print(json.dumps({"error": message}, ensure_ascii=False))
         else:

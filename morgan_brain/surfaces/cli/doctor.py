@@ -533,11 +533,18 @@ _SENDS_TEXT_NOTICE = (
     "and compare against what is stored."
 )
 
-#: Carried in the report so ``--json`` says it too, not only the rendered text: a slower wall
-#: time with --clients than with one client alone is not necessarily the comparison's fault.
+#: Carried in the report so ``--json`` says it too, not only the rendered text. Two causes, not
+#: one: `wall_seconds` times the whole pass, so it includes Morgan's own per-request client
+#: setup (a fresh one per row -- see `_client_pass`), which grows with --clients on this
+#: process's own event loop even against a perfectly parallel host; and Ollama specifically may
+#: also serialise concurrent clients rather than answer them in parallel. Either can make wall
+#: time rise with --clients, and this number cannot tell them apart -- it is not evidence that
+#: the host did or did not serialise anything.
 _OLLAMA_NOTE = (
-    "Ollama may serialise concurrent clients rather than answer them in parallel, so a slower "
-    "wall time with --clients than without it can be the host queuing requests."
+    "wall_seconds includes this process's own per-request client setup, which grows with "
+    "--clients on its own; Ollama specifically may also serialise concurrent clients rather "
+    "than answer them in parallel. A slower wall time with --clients than without it can be "
+    "either, or both -- not evidence on its own that the host serialised anything."
 )
 
 
@@ -550,13 +557,25 @@ def _safe_cosine(a: list[float], b: list[float]) -> float | None:
         return None
 
 
+def _fails(cosine: float | None, tolerance: float) -> bool:
+    """Whether *cosine* counts as a failing comparison: missing (``_safe_cosine`` already
+    turned a zero or non-finite vector into ``None``), or not clearly at or above *tolerance*.
+
+    Written as ``not (cosine >= tolerance)`` rather than ``cosine < tolerance``: two finite,
+    non-zero vectors can still overflow inside ``fingerprint.cosine`` (huge components make
+    the dot product and both norms infinite, and ``inf / inf`` is ``nan``), and a NaN result
+    compares ``False`` against *both* ``<`` and ``>=`` -- so ``cosine < tolerance`` silently
+    calls it a pass, while ``not (cosine >= tolerance)`` correctly calls it a failure.
+    """
+    return cosine is None or not (cosine >= tolerance)
+
+
 def _any_pair_disagrees(fresh: list[list[float]], tolerance: float) -> bool:
     """Whether any two of *fresh* -- one row's vector, fresh from each client -- fall below
     *tolerance* against each other, or cannot be compared at all."""
     for i in range(len(fresh)):
         for j in range(i + 1, len(fresh)):
-            cosine = _safe_cosine(fresh[i], fresh[j])
-            if cosine is None or cosine < tolerance:
+            if _fails(_safe_cosine(fresh[i], fresh[j]), tolerance):
                 return True
     return False
 
@@ -633,18 +652,21 @@ async def _compare_sample(
             }
             continue
         fresh_by_client[label] = fresh
+        # min/median are computed over every row this client's cosine could be computed for --
+        # a failing (below-tolerance) row's cosine is a real, comparable number and belongs in
+        # both populations, the same way the pooled ones already include it. Only a `None`
+        # (zero or non-finite vector) has nothing to contribute.
         cosines: list[float] = []
         below: list[str] = []
         for row_id, vector in zip(ids, fresh, strict=True):
             cosine = _safe_cosine(vector, stored[row_id])
-            if cosine is None or cosine < tolerance:
+            if cosine is not None:
+                cosines.append(cosine)
+                pooled.append(cosine)
+            if _fails(cosine, tolerance):
                 below.append(row_id)
                 if row_id not in pooled_below:
                     pooled_below.append(row_id)
-            else:
-                cosines.append(cosine)
-            if cosine is not None:
-                pooled.append(cosine)
         per_client[label] = {
             "min": min(cosines) if cosines else None,
             "median": statistics.median(cosines) if cosines else None,
@@ -671,41 +693,20 @@ async def _compare_sample(
     }
 
 
-async def audit_vectors(
-    conn: sqlite3.Connection,
-    settings: Settings,
-    *,
-    table_name: str,
-    project: str,
-    all_projects: bool,
-    clients: int = 1,
-) -> dict[str, Any]:
-    """``doctor --vectors``, over a connection the caller keeps open itself: draw the sample,
-    then re-embed and compare it.
-
-    ``build_doctor_report`` does not call this -- it draws the sample inside the worker thread
-    that reads the database (``_read_database``) and calls ``_compare_sample`` only after that
-    connection is closed, so a read and a network call never share one connection. This is for
-    a caller, such as a test, that wants the whole audit in one call over a connection of its
-    own.
-    """
-    sample = vectors_store.audit_sample(
-        conn,
-        table_name=table_name,
-        n=settings.vector_audit_sample_rows,
-        user_id=settings.owner_user_id,
-        project=project,
-        all_projects=all_projects,
-    )
-    return await _compare_sample(sample, settings, clients=clients)
-
-
 async def _run_vector_audit(
     report: dict[str, Any], settings: Settings, local: _Local, *, clients: int
 ) -> dict[str, Any]:
     """``vector_audit`` and ``vector_audit_reason``, paired like ``embedding_space`` and its
     own reason: exactly one of them is not ``None``, so ``--json`` and the render both know
-    why there are no numbers without guessing from an absent key."""
+    why there are no numbers without guessing from an absent key. Called only when
+    ``--vectors`` was passed; ``build_doctor_report`` sets both keys to ``None`` plus "not
+    requested" on its own otherwise, so the pair is present in every report, asked for or not.
+
+    Reads ``report["embedding_provider"]``, already set by the caller from the same run's
+    embedding probe: an unreachable or refused host would otherwise make every client wait out
+    the full import budget (``MORGAN_EMBEDDING_IMPORT_RETRY_BUDGET_SECONDS``, 600 s by default)
+    only to report the same thing the probe already knows in one request.
+    """
     if report.get("database_error"):
         return {
             "vector_audit": None,
@@ -716,11 +717,23 @@ async def _run_vector_audit(
             "vector_audit": None,
             "vector_audit_reason": "the hash backend embeds locally; there is no host to audit",
         }
+    embedding_verdict = report.get("embedding_provider")
+    if embedding_verdict in ("unreachable", "refused"):
+        return {
+            "vector_audit": None,
+            "vector_audit_reason": f"embedding host {embedding_verdict}; see embedding_provider",
+        }
     if local.space is None:
         return {
             "vector_audit": None,
             "vector_audit_reason": report.get("embedding_space_reason")
             or "no active embedding space registered yet",
+        }
+    sample_error = report.get("probe_errors", {}).get("vector_sample")
+    if sample_error:
+        return {
+            "vector_audit": None,
+            "vector_audit_reason": f"failed to read the sample: {sample_error}",
         }
     if not local.vector_sample:
         return {"vector_audit": None, "vector_audit_reason": "no stored vectors in scope to sample"}
@@ -756,8 +769,14 @@ async def build_doctor_report(
             fingerprint=_fingerprint_verdict(local.space, embeddings, settings),
             strings_digest=fingerprint.DIGEST,
         )
+    # vector_audit/vector_audit_reason are always present, like embedding_space and its own
+    # reason -- a --json consumer that reads one without checking for the other first must
+    # never get a KeyError depending on whether --vectors happened to be passed.
     if vectors:
         report.update(await _run_vector_audit(report, settings, local, clients=clients))
+    else:
+        report["vector_audit"] = None
+        report["vector_audit_reason"] = "not requested; pass --vectors"
     return report
 
 

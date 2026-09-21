@@ -91,9 +91,12 @@ def vector_audit_server(
     client, and every other text, gets the normal vector. A spec is ``"wrong"`` (the exact
     negation of the normal vector -- as far from it as a vector of the same length can be,
     so a comparison never has to hope a hash landed far enough by chance), ``"zero"`` (the
-    zero vector, which ``fingerprint.cosine`` refuses to compare) or ``"nan"`` (a vector of
-    ``NaN``s, which it also refuses) -- the two answers an audit must report as failing
-    rather than crash on.
+    zero vector, which ``fingerprint.cosine`` refuses to compare), ``"nan"`` (a vector of
+    ``NaN``s, which it also refuses) -- the two answers an audit must report as failing rather
+    than crash on -- or ``"overflow"`` (every component ``1e200``: individually finite, so
+    ``cosine`` does not refuse it, but its dot product and norm overflow to infinity against
+    another huge vector, and ``inf / inf`` is ``nan`` -- the case ``cosine`` itself does not
+    catch, and the caller comparing two clients' answers must).
     """
     wrong = wrong or {}
 
@@ -149,6 +152,8 @@ def _scripted_vector(text: str, label: str, wrong: dict[str, Any], dim: int) -> 
         return [0.0] * dim
     if spec == "nan":
         return [math.nan] * dim
+    if spec == "overflow":
+        return [1e200] * dim
     return normal
 
 

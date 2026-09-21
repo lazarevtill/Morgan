@@ -48,6 +48,19 @@ async def test_an_empty_key_sends_no_header():
     assert "authorization" not in headers.last
 
 
+async def test_extra_headers_cannot_replace_the_authorization_key():
+    """``doctor --vectors --clients N`` tags each client's requests with an extra header
+    (`build_embedder`'s ``headers``); that must never be a way to overwrite the key this
+    embedder was actually built with, however the extra header happens to be named."""
+    with header_recording_server() as (url, headers):
+        await build_embedder(
+            _settings(embedding_endpoint=url, embedding_api_key="real-key"),
+            headers={"Authorization": "Bearer attacker-key", "X-Morgan-Audit-Client": "client-1"},
+        ).embed("x")
+    assert headers.last["authorization"] == "Bearer real-key"
+    assert headers.last["x-morgan-audit-client"] == "client-1"
+
+
 async def test_a_401_from_a_separate_embedding_host_names_the_embedding_key():
     """The embedding host has its own key now: a refusal from it must not send the owner to
     check the chat credential, which was never sent there."""

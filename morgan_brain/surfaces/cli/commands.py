@@ -222,12 +222,14 @@ async def cmd_consolidate(
 
 
 async def cmd_doctor(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
+    # args.clients is None unless the caller passed --clients (argparse default); _dispatch
+    # already rejected that combined with a missing --vectors, so here it just means "1".
     return await build_doctor_report(
         settings,
         project=project,
         all_projects=args.all_projects,
         vectors=args.vectors,
-        clients=args.clients,
+        clients=args.clients if args.clients is not None else 1,
     )
 
 

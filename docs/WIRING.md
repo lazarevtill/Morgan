@@ -154,29 +154,39 @@ migrate` yet, where the columns it counts do not exist. Each `project` line is a
 `projects` table: its classification and whether capture and consolidation are on. A
 `MORGAN_CODE_ROOTS` entry that is not a directory is marked so.
 
-`morgan doctor --vectors` re-embeds a sample of `MORGAN_VECTOR_AUDIT_SAMPLE_ROWS` (180) stored
-vectors, spread evenly across the active embedding space's table, and compares each fresh
-answer against what is stored, at `MORGAN_EMBEDDING_FINGERPRINT_TOLERANCE`. It is the one thing
-`doctor` sends anywhere: a line to stderr says so first -- the host itself is in `data_flow`,
-above -- because stdout still carries `--json`. `--clients N` runs the same sample through N
-independent, concurrent embedders instead of one, and reports each client's own numbers beside
-any id whose fresh vectors disagreed between clients -- catching a server that only sometimes
-answers a request wrong, which one client alone cannot see:
+The plain embedding probe above already sends the five fingerprint strings to the embedding
+host on every `doctor` run, to say whether it answers at all. `morgan doctor --vectors` sends
+more: a sample of `MORGAN_VECTOR_AUDIT_SAMPLE_ROWS` (180) stored vectors, spread evenly across
+the active embedding space's table, re-embedded and compared against what is stored, at
+`MORGAN_EMBEDDING_FINGERPRINT_TOLERANCE`. A line to stderr says so first -- the host itself is
+in `data_flow`, above -- because stdout still carries `--json`. `--clients N` runs the same
+sample through N independent, concurrent embedders instead of one, and reports each client's
+own numbers beside any id whose fresh vectors disagreed between clients -- catching a server
+that only sometimes answers a request wrong, which one client alone cannot see. The audit is
+skipped, with a reason naming the probe's own verdict, when that plain probe already found the
+embedding host unreachable or refused -- otherwise every client would wait out the full import
+retry budget (`MORGAN_EMBEDDING_IMPORT_RETRY_BUDGET_SECONDS`, 600 s by default) only to report
+what the probe already knows:
 
 ```
 vector_audit: 180 sampled, min 0.9982, median 0.9998, 0 below tolerance
   client-1: min 0.9985, median 1.0000, 0 below tolerance, 173.786 s
   client-2: min 0.9982, median 0.9996, 0 below tolerance, 173.537 s
-  Ollama may serialise concurrent clients rather than answer them in parallel, so a slower
-  wall time with --clients than without it can be the host queuing requests.
+  wall_seconds includes this process's own per-request client setup, which grows with
+  --clients on its own; Ollama specifically may also serialise concurrent clients rather than
+  answer them in parallel. A slower wall time with --clients than without it can be either, or
+  both -- not evidence on its own that the host serialised anything.
 ```
 
 `--json` gives the same numbers under `vector_audit`: `sampled`, `min`, `median`,
 `below_tolerance` (the ids, pooled across every client), `per_client` (each client's own `min`,
 `median`, `below_tolerance` and `wall_seconds`, or an `error` if that client could not be
-reached at all) and `disagreements` (the ids clients answered differently for). Without
-`--vectors`, or on the hash backend, or before an embedding space is registered, `vector_audit`
-reads `None` and `vector_audit_reason` says why -- nothing runs a model unasked.
+reached at all) and `disagreements` (the ids clients answered differently for). `vector_audit`
+and `vector_audit_reason` are always both present, like `embedding_space` and its own reason,
+so a `--json` consumer reading one never gets a `KeyError` depending on whether `--vectors` was
+passed: without it, or on the hash backend, or before an embedding space is registered, or when
+the embedding host is unreachable or refused, `vector_audit` reads `None` and
+`vector_audit_reason` says why -- nothing runs a model unasked.
 
 ## 5. The CLI
 

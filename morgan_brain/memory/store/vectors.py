@@ -260,6 +260,26 @@ def _exists(conn: sqlite3.Connection, table_name: str) -> bool:
     return row is not None
 
 
+def _text_and_vector(
+    conn: sqlite3.Connection, *, table: str, rowid: int, memory_id: str
+) -> tuple[str, list[float]] | None:
+    """One candidate's stored text and vector, or ``None`` when either is missing.
+
+    The point lookup ``stored_sample`` and ``audit_sample`` both repeat per candidate: the
+    vec0 embedding by rowid -- one lookup per row, because vec0 answers ``rowid = ?`` from its
+    rowid index while ``rowid IN (...)`` scans every stored vector, 49 MB on a 3,000-memory
+    archive -- and the memory's own text by id.
+    """
+    lookup = f"SELECT embedding FROM {table} WHERE rowid = ?"  # noqa: S608 # nosec B608
+    hit = conn.execute(lookup, (rowid,)).fetchone()
+    if hit is None:
+        return None
+    memory = conn.execute("SELECT content FROM memories WHERE id = ?", (memory_id,)).fetchone()
+    if memory is None:
+        return None
+    return str(memory["content"]), _unpack(hit["embedding"])
+
+
 def stored_sample(
     conn: sqlite3.Connection, *, table_name: str, n: int
 ) -> list[tuple[str, list[float]]]:
@@ -283,18 +303,14 @@ def stored_sample(
         "SELECT m.rowid AS rowid, m.id AS id FROM vec_meta m JOIN memories e ON e.id = m.id "
         "ORDER BY random()"
     ).fetchall()
-    # One point lookup per row: vec0 answers `rowid = ?` from its rowid index, while
-    # `rowid IN (...)` scans every stored vector -- 49 MB on a 3,000-memory archive.
-    lookup = f"SELECT embedding FROM {table} WHERE rowid = ?"  # noqa: S608 # nosec B608
     pairs: list[tuple[str, list[float]]] = []
     for candidate in candidates:
-        hit = conn.execute(lookup, (candidate["rowid"],)).fetchone()
-        if hit is None:
+        found = _text_and_vector(
+            conn, table=table, rowid=candidate["rowid"], memory_id=candidate["id"]
+        )
+        if found is None:
             continue
-        memory = conn.execute(
-            "SELECT content FROM memories WHERE id = ?", (candidate["id"],)
-        ).fetchone()
-        pairs.append((memory["content"], _unpack(hit["embedding"])))
+        pairs.append(found)
         if len(pairs) == n:
             break
     return pairs
@@ -345,19 +361,16 @@ def audit_sample(
     # `take` indices spread evenly across [0, total) -- a stride sample, not a prefix, so a
     # sample smaller than the table touches all of it rather than only its oldest rows.
     indices = sorted({(i * total) // take for i in range(take)})
-    lookup = f"SELECT embedding FROM {table} WHERE rowid = ?"  # noqa: S608 # nosec B608
     triples: list[tuple[str, str, list[float]]] = []
     for idx in indices:
         candidate = candidates[idx]
-        hit = conn.execute(lookup, (candidate["rowid"],)).fetchone()
-        if hit is None:
+        found = _text_and_vector(
+            conn, table=table, rowid=candidate["rowid"], memory_id=candidate["id"]
+        )
+        if found is None:
             continue
-        memory = conn.execute(
-            "SELECT content FROM memories WHERE id = ?", (candidate["id"],)
-        ).fetchone()
-        if memory is None:
-            continue
-        triples.append((candidate["id"], memory["content"], _unpack(hit["embedding"])))
+        text, vector = found
+        triples.append((candidate["id"], text, vector))
     return triples
 
 

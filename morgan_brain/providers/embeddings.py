@@ -143,9 +143,11 @@ class OpenAICompatEmbedder:
         self._model = model
         self._budget = budget
         self._redact = _Redactor(api_key or "")
-        self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-        if headers:
-            self._headers.update(headers)
+        # headers first, Authorization last: a caller's extra headers must never be able to
+        # replace the key this adapter was built with, whatever name it uses.
+        self._headers = dict(headers) if headers else {}
+        if api_key:
+            self._headers["Authorization"] = f"Bearer {api_key}"
         self._setting = setting
         self._key_setting = key_setting
 

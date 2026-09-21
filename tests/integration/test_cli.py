@@ -11,6 +11,8 @@ import sys
 
 import pytest
 
+from tests.fakes import model_server
+
 
 def _run(args: list[str], env: dict[str, str], cwd) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -122,6 +124,66 @@ def test_doctor_rows_vectors_catches_an_unwired_vector_store(tmp_path):
     assert report["rows"]["memories"] == 1
     assert report["rows"]["fts"] == 1
     assert report["rows"]["vectors"] == 1
+
+
+def test_doctor_vectors_json_reports_the_audit_and_notices_on_stderr(tmp_path):
+    """M9: ``--vectors`` end to end through a real subprocess, not only the report-builder
+    unit tests -- the argparse flags, ``cmd_doctor``'s pass-through and ``_render_vector_audit``
+    all sit between them and what ``--json`` actually prints."""
+    with model_server(embedding_dim=8) as url:
+        env = {
+            **os.environ,
+            "MORGAN_DATA_DIR": str(tmp_path),
+            "MORGAN_EMBEDDING_BACKEND": "provider",
+            "MORGAN_EMBEDDING_ENDPOINT": url,
+            "MORGAN_EMBEDDING_DIM": "8",
+            "MORGAN_LLM_ENDPOINT": _CLOSED,
+        }
+        remembered = _run(["remember", "a fact worth keeping"], env, tmp_path)
+        assert remembered.returncode == 0, remembered.stderr
+
+        out = _run(["doctor", "--vectors", "--json"], env, tmp_path)
+
+    assert out.returncode == 0, out.stderr
+    report = json.loads(out.stdout)  # the whole of stdout is the document
+    assert report["vector_audit"]["sampled"] == 1
+    assert report["vector_audit"]["below_tolerance"] == []
+    assert "embedding host" in out.stderr
+
+
+def test_doctor_rejects_clients_without_vectors(tmp_path):
+    out = _run(
+        ["doctor", "--clients", "2"], _hash_env(tmp_path, MORGAN_LLM_ENDPOINT=_CLOSED), tmp_path
+    )
+    assert out.returncode == 2
+    assert "--clients" in out.stderr and "--vectors" in out.stderr
+
+
+def test_doctor_rejects_clients_without_vectors_as_json_when_json_requested(tmp_path):
+    env = _hash_env(tmp_path, MORGAN_LLM_ENDPOINT=_CLOSED)
+    out = _run(["doctor", "--clients", "2", "--json"], env, tmp_path)
+    assert out.returncode == 2
+    payload = json.loads(out.stdout)
+    assert "--clients" in payload["error"] and "--vectors" in payload["error"]
+
+
+def test_doctor_rejects_clients_below_one():
+    out = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "morgan_brain.surfaces.cli",
+            "doctor",
+            "--vectors",
+            "--clients",
+            "0",
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ},
+        check=False,
+    )
+    assert out.returncode == 2
 
 
 def test_project_defaults_to_the_git_repo_name(tmp_path):
