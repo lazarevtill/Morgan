@@ -19,25 +19,42 @@ from datetime import datetime
 
 from morgan_brain.memory.store.db import write_transaction
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS embedding_spaces (
-    id                      INTEGER PRIMARY KEY,
-    model                   TEXT NOT NULL,
-    quant                   TEXT NOT NULL DEFAULT '',
-    dims                    INTEGER NOT NULL,
-    query_prefix            TEXT NOT NULL DEFAULT '',
-    document_prefix         TEXT NOT NULL DEFAULT '',
-    fingerprint             BLOB,
-    fingerprint_recorded_at TEXT,
-    floor_margin            REAL,
-    status                  TEXT NOT NULL
-                                CHECK (status IN ('active', 'shadow', 'retired', 'mismatch')),
-    table_name              TEXT NOT NULL UNIQUE,
-    created_at              TEXT NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_embedding_spaces_one_active
-    ON embedding_spaces (status) WHERE status = 'active';
-"""
+#: Individual statements, run with plain ``execute`` rather than ``executescript`` -- the
+#: latter issues an implicit ``COMMIT`` before it runs anything, which would end migration
+#: step 3's enclosing ``write_transaction`` partway through a wave that a later step then
+#: fails: the DDL would stay committed while ``user_version`` rolled back to before it.
+_SCHEMA_STATEMENTS: tuple[str, ...] = (
+    """
+    CREATE TABLE IF NOT EXISTS embedding_spaces (
+        id                      INTEGER PRIMARY KEY,
+        model                   TEXT NOT NULL,
+        quant                   TEXT NOT NULL DEFAULT '',
+        dims                    INTEGER NOT NULL,
+        query_prefix            TEXT NOT NULL DEFAULT '',
+        document_prefix         TEXT NOT NULL DEFAULT '',
+        fingerprint             BLOB,
+        fingerprint_recorded_at TEXT,
+        floor_margin            REAL,
+        status                  TEXT NOT NULL
+                                    CHECK (status IN ('active', 'shadow', 'retired', 'mismatch')),
+        table_name              TEXT NOT NULL UNIQUE,
+        created_at              TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_embedding_spaces_one_active
+        ON embedding_spaces (status) WHERE status = 'active'
+    """,
+)
+
+
+def create_schema(conn: sqlite3.Connection) -> None:
+    """Create ``embedding_spaces`` and its partial unique index, joining *conn*'s current
+    transaction rather than committing one of its own. Called by ``EmbeddingSpaceStore`` at
+    open and by migration step 3, so both leave the same DDL -- and step 3's DDL rolls back
+    with the rest of its wave when a later step in it fails."""
+    for statement in _SCHEMA_STATEMENTS:
+        conn.execute(statement)
 
 
 class EmbeddingSpaceStore:
@@ -50,7 +67,7 @@ class EmbeddingSpaceStore:
     """
 
     def __init__(self, conn: sqlite3.Connection) -> None:
-        conn.executescript(_SCHEMA)
+        create_schema(conn)
         conn.commit()
 
 

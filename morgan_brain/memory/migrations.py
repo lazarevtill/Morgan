@@ -29,11 +29,10 @@ from itertools import takewhile
 from typing import NamedTuple
 
 from morgan_brain.memory.knowledge.extract import extract_entity_names
+from morgan_brain.memory.store import projects, spaces
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
-from morgan_brain.memory.store.projects import ProjectStore
-from morgan_brain.memory.store.spaces import EmbeddingSpaceStore
 from morgan_brain.memory.store.tables import PROJECT_TABLES
 from morgan_brain.models import Entity
 
@@ -109,12 +108,15 @@ def _create_embedding_spaces_and_projects(conn: sqlite3.Connection, stores: Stor
     """Add ``embedding_spaces`` and ``projects``. Light: two ``CREATE TABLE``s, no row moved.
 
     *stores* is unused -- neither table is part of the episodics/entities pair every step
-    receives. The two stores below own this same DDL, so a fresh database (which never runs
-    this function -- ``stamp_if_new`` marks it done first) and an old one upgraded through
-    this step end up with identical schema.
+    receives. Calls each store's ``create_schema`` directly, not its class -- the class also
+    commits, and this runs inside ``upgrade``/``migrate``'s ``write_transaction``: a commit
+    here would end that transaction early, so a later step's failure could no longer roll
+    this one back with it. The same two functions run at open (via ``EmbeddingSpaceStore`` and
+    ``ProjectStore``, which do commit, outside any transaction), so a fresh database and an
+    old one upgraded through this step end up with identical schema either way.
     """
-    EmbeddingSpaceStore(conn)
-    ProjectStore(conn)
+    spaces.create_schema(conn)
+    projects.create_schema(conn)
 
 
 #: In order. Step *n* brings a database from ``user_version`` *n - 1* to *n*; append only.

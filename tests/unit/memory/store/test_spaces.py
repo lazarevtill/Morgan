@@ -97,6 +97,22 @@ def _index_sql(conn, name: str) -> str | None:
     return None if row is None else str(row["sql"])
 
 
+def _old_database_missing_both_tables(tmp_path, name: str) -> str:
+    """A version-2 database with neither table -- what step 3 must build from nothing."""
+    path = str(tmp_path / name)
+    build_memory_module(path)._conn.close()
+    setup = open_db(path)
+    setup.executescript(
+        "DROP INDEX IF EXISTS idx_embedding_spaces_one_active;"
+        "DROP TABLE IF EXISTS embedding_spaces;"
+        "DROP TABLE IF EXISTS projects;"
+    )
+    setup.execute("PRAGMA user_version = 2")
+    setup.commit()
+    setup.close()
+    return path
+
+
 def test_a_fresh_database_and_a_migrated_one_end_with_the_same_schema(tmp_path):
     """Step 3 creates ``embedding_spaces`` and ``projects`` on a database opened for the first
     time (``stamp_if_new`` skips every step, so the stores must build the same tables step 3
@@ -108,18 +124,7 @@ def test_a_fresh_database_and_a_migrated_one_end_with_the_same_schema(tmp_path):
     """
     fresh = build_memory_module(str(tmp_path / "fresh.db"))._conn
 
-    old_path = str(tmp_path / "old.db")
-    build_memory_module(old_path)._conn.close()
-    setup = open_db(old_path)
-    setup.executescript(
-        "DROP INDEX IF EXISTS idx_embedding_spaces_one_active;"
-        "DROP TABLE IF EXISTS embedding_spaces;"
-        "DROP TABLE IF EXISTS projects;"
-    )
-    setup.execute("PRAGMA user_version = 2")
-    setup.commit()
-    setup.close()
-
+    old_path = _old_database_missing_both_tables(tmp_path, "old.db")
     migrated = open_db(old_path)
     assert [s.number for s in migrations.pending(migrated)] == [3]
 
@@ -133,3 +138,32 @@ def test_a_fresh_database_and_a_migrated_one_end_with_the_same_schema(tmp_path):
         migrated, "idx_embedding_spaces_one_active"
     )
     assert _index_sql(fresh, "idx_embedding_spaces_one_active") is not None
+
+
+def test_a_later_failing_step_rolls_step_threes_ddl_back_too(tmp_path):
+    """``create_schema`` must join the migration's own transaction rather than commit one of
+    its own. ``conn.executescript`` (an early implementation this test caught) issues an
+    implicit ``COMMIT`` before it runs anything -- inside ``write_transaction``'s ``BEGIN
+    IMMEDIATE`` that ends the whole wave's transaction early, so a later step's failure rolls
+    back everything from that point on but leaves step 3's tables and ``user_version``
+    committed regardless. ``morgan migrate`` runs steps 3 to 7 in exactly one transaction
+    (SPEC-phase0 §4), so a failure in a later step must undo step 3 as cleanly as any other.
+    """
+    old_path = _old_database_missing_both_tables(tmp_path, "old.db")
+    conn = open_db(old_path)
+    stores = migration_stores(conn)
+
+    def _fail(c: sqlite3.Connection, s: migrations.Stores) -> None:
+        raise RuntimeError("a later step failed")
+
+    steps = (*migrations._STEPS[:3], migrations.Step(4, "fail", True, _fail))
+
+    with pytest.raises(RuntimeError, match="a later step failed"):
+        migrations.migrate(conn, stores, steps=steps)
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert (
+        conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'embedding_spaces'").fetchone()
+        is None
+    )
+    assert conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'projects'").fetchone() is None
