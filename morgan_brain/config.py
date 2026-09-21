@@ -248,8 +248,6 @@ def settings_for(surface: Surface) -> Settings:
     cached: the working directory and ``XDG_CONFIG_HOME`` are read when it is called.
     """
     files = env_files_for(surface)
-    # _env_file is BaseSettings.__init__'s own keyword; mypy builds a pydantic model's __init__
-    # from its fields alone and does not see it.
-    settings = Settings(_env_file=files)  # type: ignore[call-arg]
+    settings = Settings(_env_file=files)
     settings._env_files_read = [{"path": str(f), "present": f.is_file()} for f in files]
     return settings

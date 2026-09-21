@@ -17,7 +17,7 @@ morgan-mcp ──┘        │                 ├─ FTS5 keyword index      o
 
 | Module | Responsibility |
 |---|---|
-| `config.py` | The single `MORGAN_`-prefixed settings source. Reads `~/.config/morgan/.env`, then `./.env`, then the environment; the database defaults to `~/.local/share/morgan/`. Chat and embeddings are addressed separately when one server does not serve both. |
+| `config.py` | The single `MORGAN_`-prefixed settings source, `settings_for(surface)`. The CLI reads `~/.config/morgan/.env`, then `./.env`, then the environment; `morgan-mcp` reads the user file and the environment only, because its working directory is the client's. `doctor` lists the files read. The database defaults to `~/.local/share/morgan/`. Chat and embeddings are addressed separately when one server does not serve both. |
 | `models.py` | `Memory`, `TemporalFact`, `MemoryQuery`, `Message`. Everything that persists is `user_id`- and `project`-keyed. |
 | `logging_setup.py` | Process output: stdout is UTF-8 because the protocols on it are; every log line goes to stderr. |
 | `composition.py` | Opens the database and wires everything. `build_memory_context` for the memory commands; `build_app_context` adds the chat client. |

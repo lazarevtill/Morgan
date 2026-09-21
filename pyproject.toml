@@ -102,11 +102,20 @@ ignore = [
 [tool.mypy]
 python_version = "3.12"
 strict = true
+# pydantic builds a model's __init__ at runtime; the plugin tells mypy what it builds, including
+# BaseSettings' own keywords such as _env_file.
+plugins = ["pydantic.mypy"]
 
 # The MCP SDK ships no type information of its own.
 [[tool.mypy.overrides]]
 module = ["mcp.*"]
 ignore_missing_imports = true
+
+# The plugin's defaults type every __init__ argument as Any and accept unknown keywords. These
+# keep a model's constructor checked as strictly as without the plugin.
+[tool.pydantic-mypy]
+init_typed = true
+init_forbid_extra = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

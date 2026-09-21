@@ -33,8 +33,10 @@ same protocol.
 
 Copy `.env.example` to **`~/.config/morgan/.env`** (`$XDG_CONFIG_HOME/morgan/.env`). That
 file is read from every working directory, which is what the CLI needs: it is meant to run
-from inside whichever repository you are working in. A `./.env` in the current directory is
-read after it and overrides it; real environment variables override both.
+from inside whichever repository you are working in. The CLI reads a `./.env` in the current
+directory after it, which overrides it; real environment variables override both.
+`morgan-mcp` reads the user file and the environment only: a client starts it in whatever
+folder it has open, and a `./.env` there is that project's, not Morgan's.
 
 ```bash
 MORGAN_LLM_ENDPOINT=http://localhost:8081/v1   # the chat model
@@ -60,8 +62,7 @@ answers `/embeddings` with a 501.
 
 ```
 database: /home/you/.local/share/morgan/morgan.db
-config_file: /home/you/.config/morgan/.env
-config_file_present: True
+env_files: [{'path': '/home/you/.config/morgan/.env', 'present': True}, {'path': '/home/you/code/my-repo/.env', 'present': False}]
 project: my-repo
 all_projects: False
 embedding_backend: provider
@@ -79,7 +80,9 @@ fts_rows: 0
 ```
 
 Every probe is independent, so one failure does not hide the rest. The first two lines answer
-"why is my brain empty?": a database or config file somewhere other than where you expect.
+"why is my brain empty?": a database somewhere other than where you expect, or a `.env` file
+read, or missing, where you did not expect it. `env_files` lists every file the CLI read, in
+order, and whether each was there.
 
 The two model servers are probed separately. `provider` is the chat endpoint, which only
 `ask` and `consolidate` need. `embedding_provider` is the endpoint every `remember` and
