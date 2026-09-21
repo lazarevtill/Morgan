@@ -195,6 +195,7 @@ async def import_chatgpt(
                         source=source,
                         created_at=_created_at(message),
                         origin_kind=OriginKind.IMPORT,
+                        client="cli",
                         cwd=str(Path.cwd()),
                         author_id=user_id,
                     )

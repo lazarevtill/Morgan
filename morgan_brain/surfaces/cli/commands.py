@@ -141,10 +141,26 @@ async def cmd_forget(args: argparse.Namespace, settings: Settings, project: str)
     return result
 
 
-async def cmd_ask(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
+async def cmd_ask(
+    args: argparse.Namespace,
+    settings: Settings,
+    project: str,
+    *,
+    client: str = "cli",
+    session_id: str = "",
+) -> dict[str, Any]:
+    """*client* and *session_id* default to the CLI's own values; the MCP server passes its
+    caller's ``clientInfo.name`` and its own per-process session id instead -- the same
+    convention ``cmd_remember`` uses."""
     ctx = build_app_context(settings)
     try:
-        reply = await ctx.chat.ask(user_id=settings.owner_user_id, project=project, text=args.text)
+        reply = await ctx.chat.ask(
+            user_id=settings.owner_user_id,
+            project=project,
+            text=args.text,
+            caller_client=client,
+            caller_session_id=session_id,
+        )
     finally:
         ctx.conn.close()
     return {"project": project, "response": reply, "model_used": settings.llm_model}

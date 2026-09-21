@@ -54,13 +54,25 @@ class Chat:
         self._clock = clock
 
     async def ask(
-        self, *, user_id: str, project: str, text: str, session_id: str | None = None
+        self,
+        *,
+        user_id: str,
+        project: str,
+        text: str,
+        session_id: str | None = None,
+        caller_client: str = "",
+        caller_session_id: str = "",
     ) -> str:
         """Answer *text* for *user_id* in *project*, and remember the exchange.
 
         On a database waiting for ``morgan migrate`` it refuses before anything else: the
         model call and the two history rows below would otherwise happen, and only the
         memories after them would be refused.
+
+        *caller_client*/*caller_session_id* are provenance for the two memories this turn
+        writes -- named apart from *session_id* (history bucketing) and ``Chat``'s own
+        ``client`` (the ``ChatClient`` this instance calls the model through) on purpose, so
+        neither collides with an existing parameter of a different kind.
         """
         self._gate.require_writable()
         hkey = session_key(user_id, session_id)
@@ -95,6 +107,8 @@ class Chat:
                     origin_kind=OriginKind.ASK,
                     author_id=user_id,
                     cwd=str(Path.cwd()),
+                    client=caller_client,
+                    session_id=caller_session_id,
                 )
             )
         return reply

@@ -8,6 +8,7 @@ directory.
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -18,6 +19,7 @@ from mcp import types
 from mcp.client.session import ClientSession
 from mcp.shared.memory import create_connected_server_and_client_session
 
+import morgan_brain.composition as composition
 from morgan_brain.app.chat import Chat
 from morgan_brain.composition import build_memory_context, build_memory_module, sqlite_path, utcnow
 from morgan_brain.config import Settings
@@ -31,7 +33,7 @@ from morgan_brain.memory.knowledge.consolidation import (
 )
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.models import MemorySource, OriginKind, Scope
-from morgan_brain.surfaces.cli.commands import cmd_remember
+from morgan_brain.surfaces.cli.commands import cmd_ask, cmd_import, cmd_remember
 from morgan_brain.surfaces.mcp_server import build_server
 from tests.fakes import FakeChatClient
 
@@ -80,6 +82,21 @@ class _RecordingClient:
         assert not result.isError, result.content
         assert result.structuredContent is not None
         return result.structuredContent
+
+
+def _chatgpt_export(tmp_path: Path) -> Path:
+    """A one-turn ChatGPT export, in the export's own shape -- the same fixture shape
+    ``tests/integration/test_read_only_refuses_before_work.py::_export`` uses."""
+    message = {
+        "id": "m0",
+        "author": {"role": "user"},
+        "create_time": 1700000000.0,
+        "content": {"content_type": "text", "parts": ["The Harbor mirror is back."]},
+    }
+    conversation = {"conversation_id": "c0", "id": "c0", "mapping": {"m0": {"message": message}}}
+    path = tmp_path / "conversations.json"
+    path.write_text(json.dumps([conversation]), encoding="utf-8")
+    return path
 
 
 @asynccontextmanager
@@ -167,6 +184,56 @@ async def test_an_answer_is_stored_as_agent_inferred_and_origin_ask(
     stored = _memory_row_by_source(settings_for_tmp, MemorySource.AGENT_INFERRED.value)
     assert stored["source"] == MemorySource.AGENT_INFERRED.value
     assert stored["origin_kind"] == OriginKind.ASK.value
+
+
+async def test_an_ask_through_the_cli_stores_client_cli(
+    settings_for_tmp: Settings, monkeypatch: Any
+) -> None:
+    """``cmd_ask`` -- the CLI's own handler -- must default the two new ``Chat.ask``
+    parameters to the CLI's values, the same way ``cmd_remember`` already does.
+
+    ``build_chat_client`` (not ``tests/fakes.py::model_server``) is monkeypatched to return a
+    ``FakeChatClient``: a real ``ask`` needs a chat-completions endpoint, which
+    ``model_server``'s double does not serve (see the docstring above), and the hash embedding
+    backend already needs no embedding server.
+    """
+    monkeypatch.setattr(composition, "build_chat_client", lambda settings: FakeChatClient())
+
+    await cmd_ask(argparse.Namespace(text="what did I decide?"), settings_for_tmp, "p")
+
+    stored = _memory_row_by_source(settings_for_tmp, MemorySource.AGENT_INFERRED.value)
+    assert stored["client"] == "cli"
+    assert stored["session_id"] == ""
+
+
+async def test_ask_morgan_through_the_mcp_server_stores_the_callers_client(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(composition, "build_chat_client", lambda settings: FakeChatClient())
+
+    async with _mcp_client(tmp_path, client_name="claude-desktop") as client:
+        await client.call_tool("ask_morgan", {"text": "what did I decide?", "project": "p"})
+
+    stored = _memory_row_by_source(_settings(tmp_path), MemorySource.AGENT_INFERRED.value)
+    assert stored["client"] == "claude-desktop"
+    assert stored["session_id"] != ""
+
+
+# ---------------------------------------------------------------------------
+# import
+# ---------------------------------------------------------------------------
+
+
+async def test_an_import_stores_client_cli(settings_for_tmp: Settings, tmp_path: Path) -> None:
+    """Import runs only from the CLI -- there is no MCP import tool -- so its writer names
+    ``"cli"`` outright, the same value the CLI's other writers default to."""
+    export = _chatgpt_export(tmp_path)
+
+    await cmd_import(argparse.Namespace(path=str(export)), settings_for_tmp, "ignored")
+
+    stored = _memory_row_by_source(settings_for_tmp, MemorySource.USER_STATED.value)
+    assert stored["origin_kind"] == OriginKind.IMPORT.value
+    assert stored["client"] == "cli"
 
 
 # ---------------------------------------------------------------------------

@@ -243,10 +243,18 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
         args = argparse.Namespace(all_projects=all_projects)
         return await cmd_forget(args, settings, project or DEFAULT_PROJECT)
 
-    async def ask_morgan(text: str, project: str | None = None) -> dict[str, Any]:
+    async def ask_morgan(
+        text: str, project: str | None = None, ctx: _ToolContext | None = None
+    ) -> dict[str, Any]:
         """A full turn through the orchestrator (requires a reachable LLM)."""
         args = argparse.Namespace(text=text)
-        return await cmd_ask(args, settings, project or DEFAULT_PROJECT)
+        return await cmd_ask(
+            args,
+            settings,
+            project or DEFAULT_PROJECT,
+            client=_client_name(ctx),
+            session_id=session_id,
+        )
 
     dispatch: dict[str, _ToolFn] = {
         "remember": remember,
