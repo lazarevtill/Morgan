@@ -1,12 +1,10 @@
 """A stopped import's suspects reach the owner through the real CLI entry point, not just
 through ``ImportStopped``'s own attributes.
 
-Re-review round-1 finding: nothing drove ``surfaces/cli/__main__.py``'s new
-``except ImportStopped`` clause through the actual ``main``/argparse/``_dispatch`` path --
-every other test either built ``ImportStopped`` directly or called ``cmd_import`` in-process,
-bypassing the exception handler this proves. A real subprocess, against a real (fake) model
-server, is the only way to be sure ``--json``'s ``suspect_ids`` key and the text-mode second
-stderr line are not lost to a future refactor of that handler.
+The other canary tests build ``ImportStopped`` directly or call ``cmd_import`` in-process, so
+they bypass ``surfaces/cli/__main__.py``'s ``except ImportStopped`` clause. A real subprocess,
+against a fake model server, pins ``--json``'s ``suspect_ids`` key and the text-mode stderr line
+through ``main``, argparse and ``_dispatch``.
 """
 
 from __future__ import annotations
