@@ -26,6 +26,7 @@ overwritten. Everything lives in one SQLite file on hardware you own.
   later be evaluated against conversations nothing has learned from.
 - **Forgets completely.** `morgan forget` erases a project from every table in one
   transaction, including vectors and the entity index, and reports exactly what it touched.
+  A snapshot taken first is the undo.
 - **Talks to any model server.** Any OpenAI-compatible endpoint: llama-server by default,
   Ollama's `/v1`, vLLM. The model server is the only thing Morgan needs that it does not ship.
 - **Two surfaces, one gate.** The `morgan` CLI and the `morgan-mcp` server (stdio, or HTTP
@@ -56,7 +57,9 @@ morgan install-skill                   # lists what it writes, then asks
 ```
 
 The database is `~/.local/share/morgan/morgan.db` (`MORGAN_DATA_DIR`). The memory
-commands work with no model server at all under `MORGAN_EMBEDDING_BACKEND=hash`.
+commands work with no model server at all under `MORGAN_EMBEDDING_BACKEND=hash`. After an
+upgrade, `morgan doctor` says whether the database waits for `morgan migrate`, which upgrades
+it behind a snapshot; `morgan snapshot` and `morgan restore` are the backup and its undo.
 
 ## Is the recall any good?
 
@@ -69,10 +72,13 @@ two categories that do not yet work.
 
 ## Documentation
 
-- [`docs/WIRING.md`](docs/WIRING.md) — configuration, the model server, the CLI, the MCP server, Docker.
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the package, the write path, recall, consolidation, erasure.
+- [`docs/WIRING.md`](docs/WIRING.md) — configuration, the model server, the CLI (snapshot, restore,
+  migrate included), the MCP server, Docker.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the package, recall, the embedding space,
+  migrations and snapshots, consolidation, erasure.
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — at-rest and transport protection, backups, the stack.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — where this came from, what was cut, what is next.
+- [`docs/decisions/`](docs/decisions/) — decisions taken ahead of the code that carries them.
 - [`CLAUDE.md`](CLAUDE.md) — the invariants, for anyone (or anything) changing the code;
   [`AGENTS.md`](AGENTS.md) carries the same text for Codex and the other agents that read it.
 
@@ -84,7 +90,7 @@ build is archived at the git tag `legacy-v0.1.0-kernel` and its documents under
 [`docs/archive/`](docs/archive/). It was cut to this core in September 2026 because the
 memory was the part that was used, and the learning loop was switched off pending an
 evaluation gate sound enough to trust it. Earlier builds: `legacy-v0.0.4-full`,
-`legacy-v0.0.3-monolith`. All are tags; `main` is the only branch.
+`legacy-v0.0.3-monolith`. All are tags.
 
 ## License
 

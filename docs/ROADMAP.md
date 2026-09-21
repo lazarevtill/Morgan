@@ -4,7 +4,7 @@
 
 Morgan is a project-scoped memory for the owner's AI tools: one SQLite database, a CLI and an
 MCP server over one gate, recall that fuses vector and keyword search, and on-demand
-consolidation of memories into valid-time facts by a local model. About 5,000 lines, one
+consolidation of memories into valid-time facts by a local model. About 10,300 lines, one
 process, no services beyond a model server.
 
 ## Where it came from
@@ -39,15 +39,17 @@ The full build is at the tag **`legacy-v0.1.0-kernel`**, its designs and decisio
 
 `tests/memory_quality/` holds 60 labelled probes over an 86-memory corpus, half of it
 Russian, with every query written to share few or no words with its target so the keyword
-signal cannot carry it. `pytest --live` runs them against a real embedding endpoint.
+signal cannot carry it. `pytest --live` runs them against a real embedding endpoint. With
+`qwen3-embedding:8b` at 4,096 dimensions and no floor
+([`measurements/2026-09-phase0-baseline.md`](measurements/2026-09-phase0-baseline.md)):
 
 | | recall@8 | MRR | stale-first | abstain |
 |---|---|---|---|---|
-| overall | 0.85 | 0.48 | 0.50 | 0.00 |
-| single-hop | 0.95 | 0.58 | — | — |
-| temporal | 1.00 | 0.65 | — | — |
-| knowledge-update | 0.90 | 0.49 | 0.50 | — |
-| multi-hop | 0.38 | 0.08 | — | — |
+| overall | 0.89 | 0.51 | 0.70 | 0.00 |
+| single-hop | 0.90 | 0.58 | — | — |
+| temporal | 1.00 | 0.66 | — | — |
+| knowledge-update | 1.00 | 0.50 | 0.70 | — |
+| multi-hop | 0.62 | 0.16 | — | — |
 | unanswerable | — | — | — | 0.00 |
 
 Stale-first measures order, not presence: the same memory is forbidden by "where do I live
@@ -86,10 +88,16 @@ the wider margin 97% of the time. At 0.11, on the half of the questions held out
 it kept 24 of 25 answers and silenced 12 of 13 unanswerable questions; over all of them, 141
 of 150 answers and 34 of 38 silences.
 
+With `qwen3-embedding:8b`, over 3,010 imported memories and 128 labelled questions, the floor
+is 0.08. On the 38 questions sealed from the fit, recall@8 is 0.84 against 0.88 with no floor,
+and 85% of the unanswerable questions among them are silenced; on the 90 fitted ones, 0.88
+against 0.89, and 84%. A higher margin silences no more of the sealed questions and costs
+recall ([`measurements/2026-09-phase0-baseline.md`](measurements/2026-09-phase0-baseline.md)).
+
 ## Next
 
-- **A superseded memory outranks the current one** in half the probes: the old answer
-  comes back at rank 1 and the current one below it. Fusion is rank-only and carries no
+- **A superseded memory outranks the current one** in 7 of the 10 knowledge-update probes:
+  the old answer comes back above the current one. Fusion is rank-only and carries no
   recency term, so nothing orders new above old. The probes store episodics, which have no
   validity interval at all -- supersession lives on facts, and nothing has consolidated
   these.

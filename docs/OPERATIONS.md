@@ -4,9 +4,10 @@
 
 Everything is in one SQLite database under `MORGAN_DATA_DIR` (default
 `~/.local/share/morgan/`): memories, facts, vectors, the keyword and entity indexes, session
-history. There is no field-level encryption: it cannot coexist with
-the FTS5 index and would not cover vectors. At-rest protection is a property of the host:
-encrypt the volume (LUKS or the equivalent).
+history. Snapshots are whole copies of it, in `MORGAN_SNAPSHOT_DIR`. There is no field-level
+encryption: it cannot coexist with the FTS5 index and would not cover vectors. At-rest
+protection is a property of the host: encrypt the volumes that hold the database and the
+snapshots (LUKS or the equivalent).
 
 ## Transport protection
 
@@ -17,11 +18,19 @@ address without a real key.
 ## Backups
 
 ```bash
-sqlite3 ~/.local/share/morgan/morgan.db ".backup 'morgan-backup.db'"
+morgan snapshot                     # a VACUUM INTO copy in MORGAN_SNAPSHOT_DIR, quick_check'ed
+morgan snapshot --list
+morgan restore <snapshot> --yes     # takes a before-restore snapshot first
 ```
 
 Safe while the server runs; a filesystem copy of a WAL-mode database mid-write is not
-consistent. One file is the whole backup, and the whole exposure.
+consistent. `morgan migrate` and `morgan forget` take a snapshot of their own before they
+change anything. Morgan never deletes a snapshot that passed its check, so
+`MORGAN_SNAPSHOT_DIR` (default `~/.local/share/morgan/snapshots`) only grows: prune it
+yourself. The snapshots sit beside the database unless you point them elsewhere, so a copy
+kept off the machine is yours to make. One file is the whole backup, and the whole exposure:
+each snapshot holds everything the database held when it was taken, including what `forget`
+erased afterwards.
 
 ## MCP clients
 
