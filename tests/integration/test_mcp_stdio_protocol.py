@@ -2,8 +2,8 @@
 
 The server is driven by hand over pipes rather than through an MCP client, because the
 client library skips lines it cannot parse -- which is precisely the failure this guards
-against. A model server that is down makes the embedder probe log a warning; that warning
-must land on stderr, never in the protocol stream.
+against. The tool call opens a fresh database, which logs the embedding space it registers;
+that line must land on stderr, never in the protocol stream.
 """
 
 from __future__ import annotations
@@ -76,5 +76,8 @@ def test_every_stdout_line_is_a_jsonrpc_message(tmp_path):
     by_id = {m["id"]: m for m in messages if "id" in m}
     assert {t["name"] for t in by_id[2]["result"]["tools"]} >= {"remember", "recall", "forget"}
     assert by_id[3]["result"]["isError"] is True
+    # The first real embedding failed, not a probe at open: it names the setting that
+    # addresses the model, which serves embeddings here because no other endpoint is set.
     assert "127.0.0.1:1" in by_id[3]["result"]["content"][0]["text"]
-    assert "embedding-dim-probe" in stderr.decode()
+    assert "MORGAN_LLM_ENDPOINT" in by_id[3]["result"]["content"][0]["text"]
+    assert "embedding-space.registered" in stderr.decode()

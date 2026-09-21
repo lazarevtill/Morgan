@@ -141,10 +141,11 @@ async def test_floor_sweep_over_the_holdout(snapshot_db, holdout_probes, floor_s
     assert not missing, f"{len(missing)} expected ids are not in the snapshot: {missing[:5]}"
 
     settings = Settings()
-    # composition.build_memory_context probes this automatically; build_memory_module (used
-    # below, like the sibling live tests) does not, and a wrong width here does not fail
-    # loudly -- it runs a KNN against a table shaped for a different model and returns
-    # confident, wrong neighbours that would read as a measured floor.
+    # composition.build_memory_context refuses a database whose embedding space is another
+    # width; this snapshot predates embedding spaces, build_memory_module (used below, like
+    # the sibling live tests) checks nothing, and a wrong width here does not fail loudly --
+    # it runs a KNN against a table shaped for a different model and returns confident,
+    # wrong neighbours that would read as a measured floor.
     assert settings.embedding_dim == 4096, (
         "this snapshot's vectors are 4096-wide (qwen3-embedding:8b); "
         f"settings.embedding_dim={settings.embedding_dim} -- export MORGAN_EMBEDDING_DIM=4096"

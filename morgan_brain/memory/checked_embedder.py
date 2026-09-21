@@ -54,9 +54,11 @@ def _utcnow() -> datetime:
 class CheckedEmbedder:
     """An ``Embedder`` that checks the active embedding space on the process's first call.
 
-    *sample* is where the stored rows come from when the fingerprint is not recorded yet;
-    ``None`` reads them from the database (``vectors.stored_sample`` over the active space's
-    table).
+    *endpoint* is where *inner* sends its requests and *setting* the variable that addresses
+    it; ``providers/factory.py::build_embedder``, which decided both, passes them in, and every
+    refusal names that setting. *sample* is where the stored rows come from when the
+    fingerprint is not recorded yet; ``None`` reads them from the database
+    (``vectors.stored_sample`` over the active space's table).
     """
 
     def __init__(
@@ -65,17 +67,15 @@ class CheckedEmbedder:
         *,
         conn: sqlite3.Connection,
         settings: Settings,
+        endpoint: str,
+        setting: str,
         sample: Sample | None = None,
         clock: Callable[[], datetime] = _utcnow,
     ) -> None:
-        # Imported here rather than at the top: providers/factory.py wraps the embedder it
-        # builds in this class, so importing it at module level would make each module import
-        # the other before either has finished loading.
-        from morgan_brain.providers.factory import embedding_endpoint_of
-
         self._inner = inner
         self._conn = conn
-        self._endpoint = embedding_endpoint_of(settings)
+        self._url = endpoint
+        self._setting = setting
         self._model = settings.embedding_model
         self._tolerance = settings.embedding_fingerprint_tolerance
         self._sample_rows = settings.embedding_fingerprint_sample_rows
@@ -88,9 +88,9 @@ class CheckedEmbedder:
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         space = spaces.active(self._conn)
         if space is None:
-            if (self._endpoint.url, self._model) in _unregistered:
+            if (self._url, self._model) in _unregistered:
                 return await self._inner.embed_batch(texts)
-        elif (self._endpoint.url, self._model, space.dims, space.id) in _checked:
+        elif (self._url, self._model, space.dims, space.id) in _checked:
             return await self._inner.embed_batch(texts)
         return await self._first_call(space, texts)
 
@@ -104,7 +104,7 @@ class CheckedEmbedder:
         answered = await self._inner.embed_batch(inputs)
         if len(answered) != len(inputs):
             raise ValueError(
-                f"the embedding model at {self._endpoint.setting} answered {len(answered)} "
+                f"the embedding model at {self._setting} answered {len(answered)} "
                 f"vectors for {len(inputs)} inputs"
             )
         own = answered[: len(texts)]
@@ -112,15 +112,16 @@ class CheckedEmbedder:
         fresh_strings = answered[len(texts) + len(rows) :]
 
         if space is None:
-            # A database below version 6 registers its space under `morgan migrate`. It is
-            # read-only until then, and recall must keep working on it, unchecked as before.
+            # Opening a writable database registers its space; one waiting for `morgan
+            # migrate` has none until it runs. It is read-only until then, and recall must
+            # keep working on it, unchecked as before.
             log.warning(
                 "embedding-space.none-registered",
-                endpoint=self._endpoint.url,
+                endpoint=self._url,
                 model=self._model,
                 hint="run `morgan migrate`; embeddings are unchecked until a space is registered",
             )
-            _unregistered.add((self._endpoint.url, self._model))
+            _unregistered.add((self._url, self._model))
             return own
 
         self._require_answers(space, answered)
@@ -128,7 +129,7 @@ class CheckedEmbedder:
             self._require_fingerprint(space, space.fingerprint, fresh_strings)
         else:
             self._record(space, fresh_strings, rows, fresh_rows)
-        _checked.add((self._endpoint.url, self._model, space.dims, space.id))
+        _checked.add((self._url, self._model, space.dims, space.id))
         return own
 
     def _sample_of(self, space: spaces.EmbeddingSpace) -> list[tuple[str, list[float]]]:
@@ -151,7 +152,7 @@ class CheckedEmbedder:
                     space_id=space.id,
                     model=space.model,
                     dims=space.dims,
-                    setting=self._endpoint.setting,
+                    setting=self._setting,
                     got=len(vector),
                 )
             for component in vector:
@@ -160,7 +161,7 @@ class CheckedEmbedder:
                         space_id=space.id,
                         model=space.model,
                         dims=space.dims,
-                        setting=self._endpoint.setting,
+                        setting=self._setting,
                         value=component,
                     )
 
@@ -175,7 +176,7 @@ class CheckedEmbedder:
                 space_id=space.id,
                 model=space.model,
                 dims=space.dims,
-                setting=self._endpoint.setting,
+                setting=self._setting,
                 against="fingerprint",
                 min_cosine=comparison.min_cosine,
                 tolerance=self._tolerance,
@@ -209,7 +210,7 @@ class CheckedEmbedder:
                 space_id=space.id,
                 model=space.model,
                 dims=space.dims,
-                setting=self._endpoint.setting,
+                setting=self._setting,
             )
         cosines = [
             fingerprint.cosine(fresh, stored)
@@ -222,7 +223,7 @@ class CheckedEmbedder:
                 space_id=space.id,
                 model=space.model,
                 dims=space.dims,
-                setting=self._endpoint.setting,
+                setting=self._setting,
                 against="stored-row",
                 min_cosine=min(cosines),
                 tolerance=self._tolerance,

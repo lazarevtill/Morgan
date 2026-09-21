@@ -6,9 +6,11 @@ the adapters' interfaces, not on how they were built.
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Any, NamedTuple
 
 from morgan_brain.config import Settings
+from morgan_brain.memory.checked_embedder import CheckedEmbedder
 from morgan_brain.memory.embedder import Embedder, FakeEmbedder
 from morgan_brain.providers.embeddings import OpenAICompatEmbedder
 from morgan_brain.providers.openai_compat import OpenAICompatAdapter
@@ -45,22 +47,32 @@ def build_chat_client(settings: Settings) -> OpenAICompatAdapter:
     )
 
 
-def build_embedder(settings: Settings) -> Embedder:
+def build_embedder(settings: Settings, *, conn: sqlite3.Connection | None = None) -> Embedder:
     """The single decision between the live embedding endpoint and the deterministic stub.
 
     The stub reuses ``FakeEmbedder``: sha256 is stable across processes regardless of
     ``PYTHONHASHSEED``, which the CLI (a subprocess per command) and the store need in order
-    to agree on vectors for the same text.
+    to agree on vectors for the same text. No model answers it, so it is never checked.
+
+    Given *conn*, the database the vectors are stored in, the live embedder is wrapped in
+    ``CheckedEmbedder``: the process's first request also proves the model answering is the
+    one that wrote that database's active space. ``build_memory_context`` always passes it.
+    Without one -- a measurement run over a bare file -- the model is unchecked.
     """
     if settings.embedding_backend == "hash":
         return FakeEmbedder(dim=settings.embedding_dim)
     endpoint = embedding_endpoint_of(settings)
-    return OpenAICompatEmbedder(
+    inner = OpenAICompatEmbedder(
         endpoint.url,
         settings.embedding_model,
         timeout=settings.llm_timeout_seconds,
         api_key=settings.llm_api_key or None,
         setting=endpoint.setting,
+    )
+    if conn is None:
+        return inner
+    return CheckedEmbedder(
+        inner, conn=conn, settings=settings, endpoint=endpoint.url, setting=endpoint.setting
     )
 
 

@@ -5,6 +5,9 @@ from __future__ import annotations
 import pytest
 
 from morgan_brain.config import Settings
+from morgan_brain.memory.checked_embedder import CheckedEmbedder
+from morgan_brain.memory.embedder import FakeEmbedder
+from morgan_brain.memory.store.db import open_db
 from morgan_brain.providers.embeddings import OpenAICompatEmbedder
 from morgan_brain.providers.factory import build_chat_client, build_embedder
 from morgan_brain.providers.wire import ChatMessage, ProviderUnreachable
@@ -82,3 +85,29 @@ def test_embedder_uses_its_own_endpoint_when_one_is_configured():
 
     assert isinstance(embedder, OpenAICompatEmbedder)
     assert embedder._url == "http://embed:8082/v1/embeddings"
+
+
+def test_a_model_built_for_a_database_is_checked_against_its_space():
+    """The one path every memory command takes: ``build_memory_context`` hands the factory
+    its connection, and the model is then checked on its first call."""
+    conn = open_db(":memory:")
+    try:
+        embedder = build_embedder(
+            Settings(embedding_endpoint="http://embed:8082/v1", embedding_backend="provider"),
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    assert isinstance(embedder, CheckedEmbedder)
+
+
+def test_the_hash_backend_is_never_checked():
+    """No model answers it, so there is no space for it to be the wrong model of."""
+    conn = open_db(":memory:")
+    try:
+        embedder = build_embedder(Settings(embedding_backend="hash"), conn=conn)
+    finally:
+        conn.close()
+
+    assert isinstance(embedder, FakeEmbedder)

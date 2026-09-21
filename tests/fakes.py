@@ -24,6 +24,32 @@ def _unit_vector(text: str, dim: int) -> list[float]:
     return [x / norm for x in raw]
 
 
+class Calls:
+    """The requests a model server has received, of any kind: ``total``."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.total = 0
+
+    def count(self) -> None:
+        with self._lock:
+            self.total += 1
+
+
+@contextmanager
+def counting_model_server(
+    *, embeddings: bool = True, embedding_dim: int = 1024, reorder: bool = False
+) -> Iterator[tuple[str, Calls]]:
+    """``model_server``, counting every request it receives; yields its ``/v1`` URL and the
+    count. Every request, not only embedding ones: a cold embedding host pays for any request
+    that loads its model, so "no request" is what an open that must not wait on it asserts."""
+    calls = Calls()
+    with _model_server(
+        embeddings=embeddings, embedding_dim=embedding_dim, reorder=reorder, calls=calls
+    ) as url:
+        yield url, calls
+
+
 @contextmanager
 def model_server(
     *, embeddings: bool = True, embedding_dim: int = 1024, reorder: bool = False
@@ -39,15 +65,28 @@ def model_server(
     ``index`` of its input: the order of the list is not part of the protocol. Real sockets,
     so a probe is tested the way it runs.
     """
+    with _model_server(
+        embeddings=embeddings, embedding_dim=embedding_dim, reorder=reorder, calls=None
+    ) as url:
+        yield url
 
+
+@contextmanager
+def _model_server(
+    *, embeddings: bool, embedding_dim: int, reorder: bool, calls: Calls | None
+) -> Iterator[str]:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
+            if calls is not None:
+                calls.count()
             if self.path == "/v1/models":
                 self._reply(200, {"object": "list", "data": []})
             else:
                 self._reply(404, {"error": "not found"})
 
         def do_POST(self) -> None:
+            if calls is not None:
+                calls.count()
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
             if self.path != "/v1/embeddings":
                 self._reply(404, {"error": "not found"})

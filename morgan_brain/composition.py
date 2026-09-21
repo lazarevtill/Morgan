@@ -8,10 +8,8 @@ lives in the same SQLite file, which is what makes ``forget()`` one transaction.
 
 from __future__ import annotations
 
-import asyncio
 import pathlib
 import sqlite3
-import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -26,7 +24,8 @@ from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
 from morgan_brain.memory.migrations import Step, Stores, pending, stamp_if_new, upgrade
 from morgan_brain.memory.module import MemoryModule
-from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store import spaces
+from morgan_brain.memory.store.db import open_db, write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
 from morgan_brain.memory.store.fts import FtsIndex
@@ -35,15 +34,14 @@ from morgan_brain.memory.store.projects import ProjectStore
 from morgan_brain.memory.store.spaces import EmbeddingSpaceStore
 from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.memory.store.vectors import SqliteVectorIndex
-from morgan_brain.providers.factory import (
-    build_chat_client,
-    build_embedder,
-    embedding_endpoint_of,
-)
+from morgan_brain.providers.factory import build_chat_client, build_embedder
 from morgan_brain.providers.openai_compat import OpenAICompatAdapter
-from morgan_brain.providers.wire import ProviderUnreachable
 
 log = structlog.get_logger("composition")
+
+#: The vec0 table ``store/vectors.py`` keeps every vector in: the table of the one space a
+#: database has before any second one exists.
+_VECTOR_TABLE = "vec_items"
 
 
 def utcnow() -> datetime:
@@ -53,50 +51,6 @@ def utcnow() -> datetime:
 def sqlite_path(url: str) -> str:
     """Turn a sqlite:/// URL into a filesystem path; pass through ':memory:'."""
     return url.removeprefix("sqlite:///")
-
-
-def _run_coro_isolated(coro: Any) -> Any:
-    """Run *coro* to completion whether or not an event loop is already running here."""
-    result: list[Any] = []
-    error: list[BaseException] = []
-
-    def _runner() -> None:
-        try:
-            result.append(asyncio.run(coro))
-        except BaseException as exc:  # noqa: BLE001 — re-raised on the calling thread below
-            error.append(exc)
-
-    thread = threading.Thread(target=_runner, daemon=True)
-    thread.start()
-    thread.join()
-    if error:
-        raise error[0]
-    return result[0]
-
-
-def _probe_embedding_dim(embedder: Embedder, settings: Settings) -> None:
-    """Verify the live embedder's output dimension matches ``settings.embedding_dim``.
-
-    Catches the class of bug where ``embedding_model`` and ``embedding_dim`` disagree: the
-    vector table is created with one width and every insert would then fail. Skipped for the
-    hash stub, whose width *is* the setting. An unreachable endpoint is logged, not raised:
-    the memory commands that never embed anything must still work.
-    """
-    if settings.embedding_backend == "hash":
-        return
-    try:
-        vector = _run_coro_isolated(embedder.embed("probe"))
-    except ProviderUnreachable as exc:
-        log.warning("embedding-dim-probe.unreachable", endpoint=exc.endpoint, error=str(exc))
-        return
-    if len(vector) != settings.embedding_dim:
-        raise RuntimeError(
-            f"embedding model {settings.embedding_model!r} at "
-            f"{embedding_endpoint_of(settings).url} "
-            f"returned a {len(vector)}-dimensional vector but settings.embedding_dim="
-            f"{settings.embedding_dim}; the two must agree "
-            "(set MORGAN_EMBEDDING_DIM to the model's real output size)"
-        )
 
 
 @dataclass
@@ -173,22 +127,77 @@ def _read_only_reason(remaining: Sequence[Step]) -> str | None:
     return f"writes are blocked until `morgan migrate` runs: {count} ({names})"
 
 
+def _register_the_settings_space(conn: sqlite3.Connection, settings: Settings) -> None:
+    """Record the settings' model and width as the active space of a database that has none.
+
+    A database write, no embedding: the fingerprint is left ``NULL`` for the first embedding
+    call to record, once a sample of the stored vectors shows the model wrote them. The check
+    is read again under the write lock, because another process may open the same fresh file
+    at once, and a second active space fails on the partial unique index.
+    """
+    if spaces.active(conn) is not None:
+        return
+    with write_transaction(conn):
+        if spaces.active(conn) is not None:
+            return
+        space = spaces.register(
+            conn,
+            model=settings.embedding_model,
+            dims=settings.embedding_dim,
+            table_name=_VECTOR_TABLE,
+            clock=utcnow,
+        )
+    log.info("embedding-space.registered", space_id=space.id, model=space.model, dims=space.dims)
+
+
+def _require_the_space_width(conn: sqlite3.Connection, settings: Settings) -> None:
+    """Refuse a database whose active space is not ``MORGAN_EMBEDDING_DIM`` wide.
+
+    Read from the database, never asked of the model: every vector the space holds is that
+    wide, and a query or a write at the settings' width would fail against them.
+    """
+    space = spaces.active(conn)
+    if space is not None and space.dims != settings.embedding_dim:
+        raise RuntimeError(
+            f"embedding space {space.id} ({space.model}) holds {space.dims}-dimensional "
+            f"vectors but MORGAN_EMBEDDING_DIM is {settings.embedding_dim}; the two must "
+            f"agree (set MORGAN_EMBEDDING_DIM={space.dims}, the width this database was "
+            "written at)"
+        )
+
+
 def build_memory_context(settings: Settings | None = None) -> MemoryContext:
+    """Open the database and wire the memory core over it. Nothing is embedded.
+
+    A writable database with no active embedding space is given the settings' model and
+    width; a database waiting for ``morgan migrate`` registers nothing, and neither does the
+    hash backend, which no model answers. A space whose width disagrees with the settings is
+    refused here, from the database alone. The model is asked only when something is
+    embedded, and its first request carries the space's check (``CheckedEmbedder``).
+    """
     settings = settings or get_settings()
     path = sqlite_path(settings.temporal_db_url)
     if path != ":memory:":
         pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
     conn = open_db(path)
-    embedder = build_embedder(settings)
-    _probe_embedding_dim(embedder, settings)
-    module = build_memory_module(
-        conn,
-        embedder=embedder,
-        dim=settings.embedding_dim,
-        floor_margin=settings.recall_floor_margin,
-    )
+    try:
+        embedder = build_embedder(settings, conn=conn)
+        module = build_memory_module(
+            conn,
+            embedder=embedder,
+            dim=settings.embedding_dim,
+            floor_margin=settings.recall_floor_margin,
+        )
+        read_only_reason = _read_only_reason(pending(conn))
+        if read_only_reason is None and settings.embedding_backend == "provider":
+            _register_the_settings_space(conn, settings)
+        _require_the_space_width(conn, settings)
+    except BaseException:
+        # A refused open lets go of the file it opened.
+        conn.close()
+        raise
     return MemoryContext(
-        gate=MemoryGate(module, read_only_reason=_read_only_reason(pending(conn))),
+        gate=MemoryGate(module, read_only_reason=read_only_reason),
         conn=conn,
         history=SessionHistoryStore(conn, clock=utcnow),
         embedder=embedder,

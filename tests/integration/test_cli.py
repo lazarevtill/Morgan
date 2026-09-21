@@ -307,8 +307,9 @@ def test_the_user_config_file_is_read_from_any_working_directory(tmp_path):
 
 
 def test_json_stdout_stays_json_when_something_is_logged(tmp_path):
-    """A warning is logged when the embedder cannot be probed. It belongs on stderr: a
-    script reading --json output must never find a log line in front of the document."""
+    """Opening a fresh database logs the embedding space it registers. That line belongs on
+    stderr: a script reading --json output must never find a log line in front of the
+    document."""
     env = _env_without_morgan(
         MORGAN_DATA_DIR=str(tmp_path), MORGAN_LLM_ENDPOINT="http://127.0.0.1:1/v1"
     )
@@ -316,7 +317,7 @@ def test_json_stdout_stays_json_when_something_is_logged(tmp_path):
     assert out.returncode == 1
     payload = json.loads(out.stdout)  # the whole of stdout is the document
     assert "127.0.0.1:1" in payload["error"]
-    assert "embedding-dim-probe" in out.stderr
+    assert "embedding-space.registered" in out.stderr
 
 
 def test_an_embedding_endpoint_that_is_down_is_named_with_its_setting(tmp_path):
@@ -335,7 +336,6 @@ def test_an_embedding_endpoint_that_is_down_is_named_with_its_setting(tmp_path):
     assert "127.0.0.1:1" in error
     assert "MORGAN_EMBEDDING_ENDPOINT" in error
     assert "MORGAN_LLM_ENDPOINT" not in error
-    assert "embedding-dim-probe.unreachable" in out.stderr
     assert "chat.invalid" not in out.stderr
 
 

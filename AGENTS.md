@@ -29,7 +29,10 @@ come in" are answered by the directory names.
 - `logging_setup.py` — process output. stdout is UTF-8 because the protocols on it are; logs
   go to stderr. One call per entrypoint.
 - `composition.py` — opens the database and wires the above. `build_memory_context` needs no
-  chat model; `build_app_context` adds it.
+  chat model and sends no request: it registers the settings' embedding model and width on a
+  writable database that has no embedding space (the hash backend registers none), and
+  refuses a space of another width than `MORGAN_EMBEDDING_DIM`. `build_app_context` adds the
+  chat model.
 - `memory/` — the core. `gate.py` is the only door and `module.py` is the one write path and
   the fused recall; `embedder.py` is the embedding seam; `fingerprint.py` is the five frozen
   strings that identify an embedding space and the pure arithmetic (`cosine`, `compare`,
@@ -54,8 +57,8 @@ come in" are answered by the directory names.
   against a real embedding endpoint.
 - `providers/` — the only place a model SDK is imported: `openai_compat.py` (chat),
   `embeddings.py`, `structured.py` (JSON-validated output), `factory.py` (settings → adapters,
-  and where embeddings are sent), `wire.py` (message types, `ChatClient`,
-  `ProviderUnreachable`, `EmbeddingSpaceMismatch`).
+  where embeddings are sent, and the `CheckedEmbedder` around the embedding model), `wire.py`
+  (message types, `ChatClient`, `ProviderUnreachable`, `EmbeddingSpaceMismatch`).
 - `app/chat.py` — one turn: recall, answer, remember. Not a surface: the one use-case both
   surfaces call.
 - `surfaces/` — where requests come in. `cli/` (`__main__` parses and dispatches, `commands`
@@ -119,8 +122,9 @@ come in" are answered by the directory names.
   parsed by machines; all logs go to stderr. Never `print()` diagnostics from library code.
 - **Nothing runs a model unasked.** `ask` and `consolidate` call the chat model; nothing else
   does, and nothing runs on a schedule. Consolidation is on demand (or the owner's own cron).
-  Embedding one word is not generation: opening memory does it to check the model's width,
-  and `doctor` to check that embeddings are served.
+  Nothing embeds at open, in a hook or in a sweep. The active embedding space is fingerprinted
+  at a process's first embedding call, riding on that call; `doctor` embeds when it is run,
+  and `doctor --vectors` re-embeds a sample when asked.
 - **Every MCP tool declares what it does.** `TOOL_ANNOTATIONS` states all four hints for every
   tool, and only a tool that changes nothing claims read-only: a client may run those
   unprompted, and `install-skill` allows exactly those in Claude Code. `ask_morgan` stores the

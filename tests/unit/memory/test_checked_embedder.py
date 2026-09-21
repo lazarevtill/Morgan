@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import math
 import sqlite3
-from collections.abc import Iterator
 from datetime import UTC, datetime
 
 import pytest
@@ -29,16 +28,6 @@ from tests.fakes import model_server
 from tests.unit.memory.conftest import build_memory_module
 
 
-@pytest.fixture(autouse=True)
-def _a_fresh_process() -> Iterator[None]:
-    """Each test is a new process: the once-per-process record starts empty and is left so."""
-    checked_embedder._checked.clear()
-    checked_embedder._unregistered.clear()
-    yield
-    checked_embedder._checked.clear()
-    checked_embedder._unregistered.clear()
-
-
 @pytest.fixture
 def conn(tmp_path) -> sqlite3.Connection:
     return build_memory_module(str(tmp_path / "m.db"))._conn
@@ -51,7 +40,9 @@ def settings(tmp_path) -> Settings:
 
 async def test_the_first_call_carries_the_strings_and_later_calls_do_not(conn, settings):
     inner = _recording_embedder(dims=4)
-    embedder = CheckedEmbedder(inner, conn=conn, settings=settings, sample=lambda n: [])
+    embedder = CheckedEmbedder(
+        inner, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING, sample=lambda n: []
+    )
 
     await embedder.embed("a real query")
     await embedder.embed("another")
@@ -63,7 +54,12 @@ async def test_the_first_call_carries_the_strings_and_later_calls_do_not(conn, s
 async def test_a_same_width_model_that_answers_differently_is_named(conn, settings):
     space = _a_space_with_a_recorded_fingerprint(conn, dims=4)
     embedder = CheckedEmbedder(
-        _other_model(dims=4), conn=conn, settings=settings, sample=lambda n: []
+        _other_model(dims=4),
+        conn=conn,
+        settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
+        sample=lambda n: [],
     )
 
     with pytest.raises(EmbeddingSpaceMismatch) as exc:
@@ -81,6 +77,8 @@ async def test_a_null_fingerprint_is_recorded_only_when_the_stored_sample_matche
         _embedder_returning({"id-1 text": [1.0, 0.0, 0.0, 0.0]}),
         conn=conn,
         settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
         sample=lambda n: stored,
     )
 
@@ -95,6 +93,8 @@ async def test_a_sample_that_does_not_match_refuses_and_records_nothing(conn, se
         _embedder_returning({"id-1 text": [0.0, 1.0, 0.0, 0.0]}),
         conn=conn,
         settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
         sample=lambda n: [("id-1 text", [1.0, 0.0, 0.0, 0.0])],
     )
 
@@ -107,7 +107,12 @@ async def test_a_sample_that_does_not_match_refuses_and_records_nothing(conn, se
 async def test_a_width_change_is_still_caught(conn, settings):
     spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
     embedder = CheckedEmbedder(
-        _recording_embedder(dims=3), conn=conn, settings=settings, sample=lambda n: []
+        _recording_embedder(dims=3),
+        conn=conn,
+        settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
+        sample=lambda n: [],
     )
 
     with pytest.raises(EmbeddingSpaceMismatch, match="3-dimensional"):
@@ -120,11 +125,11 @@ async def test_with_no_active_space_it_embeds_and_logs_once(conn, settings):
     inner = _recording_embedder(dims=4)
 
     with capture_logs() as logs:
-        first = await CheckedEmbedder(inner, conn=conn, settings=settings, sample=_no_sample).embed(
-            "a real query"
-        )
+        first = await CheckedEmbedder(
+            inner, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING, sample=_no_sample
+        ).embed("a real query")
         second = await CheckedEmbedder(
-            inner, conn=conn, settings=settings, sample=_no_sample
+            inner, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING, sample=_no_sample
         ).embed("another")
 
     assert first == _unit("model-a", "a real query", 4)
@@ -144,7 +149,12 @@ async def test_exactly_the_five_string_vectors_are_compared(conn, settings, monk
 
     monkeypatch.setattr(fingerprint, "compare", spy)
     embedder = CheckedEmbedder(
-        _recording_embedder(dims=4), conn=conn, settings=settings, sample=_no_sample
+        _recording_embedder(dims=4),
+        conn=conn,
+        settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
+        sample=_no_sample,
     )
 
     got = await embedder.embed_batch(["one", "two", "three"])
@@ -160,7 +170,12 @@ async def test_the_recorded_fingerprint_is_the_five_strings_alone(conn, settings
     spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
     stored = [(t, _unit("model-a", t, 4)) for t in ("row one", "row two")]
     embedder = CheckedEmbedder(
-        _recording_embedder(dims=4), conn=conn, settings=settings, sample=lambda n: stored
+        _recording_embedder(dims=4),
+        conn=conn,
+        settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
+        sample=lambda n: stored,
     )
 
     got = await embedder.embed_batch(["query one", "query two"])
@@ -182,7 +197,12 @@ async def test_the_sample_asks_for_the_configured_number_of_rows(conn, settings)
 
     tuned = settings.model_copy(update={"embedding_fingerprint_sample_rows": 7})
     await CheckedEmbedder(
-        _recording_embedder(dims=4), conn=conn, settings=tuned, sample=sample
+        _recording_embedder(dims=4),
+        conn=conn,
+        settings=tuned,
+        endpoint=_URL,
+        setting=_SETTING,
+        sample=sample,
     ).embed("q")
 
     assert asked == [7]
@@ -193,8 +213,22 @@ async def test_once_per_process_means_a_second_instance_sends_no_strings(conn, s
     first_inner = _recording_embedder(dims=4)
     second_inner = _recording_embedder(dims=4)
 
-    await CheckedEmbedder(first_inner, conn=conn, settings=settings, sample=_no_sample).embed("a")
-    await CheckedEmbedder(second_inner, conn=conn, settings=settings, sample=_no_sample).embed("b")
+    await CheckedEmbedder(
+        first_inner,
+        conn=conn,
+        settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
+        sample=_no_sample,
+    ).embed("a")
+    await CheckedEmbedder(
+        second_inner,
+        conn=conn,
+        settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
+        sample=_no_sample,
+    ).embed("b")
 
     assert len(first_inner.calls[0]) == 6
     assert second_inner.calls == [["b"]]
@@ -205,7 +239,12 @@ async def test_a_mismatch_is_raised_again_on_the_next_call(conn, settings):
     # vector from the wrong model, silently -- the failure this check exists to prevent.
     _a_space_with_a_recorded_fingerprint(conn, dims=4)
     embedder = CheckedEmbedder(
-        _other_model(dims=4), conn=conn, settings=settings, sample=_no_sample
+        _other_model(dims=4),
+        conn=conn,
+        settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
+        sample=_no_sample,
     )
 
     with pytest.raises(EmbeddingSpaceMismatch):
@@ -219,7 +258,12 @@ async def test_a_fresh_space_with_no_rows_records_its_fingerprint_directly(conn,
 
     with capture_logs() as logs:
         await CheckedEmbedder(
-            _recording_embedder(dims=4), conn=conn, settings=settings, sample=_no_sample
+            _recording_embedder(dims=4),
+            conn=conn,
+            settings=settings,
+            endpoint=_URL,
+            setting=_SETTING,
+            sample=_no_sample,
         ).embed("q")
 
     assert spaces.active(conn).fingerprint is not None
@@ -253,7 +297,9 @@ async def test_by_default_the_sample_is_read_from_the_database(tmp_path, setting
     conn = module._conn
     spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
 
-    await CheckedEmbedder(FakeEmbedder(dim=4), conn=conn, settings=settings).embed("q")
+    await CheckedEmbedder(
+        FakeEmbedder(dim=4), conn=conn, settings=settings, endpoint=_URL, setting=_SETTING
+    ).embed("q")
 
     assert spaces.active(conn).fingerprint is not None
 
@@ -265,7 +311,9 @@ async def test_by_default_a_stored_row_from_another_model_refuses(tmp_path, sett
     spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
 
     with pytest.raises(EmbeddingSpaceMismatch):
-        await CheckedEmbedder(_other_model(dims=4), conn=conn, settings=settings).embed("q")
+        await CheckedEmbedder(
+            _other_model(dims=4), conn=conn, settings=settings, endpoint=_URL, setting=_SETTING
+        ).embed("q")
 
     assert spaces.active(conn).fingerprint is None
 
@@ -274,7 +322,14 @@ async def test_a_nan_answer_against_a_recorded_fingerprint_is_refused_and_not_ca
     conn, settings
 ):
     _a_space_with_a_recorded_fingerprint(conn, dims=4)
-    embedder = CheckedEmbedder(_nan_model(dims=4), conn=conn, settings=settings, sample=_no_sample)
+    embedder = CheckedEmbedder(
+        _nan_model(dims=4),
+        conn=conn,
+        settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
+        sample=_no_sample,
+    )
 
     with pytest.raises(EmbeddingSpaceMismatch, match="non-finite"):
         await embedder.embed("a real query")
@@ -290,6 +345,8 @@ async def test_a_nan_answer_over_a_stored_sample_records_nothing(conn, settings)
         _nan_model(dims=4),
         conn=conn,
         settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
         sample=lambda n: [("id-1 text", [1.0, 0.0, 0.0, 0.0])],
     )
 
@@ -313,7 +370,12 @@ async def test_an_empty_sample_over_stored_rows_is_refused_and_records_nothing(t
     conn = module._conn
     spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
     embedder = CheckedEmbedder(
-        _other_model(dims=4), conn=conn, settings=settings, sample=_no_sample
+        _other_model(dims=4),
+        conn=conn,
+        settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
+        sample=_no_sample,
     )
 
     with pytest.raises(EmbeddingSpaceMismatch, match="cannot be verified"):
@@ -349,19 +411,28 @@ async def test_a_server_that_reorders_its_answers_still_passes_the_check(conn, t
     with model_server(embedding_dim=4) as url:
         in_order = Settings(data_dir=str(tmp_path), embedding_endpoint=url)
         expected = await _adapter(url, in_order).embed("a real query")
-        await CheckedEmbedder(_adapter(url, in_order), conn=conn, settings=in_order).embed("q")
+        await CheckedEmbedder(
+            _adapter(url, in_order), conn=conn, settings=in_order, endpoint=url, setting=_SETTING
+        ).embed("q")
     assert spaces.active(conn).fingerprint is not None
     checked_embedder._checked.clear()  # a new process
 
     with model_server(embedding_dim=4, reorder=True) as url:
         reordered = Settings(data_dir=str(tmp_path), embedding_endpoint=url)
-        embedder = CheckedEmbedder(_adapter(url, reordered), conn=conn, settings=reordered)
+        embedder = CheckedEmbedder(
+            _adapter(url, reordered), conn=conn, settings=reordered, endpoint=url, setting=_SETTING
+        )
         got = await embedder.embed("a real query")
 
     assert got == expected
 
 
 # --- helpers ---------------------------------------------------------------------------------
+
+#: Where the embedder under test is addressed, and by which setting: the factory decides both
+#: in production and hands them in.
+_URL = "http://embed.test/v1"
+_SETTING = "MORGAN_EMBEDDING_ENDPOINT"
 
 
 def _clock() -> datetime:

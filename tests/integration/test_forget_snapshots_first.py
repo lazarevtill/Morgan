@@ -120,8 +120,7 @@ def _run_isolated(coro: Any) -> Any:
     """Run *coro* to completion whether or not an event loop is already running here.
 
     A sync test has none; an ``async def`` test under ``asyncio_mode = auto`` already has
-    one, and ``asyncio.run`` refuses to nest inside it. Mirrors
-    ``composition._run_coro_isolated``.
+    one, and ``asyncio.run`` refuses to nest inside it.
     """
     result: list[Any] = []
     error: list[BaseException] = []

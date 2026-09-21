@@ -9,6 +9,7 @@ import pytest
 import structlog
 
 from morgan_brain.config import Settings
+from morgan_brain.memory import checked_embedder
 
 
 @pytest.fixture(scope="session")
@@ -41,6 +42,22 @@ def _structlog_config_restored() -> Iterator[None]:
     saved = structlog.get_config()
     yield
     structlog.configure(**saved)
+
+
+@pytest.fixture(autouse=True)
+def _a_fresh_process() -> Iterator[None]:
+    """Each test is a new process as far as the embedding-space check goes.
+
+    ``checked_embedder`` records the spaces a process has proven at module level, keyed by
+    endpoint, model, width and space id -- and every test database's first space has id 1, at
+    the same default model and width. Left in place, a test after the first would skip the
+    check its own database needs, and pass or fail by the order the suite ran in.
+    """
+    checked_embedder._checked.clear()
+    checked_embedder._unregistered.clear()
+    yield
+    checked_embedder._checked.clear()
+    checked_embedder._unregistered.clear()
 
 
 @pytest.fixture
