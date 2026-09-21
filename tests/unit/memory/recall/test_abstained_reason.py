@@ -90,6 +90,13 @@ async def test_an_empty_project_says_empty(tmp_path):
     assert (out.abstained, out.reason, out.memories) == (True, "empty", [])
 
 
+async def test_an_empty_project_with_a_floor_still_says_empty(tmp_path):
+    # No hits is also too few to judge; "empty" is what the caller needs to hear.
+    module = build_memory_module(str(tmp_path / "m.db"), floor_margin=0.11)
+    out = await module.recall(MemoryQuery(user_id="u", project="p", text="anything"))
+    assert (out.abstained, out.reason, out.memories) == (True, "empty", [])
+
+
 async def test_three_memories_are_returned_unjudged(tmp_path):
     module = await _module_with(tmp_path, count=3, floor_margin=0.11)
     out = await module.recall(MemoryQuery(user_id="u", project="p", text="Harbor"))

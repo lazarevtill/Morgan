@@ -24,8 +24,8 @@ _ABSTAINED = {
 def _render_recall(data: dict[str, Any]) -> str:
     if not data["results"]:
         scope = "any project" if data["all_projects"] else f"project {data['project']!r}"
-        why = _ABSTAINED.get(data["reason"], str(data["reason"]))
-        return f"No memories found in {scope} ({why})."
+        why = _ABSTAINED.get(data["reason"])
+        return f"No memories found in {scope} ({why})." if why else f"No memories found in {scope}."
     return "\n".join(
         f"{i + 1}. [{r['kind']}/{r['project']}] {r['content']}"
         for i, r in enumerate(data["results"])
