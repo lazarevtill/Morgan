@@ -31,9 +31,11 @@ come in" are answered by the directory names.
 - `composition.py` — opens the database and wires the above. `build_memory_context` needs no
   chat model; `build_app_context` adds it.
 - `memory/` — the core. `gate.py` is the only door and `module.py` is the one write path and
-  the fused recall; `embedder.py` is the embedding seam; `migrations.py` upgrades a database
-  written by an older version, its light steps when it is opened and its heavy ones under
-  `morgan migrate`; `snapshot.py` writes and lists verified `VACUUM INTO` copies of the
+  the fused recall; `embedder.py` is the embedding seam; `fingerprint.py` is the five frozen
+  strings that identify an embedding space and the pure arithmetic (`cosine`, `compare`,
+  `pack`/`unpack`) over their vectors, with no I/O of its own; `migrations.py` upgrades a
+  database written by an older version, its light steps when it is opened and its heavy ones
+  under `morgan migrate`; `snapshot.py` writes and lists verified `VACUUM INTO` copies of the
   whole database, and restores one behind a safety snapshot of its own. Below them:
   - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
     `history`, `spaces` (the `embedding_spaces` table and its one-active partial index),

@@ -12,11 +12,11 @@ content without yet being searched.
 from __future__ import annotations
 
 import sqlite3
-import struct
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
+from morgan_brain.memory import fingerprint
 from morgan_brain.memory.store.db import write_transaction
 
 #: Individual statements, run with plain ``execute`` rather than ``executescript`` -- the
@@ -156,21 +156,19 @@ def set_status(conn: sqlite3.Connection, space_id: int, status: str) -> None:
 
 
 def _pack(vectors: list[list[float]], *, dims: int) -> bytes:
-    """Little-endian float32, every vector's components concatenated in the order given."""
-    flat: list[float] = []
+    """Validate every vector is *dims*-wide, then delegate the actual packing to
+    ``fingerprint.pack`` -- little-endian float32, same format ``record_fingerprint`` has
+    always stored."""
     for vector in vectors:
         if len(vector) != dims:
             raise ValueError(f"expected a {dims}-wide vector, got {len(vector)}")
-        flat.extend(vector)
-    return struct.pack(f"<{len(flat)}f", *flat)
+    return fingerprint.pack(vectors)
 
 
 def unpack(blob: bytes, *, dims: int) -> list[list[float]]:
-    """The inverse of the packing ``record_fingerprint`` does. Local to this task -- Task 13's
-    ``fingerprint.pack``/``unpack`` will delegate to the same little-endian float32 layout."""
-    count = len(blob) // 4
-    flat = struct.unpack(f"<{count}f", blob)
-    return [list(flat[i : i + dims]) for i in range(0, count, dims)]
+    """The inverse of the packing ``record_fingerprint`` does. Delegates to
+    ``fingerprint.unpack``, which uses the same little-endian float32 layout."""
+    return fingerprint.unpack(blob, dims=dims)
 
 
 def record_fingerprint(
