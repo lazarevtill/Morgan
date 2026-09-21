@@ -194,10 +194,13 @@ class EmbeddingSpaceMismatch(Exception):
 
     Two models of the same width are indistinguishable by width alone, so without this every
     stored vector would be searched by a model that never wrote it: wrong answers, no error.
-    Raised by ``memory/checked_embedder.py`` on a process's first embedding call, when the
-    model's answers fall outside the measured tolerance of the active space's fingerprint, or
-    of the vectors already stored, come back at another width or with a non-finite component,
-    or cannot be checked against the stored vectors at all (``established`` is then false).
+    Raised by ``memory/checked_embedder.py`` on a process's first embedding call, and by its
+    ``check()`` on demand (`morgan import`'s canary, re-run every
+    ``MORGAN_IMPORT_CANARY_EVERY`` memories and once more at the end), when the model's
+    answers fall outside the measured tolerance of the active space's fingerprint, or of the
+    vectors already stored, come back at another width, the wrong count, or with a non-finite
+    component, or cannot be checked at all -- no fingerprint recorded yet, or no active space
+    (``established`` is then false).
     The message names the space, the setting that addresses the model, what went wrong, what
     it means and what to check.
     """
@@ -263,6 +266,19 @@ class EmbeddingSpaceMismatch(Exception):
         return cls(space_id=space_id, model=model, dims=dims, setting=setting, detail=detail)
 
     @classmethod
+    def wrong_count(
+        cls, *, space_id: int, model: str, dims: int, setting: str, expected: int, got: int
+    ) -> EmbeddingSpaceMismatch:
+        """The model answered a different number of vectors than strings sent -- the answer
+        cannot even be lined up against the fingerprint string by string, so nothing else
+        about it can be trusted. Distinct from ``_first_call``'s own bare ``ValueError`` on the
+        same shape of failure: a canary's version must be an ``EmbeddingSpaceMismatch``, so
+        the import that sent it can catch it and name the suspects, the same as any other
+        canary failure."""
+        detail = f"it answered {got} vectors for {expected} inputs sent"
+        return cls(space_id=space_id, model=model, dims=dims, setting=setting, detail=detail)
+
+    @classmethod
     def unverified(
         cls, *, space_id: int, model: str, dims: int, setting: str
     ) -> EmbeddingSpaceMismatch:
@@ -285,11 +301,12 @@ class EmbeddingSpaceMismatch(Exception):
     def no_fingerprint(
         cls, *, space_id: int, model: str, dims: int, setting: str
     ) -> EmbeddingSpaceMismatch:
-        """No fingerprint is recorded for the active space (or none is active at all), so a
+        """A real, registered space exists, but no fingerprint is recorded for it yet, so a
         re-check -- ``CheckedEmbedder.check()``, the import canary -- has nothing recorded to
         compare a fresh embedding against. Refused by name: a check with nothing to compare
-        against must never read as a silent pass."""
-        detail = "no fingerprint is recorded for the active embedding space yet"
+        against must never read as a silent pass. Distinct from ``no_active_space``, which is
+        for when there is no space to name at all."""
+        detail = "no fingerprint is recorded for this embedding space yet"
         return cls(
             space_id=space_id,
             model=model,
@@ -298,6 +315,32 @@ class EmbeddingSpaceMismatch(Exception):
             detail=detail,
             established=False,
         )
+
+    @classmethod
+    def no_active_space(cls, *, setting: str) -> EmbeddingSpaceMismatch:
+        """No embedding space is registered at all -- not even an id, a model or a width to
+        name, unlike every other case here, which is about a real, registered space. Built
+        without going through ``__init__``'s templated message, which always names a space:
+        naming a placeholder one ("embedding space 0 (..., 0 dims)") here would claim a space
+        exists when none does. Reached by calling ``check()`` directly on a database with no
+        registered space, or by an import over one -- ``embed_batch`` lets ordinary stores
+        through unchecked then (``_unregistered``), so a canary is the first thing to notice.
+        Every writable, provider-backed ``cmd_import`` run registers a space before storing
+        anything, so this is not reached through the CLI.
+        """
+        instance: EmbeddingSpaceMismatch = cls.__new__(cls)
+        instance.space_id = 0
+        instance.model = ""
+        instance.dims = 0
+        instance.setting = setting
+        instance.detail = "no embedding space is registered"
+        instance.established = False
+        Exception.__init__(
+            instance,
+            "no embedding space is registered, so nothing was compared against the model at "
+            f"{setting}; run `morgan doctor` or `morgan migrate`",
+        )
+        return instance
 
 
 @runtime_checkable

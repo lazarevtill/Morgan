@@ -26,6 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from morgan_brain.config import DEFAULT_IMPORT_CANARY_EVERY
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.models import Memory, MemoryKind, MemorySource, OriginKind
 from morgan_brain.providers.wire import EmbeddingSpaceMismatch
@@ -75,26 +76,41 @@ class ImportReport:
 
 
 class ImportStopped(Exception):
-    """The import canary caught the model answering outside the recorded fingerprint's
-    tolerance, and stopped before trusting anything stored since the last good check.
+    """The import canary caught the model answering outside tolerance, and stopped before
+    trusting anything stored since the last good check.
 
-    *first* and *last* are the 1-based ordinals -- counting only memories the importer
-    actually embedded and stored, never a piece skipped because it was already there
-    unchanged -- of every memory stored since the canary last matched. *suspect_ids* carries
-    their memory ids, for a caller that wants to act on them directly rather than parse the
-    message. Storage is idempotent by id: once ``morgan doctor --vectors`` confirms the model
-    is sound again, re-running the same import is safe -- it skips everything already stored
-    and picks up exactly where this stopped.
+    *first* and *last* are the 1-based ordinals of the suspect stretch, counting only what
+    *this run* actually stored -- never a piece skipped because it was already there
+    unchanged, and never the export's own numbering, which a resumed run does not track.
+    *suspect_ids* carries the memory ids themselves, in order, so a caller can act on them
+    directly rather than parse the message; a resumed run's ids are its own, not an earlier
+    stopped run's, because a suspect skipped as already-stored is never re-named. *setting*
+    and *detail* are the failing ``EmbeddingSpaceMismatch``'s own, carried through unchanged
+    rather than paraphrased into a single guessed cause.
+
+    **The suspects are not repaired.** They are already stored, in every index, with
+    whatever vectors they were given -- the canary runs after the stretch is stored, not
+    before. Storage is idempotent by id, so once ``morgan doctor --vectors`` confirms the
+    model is sound again, re-running the same import skips every id already stored, suspects
+    included, rather than re-embedding them. Real remediation -- re-embedding the suspects,
+    or holding a stretch back until its own canary passes -- is out of phase-0 scope.
     """
 
-    def __init__(self, *, first: int, last: int, suspect_ids: list[str], setting: str) -> None:
+    def __init__(
+        self, *, first: int, last: int, suspect_ids: list[str], setting: str, detail: str
+    ) -> None:
         self.first = first
         self.last = last
         self.suspect_ids = suspect_ids
+        self.setting = setting
+        self.detail = detail
+        first_id, last_id = suspect_ids[0], suspect_ids[-1]
         super().__init__(
-            f"import stopped: memories {first}-{last} may be embedded with the wrong vectors "
-            f"({setting} stopped matching the recorded fingerprint); run `morgan doctor "
-            "--vectors`, then re-run the import to pick up where this stopped"
+            f"import stopped: memory {first} through memory {last} of this run's own store "
+            f"order are suspect -- ids {first_id} through {last_id} ({setting}: {detail}). "
+            "They stay stored exactly as given; a re-run skips them unchanged, it does not "
+            "repair them. Run `morgan doctor --vectors`, then re-run the import to store "
+            "the rest."
         )
 
 
@@ -179,7 +195,7 @@ async def import_chatgpt(
     gate: MemoryGate,
     user_id: str,
     progress: Any = None,
-    canary_every: int = 50,
+    canary_every: int = DEFAULT_IMPORT_CANARY_EVERY,
 ) -> ImportReport:
     """Import every usable turn of *path* through *gate*, returning what was written.
 
@@ -189,17 +205,26 @@ async def import_chatgpt(
     Every *canary_every* memories this actually stores -- never a piece skipped because it
     was already there unchanged, which costs no embedding -- it re-checks the active embedding
     space against its recorded fingerprint (``MemoryGate.check_embedding_space``), and once
-    more at the end for whatever was stored since the last good check. A mismatch raises
-    ``ImportStopped`` naming the suspect range rather than trusting anything embedded after a
-    model that may have started answering wrong. ``surfaces/cli/commands.py::cmd_import``
-    passes ``settings.import_canary_every``; this function reads no settings of its own.
+    more at the end for whatever was stored since the last good check. This bounds how many
+    memories a model that is *still* answering wrong when a check runs can reach before it is
+    named; it does not catch a vector that was wrong only in between two checks. A mismatch
+    raises ``ImportStopped`` naming the suspect range; the suspects stay stored with whatever
+    vectors they were given, and a re-run skips them like anything else already stored, rather
+    than repairing them. ``surfaces/cli/commands.py::cmd_import`` passes
+    ``settings.import_canary_every``, whose default is the same
+    ``config.DEFAULT_IMPORT_CANARY_EVERY`` this parameter defaults to; this function reads no
+    settings of its own, so a caller with no ``Settings`` still gets a sensible interval.
+
+    Raises ``ValueError`` by name if *canary_every* is below 1 -- a caller bypassing
+    ``Settings``'s own ``ge=1`` validation would otherwise divide by zero.
     """
+    if canary_every < 1:
+        raise ValueError(f"canary_every must be at least 1, got {canary_every}")
     # to_thread: a real export is tens of megabytes, and reading it inline would block the
     # loop the embedding calls below run on.
     raw = await asyncio.to_thread(path.read_text, encoding="utf-8")
     conversations = json.loads(raw)
     kept = held = stored = skipped = 0
-    total_stored = 0
     #: Memory ids stored since the last canary that still matched -- the suspects a failure
     #: names, and what a caller acts on directly without parsing the message.
     since_last_canary: list[str] = []
@@ -243,11 +268,10 @@ async def import_chatgpt(
                     )
                 )
                 stored += 1
-                total_stored += 1
                 since_last_canary.append(memory_id)
                 wrote_any = True
-                if total_stored % canary_every == 0:
-                    await _run_canary(gate, total_stored, since_last_canary)
+                if stored % canary_every == 0:
+                    await _run_canary(gate, stored, since_last_canary)
                     since_last_canary = []
 
         if wrote_any:
@@ -257,25 +281,27 @@ async def import_chatgpt(
             progress(done, len(conversations))
 
     if since_last_canary:
-        await _run_canary(gate, total_stored, since_last_canary)
+        await _run_canary(gate, stored, since_last_canary)
 
     return ImportReport(conversations=kept, held_out=held, memories=stored, skipped_turns=skipped)
 
 
-async def _run_canary(gate: MemoryGate, total_stored: int, since_last_canary: list[str]) -> None:
+async def _run_canary(gate: MemoryGate, stored: int, since_last_canary: list[str]) -> None:
     """Re-check the active embedding space; a mismatch stops the import rather than trusting
     anything stored since the last good check.
 
-    *total_stored* is the ordinal of the last memory stored so far; *since_last_canary* the
-    ids stored since the previous good canary (or the start of the import), in order, so the
-    suspect range is ``total_stored - len(since_last_canary) + 1`` through *total_stored*.
+    *stored* is this run's own count of memories stored so far (``import_chatgpt``'s ``stored``
+    at the moment of the call); *since_last_canary* the ids stored since the previous good
+    canary (or the start of the run), in order, so the suspect range is
+    ``stored - len(since_last_canary) + 1`` through *stored*.
     """
     try:
         await gate.check_embedding_space()
     except EmbeddingSpaceMismatch as exc:
         raise ImportStopped(
-            first=total_stored - len(since_last_canary) + 1,
-            last=total_stored,
+            first=stored - len(since_last_canary) + 1,
+            last=stored,
             suspect_ids=list(since_last_canary),
             setting=exc.setting,
+            detail=exc.detail,
         ) from exc

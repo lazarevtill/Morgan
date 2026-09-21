@@ -19,6 +19,7 @@ import os
 import sys
 from pathlib import Path
 
+from morgan_brain.app.chatgpt_import import ImportStopped
 from morgan_brain.config import Settings, settings_for
 from morgan_brain.logging_setup import configure_logging
 from morgan_brain.models import PERSONAL_PROJECT
@@ -260,6 +261,17 @@ async def _dispatch(
             data = await cmd_remember(args, settings, remember_project)
         else:
             data = await handler(args, settings, project)
+    except ImportStopped as exc:
+        # Same shape as the generic handler below, plus the one field it has no place for: the
+        # suspect ids. A long list belongs on stderr in text mode, not crammed into one line.
+        if args.json:
+            print(
+                json.dumps({"error": str(exc), "suspect_ids": exc.suspect_ids}, ensure_ascii=False)
+            )
+        else:
+            print(f"error: {exc}", file=sys.stderr)
+            print(f"suspect memory ids: {' '.join(exc.suspect_ids)}", file=sys.stderr)
+        return 1
     except Exception as exc:  # noqa: BLE001 -- a CLI user gets a clean message, not a traceback
         if args.json:
             print(json.dumps({"error": str(exc)}, ensure_ascii=False))

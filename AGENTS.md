@@ -41,9 +41,11 @@ come in" are answered by the directory names.
   `pack`/`unpack`) over their vectors, with no I/O of its own; `checked_embedder.py` wraps an
   embedder so that a process's first request also carries those strings, and refuses with
   `EmbeddingSpaceMismatch` when the model answering is not the one that wrote the active
-  space; `migrations.py` upgrades a database written by an older version, its light steps
-  when it is opened and its heavy ones under `morgan migrate`; `snapshot.py` writes and lists
-  verified `VACUUM INTO` copies of the whole database, and restores one behind a safety
+  space; its `check()` re-sends them on demand, never short-circuited by that first-call
+  cache, for `morgan import`'s canary; `migrations.py` upgrades a database written by an
+  older version, its light steps when it is opened and its heavy ones under `morgan migrate`;
+  `snapshot.py` writes and lists verified `VACUUM INTO` copies of the whole database, and
+  restores one behind a safety
   snapshot of its own. Below them:
   - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
     `history`, `spaces` (the `embedding_spaces` table and its one-active partial index),
@@ -176,7 +178,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 617 passed, 4 skipped (the live ones)
+pytest -q                     # 625 passed, 4 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

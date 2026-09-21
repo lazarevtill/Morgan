@@ -28,17 +28,23 @@ def _unit_vector(text: str, dim: int) -> list[float]:
 
 class Calls:
     """The requests a model server has received, of any kind: ``total``, and ``times``, when
-    each arrived (``time.monotonic``)."""
+    each arrived (``time.monotonic``). ``inputs`` records how many texts each request's
+    ``input`` carried, in arrival order, and is always the same length as ``times`` -- a
+    non-embeddings request (a GET, say) records ``0`` -- so a test can tell an import's
+    ordinary memory requests apart from an import canary's five-string one, or a retry from a
+    fresh request, without guessing from the count alone."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self.total = 0
         self.times: list[float] = []
+        self.inputs: list[int] = []
 
-    def count(self) -> None:
+    def count(self, inputs: int = 0) -> None:
         with self._lock:
             self.total += 1
             self.times.append(time.monotonic())
+            self.inputs.append(inputs)
 
 
 @contextmanager
@@ -431,9 +437,13 @@ def _model_server(
                 self._reply(404, {"error": "not found"})
 
         def do_POST(self) -> None:
-            if calls is not None:
-                calls.count()
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            if calls is not None:
+                raw_input = body.get("input")
+                if isinstance(raw_input, list):
+                    calls.count(len(raw_input))
+                else:
+                    calls.count(1 if raw_input is not None else 0)
             if delay and stopping.wait(delay):
                 return
             if self.path != "/v1/embeddings":

@@ -299,6 +299,82 @@ async def test_verify_with_no_active_space_sends_nothing(conn, settings):
     assert inner.calls == []
 
 
+async def test_check_sends_only_the_five_strings_and_never_records(conn, settings):
+    """Task 26's import canary. Unlike ``verify()``, ``check()`` is never short-circuited by
+    ``_checked`` and never records -- a full round trip against a space that already has a
+    fingerprint, called twice, sends the five strings both times."""
+    _a_space_with_a_recorded_fingerprint(conn, dims=4)
+    before = spaces.active(conn).fingerprint
+    inner = _recording_embedder(dims=4)
+    embedder = CheckedEmbedder(inner, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING)
+
+    await embedder.check()
+    await embedder.check()
+
+    assert inner.calls == [list(fingerprint.STRINGS), list(fingerprint.STRINGS)]
+    assert spaces.active(conn).fingerprint == before
+
+
+async def test_check_refuses_a_wrong_answer_count(conn, settings):
+    """I1: a canary answer that cannot even be lined up against the fingerprint string by
+    string must not reach ``fingerprint.compare``'s bare ``ValueError`` -- the import that
+    sent it only catches ``EmbeddingSpaceMismatch``, so a short answer must be one."""
+    _a_space_with_a_recorded_fingerprint(conn, dims=4)
+    embedder = CheckedEmbedder(
+        _short_answering_model(dims=4, short_by=2),
+        conn=conn,
+        settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
+    )
+
+    with pytest.raises(EmbeddingSpaceMismatch, match="3 vectors for 5 inputs") as exc:
+        await embedder.check()
+
+    assert exc.value.setting == _SETTING
+
+
+async def test_check_refuses_a_non_finite_answer(conn, settings):
+    """I1's "at least one non-cosine path": ``_require_answers`` reused through ``check()``,
+    not only through ``embed()``/``_first_call``."""
+    _a_space_with_a_recorded_fingerprint(conn, dims=4)
+    embedder = CheckedEmbedder(
+        _nan_model(dims=4), conn=conn, settings=settings, endpoint=_URL, setting=_SETTING
+    )
+
+    with pytest.raises(EmbeddingSpaceMismatch, match="non-finite"):
+        await embedder.check()
+
+
+async def test_check_refuses_when_no_fingerprint_is_recorded_yet(conn, settings):
+    """M2: a real, registered space with nothing recorded gets its own honest detail, naming
+    the space that is really there."""
+    space = spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
+    embedder = CheckedEmbedder(
+        _recording_embedder(dims=4), conn=conn, settings=settings, endpoint=_URL, setting=_SETTING
+    )
+
+    with pytest.raises(EmbeddingSpaceMismatch, match="no fingerprint is recorded") as exc:
+        await embedder.check()
+
+    assert exc.value.space_id == space.id
+    assert exc.value.setting == _SETTING
+
+
+async def test_check_refuses_when_no_space_is_active(conn, settings):
+    """M2: no space at all must get its own detail too, and must not claim a fake one --
+    "embedding space 0 (..., 0 dims)" would name a space that does not exist."""
+    embedder = CheckedEmbedder(
+        _recording_embedder(dims=4), conn=conn, settings=settings, endpoint=_URL, setting=_SETTING
+    )
+
+    with pytest.raises(EmbeddingSpaceMismatch, match="no embedding space is registered") as exc:
+        await embedder.check()
+
+    assert "embedding space 0" not in str(exc.value)
+    assert exc.value.setting == _SETTING
+
+
 async def test_the_stored_sample_pairs_each_memory_with_its_stored_vector(tmp_path):
     module = build_memory_module(str(tmp_path / "m.db"))
     texts = ["the first memory", "the second memory", "the third memory"]
@@ -491,11 +567,13 @@ class _RecordingEmbedder:
         model: str,
         answers: dict[str, list[float]] | None = None,
         nan: bool = False,
+        short_by: int = 0,
     ) -> None:
         self._dims = dims
         self._model = model
         self._answers = answers or {}
         self._nan = nan
+        self._short_by = short_by
         self.calls: list[list[str]] = []
 
     async def embed(self, text: str) -> list[float]:
@@ -505,7 +583,8 @@ class _RecordingEmbedder:
         self.calls.append(list(texts))
         if self._nan:
             return [[math.nan] * self._dims for _ in texts]
-        return [self._answers.get(t) or _unit(self._model, t, self._dims) for t in texts]
+        answered = [self._answers.get(t) or _unit(self._model, t, self._dims) for t in texts]
+        return answered[: len(answered) - self._short_by] if self._short_by else answered
 
 
 def _recording_embedder(*, dims: int) -> _RecordingEmbedder:
@@ -520,6 +599,12 @@ def _nan_model(*, dims: int) -> _RecordingEmbedder:
     """A broken model whose every component is NaN -- which Python's JSON parser accepts from a
     bare `NaN` token, so the live adapter can hand one back too."""
     return _RecordingEmbedder(dims=dims, model="model-a", nan=True)
+
+
+def _short_answering_model(*, dims: int, short_by: int) -> _RecordingEmbedder:
+    """A model that drops the last *short_by* vectors of every answer -- a malformed reply a
+    count check must catch before anything tries to line it up against the fingerprint."""
+    return _RecordingEmbedder(dims=dims, model="model-a", short_by=short_by)
 
 
 def _adapter(url: str, settings: Settings) -> OpenAICompatEmbedder:

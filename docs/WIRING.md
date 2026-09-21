@@ -213,13 +213,18 @@ costs an embedding call; progress goes to stderr. Re-running updates in place.
 An import runs a canary: every `MORGAN_IMPORT_CANARY_EVERY` (50) memories it actually stores
 -- never one skipped because it was already there unchanged -- it re-sends the five
 fingerprint strings alone and compares them against the embedding space's recorded
-fingerprint, and once more at the end for whatever was stored since the last good check. A
-model that starts answering wrong mid-import is bounded to one such stretch rather than
-discovered only once every memory since is a suspect. A mismatch raises `ImportStopped`,
-naming the suspect range and the setting that addresses the model, and pointing at `morgan
-doctor --vectors`; storage is idempotent by id, so once the model is confirmed sound,
-re-running the same import picks up exactly where it stopped and rewrites nothing already
-stored correctly.
+fingerprint, and once more at the end for whatever was stored since the last good check. This
+bounds how many memories a model that is *still* answering wrong when a check runs can reach
+before it is named; it does not catch a vector that was wrong only in between two checks and
+has since recovered -- `morgan doctor --vectors`'s full re-embed sample is the check for that.
+A mismatch raises `ImportStopped`, printed on stderr (and under `suspect_ids` in the `--json`
+error object), naming the suspect range, the suspect memory ids and the setting that
+addresses the model, and pointing at `morgan doctor --vectors`. **The suspects are not
+repaired.** They are already stored, in every index, with whatever vectors they were given --
+the canary runs after the stretch is stored, not before -- and re-running the import skips
+every id already there unchanged, suspects included, rather than re-embedding them. Real
+remediation (re-embedding the named suspects, or holding a stretch back until its own canary
+passes) is a phase-0 gap, tracked as an owner follow-up rather than built here.
 
 `MORGAN_EMBEDDING_BACKEND=hash` replaces the embedding call with a deterministic stub, so the
 memory commands run with no model server at all (keyword and entity search still work; vector

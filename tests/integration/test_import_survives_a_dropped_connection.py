@@ -16,6 +16,7 @@ import pytest
 
 from morgan_brain.composition import sqlite_path
 from morgan_brain.config import Settings
+from morgan_brain.memory import fingerprint
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.providers.factory import build_embedder
 from morgan_brain.providers.wire import ProviderUnreachable
@@ -37,13 +38,17 @@ async def test_an_import_survives_a_dropped_connection(tmp_path):
         result = await cmd_import(argparse.Namespace(path=str(export)), settings, "ignored")
 
     assert result["memories"] == _TURNS
-    # _TURNS requests, one of them retried once, plus the canary's own request once the
-    # import ends (Task 26): 4 memories is under MORGAN_IMPORT_CANARY_EVERY's default of 50,
-    # so no canary runs mid-import, but the tail canary still runs once after the last memory.
-    assert calls.total == _TURNS + 1 + 1, (
-        "the dropped request was not retried exactly once, or the tail canary did not run "
-        "exactly once"
-    )
+    # _TURNS memories is under MORGAN_IMPORT_CANARY_EVERY's default of 50, so no canary runs
+    # mid-import, but the tail canary still runs once after the last memory (Task 26). The
+    # canary's request carries exactly the five fingerprint strings and nothing else, which
+    # no ordinary memory-store request does here (the first carries 1 + 5, later ones 1 each),
+    # so `calls.inputs` tells the two kinds of request apart instead of folding them into one
+    # count that a missing canary and an extra retry could both satisfy.
+    canary_requests = [n for n in calls.inputs if n == len(fingerprint.STRINGS)]
+    store_requests = [n for n in calls.inputs if n != len(fingerprint.STRINGS)]
+    assert len(canary_requests) == 1, "the tail canary did not run exactly once"
+    assert len(store_requests) == _TURNS + 1, "the dropped request was not retried exactly once"
+    assert calls.total == _TURNS + 1 + 1
     indexed = _ids_in_every_index(settings)
     memories = indexed.pop("memories")
     assert len(memories) == _TURNS
