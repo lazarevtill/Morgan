@@ -99,6 +99,13 @@ class ImportStopped(Exception):
     def __init__(
         self, *, first: int, last: int, suspect_ids: list[str], setting: str, detail: str
     ) -> None:
+        if not suspect_ids:
+            # `_run_canary`, the only caller today, never passes an empty list -- both call
+            # sites append to it before any interval check can fire. Still a public exception
+            # with a public list attribute the type does not forbid being empty, so a future
+            # caller that violates the precondition gets a named refusal, not a bare
+            # IndexError two lines down.
+            raise ValueError("ImportStopped needs at least one suspect id, got suspect_ids=[]")
         self.first = first
         self.last = last
         self.suspect_ids = suspect_ids

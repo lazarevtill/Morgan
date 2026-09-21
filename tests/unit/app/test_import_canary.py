@@ -239,3 +239,14 @@ async def test_import_chatgpt_refuses_a_canary_interval_below_one(tmp_path):
 
     with pytest.raises(ValueError, match="canary_every"):
         await import_chatgpt(export, gate=gate, user_id="u", canary_every=0)
+
+
+def test_import_stopped_refuses_an_empty_suspect_list_by_name():
+    """Re-review round-1 finding: ``import_chatgpt``'s only caller of ``ImportStopped``
+    (``_run_canary``) always passes a non-empty list, but the constructor is public and
+    ``suspect_ids: list[str]`` allows empty by its type -- indexing ``[0]``/``[-1]`` on one
+    must not surface as a bare, unexplained ``IndexError``."""
+    with pytest.raises(ValueError, match="suspect_ids"):
+        ImportStopped(
+            first=1, last=0, suspect_ids=[], setting="MORGAN_EMBEDDING_ENDPOINT", detail="d"
+        )

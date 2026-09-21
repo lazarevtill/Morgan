@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from morgan_brain.memory import fingerprint
 from morgan_brain.providers.wire import ChatMessage, ChatResult, StreamDelta, ToolSpec
 
 
@@ -161,6 +162,72 @@ def _scripted_vector(text: str, label: str, wrong: dict[str, Any], dim: int) -> 
     if spec == "overflow":
         return [1e200] * dim
     return normal
+
+
+@contextmanager
+def drifting_model_server(*, embedding_dim: int = 1024, drift_after: int) -> Iterator[str]:
+    """A model server that answers correctly until *drift_after* memory pieces have been
+    embedded, then answers every input -- the import canary's own fingerprint strings
+    included -- with the exact negation of the normal vector, the way a model having a bad
+    moment does: nothing about the request tells it apart from a memory's, so it does not
+    single the canary's own request out. Yields its ``/v1`` URL.
+
+    Counts only texts that are not one of the five fingerprint strings
+    (``memory.fingerprint.STRINGS``), matching what `morgan import` itself counts toward its
+    canary interval: a canary's own small request never moves the drift point, and neither
+    does a piece the importer skipped because it was already stored (it is never sent here).
+    """
+    seen = 0
+    lock = threading.Lock()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            if self.path == "/v1/models":
+                self._reply(200, {"object": "list", "data": []})
+            else:
+                self._reply(404, {"error": "not found"})
+
+        def do_POST(self) -> None:
+            nonlocal seen
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            if self.path != "/v1/embeddings":
+                self._reply(404, {"error": "not found"})
+                return
+            texts = body["input"] if isinstance(body["input"], list) else [body["input"]]
+            with lock:
+                seen += sum(1 for t in texts if t not in fingerprint.STRINGS)
+                drifted = seen > drift_after
+            vectors = [
+                {"index": i, "embedding": _drifted_vector(text, embedding_dim, drifted)}
+                for i, text in enumerate(texts)
+            ]
+            self._reply(200, {"object": "list", "data": vectors})
+
+        def _reply(self, status: int, payload: dict[str, Any]) -> None:
+            data = json.dumps(payload).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args: Any) -> None:
+            """The suite's output is not a request log."""
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True
+    ).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}/v1"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _drifted_vector(text: str, dim: int, drifted: bool) -> list[float]:
+    normal = _unit_vector(text, dim)
+    return [-x for x in normal] if drifted else normal
 
 
 class Headers:
