@@ -28,6 +28,7 @@ from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
 from morgan_brain.memory.store.fts import FtsIndex
+from morgan_brain.memory.store.tables import project_tables
 from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.memory.store.vectors import SqliteVectorIndex, VectorHit, VectorRecord
 from morgan_brain.models import (
@@ -295,9 +296,12 @@ class MemoryModule:
             # statement below stays a literal and a project with more memories than
             # SQLITE_MAX_VARIABLE_NUMBER still erases in one statement each.
             id_json = json.dumps(ids)
-            has_history = _table_exists(conn, "session_history")
-            if not has_history:
-                report.tables_skipped.append("session_history")
+            # `store/tables.py::project_tables` is the one registry of project-keyed tables,
+            # shared with `EpisodicStore.distinct_projects`. A name it returns that is absent
+            # here -- `session_history`, opened only by `build_memory_context` -- is named in
+            # `tables_skipped` rather than silently left at an honest-looking zero.
+            report.tables_skipped = [t for t in project_tables(conn) if not _table_exists(conn, t)]
+            has_history = "session_history" not in report.tables_skipped
 
             if ids:
                 conn.execute(

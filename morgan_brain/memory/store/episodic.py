@@ -10,9 +10,9 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
-from typing import ClassVar
 
 from morgan_brain.memory.store.db import write_transaction
+from morgan_brain.memory.store.tables import project_tables
 from morgan_brain.models import DEFAULT_PROJECT, Entity, Memory, MemoryKind, MemorySource
 
 
@@ -89,31 +89,28 @@ class EpisodicStore:
             for mid in ids:
                 self._conn.execute("DELETE FROM memories WHERE id = ?", (mid,))
 
-    #: Every project-keyed table `forget()` erases from. `memories` alone is not the answer:
-    #: `facts`, `interaction_signals` and `session_history` are independently project-keyed,
-    #: and `Orchestrator._persist_turn` writes history and the base signal synchronously while
-    #: the episodic memory is written by the worker off the bus. If the worker is down — or the
-    #: bounded in-proc queue drops the event — a project accumulates transcripts and signals
-    #: with zero memory rows. Enumerating from `memories` made `forget --all-projects` skip
-    #: such a project silently while reporting a clean sweep.
-    #:
-    #: A table name cannot be a bound parameter, so each is a literal statement rather than a
-    #: name interpolated into SQL.
-    _PROJECT_TABLE_SQL: ClassVar[dict[str, str]] = {
-        "memories": "SELECT DISTINCT project FROM memories WHERE user_id = ?",
-        "facts": "SELECT DISTINCT project FROM facts WHERE user_id = ?",
-        "interaction_signals": (
-            "SELECT DISTINCT project FROM interaction_signals WHERE user_id = ?"
-        ),
-        "session_history": "SELECT DISTINCT project FROM session_history WHERE user_id = ?",
-    }
-
     def distinct_projects(self, user_id: str) -> list[str]:
-        """Return every project *user_id* has data under, across all project-keyed tables."""
+        """Return every project *user_id* has data under, across every project-keyed table.
+
+        `memories` alone is not the answer: `facts` and `session_history` are independently
+        project-keyed, and `Orchestrator._persist_turn` writes history synchronously while the
+        episodic memory is written by the worker off the bus. If the worker is down -- or the
+        bounded in-proc queue drops the event -- a project accumulates transcripts with zero
+        memory rows. Enumerating from `memories` made `forget --all-projects` skip such a
+        project silently while reporting a clean sweep. `store/tables.py::project_tables` is
+        the one registry of which tables to check, shared with `MemoryModule.forget`.
+
+        A table name cannot be a bound parameter, so each is interpolated into the SQL text
+        rather than bound -- safe here because every name comes from `project_tables`, never
+        from a caller: `PROJECT_TABLES` is a module-level constant and its `embedding_spaces`
+        additions are table names Morgan itself registered, not query input.
+        """
         projects: set[str] = set()
-        for table, sql in self._PROJECT_TABLE_SQL.items():
+        for table in project_tables(self._conn):
             if not self._table_exists(table):
                 continue
+            # Table name from the registry above, never from a caller -- see the docstring.
+            sql = f"SELECT DISTINCT project FROM {table} WHERE user_id = ?"  # noqa: S608 # nosec B608
             projects.update(r["project"] for r in self._conn.execute(sql, (user_id,)))
         return sorted(projects)
 

@@ -65,6 +65,9 @@ come in" are answered by the directory names.
 - **One write path.** `MemoryModule.store` writes every index in one transaction: episodic
   row, vector, FTS5, entity index. Entities are extracted there when the caller gave none. A
   memory visible to one index and not another is found by one search and missed by the next.
+- **`forget` reaches every project-keyed table.** `store/tables.py::PROJECT_TABLES` is the one
+  list; a store that adds a table registers it there, and a test fails on any table with a
+  `project` column missing from it.
 - **Every write holds the lock from its first statement.** Other processes share the database
   file, so a write that reads before acting takes the lock before the read:
   `store/db.py::write_transaction` opens `BEGIN IMMEDIATE`, and a write inside another one
