@@ -20,7 +20,7 @@ morgan-mcp ──┘        │                 ├─ FTS5 keyword index      o
 | `config.py` | The single `MORGAN_`-prefixed settings source, `settings_for(surface)`. The CLI reads `~/.config/morgan/.env`, then `./.env`, then the environment; `morgan-mcp` reads the user file and the environment only, because its working directory is the client's. `doctor` lists the files read. The database defaults to `~/.local/share/morgan/`, its snapshots to `snapshots/` beside it. Chat and embeddings are addressed separately when one server does not serve both. |
 | `models.py` | `Memory`, `TemporalFact`, `MemoryQuery`, `Message`. Everything that persists is `user_id`- and `project`-keyed; a write that names no project lands in `personal`. A `Memory` carries its provenance: origin, client, session, working directory, author and scope. |
 | `logging_setup.py` | Process output: stdout is UTF-8 because the protocols on it are; every log line goes to stderr. |
-| `composition.py` | Opens the database and wires everything. `build_memory_context` for the memory commands: it stamps a database it creates at the last migration step, runs the pending light steps, opens the gate read-only while a heavy step waits, and on a writable database with no embedding space registers the settings' model and width. It sends no request. `build_app_context` adds the chat client. |
+| `composition.py` | Opens the database and wires everything. `build_memory_context` for the memory commands: it stamps a database it creates at the last migration step, runs the pending light steps, opens the gate read-only while a heavy step waits, and on a writable database with no embedding space registers the settings' model and width (the hash backend registers none). It sends no request. `build_app_context` adds the chat client. |
 | `memory/gate.py` | `MemoryGate`: the only door to memory. Refuses an empty user or project, and every write with `DatabaseNeedsMigration` while a heavy step waits. `RecallOutcome`, `ForgetReport`. |
 | `memory/module.py` | `MemoryModule`: the one write path (every index in one transaction, entities extracted if absent) and the fused recall, which logs one `recall.done` line per call. `forget()` in one transaction. |
 | `memory/embedder.py` | The `Embedder` protocol and the deterministic hash stub that stands in for a model server. |
@@ -72,9 +72,10 @@ grows as consolidation runs.
 
 `embedding_spaces` records which model wrote the stored vectors: model, width, prefixes, the
 vec0 table that holds them, and the fingerprint, the vectors of five fixed strings
-(`memory/fingerprint.py`). One space is active. Opening a writable database that has none
-registers the settings' model and width, refusing when the vector table was created at another
-width; an active space of another width than `MORGAN_EMBEDDING_DIM` is refused on open.
+(`memory/fingerprint.py`). One space is active. Under the provider backend, opening a writable
+database that has none registers the settings' model and width, refusing when the vector table
+was created at another width; the hash backend, which no model answers, registers none. An
+active space of another width than `MORGAN_EMBEDDING_DIM` is refused on open.
 
 Nothing embeds at open. A process's first embedding call carries the check
 (`CheckedEmbedder`): the five strings ride on the request that was being sent anyway, and the
