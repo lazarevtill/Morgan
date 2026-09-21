@@ -216,6 +216,24 @@ def _project_line(project: projects.Project) -> dict[str, Any]:
     }
 
 
+#: The report's lines that read the database, each with a ``*_reason`` beside it for when it
+#: could not: the database is missing or will not open.
+_DATABASE_REASONS: tuple[str, ...] = (
+    "embedding_space_reason",
+    "migration_reason",
+    "rows_missing_provenance_reason",
+    "projects_reason",
+)
+
+
+def _database_unread(report: dict[str, Any], why: str) -> None:
+    """The database was not read: *why* is its error, and the reason on every line that
+    would have read it -- so none of them is empty without saying so."""
+    report["database_error"] = why
+    for reason in _DATABASE_REASONS:
+        report[reason] = why
+
+
 def _collect_local_probes(settings: Settings, *, project: str, all_projects: bool) -> _Local:
     """Every *local* probe: filesystem, SQLite, sqlite-vec, FTS5, row counts, the migration
     state, snapshots, the ``projects`` rows and the active embedding space.
@@ -270,22 +288,16 @@ def _collect_local_probes(settings: Settings, *, project: str, all_projects: boo
         report.setdefault("probe_errors", {})["snapshots"] = str(exc)
 
     # sqlite3.connect creates a file that is not there; doctor must not be what creates it.
-    if db_path != ":memory:" and not Path(db_path).is_file():
-        missing = f"no database yet at {db_path}"
-        report["database_error"] = missing
-        for reason in (
-            "embedding_space_reason",
-            "migration_reason",
-            "rows_missing_provenance_reason",
-            "projects_reason",
-        ):
-            report[reason] = missing
+    # Only nothing at the path is missing: whatever else is there -- a directory, a file that
+    # is not a database -- is opened, fails to open, and is reported as that.
+    if db_path != ":memory:" and not Path(db_path).exists():
+        _database_unread(report, f"no database yet at {db_path}")
         return _Local(report)
 
     try:
         conn = open_db(db_path, busy_timeout_ms=settings.db_busy_timeout_ms)
     except Exception as exc:  # noqa: BLE001 -- report, don't crash the diagnostic tool
-        report["database_error"] = f"failed to open database: {exc}"
+        _database_unread(report, f"failed to open database: {exc}")
         return _Local(report)
     try:
         return _read_database(conn, report, settings, project=project, all_projects=all_projects)

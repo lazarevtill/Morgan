@@ -11,8 +11,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from morgan_brain.config import Settings
 from morgan_brain.surfaces.cli.doctor import build_doctor_report
+from morgan_brain.surfaces.cli.render import _render_doctor
 from tests.fakes import model_server
 
 _CLOSED = "http://127.0.0.1:1/v1"
@@ -69,3 +72,36 @@ async def test_the_hash_backend_uses_no_embedding_server(tmp_path):
 
     assert report["embedding_endpoint"] is None
     assert report["embedding_provider"] == "not used"
+
+
+async def test_a_client_that_cannot_be_built_is_reported_not_raised(tmp_path, monkeypatch):
+    """doctor is run because something is broken, and an HTTP client that cannot even be built
+    -- a CA bundle setting pointing nowhere, say -- is one more thing to report, not a crash."""
+
+    def _cannot_build(*args: Any, **kwargs: Any) -> None:
+        raise OSError("no CA bundle")
+
+    monkeypatch.setattr(httpx, "AsyncClient", _cannot_build)
+
+    report = await _report(tmp_path, llm_endpoint=_CLOSED, embedding_endpoint=_CLOSED)
+
+    assert report["provider"] == report["embedding_provider"] == "unreachable"
+    assert report["provider_probe"]["error"] == "OSError; check MORGAN_LLM_ENDPOINT"
+    assert report["embedding_probe"]["error"] == "OSError; check MORGAN_EMBEDDING_ENDPOINT"
+
+
+async def test_a_database_that_will_not_open_says_so_on_every_line_it_blanks(tmp_path):
+    (tmp_path / "morgan.db").mkdir()  # a directory where the file should be
+
+    report = await _report(tmp_path, llm_endpoint=_CLOSED, embedding_endpoint=_CLOSED)
+
+    assert report["database_error"].startswith("failed to open database")
+    for reason in (
+        "embedding_space_reason",
+        "migration_reason",
+        "rows_missing_provenance_reason",
+        "projects_reason",
+    ):
+        assert report[reason] == report["database_error"]
+    # Each folded line names why it is empty, never a bare "(None)".
+    assert "(None)" not in _render_doctor(report)

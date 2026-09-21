@@ -173,22 +173,25 @@ async def _probe(
 
     *setting* is the variable that addresses *url* and *key_setting* the one whose value is
     sent as *api_key*; an error names the one to check. The clock starts once the client is
-    built: building it loads a TLS context, which is no part of the server's answer.
+    built: building it loads a TLS context, which is no part of the server's answer. Building
+    it can fail on its own -- a CA bundle that is not there -- and is then reported like any
+    request that got no answer, timed from the attempt to build it.
     """
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-    async with httpx.AsyncClient() as client:
-        started = time.monotonic()
-        try:
+    started = time.monotonic()
+    try:
+        async with httpx.AsyncClient() as client:
+            started = time.monotonic()
             async with asyncio.timeout(timeout):
                 resp = await client.request(
                     method, url, headers=headers, json=body, timeout=timeout
                 )
-        except (httpx.TimeoutException, TimeoutError):
-            error = f"no answer within {timeout:g} s ({_PROBE_TIMEOUT_SETTING})"
-            return Probe(time.monotonic() - started, None, error), None
-        except Exception as exc:  # noqa: BLE001 -- no answer is a normal finding, not an error
-            error = f"{type(exc).__name__}; check {setting}"
-            return Probe(time.monotonic() - started, None, error), None
+    except (httpx.TimeoutException, TimeoutError):
+        error = f"no answer within {timeout:g} s ({_PROBE_TIMEOUT_SETTING})"
+        return Probe(time.monotonic() - started, None, error), None
+    except Exception as exc:  # noqa: BLE001 -- no answer is a normal finding, not an error
+        error = f"{type(exc).__name__}; check {setting}"
+        return Probe(time.monotonic() - started, None, error), None
     seconds = time.monotonic() - started
     status = resp.status_code
     if 200 <= status < 300:
