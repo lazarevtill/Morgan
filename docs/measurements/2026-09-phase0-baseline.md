@@ -354,12 +354,22 @@ Results from `2026-09-21-repeat-distribution.md`:
 `scripts/measure_partition_key.py`: copies `--db` first (never touches the source -- opened
 read-only, copied via `shutil.copy2`, the copy deleted afterward unless `--keep-copy`), builds
 a second `vec_items_pk` table on the copy with `project TEXT PARTITION KEY` (sqlite-vec
-0.1.9) alongside the existing metadata-column `vec_items`, populated from the same rows. Runs
-`--queries` KNN queries, evenly spread across the table, against both tables -- each query
-uses a sampled row's own stored vector (no embedding call needed) and the same
-`user_id`/`project` filter both tables carry -- and reports wall time and returned-id
-equality per table, `--runs` times for stability. No host, model, or path is hardcoded; every
-value above comes from the command below.
+0.1.9) alongside the existing metadata-column `vec_items`, populated from the same rows. One
+run reports, `--runs` times for stability:
+
+- **per-project** KNN time for both layouts -- `user_id` and `project` both bound, the shape
+  `SqliteVectorIndex.search` always used before migration step 6;
+- **all-projects** KNN time for both layouts -- `user_id` bound, `project` left out, the shape
+  `search` uses under `all_projects=True`; against the partitioned table this forces vec0 to
+  scan every partition instead of one;
+- whether the two layouts return the same ids, in the same order, at each scope (id order
+  mismatches, and the strictly-rarer id set mismatches);
+- the on-disk size of each layout, isolated into its own single-table file so the number is
+  never entangled with anything else the source database holds -- once for the rows `--db`
+  holds, once for `--synthetic-projects` synthetic one-memory projects.
+
+Each query uses a sampled row's own stored vector (no embedding call needed). No host, model,
+or path is hardcoded; every value above comes from the command below.
 
 ```bash
 .venv/Scripts/python.exe scripts/measure_partition_key.py \
@@ -376,8 +386,59 @@ run 1: metadata median=58.63ms mean=58.88ms (min=47.23ms max=73.09ms) | partitio
 run 2: metadata median=58.71ms mean=59.15ms (min=47.24ms max=72.04ms) | partition median=41.96ms mean=42.12ms (min=32.93ms max=52.55ms) | mismatches=0/200
 ```
 
-**Verdict: recall time drops clearly (~28% faster on both median and mean, in both runs)
-with identical ids returned (0/200 mismatches, both runs) -- take the `PARTITION KEY`.**
+Per-project queries at `k=8`: recall time drops (~28% faster on both median and mean, in both
+runs) with identical ids returned (0/200 mismatches, both runs). This is the whole picture the
+`k=8` per-project run gives; the rest of this section measures what it does not: the
+all-projects scope, and the disk cost.
+
+```bash
+.venv/Scripts/python.exe scripts/measure_partition_key.py \
+  --db ~/Documents/GitHub/morgan-eval-brain-2026-09-19-qwen3-8b/morgan.db \
+  --queries 200 --k 16 --runs 2 --synthetic-projects 20 \
+  --results-json ~/Documents/GitHub/morgan-research-2026-09-19/measurements/2026-09-21-partition-key-all-projects.json
+```
+
+`k=16` is production `k` (`top_k * 2`, `top_k` defaulting to 8 -- `recall/fusion.py`). Raw
+output (unredacted path):
+`~/Documents/GitHub/morgan-research-2026-09-19/measurements/2026-09-21-partition-key-all-projects.txt`
+(console output) and the `.json` beside it (per-query-run stats and the storage bytes), from a
+copy of the same 3,010-memory, 4,096-dim archive `k=8` above used.
+
+```
+run 1 [per-project]: metadata median=52.060ms mean=52.462ms | partition median=38.126ms mean=38.622ms | order mismatches=0/200 | set mismatches=0/200
+run 1 [all-projects]: metadata median=58.481ms mean=58.479ms | partition median=74.173ms mean=74.374ms | order mismatches=1/200 | set mismatches=0/200
+run 2 [per-project]: metadata median=56.206ms mean=56.470ms | partition median=42.944ms mean=43.225ms | order mismatches=0/200 | set mismatches=0/200
+run 2 [all-projects]: metadata median=60.933ms mean=61.304ms | partition median=77.104ms mean=77.332ms | order mismatches=1/200 | set mismatches=0/200
+storage, same rows (3010): metadata=50,728,960B partition=67,362,816B
+storage, 20 one-memory projects: metadata=16,900,096B partition=336,449,536B
+```
+
+| scope | k | partitioned median | metadata median | id order differs | id set differs |
+|---|---|---|---|---|---|
+| per-project | 16 | 38.1 / 42.9 ms | 52.1 / 56.2 ms | 0/200 | 0/200 |
+| all-projects | 16 | 74.2 / 77.1 ms | 58.5 / 60.9 ms | 1/200 | 0/200 |
+
+At `k=16`, all-projects, the partitioned table returns ids in a different order for 1 query in
+200, in both runs; the id *set* is the same both times, so it is a tie broken in another
+order, not a wrong answer -- but it fails the "same ids, in the same order" gate all the same.
+
+On-disk size, same isolated single-table file per layout:
+
+| what | metadata columns | `PARTITION KEY` |
+|---|---|---|
+| the archive's 3,010 rows | 50.7 MB | 67.4 MB |
+| 20 one-memory projects | 16.9 MB | 336.4 MB |
+
+Each partition allocates its own 1,024-vector chunk at the table's declared width, whatever it
+holds -- so a project with a single memory costs as much disk as one with a thousand, and this
+cost grows with every project added, not with every memory. Per-project at `k=16`: partition
+38-43 ms against metadata 52-56 ms, 0/200 mismatches. All-projects at `k=16`: partition 74-77
+ms against metadata 59-61 ms, 1/200 queries returning a different order. Storage for 20
+one-memory projects: partition 336.4 MB against metadata 16.9 MB.
+
+**Verdict: keep metadata columns** — per-project recall is faster with the partition, but
+all-projects recall is slower, each project costs its own chunk on disk, and a partition key
+cannot be UPDATEd (step 5 renames projects).
 
 ## 5. Commit
 

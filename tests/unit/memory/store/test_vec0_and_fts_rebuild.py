@@ -104,6 +104,37 @@ def test_a_failure_later_in_the_wave_leaves_the_old_tables_and_every_vector(tmp_
     assert int(conn.execute("PRAGMA user_version").fetchone()[0]) == 5
 
 
+def test_a_failure_inside_step_six_leaves_the_old_tables_and_every_vector(tmp_path, monkeypatch):
+    """The failure this time is *inside* step 6 itself, not a later step: ``vec_items`` has
+    already been dropped, recreated and reinserted, and ``fts_memories`` has too, when the
+    count check on ``fts_memories`` raises. The whole wave -- including the already-rebuilt
+    ``vec_items`` -- must still come back exactly as it was, not just from the point of the
+    raise, and the connection must be out of its transaction afterwards."""
+    conn = _a_version_five_database_with(tmp_path, memories=3)
+    vec_ddl, fts_ddl = _ddl(conn, "vec_items"), _ddl(conn, "fts_memories")
+    before_vectors = _embeddings(conn)
+    before_fts = _fts_rows(conn)
+    before_version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+
+    real_require_every_row = migrations._require_every_row
+
+    def _fail_for_fts_memories(conn: sqlite3.Connection, table: str, expected: int) -> int:
+        if table == "fts_memories":
+            raise RuntimeError("fts_memories short by design (injected for the test)")
+        return real_require_every_row(conn, table, expected)
+
+    monkeypatch.setattr(migrations, "_require_every_row", _fail_for_fts_memories)
+
+    with pytest.raises(RuntimeError, match="injected for the test"):
+        migrations.migrate(conn, _stores(conn))
+
+    assert (_ddl(conn, "vec_items"), _ddl(conn, "fts_memories")) == (vec_ddl, fts_ddl)
+    assert _embeddings(conn) == before_vectors
+    assert _fts_rows(conn) == before_fts
+    assert int(conn.execute("PRAGMA user_version").fetchone()[0]) == before_version
+    assert conn.in_transaction is False
+
+
 async def test_recall_answers_from_both_rebuilt_indexes(tmp_path):
     conn = _a_version_five_database_with(tmp_path, memories=3)
     migrations.migrate(conn, _stores(conn))
@@ -195,6 +226,15 @@ def _vector(text: str) -> list[float]:
 def _embeddings(conn: sqlite3.Connection) -> dict[int, bytes]:
     return {
         r["rowid"]: r["embedding"] for r in conn.execute("SELECT rowid, embedding FROM vec_items")
+    }
+
+
+def _fts_rows(conn: sqlite3.Connection) -> dict[int, tuple[str, str, str, str]]:
+    return {
+        r["rowid"]: (r["memory_id"], r["user_id"], r["project"], r["content"])
+        for r in conn.execute(
+            "SELECT rowid, memory_id, user_id, project, content FROM fts_memories"
+        )
     }
 
 
