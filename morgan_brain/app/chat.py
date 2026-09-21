@@ -9,10 +9,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.store.history import SessionHistoryStore, session_key
-from morgan_brain.models import Memory, MemoryQuery, MemorySource, Message, Role
+from morgan_brain.models import Memory, MemoryQuery, MemorySource, Message, OriginKind, Role
 from morgan_brain.providers.wire import ChatClient, ChatMessage
 
 _SYSTEM = (
@@ -77,7 +78,9 @@ class Chat:
             hkey, Message(user_id=user_id, role=Role.ASSISTANT, content=reply), project=project
         )
         # Both halves are remembered, attributed to who said them: the user's words are a
-        # statement, the reply is an inference and must never be mistaken for one.
+        # statement, the reply is an inference and must never be mistaken for one. Both rows
+        # came from the same ask turn, so both carry origin_kind=ASK -- source is what tells
+        # them apart, not origin.
         for content, source in (
             (text, MemorySource.USER_STATED),
             (reply, MemorySource.AGENT_INFERRED),
@@ -89,6 +92,9 @@ class Chat:
                     content=content,
                     source=source,
                     created_at=self._clock(),
+                    origin_kind=OriginKind.ASK,
+                    author_id=user_id,
+                    cwd=str(Path.cwd()),
                 )
             )
         return reply

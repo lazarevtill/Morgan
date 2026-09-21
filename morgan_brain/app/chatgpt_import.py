@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from morgan_brain.memory.gate import MemoryGate
-from morgan_brain.models import Memory, MemoryKind, MemorySource
+from morgan_brain.models import Memory, MemoryKind, MemorySource, OriginKind
 
 #: Where imported conversations live. Not a working project: a corpus to recall across and
 #: consolidate from, kept out of the way of the projects real work happens in.
@@ -194,6 +194,9 @@ async def import_chatgpt(
                         content=piece,
                         source=source,
                         created_at=_created_at(message),
+                        origin_kind=OriginKind.IMPORT,
+                        cwd=str(Path.cwd()),
+                        author_id=user_id,
                     )
                 )
                 stored += 1

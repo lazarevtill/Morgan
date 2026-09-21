@@ -36,8 +36,10 @@ import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import uuid4
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.session import ServerSession
 from mcp.types import ToolAnnotations
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -60,6 +62,25 @@ from morgan_brain.surfaces.network import (
 )
 
 TOOL_NAMES: tuple[str, ...] = ("remember", "recall", "facts", "forget", "ask_morgan")
+
+#: The type FastMCP injects when a tool asks for it by annotation. Parameterized (rather than
+#: bare ``Context``) because mypy --strict's ``disallow_any_generics`` rejects a generic used
+#: without its arguments; ``ServerSession``/``Request`` match ``FastMCP.get_context``'s own
+#: return type.
+_ToolContext = Context[ServerSession, Any, Request]
+
+
+def _client_name(ctx: _ToolContext | None) -> str:
+    """The caller's ``clientInfo.name`` -- what a client identifies itself as at MCP
+    handshake -- or ``"mcp"`` when none is available (a direct dispatch call in a test, or a
+    client that skipped ``clientInfo``)."""
+    if ctx is None or ctx.session.client_params is None:
+        return "mcp"
+    # str(): the SDK's ``Context.session`` property carries no return annotation, so mypy
+    # infers the chain down to ``clientInfo.name`` as ``Any`` even though it is a ``str`` at
+    # runtime.
+    return str(ctx.session.client_params.clientInfo.name)
+
 
 #: What each tool declares to a client, which decides from it whether a call may run without
 #: asking. Read-only is the hint that lets it, so only the tools that read make that claim:
@@ -179,11 +200,22 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
     """
     settings = settings if settings is not None else Settings()
     mcp = FastMCP("morgan")
+    #: One id for this server process's whole lifetime -- every memory any client has this
+    #: process store shares it, the way the CLI's empty ``session_id`` marks a one-shot process.
+    session_id = uuid4().hex
 
-    async def remember(text: str, project: str | None = None) -> dict[str, Any]:
+    async def remember(
+        text: str, project: str | None = None, ctx: _ToolContext | None = None
+    ) -> dict[str, Any]:
         """Store a memory in a project."""
         args = argparse.Namespace(text=text)
-        return await cmd_remember(args, settings, project or DEFAULT_PROJECT)
+        return await cmd_remember(
+            args,
+            settings,
+            project or DEFAULT_PROJECT,
+            client=_client_name(ctx),
+            session_id=session_id,
+        )
 
     async def recall(
         query: str,

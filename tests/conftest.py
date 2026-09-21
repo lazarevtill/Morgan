@@ -28,6 +28,14 @@ def _no_env_files(monkeypatch: pytest.MonkeyPatch, _empty_config_home: Path) -> 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(_empty_config_home))
 
 
+@pytest.fixture
+def settings_for_tmp(tmp_path: Path) -> Settings:
+    """A ``Settings`` that opens its database under ``tmp_path`` with the hash embedding
+    backend: no live model server, and never the owner's own data directory. Shared by any
+    test that needs a real (but scratch) database rather than an in-memory store."""
+    return Settings(data_dir=str(tmp_path), embedding_backend="hash")
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--live",

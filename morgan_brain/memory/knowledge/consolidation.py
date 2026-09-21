@@ -25,6 +25,7 @@ from morgan_brain.models import (
     MemoryKind,
     MemoryQuery,
     MemorySource,
+    Scope,
     TemporalFact,
 )
 from morgan_brain.providers.structured import JsonMode, generate_structured
@@ -166,6 +167,8 @@ class MemoryConsolidator:
                         object=op.object,
                         confidence=op.confidence,
                         source=MemorySource.AGENT_INFERRED,
+                        author_id=user_id,
+                        scope=Scope.PRIVATE,
                     )
                 )
                 applied.append(op)
@@ -182,6 +185,8 @@ class MemoryConsolidator:
                         object=op.object,
                         confidence=op.confidence,
                         source=MemorySource.AGENT_INFERRED,
+                        author_id=user_id,
+                        scope=Scope.PRIVATE,
                     )
                 )
                 applied.append(op)

@@ -25,7 +25,7 @@ from morgan_brain.composition import (
 )
 from morgan_brain.config import Settings
 from morgan_brain.memory import snapshot
-from morgan_brain.models import Memory, MemoryQuery, MemorySource
+from morgan_brain.models import Memory, MemoryQuery, MemorySource, OriginKind
 from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.payloads import (
     fact_to_dict,
@@ -36,8 +36,15 @@ from morgan_brain.surfaces.cli.payloads import (
 
 
 async def cmd_remember(
-    args: argparse.Namespace, settings: Settings, project: str
+    args: argparse.Namespace,
+    settings: Settings,
+    project: str,
+    *,
+    client: str = "cli",
+    session_id: str = "",
 ) -> dict[str, Any]:
+    """*client* and *session_id* default to the CLI's own values; the MCP server passes its
+    caller's ``clientInfo.name`` and its own per-process session id instead."""
     ctx = build_memory_context(settings)
     try:
         memory = Memory(
@@ -45,6 +52,11 @@ async def cmd_remember(
             project=project,
             content=args.text,
             source=MemorySource.USER_STATED,
+            origin_kind=OriginKind.REMEMBER,
+            client=client,
+            session_id=session_id,
+            cwd=str(Path.cwd()),
+            author_id=settings.owner_user_id,
         )
         memory_id = await ctx.gate.store(memory)
     finally:
