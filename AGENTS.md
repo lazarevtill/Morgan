@@ -123,8 +123,9 @@ come in" are answered by the directory names.
 - **Nothing runs a model unasked.** `ask` and `consolidate` call the chat model; nothing else
   does, and nothing runs on a schedule. Consolidation is on demand (or the owner's own cron).
   Nothing embeds at open, in a hook or in a sweep. The active embedding space is fingerprinted
-  at a process's first embedding call, riding on that call; `doctor` embeds when it is run,
-  and `doctor --vectors` re-embeds a sample when asked.
+  at a process's first embedding call, riding on that call, or by `morgan migrate` once its
+  wave has committed; `doctor` embeds when it is run, and `doctor --vectors` re-embeds a
+  sample when asked.
 - **Every MCP tool declares what it does.** `TOOL_ANNOTATIONS` states all four hints for every
   tool, and only a tool that changes nothing claims read-only: a client may run those
   unprompted, and `install-skill` allows exactly those in Claude Code. `ask_morgan` stores the

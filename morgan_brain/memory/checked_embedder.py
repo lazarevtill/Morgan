@@ -94,6 +94,20 @@ class CheckedEmbedder:
             return await self._inner.embed_batch(texts)
         return await self._first_call(space, texts)
 
+    async def verify(self) -> None:
+        """Run the first-call check now, with no text of the caller's riding on it.
+
+        ``morgan migrate`` calls it at the end of its wave, so the fingerprint is recorded
+        while the owner watches rather than on the next recall. The request carries the five
+        strings, and the stored sample when the fingerprint is not recorded yet; it records,
+        matches or refuses exactly as a first call would. Sends nothing when no space is
+        active, or when this process has already proven it.
+        """
+        space = spaces.active(self._conn)
+        if space is None or (self._url, self._model, space.dims, space.id) in _checked:
+            return
+        await self._first_call(space, [])
+
     async def _first_call(
         self, space: spaces.EmbeddingSpace | None, texts: list[str]
     ) -> list[list[float]]:

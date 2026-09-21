@@ -16,9 +16,25 @@ import re
 import sqlite3
 
 from morgan_brain.memory.store.db import write_transaction
-from morgan_brain.models import PERSONAL_PROJECT
+from morgan_brain.models import PERSONAL_PROJECT, MemoryStatus, Scope
 
 _TOKEN = re.compile(r"\w+", re.UNICODE)
+
+#: ``fts_memories`` as this code creates it. ``status``, ``scope`` and ``author_id`` follow
+#: ``content`` rather than precede it, so ``content`` keeps the column index it had. Migration
+#: step 6 recreates an older table from its own frozen copy of this statement
+#: (``migrations._FTS_MEMORIES_AT_STEP_SIX``); a test holds the two equal. SQLite does not
+#: record ``IF NOT EXISTS`` as part of the DDL.
+_CREATE_FTS_MEMORIES = """CREATE VIRTUAL TABLE IF NOT EXISTS fts_memories USING fts5(
+    memory_id UNINDEXED,
+    user_id   UNINDEXED,
+    project   UNINDEXED,
+    content,
+    status    UNINDEXED,
+    scope     UNINDEXED,
+    author_id UNINDEXED,
+    tokenize = 'unicode61 remove_diacritics 2'
+)"""
 
 
 def to_match_query(text: str) -> str:
@@ -34,17 +50,7 @@ class FtsIndex:
 
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
-        conn.executescript(
-            """
-            CREATE VIRTUAL TABLE IF NOT EXISTS fts_memories USING fts5(
-                memory_id UNINDEXED,
-                user_id   UNINDEXED,
-                project   UNINDEXED,
-                content,
-                tokenize = 'unicode61 remove_diacritics 2'
-            );
-            """
-        )
+        conn.execute(_CREATE_FTS_MEMORIES)
         conn.commit()
         self._migrate_project_column()
 
@@ -55,6 +61,11 @@ class FtsIndex:
         (it carries its own ``content`` column, not an external-content reference) -- its
         existing rows are read out, the table is dropped and recreated with the ``project``
         column, and the rows are reinserted with ``PERSONAL_PROJECT`` backfilled.
+
+        The table is recreated as it stood when ``project`` was added, without the columns
+        migration step 6 adds: a database this old was written before phase 0, opens
+        read-only until ``morgan migrate`` runs, and gets them from step 6 then. A table that
+        has ``project`` -- every one this code or step 6 created -- is left alone.
         """
         cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(fts_memories)")}
         if "project" not in cols:
@@ -82,14 +93,26 @@ class FtsIndex:
             self._conn.commit()
 
     def add(
-        self, memory_id: str, content: str, *, user_id: str, project: str = PERSONAL_PROJECT
+        self,
+        memory_id: str,
+        content: str,
+        *,
+        user_id: str,
+        project: str = PERSONAL_PROJECT,
+        status: MemoryStatus = MemoryStatus.STORED,
+        scope: Scope = Scope.PRIVATE,
+        author_id: str = "",
     ) -> None:
+        """Index *content* under *memory_id*, replacing what was indexed for it before. The
+        memory's status, scope and author are stored beside it, unindexed; keyword search does
+        not filter on them in phase 0."""
         with write_transaction(self._conn):
             self._conn.execute("DELETE FROM fts_memories WHERE memory_id = ?", (memory_id,))
             self._conn.execute(
-                "INSERT INTO fts_memories (memory_id, user_id, project, content) "
-                "VALUES (?, ?, ?, ?)",
-                (memory_id, user_id, project, content),
+                "INSERT INTO fts_memories "
+                "(memory_id, user_id, project, content, status, scope, author_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (memory_id, user_id, project, content, status.value, scope.value, author_id),
             )
 
     def search(

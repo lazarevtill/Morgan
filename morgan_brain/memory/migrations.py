@@ -29,7 +29,7 @@ from itertools import takewhile
 from typing import NamedTuple
 
 from morgan_brain.memory.knowledge.extract import extract_entity_names
-from morgan_brain.memory.store import projects, spaces
+from morgan_brain.memory.store import projects, spaces, vectors
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
@@ -229,6 +229,120 @@ def _rename_default_project(conn: sqlite3.Connection, stores: Stores) -> dict[st
     return counts
 
 
+#: ``vec_items`` and ``fts_memories`` as step 6 recreates them. Frozen here, like
+#: ``_PROVENANCE_COLUMNS``: a step is history, and a later change to either table is a later
+#: step. ``SqliteVectorIndex`` and ``FtsIndex`` create a new database's tables with the same
+#: statements (plus ``IF NOT EXISTS``, which SQLite does not record), so the DDL of a new
+#: database and a migrated one is the same text; a test compares the two. ``project`` stays a
+#: metadata column rather than a ``PARTITION KEY``: ``store/vectors.py``'s docstring has the
+#: measurements that decided it.
+_VEC_ITEMS_AT_STEP_SIX = """CREATE VIRTUAL TABLE vec_items USING vec0(
+    embedding float[{dims}] distance_metric=cosine,
+    user_id TEXT,
+    project TEXT,
+    status TEXT,
+    scope TEXT,
+    author_id TEXT
+)"""
+_FTS_MEMORIES_AT_STEP_SIX = """CREATE VIRTUAL TABLE fts_memories USING fts5(
+    memory_id UNINDEXED,
+    user_id   UNINDEXED,
+    project   UNINDEXED,
+    content,
+    status    UNINDEXED,
+    scope     UNINDEXED,
+    author_id UNINDEXED,
+    tokenize = 'unicode61 remove_diacritics 2'
+)"""
+
+#: The columns step 6 adds to both tables. A table that has them all was created by this code
+#: -- a store opened before ``morgan migrate`` ran makes a missing table at the latest DDL --
+#: and step 6 leaves it as it is.
+_STEP_SIX_COLUMNS = frozenset({"status", "scope", "author_id"})
+
+
+def _rebuild_vec0_and_fts5(conn: sqlite3.Connection, stores: Stores) -> dict[str, int]:
+    """Recreate ``vec_items`` and ``fts_memories`` with ``status``, ``scope`` and
+    ``author_id``, copying every row. Heavy: every vector blob is read and written again.
+
+    Neither vec0 nor FTS5 can be ``ALTER``ed, so each table's rows are read out, the table is
+    dropped and recreated, and the rows are reinserted under their own rowids -- the vectors
+    byte for byte, since nothing is embedded. The new columns come from the memory's own row
+    in ``memories`` (step 4 gave it all three); a row whose memory is gone gets the values
+    step 4 gave every existing memory: ``stored``, ``private``, and its owner as its author.
+    Each table's count is checked against the rows read before this step returns, inside the
+    wave's transaction: a shortfall raises, and the whole wave rolls back to the old tables.
+
+    A table that is not there is skipped -- the version-0 test runs every step on a database
+    without either, and the store creates it at the latest DDL when it first opens it -- and
+    so is one that already has the columns. The width of ``vec_items`` is the one its old
+    DDL declares. Registers no embedding space: a step is not given the settings, so it
+    cannot know which model wrote the vectors, and ``morgan migrate`` registers the settings'
+    space once its wave has committed. Returns the rows copied, per table rebuilt.
+    """
+    counts: dict[str, int] = {}
+    # None when the table is not there, and nothing to rebuild.
+    dims = vectors.declared_width(conn, table_name="vec_items")
+    if dims is not None and _lacks_step_six_columns(conn, "vec_items"):
+        rows = [
+            tuple(r)
+            for r in conn.execute(
+                "SELECT v.rowid, v.embedding, v.user_id, v.project, "
+                "COALESCE(e.status, 'stored'), COALESCE(e.scope, 'private'), "
+                "COALESCE(e.author_id, v.user_id) "
+                "FROM vec_items v "
+                "LEFT JOIN vec_meta m ON m.rowid = v.rowid "
+                "LEFT JOIN memories e ON e.id = m.id"
+            )
+        ]
+        conn.execute("DROP TABLE vec_items")
+        # The width is an int parsed from the old DDL; DDL takes no bound parameters.
+        conn.execute(_VEC_ITEMS_AT_STEP_SIX.format(dims=int(dims)))
+        conn.executemany(
+            "INSERT INTO vec_items (rowid, embedding, user_id, project, status, scope, author_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+        counts["vec_items"] = _require_every_row(conn, "vec_items", len(rows))
+    if _table_exists(conn, "fts_memories") and _lacks_step_six_columns(conn, "fts_memories"):
+        rows = [
+            tuple(r)
+            for r in conn.execute(
+                "SELECT f.rowid, f.memory_id, f.user_id, f.project, f.content, "
+                "COALESCE(e.status, 'stored'), COALESCE(e.scope, 'private'), "
+                "COALESCE(e.author_id, f.user_id) "
+                "FROM fts_memories f LEFT JOIN memories e ON e.id = f.memory_id"
+            )
+        ]
+        conn.execute("DROP TABLE fts_memories")
+        conn.execute(_FTS_MEMORIES_AT_STEP_SIX)
+        conn.executemany(
+            "INSERT INTO fts_memories "
+            "(rowid, memory_id, user_id, project, content, status, scope, author_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+        counts["fts_memories"] = _require_every_row(conn, "fts_memories", len(rows))
+    return counts
+
+
+def _lacks_step_six_columns(conn: sqlite3.Connection, table: str) -> bool:
+    return not _STEP_SIX_COLUMNS.issubset(_column_names(conn, table))
+
+
+def _require_every_row(conn: sqlite3.Connection, table: str, expected: int) -> int:
+    """The rows *table* holds, which must be the *expected* rows read out of it before it was
+    dropped; anything else raises, and the wave rolls back with the old table in place."""
+    # `table` is one of step 6's two literals, never caller input.
+    found = int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])  # noqa: S608 # nosec B608
+    if found != expected:
+        raise RuntimeError(
+            f"step 6 read {expected} rows out of {table} and the rebuilt table holds {found}; "
+            "the wave is rolled back and the old table kept"
+        )
+    return found
+
+
 #: In order. Step *n* brings a database from ``user_version`` *n - 1* to *n*; append only.
 #: Steps 1 and 2 rewrite and drop, yet stay light: they predate the split, and every Morgan
 #: that shipped them already ran them on open.
@@ -239,6 +353,7 @@ _STEPS: tuple[Step, ...] = (
     Step(3, "create embedding_spaces and projects", False, _create_embedding_spaces_and_projects),
     Step(4, "provenance columns", True, _add_provenance),
     Step(5, "rename default to personal", True, _rename_default_project),
+    Step(6, "rebuild vec0 and FTS5", True, _rebuild_vec0_and_fts5),
 )
 
 

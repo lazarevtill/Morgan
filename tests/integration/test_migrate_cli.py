@@ -20,8 +20,13 @@ from mcp.types import CallToolResult
 
 from morgan_brain.config import get_settings
 from morgan_brain.memory import migrations
+from morgan_brain.memory.store import spaces
+from morgan_brain.memory.store.db import open_db
+from morgan_brain.models import Memory
 from morgan_brain.surfaces.cli.__main__ import main
 from morgan_brain.surfaces.mcp_server import build_server
+from tests.fakes import _unit_vector, model_server
+from tests.unit.memory.conftest import a_version_five_database
 
 _BLOCKED = "writes are blocked until `morgan migrate` runs: 1 step pending (3 a heavy step)"
 
@@ -117,6 +122,94 @@ def test_an_mcp_client_is_told_the_same_as_an_error_it_can_read(tmp_path, monkey
     assert refused.isError is True
     assert _BLOCKED in refused.content[0].text
     assert answered.isError is False
+
+
+def test_migrate_registers_the_space_and_says_it_is_unverified_when_the_embedder_is_down(
+    tmp_path, monkeypatch, capsys
+):
+    """The wave does not wait on the embedding host: port 1 refuses, and the migration stands."""
+    db = _a_version_five_database(tmp_path, monkeypatch, endpoint="http://127.0.0.1:1/v1")
+
+    assert main(["migrate"]) == 0
+
+    assert "space 1 unverified; the first call will verify it" in capsys.readouterr().out
+    assert _version(db) == len(migrations._STEPS)
+    space = _active_space(db)
+    assert space is not None
+    assert (space.id, space.model, space.dims, space.table_name, space.fingerprint) == (
+        1,
+        _MODEL,
+        4,
+        "vec_items",
+        None,
+    )
+
+
+def test_migrate_records_the_fingerprint_when_the_embedder_answers(tmp_path, monkeypatch, capsys):
+    """The stored vectors are the ones this server gives their texts, so the sample matches."""
+    with model_server(embedding_dim=4) as url:
+        db = _a_version_five_database(tmp_path, monkeypatch, endpoint=url)
+        assert main(["migrate", "--json"]) == 0
+
+    out = _json(capsys)
+    assert out["embedding_space"] == {
+        "id": 1,
+        "model": _MODEL,
+        "dims": 4,
+        "fingerprint": "recorded",
+    }
+    space = _active_space(db)
+    assert space is not None and space.fingerprint is not None
+
+
+def test_a_space_refused_after_the_wave_says_the_migration_committed(tmp_path, monkeypatch, capsys):
+    """The width check runs once the wave has committed; its refusal must not read as a
+    failed migration, which a rerun would then report as nothing to do."""
+    db = _a_version_five_database(tmp_path, monkeypatch, endpoint="http://127.0.0.1:1/v1")
+    monkeypatch.setenv("MORGAN_EMBEDDING_DIM", "8")
+    get_settings.cache_clear()
+
+    assert main(["migrate", "--json"]) == 1
+
+    error = _json(capsys)["error"]
+    assert "migrated to user_version" in error and "-migrate.db" in error
+    assert "created 4 wide but MORGAN_EMBEDDING_DIM is 8" in error
+    assert _version(db) == len(migrations._STEPS)
+    assert _active_space(db) is None
+
+
+_MODEL = "an-embedding-model"
+
+
+def _a_version_five_database(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, endpoint: str
+) -> str:
+    """One memory in a database at ``user_version`` 5, whose vector is the one ``model_server``
+    gives its text, under settings that send embeddings to *endpoint*. Returns its path."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("MORGAN_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("MORGAN_SNAPSHOT_DIR", str(tmp_path / "snapshots"))
+    monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "provider")
+    monkeypatch.setenv("MORGAN_EMBEDDING_ENDPOINT", endpoint)
+    monkeypatch.setenv("MORGAN_EMBEDDING_MODEL", _MODEL)
+    monkeypatch.setenv("MORGAN_EMBEDDING_DIM", "4")
+    db = str(data_dir / "morgan.db")
+    a_version_five_database(
+        db,
+        dim=4,
+        memories=[Memory(id="m0", user_id="owner", project="p", content="the first memory")],
+        vector=lambda text: _unit_vector(text, 4),
+    ).close()
+    return db
+
+
+def _active_space(path: str) -> spaces.EmbeddingSpace | None:
+    conn = open_db(path)
+    try:
+        return spaces.active(conn)
+    finally:
+        conn.close()
 
 
 def _a_version_two_database(

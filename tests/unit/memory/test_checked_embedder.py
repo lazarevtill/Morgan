@@ -271,6 +271,33 @@ async def test_a_fresh_space_with_no_rows_records_its_fingerprint_directly(conn,
     assert recorded["space_id"] == space.id and recorded["model"] == "m"
 
 
+async def test_verify_sends_only_the_check_and_once_proven_sends_nothing(conn, settings):
+    """``morgan migrate`` checks the space with no text of its own: the request carries the
+    five strings alone, and the fingerprint is recorded as a first call would record it."""
+    spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
+    inner = _recording_embedder(dims=4)
+    embedder = CheckedEmbedder(
+        inner, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING, sample=_no_sample
+    )
+
+    await embedder.verify()
+    await embedder.verify()
+
+    assert inner.calls == [list(fingerprint.STRINGS)]
+    assert spaces.active(conn).fingerprint is not None
+
+
+async def test_verify_with_no_active_space_sends_nothing(conn, settings):
+    inner = _recording_embedder(dims=4)
+    embedder = CheckedEmbedder(
+        inner, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING, sample=_no_sample
+    )
+
+    await embedder.verify()
+
+    assert inner.calls == []
+
+
 async def test_the_stored_sample_pairs_each_memory_with_its_stored_vector(tmp_path):
     module = build_memory_module(str(tmp_path / "m.db"))
     texts = ["the first memory", "the second memory", "the third memory"]

@@ -1,5 +1,7 @@
 """``morgan snapshot``, ``morgan restore`` and ``morgan migrate`` -- a verified VACUUM INTO
 copy of the whole database, putting one back, and running the migration steps an open may not.
+A migration that ran ends by registering the settings' embedding space where none is active
+and checking it: the fingerprint is recorded then when the embedding server answers.
 
 None is project-scoped: each acts on the whole database file, not one project's rows, so
 these handlers -- unlike every other verb -- ignore ``--project``/``--all-projects``, and
@@ -14,11 +16,20 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from morgan_brain.composition import migration_stores, sqlite_path
+from morgan_brain.composition import (
+    migration_stores,
+    register_the_settings_space,
+    sqlite_path,
+)
 from morgan_brain.config import Settings
 from morgan_brain.memory import migrations, snapshot
+from morgan_brain.memory.checked_embedder import CheckedEmbedder
+from morgan_brain.memory.store import spaces
 from morgan_brain.memory.store.db import open_db
+from morgan_brain.providers.factory import build_embedder
+from morgan_brain.providers.wire import ProviderUnreachable
 from morgan_brain.surfaces.cli.payloads import (
+    embedding_space_to_dict,
     migration_plan_to_dict,
     migration_to_dict,
     restore_to_dict,
@@ -93,8 +104,56 @@ async def cmd_migrate(args: argparse.Namespace, settings: Settings, project: str
 
     *project* is accepted only because ``main()`` computes it for every verb before
     dispatching -- a migration covers the whole database, so it is never read here.
+
+    Once a wave has run, the embedding space is registered and checked (``_check_the_space``),
+    after the wave's commit: the migration stands whatever the embedding server does.
     """
-    return _migrate(settings, dry_run=args.dry_run)
+    result = _migrate(settings, dry_run=args.dry_run)
+    # Only the result of a wave that ran carries "steps"; a plan (dry run, nothing pending)
+    # changed nothing, and has nothing to check.
+    if "steps" in result:
+        try:
+            result["embedding_space"] = await _check_the_space(settings)
+        except Exception as exc:
+            raise RuntimeError(
+                f"migrated to user_version {result['user_version']} (the snapshot taken first "
+                f"is {result['snapshot']}), but {exc}"
+            ) from exc
+    return result
+
+
+async def _check_the_space(settings: Settings) -> dict[str, Any] | None:
+    """Register the settings' embedding space where none is active, then check it.
+
+    Registered by the function every open runs (``register_the_settings_space``), which also
+    refuses a vector table of another width than ``MORGAN_EMBEDDING_DIM``. Checked by the same
+    first-call check every process makes (``CheckedEmbedder.verify``): the fingerprint is
+    recorded when the stored sample matches, or compared when it was recorded before. An
+    embedding server that does not answer -- a cold host past the timeout, or none at all --
+    leaves the space unverified for the first call to verify, and that is said. ``None`` for
+    the hash backend, which no model answers and nothing registers.
+    """
+    if settings.embedding_backend != "provider":
+        return None
+    conn = open_db(
+        sqlite_path(settings.temporal_db_url), busy_timeout_ms=settings.db_busy_timeout_ms
+    )
+    try:
+        register_the_settings_space(conn, settings)
+        before = spaces.active(conn)
+        embedder = build_embedder(settings, conn=conn)
+        if before is None or not isinstance(embedder, CheckedEmbedder):
+            return None
+        try:
+            await embedder.verify()
+        except ProviderUnreachable as exc:
+            return embedding_space_to_dict(before, fingerprint="unverified", reason=str(exc))
+        after = spaces.active(conn) or before
+        return embedding_space_to_dict(
+            after, fingerprint="recorded" if before.fingerprint is None else "matches"
+        )
+    finally:
+        conn.close()
 
 
 def _migrate(settings: Settings, *, dry_run: bool) -> dict[str, Any]:

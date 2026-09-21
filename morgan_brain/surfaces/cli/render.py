@@ -130,7 +130,19 @@ def _render_migrate(data: dict[str, Any]) -> str:
         f"user_version {data['from_version']} -> {data['user_version']}, quick_check "
         f"{data['quick_check']}; rows before={data['before']} after={data['after']}"
     )
+    space = data.get("embedding_space")
+    if space is not None:
+        lines.append(_space_line(space))
     return "\n".join(lines)
+
+
+def _space_line(space: dict[str, Any]) -> str:
+    if space["fingerprint"] == "unverified":
+        return f"space {space['id']} unverified; the first call will verify it ({space['reason']})"
+    return (
+        f"embedding space {space['id']} ({space['model']}, {space['dims']} dims): "
+        f"fingerprint {space['fingerprint']}"
+    )
 
 
 RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {

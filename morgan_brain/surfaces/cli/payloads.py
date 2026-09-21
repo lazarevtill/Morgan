@@ -14,6 +14,7 @@ from typing import Any
 from morgan_brain.memory.gate import ForgetReport
 from morgan_brain.memory.migrations import Step
 from morgan_brain.memory.snapshot import RestoreResult, SnapshotResult
+from morgan_brain.memory.store.spaces import EmbeddingSpace
 from morgan_brain.models import Memory, TemporalFact
 
 
@@ -102,6 +103,23 @@ def migration_to_dict(
         "after": dict(after),
         "quick_check": quick_check,
     }
+
+
+def embedding_space_to_dict(
+    space: EmbeddingSpace, *, fingerprint: str, reason: str | None = None
+) -> dict[str, Any]:
+    """The active space as ``morgan migrate`` left it. *fingerprint* is ``recorded`` (this
+    run recorded it), ``matches`` (it was recorded before and the model still answers it) or
+    ``unverified`` (the embedding server did not answer; *reason* says how)."""
+    shaped: dict[str, Any] = {
+        "id": space.id,
+        "model": space.model,
+        "dims": space.dims,
+        "fingerprint": fingerprint,
+    }
+    if reason is not None:
+        shaped["reason"] = reason
+    return shaped
 
 
 def merge_forget_reports(reports: list[ForgetReport]) -> ForgetReport:

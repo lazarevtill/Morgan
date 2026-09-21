@@ -127,7 +127,7 @@ def _read_only_reason(remaining: Sequence[Step]) -> str | None:
     return f"writes are blocked until `morgan migrate` runs: {count} ({names})"
 
 
-def _register_the_settings_space(conn: sqlite3.Connection, settings: Settings) -> None:
+def register_the_settings_space(conn: sqlite3.Connection, settings: Settings) -> None:
     """Record the settings' model and width as the active space of a database that has none.
 
     A database write, no embedding: the fingerprint is left ``NULL`` for the first embedding
@@ -139,6 +139,10 @@ def _register_the_settings_space(conn: sqlite3.Connection, settings: Settings) -
     at -- ``morgan doctor`` builds every store at the width set then, and registers nothing --
     so a setting that disagrees with it is refused, and no space is registered: recorded, it
     would pass the space-width check below while every write failed on the table.
+
+    Every open of a writable database runs it, and so does ``morgan migrate`` once its wave
+    has committed: migration step 6 rebuilds the vector table without registering a space,
+    because a step is not given the settings that name the model.
     """
     if spaces.active(conn) is not None:
         return
@@ -203,7 +207,7 @@ def build_memory_context(settings: Settings | None = None) -> MemoryContext:
         )
         read_only_reason = _read_only_reason(pending(conn))
         if read_only_reason is None and settings.embedding_backend == "provider":
-            _register_the_settings_space(conn, settings)
+            register_the_settings_space(conn, settings)
         _require_the_space_width(conn, settings)
     except BaseException:
         # A refused open lets go of the file it opened.

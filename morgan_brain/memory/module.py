@@ -125,9 +125,20 @@ class MemoryModule:
                     project=memory.project,
                     vector=vector,
                     payload={"content": memory.content, "user_id": memory.user_id},
+                    status=memory.status,
+                    scope=memory.scope,
+                    author_id=memory.author_id,
                 )
             )
-            self._fts.add(memory.id, memory.content, user_id=memory.user_id, project=memory.project)
+            self._fts.add(
+                memory.id,
+                memory.content,
+                user_id=memory.user_id,
+                project=memory.project,
+                status=memory.status,
+                scope=memory.scope,
+                author_id=memory.author_id,
+            )
             self._entities.add(
                 memory.id,
                 [e.name for e in memory.entities],
