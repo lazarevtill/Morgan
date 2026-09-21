@@ -70,11 +70,12 @@ come in" are answered by the directory names.
   surfaces call.
 - `surfaces/` — where requests come in. `cli/` (`__main__` parses and dispatches, `commands`
   answers, `maintenance` answers `morgan snapshot`, `morgan restore` and `morgan migrate`,
-  `payloads` shapes the result, `render` prints it, `doctor` diagnoses and probes the chat
-  and embedding servers separately, `install_skill` writes the packaged `skill/SKILL.md` into
-  the coding agents installed here), `mcp_server.py` (five MCP tools over stdio or
-  streamable-HTTP, calling those same command handlers), and `network.py`, the bind guard
-  that protects the HTTP one.
+  `payloads` shapes the result, `render` prints it, `doctor` diagnoses by reading only -- it
+  builds no store, creates no table and runs no migration step -- and probes the chat and
+  embedding servers separately, telling slow from unreachable, `install_skill` writes the
+  packaged `skill/SKILL.md` into the coding agents installed here), `mcp_server.py` (five MCP
+  tools over stdio or streamable-HTTP, calling those same command handlers), and
+  `network.py`, the bind guard that protects the HTTP one.
 
 ## Invariants
 
@@ -173,7 +174,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 560 passed, 4 skipped (the live ones)
+pytest -q                     # 577 passed, 4 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

@@ -129,6 +129,13 @@ class Settings(BaseSettings):
     #: The longest (seconds) one embedding attempt may take, and never longer than what is left
     #: of the call's budget. 50 s covers a cold host's first load from disk (43 s measured).
     embedding_timeout_seconds: float = Field(default=50.0, gt=0.0)
+    #: How long (seconds) ``morgan doctor`` waits for each model server to answer its one
+    #: request before calling it unreachable. Sized for a cold embedding host, which loads its
+    #: model on the first request after idle (43 s measured): a host that is loading answers.
+    doctor_probe_timeout_seconds: float = Field(default=60.0, gt=0.0)
+    #: A server that answers ``morgan doctor`` after more than this many seconds is reported
+    #: ``slow`` rather than ``reachable`` -- it works, and the next request will be quicker.
+    doctor_slow_after_seconds: float = Field(default=2.0, gt=0.0)
     #: How structured output (fact consolidation) is requested. ``json_schema`` is native
     #: constrained decoding, which llama-server and Ollama's /v1 both support; ``json_object``
     #: for servers that only guarantee an object; ``prompted`` asks in the prompt and
@@ -180,8 +187,8 @@ class Settings(BaseSettings):
     recall_floor_margin: float | None = None
 
     # --- Project classification (surfaces/cli/project.py::classify). The disk walk over
-    # code_roots is phase 1a; phase 0 only stores these and `doctor` names a root that does
-    # not exist (Task 24). Nothing here identifies the owner -- shipped empty, so a clone of
+    # code_roots is phase 1a; phase 0 only stores these and `doctor` names a root that is
+    # not a directory. Nothing here identifies the owner -- shipped empty, so a clone of
     # this repository walks and matches nothing until its own owner sets them. ---
     #: Repository roots the phase-1a walk will scan for a project's remote and root, comma
     #: separated (``~/code,~/work``). Each entry's ``~`` is expanded eagerly, like ``data_dir``.

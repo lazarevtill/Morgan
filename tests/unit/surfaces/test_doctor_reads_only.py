@@ -1,0 +1,208 @@
+"""doctor reads the database and changes nothing in it.
+
+It is the command the owner runs because something is wrong, so it must not be one more thing
+that changes the file. Building the stores to count rows created every missing table, ran the
+light migration steps -- on a database another install still writes to -- and fixed the vector
+table at whatever width was set that minute, before any embedding space was registered.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from morgan_brain.composition import build_memory_context, sqlite_path
+from morgan_brain.config import Settings
+from morgan_brain.memory import migrations, snapshot
+from morgan_brain.memory.store.db import open_db
+from morgan_brain.surfaces.cli.doctor import build_doctor_report
+from morgan_brain.surfaces.cli.render import _render_doctor
+from tests.fakes import model_server
+
+#: ``memories`` and ``facts`` as every Morgan before phase 0 created them, and ``vec_items`` and
+#: ``fts_memories`` without the columns migration step 6 adds.
+_VERSION_TWO_DDL = (
+    """
+    CREATE TABLE memories (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, project TEXT NOT NULL DEFAULT 'default',
+        kind TEXT NOT NULL, source TEXT NOT NULL, content TEXT NOT NULL,
+        importance REAL NOT NULL, entities TEXT NOT NULL, created_at TEXT
+    )
+    """,
+    """
+    CREATE TABLE facts (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, project TEXT NOT NULL DEFAULT 'default',
+        subject TEXT NOT NULL, predicate TEXT NOT NULL, object TEXT NOT NULL,
+        source TEXT NOT NULL, confidence REAL NOT NULL, valid_from TEXT, valid_to TEXT,
+        superseded_by TEXT, last_confirmed TEXT
+    )
+    """,
+    """
+    CREATE VIRTUAL TABLE vec_items USING vec0(
+        embedding float[4] distance_metric=cosine, user_id TEXT, project TEXT
+    )
+    """,
+    """
+    CREATE VIRTUAL TABLE fts_memories USING fts5(
+        memory_id UNINDEXED, user_id UNINDEXED, project UNINDEXED, content,
+        tokenize = 'unicode61 remove_diacritics 2'
+    )
+    """,
+)
+
+
+@pytest.fixture
+def chat() -> Iterator[str]:
+    """A chat server that answers at once, so the probe these tests do not look at costs
+    nothing and no default endpoint -- possibly a real server here -- is contacted."""
+    with model_server() as url:
+        yield url
+
+
+def _settings(data_dir: Path, chat: str, **fields: Any) -> Settings:
+    return Settings(
+        **{
+            "data_dir": str(data_dir),
+            "embedding_backend": "hash",
+            "llm_endpoint": chat,
+            "doctor_probe_timeout_seconds": 5.0,
+            **fields,
+        }
+    )
+
+
+async def _report(settings: Settings, *, project: str = "p") -> dict[str, Any]:
+    return await build_doctor_report(settings, project=project, all_projects=False)
+
+
+def _a_version_two_database(path: Path) -> None:
+    conn = open_db(str(path))
+    for statement in _VERSION_TWO_DDL:
+        conn.execute(statement)
+    conn.execute(
+        "INSERT INTO memories VALUES ('m1', 'owner', 'default', 'episodic', 'user_stated', "
+        "'the first memory', 0.5, '[]', '2026-09-01T00:00:00+00:00')"
+    )
+    conn.execute("PRAGMA user_version = 2")
+    conn.commit()
+    conn.close()
+
+
+def _schema(path: Path) -> tuple[int, list[tuple[str, str, str]]]:
+    conn = sqlite3.connect(path)
+    try:
+        version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+        rows = conn.execute("SELECT type, name, sql FROM sqlite_master ORDER BY name").fetchall()
+        return version, [(str(t), str(n), str(s)) for t, n, s in rows]
+    finally:
+        conn.close()
+
+
+async def test_doctor_on_a_version_two_database_runs_no_step_and_creates_no_table(tmp_path, chat):
+    db = tmp_path / "morgan.db"
+    _a_version_two_database(db)
+    before = _schema(db)
+
+    report = await _report(_settings(tmp_path, chat))
+
+    assert _schema(db) == before
+    migration = report["migration"]
+    assert (migration["user_version"], migration["code_version"]) == (2, len(migrations._STEPS))
+    assert migration["pending"] == [
+        {"number": s.number, "name": s.name, "heavy": s.heavy}
+        for s in migrations._STEPS
+        if s.number > 2
+    ]
+    # Read, not built: the tables step 3 would create are named absent, never counted as 0.
+    assert report["projects"] is None and "projects" in report["projects_reason"]
+    assert report["embedding_space"] is None
+    assert "embedding_spaces" in report["embedding_space_reason"]
+    assert report["rows_all_projects"]["memories"] == 1
+    assert report["rows_all_projects"]["history"] is None
+
+
+async def test_a_missing_database_is_reported_and_not_created(tmp_path, chat):
+    data_dir = tmp_path / "never-opened"
+    settings = _settings(data_dir, chat)
+    path = sqlite_path(settings.temporal_db_url)
+
+    report = await _report(settings)
+
+    assert report["database_error"] == f"no database yet at {path}"
+    assert not data_dir.exists()
+    assert report["rows"] is None and report["rows_all_projects"] is None
+    assert report["migration"] is None
+    # What the library can do does not depend on a database existing.
+    assert report["sqlite_vec"] and report["fts5"] is True
+    assert f"database: {report['database']} (no database yet)" in _render_doctor(report)
+
+
+async def test_the_snapshots_projects_and_code_roots_are_read_as_they_are(tmp_path, chat):
+    settings = _settings(
+        tmp_path / "data",
+        chat,
+        code_roots=[str(tmp_path / "code"), str(tmp_path / "gone")],
+    )
+    (tmp_path / "code").mkdir()
+    build_memory_context(settings).conn.close()
+    conn = open_db(sqlite_path(settings.temporal_db_url))
+    conn.execute(
+        "INSERT INTO projects (name, classification, capture_enabled, consolidate_enabled, "
+        "created_at) VALUES ('Morgan', 'personal', 1, 0, '2026-09-21T00:00:00+00:00')"
+    )
+    conn.commit()
+    conn.close()
+    taken = snapshot.take(
+        sqlite_path(settings.temporal_db_url),
+        into=Path(settings.snapshot_dir),
+        reason="doctor-test",
+        clock=lambda: datetime(2026, 9, 21, tzinfo=UTC),
+    )
+
+    report = await _report(settings)
+
+    assert report["snapshots"] == {
+        "dir": settings.snapshot_dir,
+        "count": 1,
+        "newest": taken.path.name,
+        "bytes": taken.bytes,
+    }
+    assert report["projects"] == [
+        {
+            "name": "Morgan",
+            "classification": "personal",
+            "capture_enabled": True,
+            "paused_until": None,
+            "retention_days": None,
+            "consolidate_enabled": False,
+        }
+    ]
+    assert report["code_roots"] == [
+        {"path": str(tmp_path / "code"), "is_directory": True},
+        {"path": str(tmp_path / "gone"), "is_directory": False},
+    ]
+    assert report["migration"]["pending"] == []
+    lines = _render_doctor(report).splitlines()
+    assert "project 'Morgan': personal, capture on, consolidate off" in lines
+    assert f"code_root: {tmp_path / 'gone'} (not a directory)" in lines
+
+
+def test_the_env_files_render_one_per_line():
+    rendered = _render_doctor(
+        {
+            "env_files": [
+                {"path": "/home/you/.config/morgan/.env", "present": True},
+                {"path": "/home/you/code/.env", "present": False},
+            ]
+        }
+    )
+
+    assert rendered.splitlines() == [
+        "env_file: /home/you/.config/morgan/.env (present)",
+        "env_file: /home/you/code/.env (absent)",
+    ]

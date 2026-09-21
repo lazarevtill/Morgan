@@ -1,8 +1,9 @@
 """``morgan`` -- the terminal client.
 
-remember/recall/facts/forget/doctor are direct memory operations: they go through
+remember/recall/facts/forget are direct memory operations: they go through
 ``composition.build_memory_context`` (a MemoryGate over the real database) and need no chat
-model (``MORGAN_EMBEDDING_BACKEND=hash`` removes the embedding call too). ``ask`` and
+model (``MORGAN_EMBEDDING_BACKEND=hash`` removes the embedding call too). ``doctor`` reads the
+database without building a store, and asks each model server one question. ``ask`` and
 ``consolidate`` go through ``build_app_context`` and need a reachable model server.
 
 Every command accepts ``--project`` (default: the current git repository's directory name),

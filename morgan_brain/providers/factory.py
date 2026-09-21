@@ -6,10 +6,15 @@ the adapters' interfaces, not on how they were built.
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
+import time
 from typing import Any, Literal, NamedTuple
 
+import httpx
+
 from morgan_brain.config import Settings
+from morgan_brain.memory import fingerprint
 from morgan_brain.memory.checked_embedder import CheckedEmbedder
 from morgan_brain.memory.embedder import Embedder, FakeEmbedder
 from morgan_brain.providers.embeddings import OpenAICompatEmbedder, RetryBudget
@@ -131,46 +136,119 @@ def retry_budget_of(settings: Settings, budget: Budget) -> RetryBudget:
     )
 
 
-async def _answers(
+#: The setting a probe that got no answer in time names.
+_PROBE_TIMEOUT_SETTING = "MORGAN_DOCTOR_PROBE_TIMEOUT_SECONDS"
+
+
+class Probe(NamedTuple):
+    """What one of ``morgan doctor``'s requests found.
+
+    ``seconds`` is how long the server took to answer, or to fail, counted from the request
+    (not from building the HTTP client). ``status`` is the HTTP status it answered with, and
+    ``None`` when it gave no answer: refused, unresolved, or silent past the timeout. ``error``
+    says what went wrong, ``None`` when nothing did: an exception's class name, an HTTP status,
+    and the setting to check -- never a server's own words, which may quote back the key the
+    request carried. ``vectors`` is an embedding probe's answer, one per input, else ``None``.
+    """
+
+    seconds: float
+    status: int | None
+    error: str | None
+    vectors: list[list[float]] | None = None
+
+
+async def _probe(
     method: str,
     url: str,
     *,
     api_key: str | None,
-    # ASYNC109 wants a cancel scope instead of a timeout parameter. That is trio/anyio
-    # advice; here the value goes straight to httpx, which is how asyncio expresses it.
+    # ASYNC109 wants a cancel scope instead of a timeout parameter; the value goes to both
+    # httpx and asyncio.timeout below, which is that scope.
     timeout: float,  # noqa: ASYNC109
+    setting: str,
+    key_setting: str,
     body: dict[str, Any] | None = None,
-) -> bool:
-    """Whether ``url`` answers without a server error. Never raises."""
-    import httpx
+) -> tuple[Probe, httpx.Response | None]:
+    """One request, timed, and the answer it got. Never raises.
 
+    *setting* is the variable that addresses *url* and *key_setting* the one whose value is
+    sent as *api_key*; an error names the one to check. The clock starts once the client is
+    built: building it loads a TLS context, which is no part of the server's answer.
+    """
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.request(method, url, headers=headers, json=body)
-    except Exception:  # noqa: BLE001 -- unreachable is a normal answer, not an error to surface
-        return False
-    else:
-        return resp.status_code < 500
+    async with httpx.AsyncClient() as client:
+        started = time.monotonic()
+        try:
+            async with asyncio.timeout(timeout):
+                resp = await client.request(
+                    method, url, headers=headers, json=body, timeout=timeout
+                )
+        except (httpx.TimeoutException, TimeoutError):
+            error = f"no answer within {timeout:g} s ({_PROBE_TIMEOUT_SETTING})"
+            return Probe(time.monotonic() - started, None, error), None
+        except Exception as exc:  # noqa: BLE001 -- no answer is a normal finding, not an error
+            error = f"{type(exc).__name__}; check {setting}"
+            return Probe(time.monotonic() - started, None, error), None
+    seconds = time.monotonic() - started
+    status = resp.status_code
+    if 200 <= status < 300:
+        return Probe(seconds, status, None), resp
+    advice = f"; check {key_setting}" if status in (401, 403) else ""
+    return Probe(seconds, status, f"HTTP {status}{advice}"), None
 
 
-async def check_llm_reachable(settings: Settings, *, timeout: float = 5.0) -> bool:  # noqa: ASYNC109
-    """Best-effort reachability check for ``morgan doctor``: GET the ``/models`` listing,
-    which llama-server, vLLM and Ollama's ``/v1`` shim all serve. Never raises."""
-    url = chat_endpoint_of(settings).url.rstrip("/") + "/models"
-    return await _answers("GET", url, api_key=settings.llm_api_key or None, timeout=timeout)
+async def check_llm_reachable(settings: Settings) -> Probe:
+    """``morgan doctor``'s chat probe: GET the ``/models`` listing, which llama-server, vLLM
+    and Ollama's ``/v1`` shim all serve, within ``MORGAN_DOCTOR_PROBE_TIMEOUT_SECONDS``.
+    Never raises."""
+    endpoint = chat_endpoint_of(settings)
+    probe, _ = await _probe(
+        "GET",
+        endpoint.url.rstrip("/") + "/models",
+        api_key=settings.llm_api_key or None,
+        timeout=settings.doctor_probe_timeout_seconds,
+        setting=endpoint.setting,
+        key_setting="MORGAN_LLM_API_KEY",
+    )
+    return probe
 
 
-async def check_embeddings_reachable(settings: Settings, *, timeout: float = 5.0) -> bool:  # noqa: ASYNC109
-    """Best-effort check for ``morgan doctor`` that embeddings are served where they are sent:
-    embed one word. Not the ``/models`` listing: a chat server started without embeddings
-    lists its models and answers every embedding request with a 501. Never raises.
+async def check_embeddings_reachable(settings: Settings) -> Probe:
+    """``morgan doctor``'s embedding probe: embed the five fingerprint strings, in one request,
+    where embeddings are sent, within ``MORGAN_DOCTOR_PROBE_TIMEOUT_SECONDS``. Never raises.
+
+    Not the ``/models`` listing: a chat server started without embeddings lists its models and
+    answers every embedding request with a 501. The five strings rather than one word, because
+    their vectors are what the active space's fingerprint was recorded from: the one request
+    says both whether embeddings are served and whether the model serving them is the one that
+    wrote the stored vectors. One attempt, no retry: how long the one answer took is the
+    finding.
 
     Carries the same key ``build_embedder`` would send (``embedding_key_of``): the chat key
     only when embeddings go to the chat host, its own key when they go to a separate one.
     """
-    url = embedding_endpoint_of(settings).url.rstrip("/") + "/embeddings"
-    body = {"model": settings.embedding_model, "input": "probe"}
-    return await _answers(
-        "POST", url, api_key=embedding_key_of(settings).api_key, timeout=timeout, body=body
+    endpoint = embedding_endpoint_of(settings)
+    key = embedding_key_of(settings)
+    texts = list(fingerprint.STRINGS)
+    probe, resp = await _probe(
+        "POST",
+        endpoint.url.rstrip("/") + "/embeddings",
+        api_key=key.api_key,
+        timeout=settings.doctor_probe_timeout_seconds,
+        setting=endpoint.setting,
+        key_setting=key.setting,
+        body={"model": settings.embedding_model, "input": texts},
     )
+    if resp is None:
+        if probe.status == 501:
+            return probe._replace(error=f"{probe.error}: the server serves no embeddings")
+        return probe
+    try:
+        # Each item names the input it embeds; the order of the list is not promised.
+        data = sorted(resp.json()["data"], key=lambda item: item["index"])
+        vectors = [[float(x) for x in item["embedding"]] for item in data]
+    except Exception as exc:  # noqa: BLE001 -- a malformed answer is a finding, not a crash
+        return probe._replace(error=f"the answer carried no embeddings ({type(exc).__name__})")
+    if len(vectors) != len(texts):
+        return probe._replace(error=f"{len(vectors)} vectors answered for {len(texts)} inputs")
+    return probe._replace(vectors=vectors)

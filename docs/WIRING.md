@@ -68,7 +68,8 @@ answers `/embeddings` with a 501.
 
 ```
 database: /home/you/.local/share/morgan/morgan.db
-env_files: [{'path': '/home/you/.config/morgan/.env', 'present': True}, {'path': '/home/you/code/my-repo/.env', 'present': False}]
+env_file: /home/you/.config/morgan/.env (present)
+env_file: /home/you/code/my-repo/.env (absent)
 project: my-repo
 all_projects: False
 embedding_backend: provider
@@ -76,22 +77,59 @@ embedding_dim: 1024
 embedding_endpoint: http://gpu-box:8082/v1
 llm_endpoint: http://gpu-box:8081/v1
 llm_model: qwen2.5-7b-instruct
+data_flow: gpu-box (MORGAN_LLM_ENDPOINT) receives ask: the question, the memories recalled for it and the recent history; consolidate: up to 50 memories per project, with the project's current facts
+data_flow: gpu-box (MORGAN_EMBEDDING_ENDPOINT) receives remember: the memory's text; recall: the query; import: every imported message; doctor --vectors: a sample of stored memories; a process's first embedding call: up to 5 stored memories, while the embedding space's fingerprint is unrecorded
 sqlite_vec: v0.1.9
 fts5: True
-provider: reachable
-embedding_provider: reachable
+provider: reachable (0.3 s)
+embedding_provider: slow (41.8 s; MORGAN_DOCTOR_SLOW_AFTER_SECONDS=2.0)
+embedding_space: 1 (mxbai-embed-large, 1024 dims): fingerprint matches (min cosine 0.9993); strings sha256 82b4fe781cb3d981d562c08cb1de3ce802abc22ea5d2e956e11672f66b340f6f
+migration: user_version 7 of 7, nothing pending
+snapshots: 1 in /home/you/.local/share/morgan/snapshots, newest morgan-20260921T101500Z-migrate.db, 1843200 bytes in all
 memories: 12 in project 'my-repo' (128 across all projects)
 fts: 12 in project 'my-repo' (128 across all projects)
 vectors: 12 in project 'my-repo' (128 across all projects)
 rows_by_project: {'my-repo': 12, 'personal': 116}
 rows_missing_provenance: 0
 rows_missing_provenance_reason: None
+project 'my-repo': personal, capture on, consolidate on
+project 'personal': unclassified, capture on, consolidate on
+code_root: /home/you/code
+code_root: /home/you/work (not a directory)
 ```
 
-Every probe is independent, so one failure does not hide the rest. The first two lines answer
+`doctor` only reads. It changes nothing in the database -- no table is created, no migration
+step runs -- so it is safe to run on a database another install still writes to, or on one
+waiting for `morgan migrate`. On a fresh install the first line reads `(no database yet)` and
+the counts are `None`: the first command that stores a memory creates the file.
+
+Every probe is independent, so one failure does not hide the rest. The first lines answer
 "why is my brain empty?": a database somewhere other than where you expect, or a `.env` file
-read, or missing, where you did not expect it. `env_files` lists every file the CLI read, in
-order, and whether each was there.
+read, or missing, where you did not expect it. Each `env_file` line is a file the CLI read, in
+order, and whether it was there.
+
+The `data_flow` lines say which host receives which of your text, one line per endpoint, by
+host name alone; when one server answers both, it is one line.
+
+The two model servers are probed separately, each with one request. `provider` is the chat
+endpoint, which only `ask` and `consolidate` need. `embedding_provider` is the endpoint every
+`remember` and `recall` embeds with, probed by embedding the five fixed strings the embedding
+space is fingerprinted with, so a chat server that serves no embeddings shows as unreachable
+here; under the hash backend it reads `not used`. Each reads `reachable`, `slow` when the
+answer took longer than `MORGAN_DOCTOR_SLOW_AFTER_SECONDS` (2 s), or `unreachable` when no
+answer came within `MORGAN_DOCTOR_PROBE_TIMEOUT_SECONDS` (60 s) or the answer was an error --
+the line names the timeout, the HTTP status, or the setting to check. An embedding host that
+unloads its model when idle takes tens of seconds over its first answer: that is `slow`, and it
+works. `--json` gives each probe's `seconds`, `timeout_seconds`, `slow_after_seconds` and
+`error` under `provider_probe` and `embedding_probe`.
+
+`embedding_space` compares the five strings' fresh vectors with the fingerprint the database
+recorded for its active space: `matches`, `MISMATCH` (a different model is answering: stored
+vectors would be searched with the wrong one), or `unrecorded` (a process's first embedding
+call records it, once a sample of stored memories shows the model answering wrote them).
+`doctor` never records one. `migration` lists the steps `morgan migrate`
+would run, heavy or light; `doctor` runs none. `snapshots` counts what `morgan snapshot` and
+`morgan migrate` left behind, which Morgan never deletes.
 
 The `memories`/`fts`/`vectors` lines are scoped to `project`, with the total across every
 project beside them -- run from the wrong directory, a scoped zero used to print under a label
@@ -99,12 +137,9 @@ that read like the whole database was empty. `rows_by_project` gives every proje
 count, and `rows_missing_provenance` counts rows carrying the signature of a pre-phase-0
 process still writing after `morgan migrate` (an empty `author_id`, or a NULL `vec_items`
 status); it reads `None` with a reason on a database that has not been through `morgan
-migrate` yet, where the columns it counts do not exist.
-
-The two model servers are probed separately. `provider` is the chat endpoint, which only
-`ask` and `consolidate` need. `embedding_provider` is the endpoint every `remember` and
-`recall` embeds with, probed by embedding one word, so a chat server that serves no
-embeddings shows as unreachable here; under the hash backend it reads `not used`.
+migrate` yet, where the columns it counts do not exist. Each `project` line is a row of the
+`projects` table: its classification and whether capture and consolidation are on. A
+`MORGAN_CODE_ROOTS` entry that is not a directory is marked so.
 
 ## 5. The CLI
 

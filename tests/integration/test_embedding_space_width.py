@@ -22,7 +22,6 @@ from morgan_brain.memory.store import spaces
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.models import Memory
 from morgan_brain.providers.wire import EmbeddingSpaceMismatch
-from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from tests.fakes import counting_model_server, model_server
 
 
@@ -82,15 +81,12 @@ def test_a_database_waiting_for_migrate_registers_nothing(tmp_path, monkeypatch)
 
 
 async def test_a_vector_table_of_another_width_is_refused_and_no_space_is_registered(tmp_path):
-    """`morgan doctor`, the first command the install guide runs, builds every store at the
-    width set then and registers no space. Registering the settings' width over that table
-    would record a width the table does not have, and the space-width check would then approve
-    it: every store fails on sqlite-vec's raw dimension error, and the open at the table's own
-    width is refused with advice that is false."""
-    with model_server(embedding_dim=4) as url:
-        await build_doctor_report(
-            _settings(tmp_path, url, embedding_dim=4), project="p", all_projects=False
-        )
+    """Every store built at one width and no space registered: what an open leaves on a
+    database waiting for `morgan migrate`, which registers none. Registering the settings'
+    width over that table would record a width the table does not have, and the space-width
+    check would then approve it: every store fails on sqlite-vec's raw dimension error, and the
+    open at the table's own width is refused with advice that is false."""
+    _a_database_with_no_space(tmp_path, dims=4)
     assert _spaces(tmp_path) == []
 
     with counting_model_server(embedding_dim=8) as (url, calls):

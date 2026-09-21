@@ -88,19 +88,111 @@ def _render_row_counts(rows: dict[str, Any], totals: dict[str, Any] | None) -> l
     return lines
 
 
+def _render_probe(name: str, verdict: str, probe: dict[str, Any] | None) -> str:
+    """``embedding_provider: slow (4.2 s; MORGAN_DOCTOR_SLOW_AFTER_SECONDS=2.0)`` -- the
+    verdict, how long the answer took, and, when it is not plainly reachable, why."""
+    if probe is None:
+        return f"{name}: {verdict}"
+    if verdict == "unreachable":
+        return f"{name}: unreachable ({probe['error']})"
+    parts = [f"{probe['seconds']:.1f} s"]
+    if verdict == "slow":
+        parts.append(f"MORGAN_DOCTOR_SLOW_AFTER_SECONDS={probe['slow_after_seconds']}")
+    if probe["error"]:
+        parts.append(str(probe["error"]))
+    return f"{name}: {verdict} ({'; '.join(parts)})"
+
+
+def _render_data_flow(flow: dict[str, Any]) -> str:
+    what = "; ".join(f"{command}: {text}" for command, text in flow["carries"].items())
+    return f"data_flow: {flow['host']} ({', '.join(flow['settings'])}) receives {what}"
+
+
+def _render_migration(migration: dict[str, Any] | None, reason: str | None) -> str:
+    if migration is None:
+        return f"migration: {reason}"
+    head = f"migration: user_version {migration['user_version']} of {migration['code_version']}"
+    if not migration["pending"]:
+        return f"{head}, nothing pending"
+    steps = ", ".join(_step_line(s) for s in migration["pending"])
+    return f"{head}; pending: {steps} -- `morgan migrate` runs them, doctor runs none"
+
+
+def _render_snapshots(snapshots: dict[str, Any]) -> str:
+    if not snapshots["count"]:
+        return f"snapshots: none in {snapshots['dir']}"
+    return (
+        f"snapshots: {snapshots['count']} in {snapshots['dir']}, newest {snapshots['newest']}, "
+        f"{snapshots['bytes']} bytes in all"
+    )
+
+
+def _render_project(project: dict[str, Any]) -> str:
+    capture = "on" if project["capture_enabled"] else "off"
+    if project["paused_until"]:
+        capture += f", paused until {project['paused_until']}"
+    if project["retention_days"] is not None:
+        capture += f", kept {project['retention_days']} days"
+    consolidate = "on" if project["consolidate_enabled"] else "off"
+    return (
+        f"project {project['name']!r}: {project['classification']}, capture {capture}, "
+        f"consolidate {consolidate}"
+    )
+
+
+def _render_doctor_line(key: str, value: Any, data: dict[str, Any]) -> list[str]:
+    """The lines one key of doctor's report prints as. A key whose value another key's line
+    already carries prints none."""
+    if key in (
+        "database_error",
+        "rows_all_projects",
+        "provider_probe",
+        "embedding_probe",
+        "embedding_space_reason",
+        "migration_reason",
+        "projects_reason",
+    ):
+        return []  # folded into the line of the key it describes
+    if key == "database":
+        error = data.get("database_error")
+        if error is None:
+            return [f"database: {value}"]
+        missing = error.startswith("no database yet")
+        return [f"database: {value} ({'no database yet' if missing else error})"]
+    if key == "env_files":
+        return [f"env_file: {f['path']} ({'present' if f['present'] else 'absent'})" for f in value]
+    if key == "data_flow":
+        return [_render_data_flow(flow) for flow in value]
+    if key in ("provider", "embedding_provider"):
+        probe_key = "provider_probe" if key == "provider" else "embedding_probe"
+        return [_render_probe(key, value, data.get(probe_key))]
+    if key == "embedding_space":
+        if value is None:
+            return [f"embedding_space: none ({data.get('embedding_space_reason')})"]
+        return [
+            f"embedding_space: {value['id']} ({value['model']}, {value['dims']} dims): "
+            f"fingerprint {value['fingerprint']}; strings sha256 {value['strings_digest']}"
+        ]
+    if key == "migration":
+        return [_render_migration(value, data.get("migration_reason"))]
+    if key == "snapshots" and value is not None:
+        return [_render_snapshots(value)]
+    if key == "rows" and value is not None:
+        return _render_row_counts(value, data.get("rows_all_projects"))
+    if key == "projects":
+        if value is None:
+            return [f"projects: none ({data.get('projects_reason')})"]
+        return [_render_project(p) for p in value] or ["projects: none recorded yet"]
+    if key == "code_roots":
+        return [
+            f"code_root: {r['path']}" + ("" if r["is_directory"] else " (not a directory)")
+            for r in value
+        ]
+    return [f"{key}: {value}"]
+
+
 def _render_doctor(data: dict[str, Any]) -> str:
-    lines = []
-    for k, v in data.items():
-        if k == "rows_all_projects":
-            continue  # folded into the "rows" line below, in its own place in the report.
-        if k == "rows":
-            if v is None:
-                lines.append(f"{k}: {v}")
-            else:
-                lines.extend(_render_row_counts(v, data.get("rows_all_projects")))
-            continue
-        lines.append(f"{k}: {v}")
-    return "\n".join(lines)
+    return "\n".join(line for k, v in data.items() for line in _render_doctor_line(k, v, data))
 
 
 #: The human-readable form of each verb's payload. Rendering only -- which handler

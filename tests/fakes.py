@@ -312,6 +312,19 @@ class _Failures:
 
 
 @contextmanager
+def slow_model_server(delay: float, *, embedding_dim: int = 1024) -> Iterator[str]:
+    """``model_server``, answering every request *delay* seconds after it arrives; yields its
+    ``/v1`` URL. A host loading its model, as the embedding host does on its first request
+    after idle, answers like this: late, and correctly. A request still waiting when the
+    context exits is dropped unanswered, so a client that gave up early costs the suite
+    nothing more at teardown."""
+    with _model_server(
+        embeddings=True, embedding_dim=embedding_dim, reorder=False, calls=None, delay=delay
+    ) as url:
+        yield url
+
+
+@contextmanager
 def _model_server(
     *,
     embeddings: bool,
@@ -319,11 +332,18 @@ def _model_server(
     reorder: bool,
     calls: Calls | None,
     fail: _Failures | None = None,
+    delay: float = 0.0,
 ) -> Iterator[str]:
+    #: Set when the context exits: a handler still waiting out *delay* stops waiting and
+    #: answers nothing, instead of holding ``server_close`` (which joins every handler).
+    stopping = threading.Event()
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             if calls is not None:
                 calls.count()
+            if delay and stopping.wait(delay):
+                return
             if self.path == "/v1/models":
                 self._reply(200, {"object": "list", "data": []})
             else:
@@ -333,6 +353,8 @@ def _model_server(
             if calls is not None:
                 calls.count()
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            if delay and stopping.wait(delay):
+                return
             if self.path != "/v1/embeddings":
                 self._reply(404, {"error": "not found"})
             elif fail is not None and fail.fail():
@@ -378,6 +400,7 @@ def _model_server(
     try:
         yield f"http://127.0.0.1:{server.server_address[1]}/v1"
     finally:
+        stopping.set()
         server.shutdown()
         server.server_close()
 

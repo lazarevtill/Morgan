@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import morgan_brain.composition as composition
 from morgan_brain.composition import build_memory_context, sqlite_path
 from morgan_brain.config import Settings
 from morgan_brain.memory.store.db import open_db
@@ -35,7 +34,10 @@ CREATE TABLE IF NOT EXISTS memories (
 
 
 def _settings(tmp_path: Path) -> Settings:
-    return Settings(data_dir=str(tmp_path), embedding_backend="hash")
+    # Port 1 refuses at once: doctor's chat probe contacts no server of the developer's own.
+    return Settings(
+        data_dir=str(tmp_path), embedding_backend="hash", llm_endpoint="http://127.0.0.1:1/v1"
+    )
 
 
 async def _store(tmp_path: Path, *, project: str, count: int) -> None:
@@ -161,28 +163,19 @@ async def test_a_vec_items_row_with_a_null_status_is_counted(tmp_path):
     assert report["rows_missing_provenance"] == 1
 
 
-async def test_a_checked_table_entirely_absent_is_named_not_silently_zeroed(tmp_path, monkeypatch):
-    """Review finding: `_missing_provenance`'s `if not _table_exists(conn, table): continue`
-    treated a table that does not exist at all the same as one with zero matching rows,
-    letting it fall out of both the reason-building check and the count -- reporting a clean
-    `0` for a database `doctor` already knows is broken (`schema_error` is set).
-
-    `build_memory_module` builds `memories`/`memory_entities` before `vec_items`/`facts`
-    (`composition.py`), so a partial failure there -- sqlite-vec failing to load, say --
-    leaves the first two present and the last two missing outright. Simulated by making
-    `SqliteVectorIndex` itself raise, the same way a real load failure would; doctor's
-    existing `except Exception: report["schema_error"] = ...` around `build_memory_module`
-    catches it exactly as it does today, before this test's `assert` even runs.
-    """
-
-    def _boom(conn, *, dim):
-        raise RuntimeError("sqlite-vec extension failed to load")
-
-    monkeypatch.setattr(composition, "SqliteVectorIndex", _boom)
+async def test_a_checked_table_entirely_absent_is_named_not_silently_zeroed(tmp_path):
+    """A checked table the database does not have is named in the reason, never counted as
+    zero rows. doctor builds no store, so a table missing from the file stays missing -- here
+    ``vec_items``, beside a ``memories`` that holds a row: a clean ``0`` would describe a
+    database whose vector index is not there at all."""
+    await _store(tmp_path, project="p", count=1)
+    conn = open_db(sqlite_path(_settings(tmp_path).temporal_db_url))
+    conn.execute("DROP TABLE vec_items")
+    conn.commit()
+    conn.close()
 
     report = await _report(tmp_path, project="p")
 
-    assert report["schema_error"] is not None
     assert report["rows_missing_provenance"] is None
     assert "vec_items" in report["rows_missing_provenance_reason"]
 

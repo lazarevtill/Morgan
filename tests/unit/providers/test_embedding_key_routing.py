@@ -75,8 +75,8 @@ async def test_doctors_probes_send_each_endpoint_its_own_key():
             llm_api_key="chat-key",
             embedding_api_key="embed-key",
         )
-        assert await check_llm_reachable(settings)
-        assert await check_embeddings_reachable(settings)
+        assert (await check_llm_reachable(settings)).error is None
+        assert (await check_embeddings_reachable(settings)).error is None
 
     assert chat_headers.last.get("authorization") == "Bearer chat-key"
     assert embedding_headers.last.get("authorization") == "Bearer embed-key"

@@ -1,7 +1,7 @@
 """Composition root: open the one database and wire the core over it.
 
 ``build_memory_context`` is enough for every memory operation (``remember``, ``recall``,
-``facts``, ``forget``, ``doctor``) and needs no chat model. ``build_app_context`` adds the
+``facts``, ``forget``) and needs no chat model. ``build_app_context`` adds the
 chat client for ``ask`` and ``consolidate``. Both share one connection: every store below
 lives in the same SQLite file, which is what makes ``forget()`` one transaction.
 """
@@ -136,9 +136,10 @@ def register_the_settings_space(conn: sqlite3.Connection, settings: Settings) ->
     at once, and a second active space fails on the partial unique index.
 
     The width recorded must be the vector table's own. The table keeps the width it was created
-    at -- ``morgan doctor`` builds every store at the width set then, and registers nothing --
-    so a setting that disagrees with it is refused, and no space is registered: recorded, it
-    would pass the space-width check below while every write failed on the table.
+    at -- an open of a database waiting for ``morgan migrate`` builds every store at the width
+    set then, and registers nothing -- so a setting that disagrees with it is refused, and no
+    space is registered: recorded, it would pass the space-width check below while every write
+    failed on the table.
 
     Every open of a writable database runs it, and so does ``morgan migrate`` once its wave
     has committed: migration step 6 rebuilds the vector table without registering a space,

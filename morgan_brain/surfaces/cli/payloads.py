@@ -90,6 +90,18 @@ def migration_plan_to_dict(
     }
 
 
+def migration_status_to_dict(
+    *, user_version: int, code_version: int, pending: Sequence[Step]
+) -> dict[str, Any]:
+    """Where a database stands against this code's steps, as ``morgan doctor`` reads it --
+    doctor runs none of them."""
+    return {
+        "user_version": user_version,
+        "code_version": code_version,
+        "pending": [_step_to_dict(s) for s in pending],
+    }
+
+
 def migration_to_dict(
     *,
     database: str,
@@ -118,11 +130,17 @@ def migration_to_dict(
 
 
 def embedding_space_to_dict(
-    space: EmbeddingSpace, *, fingerprint: str, reason: str | None = None
+    space: EmbeddingSpace,
+    *,
+    fingerprint: str,
+    reason: str | None = None,
+    strings_digest: str | None = None,
 ) -> dict[str, Any]:
-    """The active space as ``morgan migrate`` left it. *fingerprint* is ``recorded`` (this
-    run recorded it), ``matches`` (it was recorded before and the model still answers it) or
-    ``unverified`` (the embedding server did not answer; *reason* says how)."""
+    """The active space. From ``morgan migrate``, *fingerprint* is ``recorded`` (this run
+    recorded it), ``matches`` (it was recorded before and the model still answers it) or
+    ``unverified`` (the embedding server did not answer; *reason* says how). From ``morgan
+    doctor``, which never records, it is what the comparison found, and *strings_digest* is
+    the sha256 of the five strings the fingerprint is made of."""
     shaped: dict[str, Any] = {
         "id": space.id,
         "model": space.model,
@@ -131,6 +149,8 @@ def embedding_space_to_dict(
     }
     if reason is not None:
         shaped["reason"] = reason
+    if strings_digest is not None:
+        shaped["strings_digest"] = strings_digest
     return shaped
 
 

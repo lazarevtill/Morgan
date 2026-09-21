@@ -57,36 +57,46 @@ def test_recall_json_output_keeps_cyrillic_readable(tmp_path):
     assert "образец" in json.loads(out.stdout)["results"][0]["content"]
 
 
+#: Port 1 refuses at once: doctor's chat probe contacts no server of the developer's own.
+_CLOSED = "http://127.0.0.1:1/v1"
+
+
 def test_doctor_reports_actionable_status(tmp_path):
-    out = _run(["doctor", "--json"], _hash_env(tmp_path), tmp_path)
+    data_dir = tmp_path / "fresh"
+    env = _hash_env(tmp_path, MORGAN_DATA_DIR=str(data_dir), MORGAN_LLM_ENDPOINT=_CLOSED)
+    out = _run(["doctor", "--json"], env, tmp_path)
     assert out.returncode == 0, out.stderr
     report = json.loads(out.stdout)
     assert set(report) >= {
         "database",
+        "database_error",
         "sqlite_vec",
         "fts5",
         "provider",
+        "provider_probe",
         "embedding_dim",
         "embedding_endpoint",
         "embedding_provider",
+        "embedding_space",
         "llm_endpoint",
+        "data_flow",
+        "migration",
+        "snapshots",
         "rows",
         "rows_all_projects",
         "rows_by_project",
         "rows_missing_provenance",
+        "projects",
+        "code_roots",
     }
-    # A totally fresh data dir -- doctor must still resolve real numbers, not crash or omit.
+    # A totally fresh data dir: doctor says there is no database yet and creates none -- it
+    # only reads -- while still answering everything that needs no database.
+    assert report["database_error"].startswith("no database yet at ")
+    assert not data_dir.exists()
     assert report["fts5"] is True
     assert report["sqlite_vec"]
-    assert report["rows"] == {
-        "scope": "project 'personal'",
-        "memories": 0,
-        "fts": 0,
-        "vectors": 0,
-    }
-    assert report["rows_all_projects"]["memories"] == 0
-    assert report["rows_missing_provenance"] == 0
-    assert report["provider"] in ("reachable", "unreachable")
+    assert report["rows"] is None and report["rows_missing_provenance"] is None
+    assert report["provider"] == "unreachable"
     assert report["embedding_provider"] == "not used"  # the hash backend
 
 
