@@ -347,7 +347,7 @@ Results from `2026-09-21-repeat-distribution.md`:
 | batch8_warm_c1 | 8 | warm | 1 | 500 | 0.99837 | 0.99871 | 1.00000 | 261.7 |
 | batch8_warm_c2 | 8 | warm | 2 | 500 | 0.99837 | 0.99861 | 1.00000 | 253.0 |
 
-**tolerance: 0.995** (worst p1 0.99860, batch8_cold_c1, below 0.998)
+**tolerance: 0.995** (worst p1 0.99860, batch8_cold_c1, above 0.998)
 
 ## 4. The `PARTITION KEY` measurement
 
