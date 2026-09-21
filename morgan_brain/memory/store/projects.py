@@ -135,16 +135,16 @@ def seed(conn: sqlite3.Connection, clock: Callable[[], datetime]) -> int:
     than starting a second one (``store/db.py::write_transaction``), so this is exactly as
     safe to call from inside a step as it is on its own, the way ``spaces.register`` does.
 
-    Ensures ``projects`` exists first (``CREATE TABLE IF NOT EXISTS``, a no-op on a database
-    step 3 already ran on -- every real one at this step, since steps run in order): a step is
-    not given the settings that would let it refuse a shortcut-built database the way
-    ``_add_provenance`` skips a table that never arrived, and creating this one is this
-    package's own to make, not a foreign table to leave alone.
+    Assumes ``projects`` already exists. Steps run strictly in order and the counter advances
+    only once a step's own transaction commits (``pending``/``upgrade``/``migrate``), so no
+    database that ever really went through migration step 3 can reach step 7 without the
+    table step 3 creates -- only a fixture that hand-stamps ``user_version`` past a step it
+    never ran could get here without it, and that is a fixture bug to fix, not a case for this
+    function to paper over.
     """
     created_at = clock().isoformat()
     inserted = 0
     with write_transaction(conn):
-        create_schema(conn)
         for name in sorted(_distinct_projects(conn)):
             cursor = conn.execute(
                 "INSERT OR IGNORE INTO projects (name, classification, created_at) "

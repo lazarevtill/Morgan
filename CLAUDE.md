@@ -45,8 +45,10 @@ come in" are answered by the directory names.
   snapshot of its own. Below them:
   - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
     `history`, `spaces` (the `embedding_spaces` table and its one-active partial index),
-    `projects` (the `projects` table; its queries land in a later task). Each owns its schema
-    and its queries; none of them ranks anything. Every write goes through
+    `projects` (the `projects` table, keyed by name: classification, remote, root and the
+    per-project capture/consolidate switches; `get`, `all` and `seed`, migration step 7's seed
+    of one row per project already named in `memories`, `facts` or `session_history`). Each
+    owns its schema and its queries; none of them ranks anything. Every write goes through
     `db.write_transaction`.
   - `recall/` — `fusion` (reciprocal rank over vector and keyword search, rank-only) and
     `floor` (the relevance floor, judged on vector scores).

@@ -16,6 +16,7 @@ from pathlib import Path
 
 from morgan_brain.composition import migration_stores
 from morgan_brain.memory import migrations
+from morgan_brain.memory.store import projects as projects_store
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
@@ -93,6 +94,12 @@ def _a_version_four_database_with_default_rows(tmp_path: Path) -> sqlite3.Connec
     Built through the real store classes rather than raw SQL: today's stores already create
     step 4's schema (the provenance columns are in every ``CREATE TABLE``), so this is exactly
     what opening a pre-Task-12 database with this code looks like, one store at a time.
+
+    Also creates ``projects`` -- empty, holding no ``'default'`` row of its own (it is keyed
+    by name, not by ``project``, and has no ``'default'`` row to move) -- because step 3
+    always creates it before step 4 ever runs on a real database, and ``PRAGMA user_version =
+    4`` below claims this one already went through step 3 too. Stamping the version without
+    the table step 3 makes would be a database no real migration could ever produce.
     """
     path = str(tmp_path / "old.db")
     conn = open_db(path)
@@ -102,6 +109,8 @@ def _a_version_four_database_with_default_rows(tmp_path: Path) -> sqlite3.Connec
     vectors = SqliteVectorIndex(conn, dim=_DIM)
     temporal = SqliteTemporalStore(conn=conn)
     history = SessionHistoryStore(conn)
+    projects_store.create_schema(conn)
+    conn.commit()
 
     async def _seed() -> None:
         for i in range(2):
