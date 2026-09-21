@@ -70,16 +70,22 @@ def test_doctor_reports_actionable_status(tmp_path):
         "embedding_endpoint",
         "embedding_provider",
         "llm_endpoint",
-        "vector_rows",
-        "memory_rows",
-        "fts_rows",
+        "rows",
+        "rows_all_projects",
+        "rows_by_project",
+        "rows_missing_provenance",
     }
     # A totally fresh data dir -- doctor must still resolve real numbers, not crash or omit.
     assert report["fts5"] is True
     assert report["sqlite_vec"]
-    assert report["memory_rows"] == 0
-    assert report["fts_rows"] == 0
-    assert report["vector_rows"] == 0
+    assert report["rows"] == {
+        "scope": "project 'personal'",
+        "memories": 0,
+        "fts": 0,
+        "vectors": 0,
+    }
+    assert report["rows_all_projects"]["memories"] == 0
+    assert report["rows_missing_provenance"] == 0
     assert report["provider"] in ("reachable", "unreachable")
     assert report["embedding_provider"] == "not used"  # the hash backend
 
@@ -94,18 +100,18 @@ def test_a_cli_the_suite_starts_reads_none_of_the_developers_configuration(tmp_p
     assert not any(f["present"] for f in env_files)
 
 
-def test_doctor_vector_rows_catches_an_unwired_vector_store(tmp_path):
+def test_doctor_rows_vectors_catches_an_unwired_vector_store(tmp_path):
     """The specific failure mode Task 17 was told to guard: recall works via FTS/vector
-    together normally, but if the vector store were never actually written to, vector_rows
-    would stay 0 while memory_rows/fts_rows go non-zero -- doctor must be able to show that
-    divergence, not paper over it."""
+    together normally, but if the vector store were never actually written to, `rows.vectors`
+    would stay 0 while `rows.memories`/`rows.fts` go non-zero -- doctor must be able to show
+    that divergence, not paper over it."""
     env = _hash_env(tmp_path)
     assert _run(["remember", "a fact worth keeping"], env, tmp_path).returncode == 0
     out = _run(["doctor", "--json"], env, tmp_path)
     report = json.loads(out.stdout)
-    assert report["memory_rows"] == 1
-    assert report["fts_rows"] == 1
-    assert report["vector_rows"] == 1
+    assert report["rows"]["memories"] == 1
+    assert report["rows"]["fts"] == 1
+    assert report["rows"]["vectors"] == 1
 
 
 def test_project_defaults_to_the_git_repo_name(tmp_path):

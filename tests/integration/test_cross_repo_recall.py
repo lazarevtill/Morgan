@@ -112,10 +112,10 @@ def test_vectors_are_actually_persisted_not_just_fts(tmp_path: Path) -> None:
     assert stored.returncode == 0, stored.stderr
 
     doctor = json.loads(_morgan(["doctor", "--json"], cwd=repo, data_dir=data).stdout)
-    # `or 0` is not defensive padding: doctor reports vector_rows=None for a non-sqlite
+    # `or 0` is not defensive padding: doctor reports rows.vectors=None for a non-sqlite
     # backend, and a bare `None > 0` raises TypeError instead of failing this assertion with
     # the doctor payload attached. The misconfiguration is exactly what the test is for.
-    assert (doctor["vector_rows"] or 0) > 0, doctor
+    assert (doctor["rows"]["vectors"] or 0) > 0, doctor
     assert doctor["database"].endswith("morgan.db"), doctor
 
 

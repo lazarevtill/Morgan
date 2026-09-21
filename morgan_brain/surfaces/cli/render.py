@@ -70,8 +70,37 @@ def _render_ask(data: dict[str, Any]) -> str:
     return str(data["response"])
 
 
+def _render_row_counts(rows: dict[str, Any], totals: dict[str, Any] | None) -> list[str]:
+    """The scoped row counts, each beside its total -- what told the owner on 2026-09-21 that
+    a project-scoped zero was not the whole database. ``memories: 3 in project 'personal' (5
+    across all projects)``; under ``--all-projects`` the scope and the total are the same
+    number, so only one is shown.
+    """
+    scope = rows["scope"]
+    lines = []
+    for key in ("memories", "fts", "vectors"):
+        value = rows[key]
+        if scope == "all projects":
+            lines.append(f"{key}: {value} across all projects")
+        else:
+            total = totals.get(key) if totals else None
+            lines.append(f"{key}: {value} in {scope} ({total} across all projects)")
+    return lines
+
+
 def _render_doctor(data: dict[str, Any]) -> str:
-    return "\n".join(f"{k}: {v}" for k, v in data.items())
+    lines = []
+    for k, v in data.items():
+        if k == "rows_all_projects":
+            continue  # folded into the "rows" line below, in its own place in the report.
+        if k == "rows":
+            if v is None:
+                lines.append(f"{k}: {v}")
+            else:
+                lines.extend(_render_row_counts(v, data.get("rows_all_projects")))
+            continue
+        lines.append(f"{k}: {v}")
+    return "\n".join(lines)
 
 
 #: The human-readable form of each verb's payload. Rendering only -- which handler

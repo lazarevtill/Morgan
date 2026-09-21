@@ -80,15 +80,26 @@ sqlite_vec: v0.1.9
 fts5: True
 provider: reachable
 embedding_provider: reachable
-vector_rows: 0
-memory_rows: 0
-fts_rows: 0
+memories: 12 in project 'my-repo' (128 across all projects)
+fts: 12 in project 'my-repo' (128 across all projects)
+vectors: 12 in project 'my-repo' (128 across all projects)
+rows_by_project: {'my-repo': 12, 'personal': 116}
+rows_missing_provenance: 0
+rows_missing_provenance_reason: None
 ```
 
 Every probe is independent, so one failure does not hide the rest. The first two lines answer
 "why is my brain empty?": a database somewhere other than where you expect, or a `.env` file
 read, or missing, where you did not expect it. `env_files` lists every file the CLI read, in
 order, and whether each was there.
+
+The `memories`/`fts`/`vectors` lines are scoped to `project`, with the total across every
+project beside them -- run from the wrong directory, a scoped zero used to print under a label
+that read like the whole database was empty. `rows_by_project` gives every project's own
+count, and `rows_missing_provenance` counts rows carrying the signature of a pre-phase-0
+process still writing after `morgan migrate` (an empty `author_id`, or a NULL `vec_items`
+status); it reads `None` with a reason on a database that has not been through `morgan
+migrate` yet, where the columns it counts do not exist.
 
 The two model servers are probed separately. `provider` is the chat endpoint, which only
 `ask` and `consolidate` need. `embedding_provider` is the endpoint every `remember` and
