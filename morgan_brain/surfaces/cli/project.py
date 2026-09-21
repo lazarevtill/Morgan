@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from fnmatch import fnmatch
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 def detect_project(cwd: Path | None = None) -> str | None:
@@ -61,3 +64,49 @@ def _repository_behind(checkout: Path, pointer: Path) -> str:
     common = common.resolve()
     # `<repository>/.git` for an ordinary repository; a bare one is the directory itself.
     return common.parent.name if common.name == ".git" else common.name.removesuffix(".git")
+
+
+#: ``classify``'s answer when nothing given matches -- SPEC-phase0 §3.7's third label.
+_UNCLASSIFIED = "unclassified"
+_WORK = "work"
+_PERSONAL = "personal"
+
+
+def _host_of(remote_url: str) -> str | None:
+    """The host git would connect to, from a URL-style or SCP-style remote.
+
+    ``scheme://[user@]host[:port]/path`` is parsed with ``urlsplit``. ``[user@]host:path`` --
+    SCP-style, ``git@gitlab.work.example:team/service.git`` -- has no scheme, so the host is
+    whatever precedes the first ``:``, with a leading ``user@`` stripped.
+    """
+    if "://" in remote_url:
+        return urlsplit(remote_url).hostname
+    host_part = remote_url.split(":", 1)[0]
+    if "@" in host_part:
+        host_part = host_part.rsplit("@", 1)[1]
+    return host_part or None
+
+
+def classify(remote_url: str | None, work_globs: Sequence[str]) -> str:
+    """``work`` on a ``work_globs`` match, ``personal`` otherwise, ``unclassified`` with no
+    remote. The label restricts nothing: recorded, printed, later used for labelling and
+    sharing -- never for hiding a project from recall or exempting it from consolidation.
+
+    A bare glob (no ``*``) must equal the remote's **host** exactly. Matched against the whole
+    URL instead, a glob naming a host would also match that same text sitting in a path
+    component -- ``gitlab.work.example`` inside
+    ``https://example.invalid/gitlab.work.example/spoof.git``, a URL whose real host is
+    ``example.invalid``. A glob with a wildcard is tried with ``fnmatch`` against the host
+    first, then the whole URL, so an operator can write either ``*.example.org`` (host-shaped)
+    or ``*acme*`` (matches a path or org name anywhere in the URL).
+    """
+    if not remote_url:
+        return _UNCLASSIFIED
+    host = _host_of(remote_url)
+    for glob in work_globs:
+        if "*" not in glob:
+            if host is not None and glob == host:
+                return _WORK
+        elif (host is not None and fnmatch(host, glob)) or fnmatch(remote_url, glob):
+            return _WORK
+    return _PERSONAL

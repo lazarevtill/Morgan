@@ -25,6 +25,16 @@ PROJECT_TABLES: tuple[str, ...] = (
 )
 
 
+#: Tables that hold one project's own data but are keyed by `name`, not `project` --
+#: `projects` itself, whose primary key *is* the project's name. `forget()` deletes the
+#: project's own row from each of these by name, alongside the id-based deletes it runs
+#: against `project_tables()`. Kept as its own registry rather than folded into
+#: `PROJECT_TABLES`: a caller that walks `project_tables()` to build an id-scoped `WHERE
+#: project = ?` delete (`forget`'s own id-based statements, `EpisodicStore.distinct_projects`)
+#: would run that same statement against `projects` and find no `project` column at all.
+NAME_KEYED_PROJECT_TABLES: tuple[str, ...] = ("projects",)
+
+
 def project_tables(conn: sqlite3.Connection) -> tuple[str, ...]:
     """`PROJECT_TABLES` plus every `embedding_spaces.table_name` row, once that table exists.
 

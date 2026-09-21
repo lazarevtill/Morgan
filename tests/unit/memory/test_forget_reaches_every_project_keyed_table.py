@@ -8,8 +8,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from morgan_brain.memory.store import projects as projects_store
 from morgan_brain.memory.store.history import SessionHistoryStore
-from morgan_brain.memory.store.tables import project_tables
+from morgan_brain.memory.store.tables import NAME_KEYED_PROJECT_TABLES, project_tables
+from morgan_brain.models import Memory
 from tests.unit.memory.conftest import build_memory_module
 
 
@@ -51,3 +53,28 @@ def test_the_registry_names_no_table_that_is_gone(tmp_path):
         assert conn.execute("SELECT 1 FROM sqlite_master WHERE name = ?", (name,)).fetchone(), (
             f"{name} is registered and does not exist"
         )
+
+
+def test_the_name_keyed_registry_also_names_no_table_that_is_gone(tmp_path):
+    """``projects`` is keyed by ``name`` -- the project's own name is its primary key, not a
+    ``project`` column -- so ``_project_keyed`` above never finds it. It has its own registry,
+    ``NAME_KEYED_PROJECT_TABLES``, checked here the same way."""
+    conn = _full_stack_conn(tmp_path)
+    for name in NAME_KEYED_PROJECT_TABLES:
+        assert conn.execute("SELECT 1 FROM sqlite_master WHERE name = ?", (name,)).fetchone(), (
+            f"{name} is registered and does not exist"
+        )
+
+
+async def test_forget_removes_the_projects_row(tmp_path):
+    """The remote URL and the root path a name-keyed row carries are the owner's data -- a
+    project's own repository and where it lives on disk -- so ``forget`` erases that row like
+    any other, even though it never joins the id-based deletes above."""
+    module = build_memory_module(str(tmp_path / "m.db"))
+    await module.store(Memory(user_id="u", project="p", content="harbor mirror secret"))
+    projects_store.seed(module._conn, clock=lambda: datetime.now(UTC))
+    assert projects_store.get(module._conn, "p") is not None
+
+    await module.forget(user_id="u", project="p")
+
+    assert projects_store.get(module._conn, "p") is None

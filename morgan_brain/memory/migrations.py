@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from itertools import takewhile
 from typing import NamedTuple
 
@@ -343,6 +344,22 @@ def _require_every_row(conn: sqlite3.Connection, table: str, expected: int) -> i
     return found
 
 
+def _utcnow() -> datetime:
+    """A step is not given the settings or the caller's clock -- ``composition.py``'s
+    ``utcnow`` would be a step importing the module that imports this one -- so this is its
+    own, the same one second's shape everywhere else in this package uses."""
+    return datetime.now(UTC)
+
+
+def _seed_projects(conn: sqlite3.Connection, stores: Stores) -> dict[str, int]:
+    """One ``unclassified`` row per distinct project already named in ``memories``, ``facts``
+    or ``session_history``. Light: it only inserts into an empty table -- ``projects`` has no
+    row before this step runs, on a fresh database or an upgraded one alike, so there is
+    nothing here to rewrite, move or delete.
+    """
+    return {"projects": projects.seed(conn, clock=_utcnow)}
+
+
 #: In order. Step *n* brings a database from ``user_version`` *n - 1* to *n*; append only.
 #: Steps 1 and 2 rewrite and drop, yet stay light: they predate the split, and every Morgan
 #: that shipped them already ran them on open.
@@ -354,6 +371,7 @@ _STEPS: tuple[Step, ...] = (
     Step(4, "provenance columns", True, _add_provenance),
     Step(5, "rename default to personal", True, _rename_default_project),
     Step(6, "rebuild vec0 and FTS5", True, _rebuild_vec0_and_fts5),
+    Step(7, "seed projects", False, _seed_projects),
 )
 
 

@@ -28,7 +28,7 @@ from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
 from morgan_brain.memory.store.fts import FtsIndex
-from morgan_brain.memory.store.tables import project_tables
+from morgan_brain.memory.store.tables import NAME_KEYED_PROJECT_TABLES, project_tables
 from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.memory.store.vectors import SqliteVectorIndex, VectorHit, VectorRecord
 from morgan_brain.models import (
@@ -346,6 +346,18 @@ class MemoryModule:
                     "DELETE FROM session_history WHERE user_id = ? AND project = ?",
                     (user_id, project),
                 ).rowcount
+            # `projects` (and any future table `NAME_KEYED_PROJECT_TABLES` names) is keyed by
+            # the project's own name, not a `project` column, so it takes no part in the
+            # id-based deletes above. Its remote URL and root path are the owner's data like
+            # any other row here; not counted on `report` -- `ForgetReport` counts what the
+            # owner asked to erase (memories, facts, history), and this table holds neither.
+            for table in NAME_KEYED_PROJECT_TABLES:
+                if _table_exists(conn, table):
+                    # `table` is one of the fixed names above, never caller input.
+                    conn.execute(
+                        f"DELETE FROM {table} WHERE name = ?",  # noqa: S608 # nosec B608
+                        (project,),
+                    )
 
         conn.execute("VACUUM")  # cannot run inside a transaction
         return report

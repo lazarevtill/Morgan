@@ -8,10 +8,10 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 def default_data_dir() -> str:
@@ -125,6 +125,19 @@ class Settings(BaseSettings):
     #: memory/recall/floor.py for what the number means.
     recall_floor_margin: float | None = None
 
+    # --- Project classification (surfaces/cli/project.py::classify). The disk walk over
+    # code_roots is phase 1a; phase 0 only stores these and `doctor` names a root that does
+    # not exist (Task 24). Nothing here identifies the owner -- shipped empty, so a clone of
+    # this repository walks and matches nothing until its own owner sets them. ---
+    #: Repository roots the phase-1a walk will scan for a project's remote and root, comma
+    #: separated (``~/code,~/work``). Each entry's ``~`` is expanded eagerly, like ``data_dir``.
+    code_roots: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    #: How many directory levels below each root that walk descends looking for a ``.git``.
+    code_root_depth: int = Field(default=2, gt=0)
+    #: ``fnmatch`` globs, comma separated, a remote's host or whole URL must match for
+    #: ``classify`` to call the project ``work`` rather than ``personal``.
+    work_remote_globs: Annotated[list[str], NoDecode] = Field(default_factory=list)
+
     @field_validator("recall_floor_margin", mode="before")
     @classmethod
     def _empty_means_no_floor(cls, value: object) -> object:
@@ -136,10 +149,25 @@ class Settings(BaseSettings):
         """
         return None if isinstance(value, str) and not value.strip() else value
 
+    @field_validator("code_roots", "work_remote_globs", mode="before")
+    @classmethod
+    def _split_comma_separated(cls, value: object) -> object:
+        """``MORGAN_CODE_ROOTS=~/code,~/work`` -> ``["~/code", "~/work"]``.
+
+        Both fields carry ``NoDecode`` (see the import above): a plain ``list[str]`` field
+        would otherwise have its raw env string handed to ``json.loads`` before any validator
+        runs, and a comma-separated value is not JSON -- every non-empty setting would fail to
+        parse before this function ever saw it. A value that is already a list (constructing
+        ``Settings`` directly, as the tests do) passes through unchanged.
+        """
+        if isinstance(value, str):
+            return [p.strip() for p in value.split(",") if p.strip()]
+        return value
+
     @model_validator(mode="after")
     def _fill_data_dir_defaults(self) -> Settings:
         """Expand ``~`` in data_dir and derive temporal_db_url / snapshot_dir from it when not
-        overridden."""
+        overridden. Also expands ``~`` in each of ``code_roots``, the same way."""
         self.data_dir = str(Path(self.data_dir).expanduser())
         if not self.temporal_db_url:
             # as_posix(): the path component of a URL uses forward slashes on every
@@ -150,6 +178,7 @@ class Settings(BaseSettings):
             if self.snapshot_dir
             else Path(self.data_dir) / "snapshots"
         )
+        self.code_roots = [str(Path(p).expanduser()) for p in self.code_roots]
         return self
 
 
