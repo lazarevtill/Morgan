@@ -21,8 +21,9 @@ from pathlib import Path
 from morgan_brain.memory.store.db import open_db
 
 #: ``VACUUM INTO``'s destination has no bound-parameter form -- see ``take()`` -- so the reason
-#: is restricted to this shape before it ever reaches SQL text.
-_REASON_RE = re.compile(r"^[a-z0-9-]{1,32}$")
+#: is restricted to this shape before it ever reaches SQL text. ``\Z`` rather than ``$``: ``$``
+#: also matches immediately before a trailing newline, which would let ``"ok\n"`` through.
+_REASON_RE = re.compile(r"^[a-z0-9-]{1,32}\Z")
 
 #: The content tables a human reading ``morgan snapshot`` cares about. The index tables
 #: (``vec_items``, ``vec_meta``, ``fts_memories``) are derived, so their row counts are not the

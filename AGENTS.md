@@ -32,7 +32,8 @@ come in" are answered by the directory names.
   chat model; `build_app_context` adds it.
 - `memory/` — the core. `gate.py` is the only door and `module.py` is the one write path and
   the fused recall; `embedder.py` is the embedding seam; `migrations.py` upgrades a database
-  written by an older version when it is opened. Below them:
+  written by an older version when it is opened; `snapshot.py` writes and lists verified
+  `VACUUM INTO` copies of the whole database. Below them:
   - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
     `history`. Each owns its schema and its queries; none of them ranks anything. Every write
     goes through `db.write_transaction`.
@@ -50,11 +51,11 @@ come in" are answered by the directory names.
 - `app/chat.py` — one turn: recall, answer, remember. Not a surface: the one use-case both
   surfaces call.
 - `surfaces/` — where requests come in. `cli/` (`__main__` parses and dispatches, `commands`
-  answers, `payloads` shapes the result, `render` prints it, `doctor` diagnoses and probes the
-  chat and embedding servers separately, `install_skill` writes the packaged `skill/SKILL.md`
-  into the coding agents installed here), `mcp_server.py` (five MCP tools over stdio or
-  streamable-HTTP, calling those same command handlers), and `network.py`, the bind guard that
-  protects the HTTP one.
+  answers, `maintenance` answers `morgan snapshot`, `payloads` shapes the result, `render`
+  prints it, `doctor` diagnoses and probes the chat and embedding servers separately,
+  `install_skill` writes the packaged `skill/SKILL.md` into the coding agents installed here),
+  `mcp_server.py` (five MCP tools over stdio or streamable-HTTP, calling those same command
+  handlers), and `network.py`, the bind guard that protects the HTTP one.
 
 ## Invariants
 
