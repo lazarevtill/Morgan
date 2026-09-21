@@ -247,6 +247,30 @@ def stored_sample(
     return pairs
 
 
+#: The embedding column of a vec0 table's DDL, as ``SqliteVectorIndex`` writes it.
+_DECLARED_WIDTH = re.compile(r"\bembedding\s+float\[(\d+)\]")
+
+
+def declared_width(conn: sqlite3.Connection, *, table_name: str) -> int | None:
+    """The width *table_name*'s vec0 DDL declares, or ``None`` when the table does not exist.
+
+    Read from the schema, not from a vector: the table keeps the width it was created at,
+    whatever width was set when it is next opened -- ``CREATE ... IF NOT EXISTS`` does not
+    change it, and nothing else checks it until a vector of another width is written or
+    searched with.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (_vector_table(table_name),),
+    ).fetchone()
+    if row is None:
+        return None
+    found = _DECLARED_WIDTH.search(row["sql"])
+    if found is None:
+        raise ValueError(f"the schema of {table_name} declares no embedding width: {row['sql']}")
+    return int(found.group(1))
+
+
 def holds_vectors(conn: sqlite3.Connection, *, table_name: str) -> bool:
     """Whether *table_name* stores any vector at all. A vec0 scan that reads no vector column
     stops at the first row: under a millisecond on a 3,000-row, 4,096-wide table."""

@@ -20,7 +20,9 @@ from morgan_brain.memory import migrations
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.store import spaces
 from morgan_brain.memory.store.db import open_db
+from morgan_brain.models import Memory
 from morgan_brain.providers.wire import EmbeddingSpaceMismatch
+from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from tests.fakes import counting_model_server, model_server
 
 
@@ -77,6 +79,42 @@ def test_a_database_waiting_for_migrate_registers_nothing(tmp_path, monkeypatch)
         assert calls.total == 0
 
     assert _spaces(tmp_path) == []
+
+
+async def test_a_vector_table_of_another_width_is_refused_and_no_space_is_registered(tmp_path):
+    """`morgan doctor`, the first command the install guide runs, builds every store at the
+    width set then and registers no space. Registering the settings' width over that table
+    would record a width the table does not have, and the space-width check would then approve
+    it: every store fails on sqlite-vec's raw dimension error, and the open at the table's own
+    width is refused with advice that is false."""
+    with model_server(embedding_dim=4) as url:
+        await build_doctor_report(
+            _settings(tmp_path, url, embedding_dim=4), project="p", all_projects=False
+        )
+    assert _spaces(tmp_path) == []
+
+    with counting_model_server(embedding_dim=8) as (url, calls):
+        with pytest.raises(RuntimeError) as info:
+            build_memory_context(_settings(tmp_path, url, embedding_dim=8))
+        assert calls.total == 0
+
+    message = str(info.value)
+    assert "vec_items" in message and "4 wide" in message
+    assert "MORGAN_EMBEDDING_DIM is 8" in message
+    assert _spaces(tmp_path) == []  # no space, so no fingerprint either
+
+    # At the table's own width the database opens, registers that width, and stores.
+    with model_server(embedding_dim=4) as url:
+        ctx = build_memory_context(_settings(tmp_path, url, embedding_dim=4))
+        try:
+            await ctx.gate.store(
+                Memory(user_id=ctx.settings.owner_user_id, project="p", content="stored at 4")
+            )
+        finally:
+            ctx.conn.close()
+
+    [space] = _spaces(tmp_path)
+    assert space["dims"] == 4 and space["fingerprint"] is not None
 
 
 def test_the_hash_backend_registers_no_space(tmp_path):

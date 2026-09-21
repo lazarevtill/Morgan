@@ -24,7 +24,7 @@ from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
 from morgan_brain.memory.migrations import Step, Stores, pending, stamp_if_new, upgrade
 from morgan_brain.memory.module import MemoryModule
-from morgan_brain.memory.store import spaces
+from morgan_brain.memory.store import spaces, vectors
 from morgan_brain.memory.store.db import open_db, write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
@@ -134,12 +134,25 @@ def _register_the_settings_space(conn: sqlite3.Connection, settings: Settings) -
     call to record, once a sample of the stored vectors shows the model wrote them. The check
     is read again under the write lock, because another process may open the same fresh file
     at once, and a second active space fails on the partial unique index.
+
+    The width recorded must be the vector table's own. The table keeps the width it was created
+    at -- ``morgan doctor`` builds every store at the width set then, and registers nothing --
+    so a setting that disagrees with it is refused, and no space is registered: recorded, it
+    would pass the space-width check below while every write failed on the table.
     """
     if spaces.active(conn) is not None:
         return
     with write_transaction(conn):
         if spaces.active(conn) is not None:
             return
+        width = vectors.declared_width(conn, table_name=_VECTOR_TABLE)
+        if width is not None and width != settings.embedding_dim:
+            raise RuntimeError(
+                f"the vector table {_VECTOR_TABLE} was created {width} wide but "
+                f"MORGAN_EMBEDDING_DIM is {settings.embedding_dim}, so no embedding space was "
+                f"registered; set MORGAN_EMBEDDING_DIM={width} if that is the model's width, or "
+                f"point MORGAN_DATA_DIR at a database created at {settings.embedding_dim}"
+            )
         space = spaces.register(
             conn,
             model=settings.embedding_model,

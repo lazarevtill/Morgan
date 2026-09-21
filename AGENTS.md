@@ -30,9 +30,9 @@ come in" are answered by the directory names.
   go to stderr. One call per entrypoint.
 - `composition.py` — opens the database and wires the above. `build_memory_context` needs no
   chat model and sends no request: it registers the settings' embedding model and width on a
-  writable database that has no embedding space (the hash backend registers none), and
-  refuses a space of another width than `MORGAN_EMBEDDING_DIM`. `build_app_context` adds the
-  chat model.
+  writable database that has no embedding space, refusing instead when the vector table was
+  created at another width (the hash backend registers none), and it refuses a space of
+  another width than `MORGAN_EMBEDDING_DIM`. `build_app_context` adds the chat model.
 - `memory/` — the core. `gate.py` is the only door and `module.py` is the one write path and
   the fused recall; `embedder.py` is the embedding seam; `fingerprint.py` is the five frozen
   strings that identify an embedding space and the pure arithmetic (`cosine`, `compare`,
