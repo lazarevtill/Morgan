@@ -57,7 +57,7 @@ async def test_the_same_drop_ends_a_command_which_has_the_shorter_budget(tmp_pat
 
 def _settings(tmp_path: Path, url: str) -> Settings:
     """A command's budget no longer than one wait, so it never waits one out; an import's long
-    enough. The command's still covers building the client and one attempt."""
+    enough."""
     return Settings(
         data_dir=str(tmp_path / "data"),
         embedding_backend="provider",

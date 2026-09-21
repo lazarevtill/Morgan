@@ -79,19 +79,19 @@ class Settings(BaseSettings):
     #: with a server error (a 501 aside: that server serves no embeddings) or a 429, or dropped
     #: the connection -- as a cold host loading its model does -- before it fails, for a
     #: command or a tool call. A bound on the wall time of the whole call, attempts and backoff
-    #: included.
+    #: included, counted once the call's HTTP client is built.
     embedding_retry_budget_seconds: float = Field(default=60.0, gt=0.0)
     #: The same bound for an import (``morgan import``), which has thousands of calls to make
     #: and no one waiting on any single one of them.
     embedding_import_retry_budget_seconds: float = Field(default=600.0, gt=0.0)
     #: How long (seconds) an embedding call keeps retrying a host it cannot connect to at all
     #: (refused, DNS, connect timeout): the host is off or the address is wrong, and waiting
-    #: on it helps no one. Counted from the start of the call, and only until a connection is
-    #: made; after that every failure counts against the budget above.
+    #: on it helps no one. Counted from the call's first attempt, and only until a connection
+    #: is made; after that every failure counts against the budget above.
     embedding_unreachable_budget_seconds: float = Field(default=5.0, gt=0.0)
     #: The wait (seconds) before an embedding call's first retry, doubling before each next.
-    #: Also the least time a last attempt is given: the wait before it shrinks to leave that
-    #: much of the budget, and the call gives up only when not even that is left.
+    #: A retry is made only while this much of the budget is left for it -- the wait before it
+    #: shrinks to leave that -- so no retry runs the call past its budget.
     embedding_retry_backoff_seconds: float = Field(default=0.5, gt=0.0)
     #: The longest (seconds) the doubling wait grows to, so a long budget -- an import's -- keeps
     #: asking at a steady rate and a host that has come up is asked again within this long.

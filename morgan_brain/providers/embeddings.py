@@ -52,15 +52,15 @@ _BOUND_GRACE_SECONDS = 0.25
 class RetryBudget:
     """How long one embedding call may take, by what went wrong. Every value is in seconds.
 
-    ``seconds`` bounds the wall time of the whole call, attempts and backoff included: a
-    command's budget or an import's. ``unreachable_seconds`` bounds it, counted from the same
-    start, while no connection has been made. The first wait between attempts is
-    ``backoff_seconds``, doubling each time up to ``backoff_cap_seconds``; the last wait
-    shrinks so that one more attempt still has ``backoff_seconds`` of the budget left. One
-    attempt takes at most ``attempt_seconds`` and never longer than what is left of the
-    call's budget -- but for an answer that trickles in a byte at a time, which is cut off
-    ``_BOUND_GRACE_SECONDS`` later -- and never less than ``backoff_seconds``, which only a
-    first attempt whose budget is already spent needs.
+    ``seconds`` bounds the wall time of the whole call, attempts and backoff included, counted
+    from the moment its HTTP client is built: a command's budget or an import's.
+    ``unreachable_seconds`` bounds it, counted from the same start, while no connection has been
+    made. The first wait between attempts is ``backoff_seconds``, doubling each time up to
+    ``backoff_cap_seconds``; a retry is made only while ``backoff_seconds`` of the budget is left
+    for it, the wait before it shrinking to leave that. One attempt takes at most
+    ``attempt_seconds`` and never longer than what is left of the budget, so the budget bounds
+    the call's wall time -- but for an answer that trickles in a byte at a time, which is cut
+    off ``_BOUND_GRACE_SECONDS`` later.
     """
 
     seconds: float
@@ -126,18 +126,16 @@ class OpenAICompatEmbedder:
         return (await self.embed_batch([text]))[0]
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        # One client for every attempt of the call, built outside any attempt's timeout:
-        # building one loads a TLS context, 0.2-0.5 s on a loaded Windows machine, which is no
-        # part of waiting for an answer. The call's budget does count it, from *started*.
-        started = time.monotonic()
+        # One client for every attempt of the call. Building it loads a TLS context, 0.2-0.5 s
+        # on a loaded Windows machine, which is no part of waiting for an answer: the budget's
+        # clock starts once it is built, in `_retried`.
         async with httpx.AsyncClient() as client:
-            return await self._retried(client, texts, started=started)
+            return await self._retried(client, texts)
 
-    async def _retried(
-        self, client: httpx.AsyncClient, texts: list[str], *, started: float
-    ) -> list[list[float]]:
+    async def _retried(self, client: httpx.AsyncClient, texts: list[str]) -> list[list[float]]:
         """Attempt the request until it succeeds, is refused, or the budget for what went
-        wrong is spent. *started* is when the call began: the budget counts from there."""
+        wrong is spent. The budget counts from here, with *client* already built."""
+        started = time.monotonic()
         budget = self._budget
         connected = False
         backoff = budget.backoff_seconds
@@ -146,14 +144,8 @@ class OpenAICompatEmbedder:
         while True:
             attempts += 1
             elapsed = time.monotonic() - started
-            # No attempt is given less than the first wait's length: the retry rule below leaves
-            # every later attempt that much, and a first attempt whose budget went on building
-            # the client would otherwise have no time at all, and fail as unreachable.
-            floor = budget.backoff_seconds
-            timeout = max(min(budget.attempt_seconds, budget.seconds - elapsed), floor)
-            connect = timeout
-            if not connected:
-                connect = max(min(timeout, budget.unreachable_seconds - elapsed), floor)
+            timeout = min(budget.attempt_seconds, budget.seconds - elapsed)
+            connect = timeout if connected else min(timeout, budget.unreachable_seconds - elapsed)
             outcome: Outcome
             error: Exception
             try:
@@ -192,7 +184,7 @@ class OpenAICompatEmbedder:
             # One more attempt is made while it can still be given the first wait's length of
             # the budget; the wait before it shrinks to leave it that. A backoff that ran past
             # the budget gave up at about half of it, on a host about to answer.
-            room = allowed - elapsed - floor
+            room = allowed - elapsed - budget.backoff_seconds
             if room <= 0:
                 raise ProviderUnreachable.retried(
                     self._url,

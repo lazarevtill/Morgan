@@ -24,6 +24,7 @@ from tests.fakes import (
     raw_model_server,
     silent_model_server,
 )
+from tests.unit.providers.conftest import TOLERANCE
 
 _CLOSED = "http://127.0.0.1:1/v1"
 
@@ -124,16 +125,15 @@ async def test_a_host_that_fails_fast_past_half_the_budget_is_still_answered():
     assert len(vector) == 1024
 
 
-async def test_fast_failures_spend_the_whole_budget_before_giving_up():
+async def test_fast_failures_spend_the_whole_budget_before_giving_up(client_ready):
     """The last wait shrinks to leave one more attempt room inside the budget, so a host that
     fails at once is given up on only near the end of it -- and not after it."""
-    with flaky_model_server(fail_times=99, status=503) as url:
-        embedder = build_embedder(_settings(url, retry_budget=1.5, backoff=0.1))
-        started = time.monotonic()
-        with pytest.raises(ProviderUnreachable, match="too slowly"):
-            await embedder.embed("x")
-        elapsed = time.monotonic() - started
-    assert 1.3 <= elapsed < 2.0
+    with (
+        flaky_model_server(fail_times=99, status=503) as url,
+        pytest.raises(ProviderUnreachable, match="too slowly"),
+    ):
+        await build_embedder(_settings(url, retry_budget=1.5, backoff=0.1)).embed("x")
+    assert 1.3 <= client_ready.since() < 1.5 + TOLERANCE
 
 
 async def test_a_capped_backoff_asks_again_soon_after_the_host_comes_up():
