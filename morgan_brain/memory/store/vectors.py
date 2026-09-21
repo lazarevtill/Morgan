@@ -14,13 +14,13 @@ ranking silently changes for unnormalised llama-server embeddings.
 
 ``project`` is a metadata column, not a vec0 ``PARTITION KEY``. The baseline
 (``scripts/measure_partition_key.py``, ``docs/measurements/2026-09-phase0-baseline.md`` §4)
-timed per-project queries only: 42 ms partitioned against 59 ms. The same script, extended to
-measure the all-projects scope and the on-disk cost (raw output
-``2026-09-21-partition-key-all-projects.txt``, named in full in the baseline doc's §4), found
-what the per-project run did not: an all-projects query -- the scope the relevance floor was
-fitted on -- takes about 75 ms partitioned against about 60 ms metadata-scoped; each project
-gets vector chunks of its own, 1,024 vectors wide whatever it holds, so twenty projects of one
-memory each fill 336.4 MB partitioned against 16.9 MB metadata-scoped; and sqlite-vec 0.1.9
+times per-project queries: 42 ms partitioned against 59 ms. The same script also measures the
+all-projects scope and the on-disk cost (raw output
+``2026-09-21-partition-key-all-projects.txt``, named in full in the baseline doc's §4): an
+all-projects query -- the scope the relevance floor was fitted on -- takes about 75 ms
+partitioned against about 60 ms metadata-scoped; each project gets vector chunks of its own,
+1,024 vectors wide whatever it holds, so twenty projects of one memory each fill 336.4 MB
+partitioned against 16.9 MB metadata-scoped; and sqlite-vec 0.1.9
 refuses an ``UPDATE`` of a partition key, the statement migration step 5 renames a
 project with. ``status`` is stored and not yet filtered on: recall does not filter on it in
 phase 0, and a vec0 table cannot be altered to add it later.

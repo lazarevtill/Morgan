@@ -387,9 +387,8 @@ run 2: metadata median=58.71ms mean=59.15ms (min=47.24ms max=72.04ms) | partitio
 ```
 
 Per-project queries at `k=8`: recall time drops (~28% faster on both median and mean, in both
-runs) with identical ids returned (0/200 mismatches, both runs). This is the whole picture the
-`k=8` per-project run gives; the rest of this section measures what it does not: the
-all-projects scope, and the disk cost.
+runs) with identical ids returned (0/200 mismatches, both runs). This scopes to per-project
+queries only; the all-projects scope and the disk cost follow below.
 
 ```bash
 .venv/Scripts/python.exe scripts/measure_partition_key.py \
@@ -431,14 +430,13 @@ On-disk size, same isolated single-table file per layout:
 
 Each partition allocates its own 1,024-vector chunk at the table's declared width, whatever it
 holds -- so a project with a single memory costs as much disk as one with a thousand, and this
-cost grows with every project added, not with every memory. Per-project at `k=16`: partition
-38-43 ms against metadata 52-56 ms, 0/200 mismatches. All-projects at `k=16`: partition 74-77
-ms against metadata 59-61 ms, 1/200 queries returning a different order. Storage for 20
-one-memory projects: partition 336.4 MB against metadata 16.9 MB.
+cost grows with every project added, not with every memory.
 
-**Verdict: keep metadata columns** — per-project recall is faster with the partition, but
-all-projects recall is slower, each project costs its own chunk on disk, and a partition key
-cannot be UPDATEd (step 5 renames projects).
+**Verdict: keep metadata columns** — per-project recall is faster with the partition (38-43 ms
+against 52-56 ms at `k=16`, 0/200 mismatches), but all-projects recall is slower (74-77 ms
+against 59-61 ms, 1/200 reordered), each project costs its own chunk on disk (20 one-memory
+projects: 336.4 MB against 16.9 MB), and a partition key cannot be UPDATEd (step 5 renames
+projects).
 
 ## 5. Commit
 
