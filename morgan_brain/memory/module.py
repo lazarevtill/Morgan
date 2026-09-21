@@ -15,13 +15,17 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import datetime
 
+import structlog
+
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.gate import ForgetReport
 from morgan_brain.memory.knowledge.extract import extract_entity_names, words
+from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
 from morgan_brain.memory.store.db import write_transaction
@@ -39,6 +43,8 @@ from morgan_brain.models import (
     MemoryQuery,
     TemporalFact,
 )
+
+log = structlog.get_logger("recall")
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
@@ -159,7 +165,9 @@ class MemoryModule:
     async def recall(self, query: MemoryQuery) -> list[Memory]:
         # None means "no project filter" at the store layer -- the cross-project escape hatch.
         project = None if query.all_projects else query.project
+        embed_started = time.monotonic()
         q_vector = await self._embedder.embed(query.text)
+        embed_latency_ms = (time.monotonic() - embed_started) * 1000
         vec_hits = await self._vectors.search(
             user_id=query.user_id,
             vector=q_vector,
@@ -202,6 +210,16 @@ class MemoryModule:
             for f in facts
         ]
         merged = _merge_facts_and_episodics(fact_memories, episodic, query.text, query.top_k)
+        # One line per recall, win or decline: 1a's availability trigger reads it, not memory.
+        # `degraded` and `reason` are None until 1a's keyword-only fallback and Task 22's
+        # abstain reasons fill them in.
+        log.info(
+            "recall.done",
+            embed_latency_ms=round(embed_latency_ms, 1),
+            degraded=None,
+            reason=None,
+            query_language=language.of(query.text),
+        )
         if not self._answer_is_worth_returning(query, project, vec_hits):
             return []
         return merged

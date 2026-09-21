@@ -18,11 +18,19 @@ import json
 import re
 import time
 from dataclasses import dataclass
+from typing import Literal
 from urllib.parse import quote, quote_plus
 
 import httpx
+import structlog
 
 from morgan_brain.providers.wire import Outcome, ProviderRefused, ProviderUnreachable
+
+log = structlog.get_logger("embed")
+
+#: What `embed.done` names a call's result: `Outcome` (`ProviderUnreachable`'s two) plus the
+#: two cases that never retry -- a plain success, and a refusal (`ProviderRefused`).
+EmbedOutcome = Literal["ok", "slow", "unreachable", "refused"]
 
 #: How much of a server's words an error quotes -- its answer to a refused request, or the
 #: text of the failure that ended a call -- once every key in them is redacted.
@@ -68,6 +76,15 @@ class RetryBudget:
     backoff_seconds: float
     backoff_cap_seconds: float
     attempt_seconds: float
+
+
+class _AttemptCounter:
+    """How many attempts ``_retried`` has made so far, visible to ``embed_batch`` once it
+    returns or raises -- an exception carries no attempt count of its own, and the count is
+    wanted on every path the call can end on, not only the one that names it in a message."""
+
+    def __init__(self) -> None:
+        self.value = 0
 
 
 class OpenAICompatEmbedder:
@@ -126,23 +143,48 @@ class OpenAICompatEmbedder:
         return (await self.embed_batch([text]))[0]
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        # One client for every attempt of the call. Building it loads a TLS context, 0.2-0.5 s
-        # on a loaded Windows machine, which is no part of waiting for an answer: the budget's
-        # clock starts once it is built, in `_retried`.
-        async with httpx.AsyncClient() as client:
-            return await self._retried(client, texts)
+        # The whole call, client construction included: 1a's availability trigger reads this
+        # line, and a slow client build is no less a cost to the caller waiting on an answer.
+        call_started = time.monotonic()
+        attempts = _AttemptCounter()
+        outcome: EmbedOutcome = "ok"
+        try:
+            # One client for every attempt of the call. Building it loads a TLS context,
+            # 0.2-0.5 s on a loaded Windows machine, which is no part of waiting for an answer:
+            # the retry budget's own clock starts once it is built, in `_retried`.
+            async with httpx.AsyncClient() as client:
+                return await self._retried(client, texts, attempts)
+        except ProviderRefused:
+            outcome = "refused"
+            raise
+        except ProviderUnreachable as exc:
+            outcome = exc.outcome
+            raise
+        finally:
+            # Never the input text or the key: `inputs` is a count, and every other field is
+            # a number or one of the four outcome words.
+            log.info(
+                "embed.done",
+                latency_ms=round((time.monotonic() - call_started) * 1000, 1),
+                attempts=attempts.value,
+                inputs=len(texts),
+                outcome=outcome,
+            )
 
-    async def _retried(self, client: httpx.AsyncClient, texts: list[str]) -> list[list[float]]:
+    async def _retried(
+        self, client: httpx.AsyncClient, texts: list[str], attempts: _AttemptCounter
+    ) -> list[list[float]]:
         """Attempt the request until it succeeds, is refused, or the budget for what went
-        wrong is spent. The budget counts from here, with *client* already built."""
+        wrong is spent. The budget counts from here, with *client* already built. *attempts*
+        is updated with each try, so ``embed_batch`` can log the count on every path: an
+        exception carries no attempt count of its own."""
         started = time.monotonic()
         budget = self._budget
         connected = False
         backoff = budget.backoff_seconds
-        attempts = 0
         named: Exception | None = None
         while True:
-            attempts += 1
+            attempts.value += 1
             elapsed = time.monotonic() - started
             timeout = min(budget.attempt_seconds, budget.seconds - elapsed)
             connect = timeout if connected else min(timeout, budget.unreachable_seconds - elapsed)
@@ -192,7 +234,7 @@ class OpenAICompatEmbedder:
                     outcome=outcome,
                     error=_name(named),
                     said=self._said(named),
-                    attempts=attempts,
+                    attempts=attempts.value,
                     seconds=elapsed,
                 ) from error
             await asyncio.sleep(min(backoff, room))
