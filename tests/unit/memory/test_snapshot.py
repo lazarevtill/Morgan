@@ -63,6 +63,27 @@ async def test_a_copy_that_fails_its_check_is_deleted(tmp_path, monkeypatch):
     assert not list((tmp_path / "s").glob("*.db"))
 
 
+async def test_a_same_second_collision_gets_a_free_name_and_never_overwrites(tmp_path):
+    """``restore``'s safety snapshot always uses the fixed reason ``before-restore``, so a
+    second one in the same UTC second is not hypothetical -- it is the first caller that
+    hits it. The first snapshot must survive untouched under its own name."""
+    db = await _db_with_one_memory(tmp_path / "morgan.db")
+    first = snapshot.take(db, into=tmp_path / "s", reason="before-restore", clock=_clock)
+
+    module = build_memory_module(db)
+    await module.store(Memory(user_id="u", project="p", content="a second memory"))
+    module._conn.commit()
+
+    second = snapshot.take(db, into=tmp_path / "s", reason="before-restore", clock=_clock)
+
+    assert first.path.name == "morgan-20260921T101500Z-before-restore.db"
+    assert second.path.name == "morgan-20260921T101500Z-before-restore-2.db"
+    assert first.path.exists() and second.path.exists()
+    # The first file was never overwritten with the later state.
+    assert len(_memory_rows(first.path)) == 1
+    assert len(_memory_rows(second.path)) == 2
+
+
 def _clock() -> datetime:
     return datetime(2026, 9, 21, 10, 15, tzinfo=UTC)
 

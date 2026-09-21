@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from morgan_brain.memory.gate import ForgetReport
-from morgan_brain.memory.snapshot import SnapshotResult
+from morgan_brain.memory.snapshot import RestoreResult, SnapshotResult
 from morgan_brain.models import Memory, TemporalFact
 
 
@@ -47,6 +47,14 @@ def snapshot_to_dict(result: SnapshotResult) -> dict[str, Any]:
         "bytes": result.bytes,
         "user_version": result.user_version,
         "counts": dict(result.counts),
+    }
+
+
+def restore_to_dict(result: RestoreResult) -> dict[str, Any]:
+    return {
+        "before": dict(result.before),
+        "after": dict(result.after),
+        "safety_snapshot": str(result.safety.path),
     }
 
 

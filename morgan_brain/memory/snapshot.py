@@ -10,6 +10,7 @@ check stays on disk until the owner removes it.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import sqlite3
@@ -18,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from morgan_brain.memory import migrations
 from morgan_brain.memory.store.db import open_db
 
 #: ``VACUUM INTO``'s destination has no bound-parameter form -- see ``take()`` -- so the reason
@@ -55,12 +57,40 @@ class SnapshotCorrupt(Exception):
         self.path = path
 
 
+class SnapshotTooNew(Exception):
+    """*path* was written by a Morgan with more migration steps than this one knows.
+
+    Restoring it would run this database backwards: rows and columns a newer ``_STEPS`` added
+    would sit in a database this build never upgrades to expect them. Refused before anything
+    is touched -- upgrade morgan before restoring a snapshot written by a newer one.
+    """
+
+    def __init__(self, path: Path, snapshot_version: int, code_version: int) -> None:
+        message = (
+            f"{path} is at user_version {snapshot_version}, but this morgan only knows "
+            f"{code_version} migration step(s) -- upgrade morgan before restoring a snapshot "
+            "written by a newer one"
+        )
+        super().__init__(message)
+        self.path = path
+        self.snapshot_version = snapshot_version
+        self.code_version = code_version
+
+
 @dataclass
 class SnapshotResult:
     path: Path
     bytes: int
     user_version: int
     counts: dict[str, int]
+
+
+@dataclass
+class RestoreResult:
+    before: dict[str, int]
+    after: dict[str, int]
+    #: The safety copy of the database taken before it was replaced -- see ``restore()``.
+    safety: SnapshotResult
 
 
 def _free_bytes(path: Path) -> int:
@@ -107,6 +137,25 @@ def _describe(path: Path) -> tuple[int, dict[str, int]]:
         conn.close()
 
 
+def _free_destination(into: Path, stamp: str, reason: str) -> Path:
+    """The first name under *into* for this *stamp* and *reason* that nothing already
+    occupies.
+
+    Two snapshots with the same reason in the same UTC second are not hypothetical: a
+    restore always takes its safety copy under the fixed reason ``before-restore``, so a
+    second restore inside one second is the first caller to collide. ``VACUUM INTO`` refuses
+    to write over an existing file with a bare ``sqlite3.OperationalError``, and Morgan never
+    overwrites a snapshot that already passed its check -- so the smallest free numeric
+    suffix is added instead.
+    """
+    candidate = into / f"morgan-{stamp}-{reason}.db"
+    suffix = 2
+    while candidate.exists():
+        candidate = into / f"morgan-{stamp}-{reason}-{suffix}.db"
+        suffix += 1
+    return candidate
+
+
 def take(
     db_path: str,
     *,
@@ -116,7 +165,8 @@ def take(
     busy_timeout_ms: int = 5000,
 ) -> SnapshotResult:
     """Write a verified ``VACUUM INTO`` copy of *db_path* under *into*, named by time and
-    reason.
+    reason (a numeric suffix is added when that name is already taken -- see
+    ``_free_destination``).
 
     In order: make *into*; refuse with ``NotEnoughSpace`` when *into*'s volume has less free
     space than *db_path*'s size; ``VACUUM INTO`` the timestamped destination; ``quick_check``
@@ -143,7 +193,7 @@ def take(
         )
 
     stamp = clock().strftime("%Y%m%dT%H%M%SZ")
-    dest = into / f"morgan-{stamp}-{reason}.db"
+    dest = _free_destination(into, stamp, reason)
 
     # `reason` is validated above (`_REASON_RE`: `[a-z0-9-]{1,32}`) and `into` is a path this
     # process constructed, so `dest` cannot contain a single quote -- escaped anyway because
@@ -186,3 +236,62 @@ def list_snapshots(into: Path) -> list[SnapshotResult]:
             )
         )
     return results
+
+
+def restore(
+    db_path: str,
+    *,
+    source: Path,
+    into: Path,
+    clock: Callable[[], datetime],
+    busy_timeout_ms: int = 5000,
+) -> RestoreResult:
+    """Replace *db_path* with *source*, behind a safety snapshot of *db_path* taken first.
+
+    In order: ``quick_check`` *source* itself, raising ``SnapshotCorrupt`` on anything but
+    ``"ok"`` -- a restore never reads from a copy that failed its own check; refuse with
+    ``SnapshotTooNew`` when *source*'s ``user_version`` is ahead of what this build's
+    ``migrations._STEPS`` knows how to read, naming both numbers; count *db_path*'s rows
+    before anything changes; ``take()`` a safety copy of *db_path* under the fixed reason
+    ``"before-restore"`` -- taken unconditionally, because a restore is the one command whose
+    own mistake cannot be undone by running it again; ``os.replace`` *db_path* with *source*
+    and drop any stale ``-wal``/``-shm`` sidecar left next to the old file, which belongs to
+    a database that no longer exists at that path; ``quick_check`` the result; count rows
+    after.
+
+    On Windows, ``os.replace`` raises ``PermissionError`` while another process still holds
+    *db_path* open -- caught and re-raised naming the fix (close the sessions running
+    ``morgan-mcp``) rather than forced.
+    """
+    check = _quick_check(source)
+    if check != "ok":
+        raise SnapshotCorrupt(source, f"{source} failed PRAGMA quick_check: {check}")
+
+    snapshot_version, _ = _describe(source)
+    code_version = len(migrations._STEPS)
+    if snapshot_version > code_version:
+        raise SnapshotTooNew(source, snapshot_version, code_version)
+
+    _, before = _describe(Path(db_path))
+
+    safety = take(
+        db_path, into=into, reason="before-restore", clock=clock, busy_timeout_ms=busy_timeout_ms
+    )
+
+    try:
+        os.replace(source, db_path)
+    except PermissionError as exc:
+        raise PermissionError(
+            f"could not replace {db_path}: another process still has it open -- close any "
+            "running morgan-mcp sessions and try again"
+        ) from exc
+
+    Path(f"{db_path}-wal").unlink(missing_ok=True)
+    Path(f"{db_path}-shm").unlink(missing_ok=True)
+
+    check_after = _quick_check(Path(db_path))
+    if check_after != "ok":
+        raise SnapshotCorrupt(Path(db_path), f"{db_path} failed PRAGMA quick_check: {check_after}")
+
+    _, after = _describe(Path(db_path))
+    return RestoreResult(before=before, after=after, safety=safety)

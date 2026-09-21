@@ -30,7 +30,7 @@ from morgan_brain.surfaces.cli.commands import (
     cmd_recall,
     cmd_remember,
 )
-from morgan_brain.surfaces.cli.maintenance import cmd_snapshot
+from morgan_brain.surfaces.cli.maintenance import cmd_restore, cmd_snapshot, restore_preview
 from morgan_brain.surfaces.cli.project import detect_project
 from morgan_brain.surfaces.cli.render import RENDERERS
 
@@ -46,6 +46,7 @@ HANDLERS = {
     "doctor": cmd_doctor,
     "import": cmd_import,
     "snapshot": cmd_snapshot,
+    "restore": cmd_restore,
 }
 
 # Commands where --all-projects is meaningless: a write or a single chat turn always
@@ -124,6 +125,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Emit machine-readable JSON instead of human text."
     )
 
+    # No --project/--all-projects: like snapshot, a restore replaces the whole database file.
+    p_restore = sub.add_parser(
+        "restore",
+        help="Replace the whole database with a snapshot, behind a safety snapshot taken first.",
+    )
+    p_restore.add_argument("file", help="Path to the snapshot file to restore.")
+    p_restore.add_argument(
+        "--yes", action="store_true", help="Actually replace the database (default: preview only)."
+    )
+    p_restore.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON instead of human text."
+    )
+
     # No --project: the destination follows the holdout rule, not the caller's working
     # directory, and offering a flag that cannot be honoured would be worse than omitting it.
     p_import = sub.add_parser(
@@ -165,6 +179,19 @@ async def _dispatch(args: argparse.Namespace, settings: Settings, project: str) 
             print(json.dumps({"error": message}, ensure_ascii=False))
         else:
             print(message, file=sys.stderr)
+        return 2
+
+    if args.command == "restore" and not args.yes:
+        # A restore is the one command whose own mistake a rerun cannot undo, so the bare
+        # form never touches anything -- it only prints what --yes would replace.
+        preview = restore_preview(args, settings)
+        if args.json:
+            print(json.dumps(preview, ensure_ascii=False))
+        else:
+            print(
+                f"Would replace {preview['database']} with {preview['snapshot']}. "
+                "Pass --yes to actually restore."
+            )
         return 2
 
     handler, renderer = HANDLERS[args.command], RENDERERS[args.command]

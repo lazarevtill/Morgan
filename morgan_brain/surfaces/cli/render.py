@@ -93,6 +93,13 @@ def _render_snapshot(data: dict[str, Any]) -> str:
     )
 
 
+def _render_restore(data: dict[str, Any]) -> str:
+    return (
+        f"Restored: before={data['before']} after={data['after']} "
+        f"(the database as it was is saved at {data['safety_snapshot']})"
+    )
+
+
 RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "remember": _render_remember,
     "recall": _render_recall,
@@ -103,4 +110,5 @@ RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "doctor": _render_doctor,
     "import": _render_import,
     "snapshot": _render_snapshot,
+    "restore": _render_restore,
 }
