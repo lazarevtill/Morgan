@@ -48,9 +48,10 @@ def _column_names(conn: sqlite3.Connection, table: str) -> set[str]:
 
 
 #: The table and column migration step 4 (``memories``/``facts`` author) and step 6
-#: (``vec_items`` status) add. Checked by ``_missing_provenance`` below: absent on a database
-#: that has not been through that step yet -- ordinary before ``morgan migrate``, not a bug --
-#: so the count reports ``None`` with a reason instead of a wrong zero.
+#: (``vec_items`` status) add. Checked by ``_missing_provenance`` below: a column absent on a
+#: database that has not been through that step yet is ordinary before ``morgan migrate``, not
+#: a bug, and so is a table entirely absent because schema-building partially failed -- either
+#: way the count reports ``None`` with a reason instead of a wrong zero.
 _PROVENANCE_CHECKS: tuple[tuple[str, str], ...] = (
     ("memories", "author_id"),
     ("facts", "author_id"),
@@ -66,21 +67,28 @@ def _missing_provenance(conn: sqlite3.Connection, *, user_id: str) -> tuple[int 
     Subsumes the spec's "unknown origin written after the migration" case: an old writer also
     leaves ``author_id`` empty, and nothing records when the migration ran.
 
-    Returns ``(None, reason)`` on a database that has not been through the step that added a
-    checked column yet: the column itself is absent, so a count against it would be
-    meaningless rather than an honest zero.
+    Returns ``(None, reason)`` when a checked table has not been through the step that added
+    its column yet, *or* is entirely absent -- ``build_memory_module`` builds ``memories``
+    before ``vec_items`` (``composition.py``), so a partial failure (``schema_error``,
+    ``sqlite_vec_error``) can leave the later ones missing outright while the earlier ones
+    exist. Either way a count would be meaningless, not an honest zero: an absent table is
+    named in the reason exactly like a present one missing its column, never silently
+    skipped into the total the way ``0`` rows would be.
     """
     missing = [
-        f"{table}.{column}"
+        f"{table}.{column}" if _table_exists(conn, table) else table
         for table, column in _PROVENANCE_CHECKS
-        if _table_exists(conn, table) and column not in _column_names(conn, table)
+        if not _table_exists(conn, table) or column not in _column_names(conn, table)
     ]
     if missing:
-        return None, f"not migrated yet (missing {', '.join(missing)}); run `morgan migrate`"
+        return None, (
+            f"not migrated yet or missing entirely: {', '.join(missing)}; run `morgan migrate`, "
+            "or see schema_error/sqlite_vec_error above if it should already exist"
+        )
+    # Every checked table exists and has its column -- `missing` above already ruled out the
+    # only two ways this count could be meaningless.
     total = 0
     for table, column in _PROVENANCE_CHECKS:
-        if not _table_exists(conn, table):
-            continue
         empty = "IS NULL" if table == "vec_items" else "= ''"
         # `table` and `column` come only from `_PROVENANCE_CHECKS` above, never from a caller.
         row = conn.execute(

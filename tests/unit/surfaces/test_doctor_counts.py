@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import morgan_brain.composition as composition
 from morgan_brain.composition import build_memory_context, sqlite_path
 from morgan_brain.config import Settings
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.models import Memory
 from morgan_brain.surfaces.cli.doctor import build_doctor_report
+from morgan_brain.surfaces.cli.render import _render_doctor
 
 #: ``memories`` exactly as every Morgan before phase 0 created it (frozen in
 #: ``tests/unit/memory/test_provenance_columns.py::_PRE_PHASE_ZERO_DDL`` too) -- no
@@ -157,3 +159,42 @@ async def test_a_vec_items_row_with_a_null_status_is_counted(tmp_path):
     report = await _report(tmp_path, project="Morgan")
 
     assert report["rows_missing_provenance"] == 1
+
+
+async def test_a_checked_table_entirely_absent_is_named_not_silently_zeroed(tmp_path, monkeypatch):
+    """Review finding: `_missing_provenance`'s `if not _table_exists(conn, table): continue`
+    treated a table that does not exist at all the same as one with zero matching rows,
+    letting it fall out of both the reason-building check and the count -- reporting a clean
+    `0` for a database `doctor` already knows is broken (`schema_error` is set).
+
+    `build_memory_module` builds `memories`/`memory_entities` before `vec_items`/`facts`
+    (`composition.py`), so a partial failure there -- sqlite-vec failing to load, say --
+    leaves the first two present and the last two missing outright. Simulated by making
+    `SqliteVectorIndex` itself raise, the same way a real load failure would; doctor's
+    existing `except Exception: report["schema_error"] = ...` around `build_memory_module`
+    catches it exactly as it does today, before this test's `assert` even runs.
+    """
+
+    def _boom(conn, *, dim):
+        raise RuntimeError("sqlite-vec extension failed to load")
+
+    monkeypatch.setattr(composition, "SqliteVectorIndex", _boom)
+
+    report = await _report(tmp_path, project="p")
+
+    assert report["schema_error"] is not None
+    assert report["rows_missing_provenance"] is None
+    assert "vec_items" in report["rows_missing_provenance_reason"]
+
+
+async def test_the_scoped_line_renders_with_its_total(tmp_path):
+    """`render.py` is on this task's file list and otherwise has no test touching doctor's
+    plain-text form: the spec's own example, `memories: 3 in project 'personal' (5 across all
+    projects)`, rendered from a real report rather than a hand-built dict."""
+    await _store(tmp_path, project="Morgan", count=2)
+    await _store(tmp_path, project="personal", count=3)
+
+    report = await _report(tmp_path, project="personal")
+    rendered = _render_doctor(report)
+
+    assert "memories: 3 in project 'personal' (5 across all projects)" in rendered.splitlines()
