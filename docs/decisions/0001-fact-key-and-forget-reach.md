@@ -1,6 +1,7 @@
 # 0001: The fact key, and how far `forget` reaches
 
-**Status:** accepted, 2026-09-22. Decision 1 is built in phase 2; decision 2 holds now.
+**Status:** accepted, 2026-09-22. Decision 1 is built when supersession is assembled
+deterministically; decision 2 holds now.
 
 ## Decision 1: the fact key includes the author and the scope
 
@@ -13,14 +14,15 @@ a key has at most one current fact: the one with `valid_to IS NULL`.
 new one. `facts` carries `author_id` and `scope` columns (migration step 4), and neither the
 index nor the upsert reads them.
 
-**When.** The index and the upsert change together in phase 2, with R1, when supersession is
-assembled deterministically.
+**When.** The index and the upsert change together when supersession is assembled
+deterministically.
 
 **Why not now.** Nothing writes a second author or a second scope. Consolidation is the only
 writer of facts, and every fact it writes carries `author_id` equal to the owner's `user_id`
 and `scope` `private`; step 4 gave existing facts the same values. With one owner, one author
 and one scope, the four-column key and the six-column key select the same rows. Changing the
-index is a heavy migration step, and this phase gains nothing from it.
+index is a heavy migration step, and until something writes a second author or scope it
+changes nothing.
 
 **Until then.** A writer that stores a second author's or a second scope's fact under an existing
 key closes the other one's fact instead of keeping both. The first writer that sets another
@@ -53,7 +55,8 @@ which of them it reports as absent. (It deletes the project's row from each tabl
 `tests/unit/memory/test_forget.py::test_forget_empties_every_underlying_table` checks each
 table against a list of its own. A store that adds a table therefore also adds its delete to
 `forget()` and adds the table to that test's list. A second embedding space's vec0 table, once
-phase 2 creates one, is in `project_tables(conn)` but has no delete in `forget()`: `forget()`
-deletes vectors from `vec_items` only.
+something creates one (a second model's space, for a re-embed), is in `project_tables(conn)`
+but has no delete in `forget()`: `forget()` deletes vectors from `vec_items` only.
 
-**Later.** Phase 1a's `forget --session` and `forget --since` cascade through the same registry.
+**Later.** Erasing by session or by date, once `forget` can, cascades through the same
+registry.

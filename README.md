@@ -15,18 +15,20 @@ overwritten. Everything lives in one SQLite file on hardware you own.
 - **Recalls by meaning and by keyword.** Vector search (sqlite-vec) and full-text search
   (FTS5, Cyrillic-aware) over every memory in the project, fused by reciprocal rank. With a
   relevance floor set, recall can decline a question the project cannot answer.
-- **Consolidates into facts.** `morgan consolidate` asks your model to turn recent memories
-  into subject-predicate-object facts with validity intervals. An update closes the old
-  interval and opens a new one; nothing is overwritten and history stays queryable. Every
-  fact records who asserted it: you, or the model's inference.
+- **Consolidates into facts.** `morgan consolidate` asks your model to turn up to 50 of a
+  project's memories, the ones nearest an empty query rather than the most recent, into
+  subject-predicate-object facts with validity intervals. An update closes the old interval
+  and opens a new one; nothing is overwritten, and closed intervals stay in the database.
+  Every fact records who asserted it; the facts consolidation writes are marked as the
+  model's inference, never as something you said.
 - **Answers with what it knows.** `morgan ask` recalls first, answers, and remembers the
   exchange.
 - **Starts from your history, not from nothing.** `morgan import` seeds memory from a ChatGPT
   export. A fifth of the conversations are held back in a separate project, so the memory can
   later be evaluated against conversations nothing has learned from.
-- **Forgets completely.** `morgan forget` erases a project from every table in one
-  transaction, including vectors and the entity index, and reports exactly what it touched.
-  A snapshot taken first is the undo.
+- **Forgets a project.** `morgan forget` erases it from every table in one transaction,
+  including vectors and the entity index, and reports exactly what it touched. The snapshot
+  it takes first is the undo, and keeps a full copy until you delete it.
 - **Talks to any model server.** Any OpenAI-compatible endpoint: llama-server by default,
   Ollama's `/v1`, vLLM. The model server is the only thing Morgan needs that it does not ship.
 - **Two surfaces, one gate.** The `morgan` CLI and the `morgan-mcp` server (stdio, or HTTP
@@ -45,7 +47,7 @@ cd ~/src/any-repo                      # the brain is the same from every reposi
 morgan remember "prefers terse, code-first answers"
 morgan recall "how do I like answers"  # needs only the embedding model
 morgan ask "what do you know about me" # needs the chat model
-morgan consolidate                      # recent memories → dated facts
+morgan consolidate                      # memories nearest an empty query → dated facts
 morgan import ~/Downloads/conversations.json   # optional: seed from a ChatGPT export
 ```
 
@@ -72,25 +74,18 @@ two categories that do not yet work.
 
 ## Documentation
 
-- [`docs/WIRING.md`](docs/WIRING.md) — configuration, the model server, the CLI (snapshot, restore,
-  migrate included), the MCP server, Docker.
+- [`docs/WIRING.md`](docs/WIRING.md) — configuration, the model server, the CLI (snapshot,
+  restore and migrate included), the MCP server, Docker.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the package, recall, the embedding space,
   migrations and snapshots, consolidation, erasure.
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — at-rest and transport protection, backups, the stack.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — where this came from, what was cut, what is next.
-- [`docs/decisions/`](docs/decisions/) — decisions taken ahead of the code that carries them.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — what is not in the code and why, what retrieval
+  measures, what is next.
+- [`docs/decisions/`](docs/decisions/) — decisions, and what the code does about each.
 - [`CLAUDE.md`](CLAUDE.md) — the invariants, for anyone (or anything) changing the code;
   [`AGENTS.md`](AGENTS.md) carries the same text for Codex and the other agents that read it.
-
-## History
-
-Morgan began as a self-learning personal agent kernel: a cognitive loop, a persona graph,
-an eval-gated prompt optimizer, a REST gateway, a learning worker, skills and tools. That
-build is archived at the git tag `legacy-v0.1.0-kernel` and its documents under
-[`docs/archive/`](docs/archive/). It was cut to this core in September 2026 because the
-memory was the part that was used, and the learning loop was switched off pending an
-evaluation gate sound enough to trust it. Earlier builds: `legacy-v0.0.4-full`,
-`legacy-v0.0.3-monolith`. All are tags.
+- [`docs/archive/`](docs/archive/) — the designs of the archived agent kernel, whose code is
+  at the git tag `legacy-v0.1.0-kernel`.
 
 ## License
 

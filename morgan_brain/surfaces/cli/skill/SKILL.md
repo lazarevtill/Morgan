@@ -71,9 +71,9 @@ answered elsewhere.
 
 - The message names a setting to check and a `morgan doctor` command to run: the embedding
   or chat server is down, too slow or refused the request, or the embedding model answering
-  is not the one that wrote the stored memories. Morgan retried before answering wherever a
-  retry could help. Tell the owner what the message says; do not retry in a loop.
-- The message begins "writes are blocked until `morgan migrate` runs": the database waits
+  is not the one that wrote the stored memories. Embedding calls were retried before this
+  answer; chat calls are not. Tell the owner what the message says; do not retry in a loop.
+- The message contains "writes are blocked until `morgan migrate` runs": the database waits
   for an upgrade. `recall` and `facts` still answer; `remember`, `ask_morgan` and `forget` are
   refused. Tell the owner; running `morgan migrate` is their decision, not yours.
 

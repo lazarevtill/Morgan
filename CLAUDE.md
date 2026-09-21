@@ -11,9 +11,9 @@ one `MemoryGate`. The model server is any OpenAI-compatible endpoint (llama-serv
 default). One process, no queue, no worker, no scheduler.
 
 Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
-`docs/ROADMAP.md` (what was cut and why), `docs/decisions/` (decisions the code has not caught
-up with yet). The archived kernel this was cut from is at the tag `legacy-v0.1.0-kernel` with
-its designs under `docs/archive/`.
+`docs/ROADMAP.md` (what is not in the code and why, what retrieval measures, what is next),
+`docs/decisions/` (decisions, and what the code does about each). The archived agent kernel is
+at the tag `legacy-v0.1.0-kernel`, its designs under `docs/archive/`.
 
 ## Package map (`morgan_brain/`, ~10,300 lines)
 
@@ -121,7 +121,8 @@ come in" are answered by the directory names.
   Morgan never prunes.
 - **Facts evolve, they don't overwrite.** Update = close the old interval, open a new one. A
   key has at most one current fact, and a unique index on `facts` enforces it. The key is
-  (`user_id`, `project`, `subject`, `predicate`); it gains `author_id` and `scope` in phase 2
+  (`user_id`, `project`, `subject`, `predicate`); it gains `author_id` and `scope` once
+  supersession is assembled deterministically
   (`docs/decisions/0001-fact-key-and-forget-reach.md`).
 - **Facts are surfaced alongside episodics, never instead of them.** Recall budgets the
   fact block so a matching memory cannot be pushed out of the window by fact volume.

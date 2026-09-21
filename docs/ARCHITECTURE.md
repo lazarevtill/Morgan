@@ -60,8 +60,8 @@ Recall returns a `RecallOutcome`: the memories, `abstained`, and a `reason`, whi
 `--json`, the MCP result and the `recall.done` log line all carry. An empty result is
 abstained, as `empty` (nothing in scope, not even a fact) or `declined` (the floor). Results
 come back with `too_few_to_judge`, `no_floor`, or `null` when the floor judged them and they
-answered. `keyword_only` is reserved for phase 1a's fallback when embeddings are down; nothing
-emits it. The `recall.done` line also carries the embedding's latency and outcome and the
+answered. `keyword_only` is reserved for a keyword-only fallback when embeddings are down,
+which does not exist yet; nothing emits it. The `recall.done` line also carries the embedding's latency and outcome and the
 query's language.
 
 Facts never suppress episodics: prepended in full and then truncated, a project holding

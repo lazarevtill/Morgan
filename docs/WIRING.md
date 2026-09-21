@@ -244,7 +244,7 @@ After an upgrade of Morgan, `morgan doctor`'s `migration` line says whether the 
 for `morgan migrate`. Light steps run by themselves when the database is opened. A heavy step
 (one that rewrites, moves or deletes rows) waits for `morgan migrate`, and until it runs every
 write -- `remember`, `ask`, `consolidate`, `forget`, `import`, and the MCP tools that write --
-fails with a message that begins "writes are blocked until `morgan migrate` runs" and names the
+fails with an error containing "writes are blocked until `morgan migrate` runs" and naming the
 pending steps; `recall` and `facts` still answer. `morgan migrate --dry-run` lists the pending
 steps. `morgan migrate` takes a `migrate` snapshot, runs every pending step in one
 transaction, checks the result, prints the row counts before and after, and then checks the
@@ -294,7 +294,7 @@ own working directory means nothing to a client). A call that names no project w
 `personal`: `remember` says so with `project_defaulted: true`, and `forget` without a
 `project` erases `personal`. Every tool declares MCP's hints: `recall` and `facts` are
 read-only, `remember` and `ask_morgan` write (a turn stores the exchange), `forget` is
-destructive. Errors come back as the tool's error result, with the message the CLI prints: an
+destructive. Errors come back as the tool's error result, carrying the message the CLI prints: an
 unreachable, slow or refusing model server, an `EmbeddingSpaceMismatch`, or a database waiting
 for `morgan migrate`, which refuses the three tools that write while `recall` and `facts`
 still answer.
@@ -351,6 +351,19 @@ OpenResearch's data folder in its settings, set `ORX_DATA_DIR` before installing
 with `./data` mounted as the database directory. Put `MORGAN_LLM_ENDPOINT` and a real
 `MORGAN_API_KEY` in `.env` next to the compose file; the published port is not loopback, so
 the server refuses to start without the key.
+
+After an upgrade that leaves a heavy migration step pending, the server refuses every write
+until `morgan migrate` has run against `/app/data`. Run it in a one-off container of the same
+service, which gets the same `.env` and the same `./data` mount, with the old server stopped:
+
+```bash
+docker compose build
+docker compose stop morgan-mcp
+docker compose run --rm morgan-mcp morgan migrate
+docker compose up -d
+```
+
+The snapshot `migrate` takes lands in `./data/snapshots`.
 
 ## 9. Consolidation on a schedule
 

@@ -20,12 +20,24 @@ address without a real key.
 ```bash
 morgan snapshot                     # a VACUUM INTO copy in MORGAN_SNAPSHOT_DIR, quick_check'ed
 morgan snapshot --list
+```
+
+`morgan snapshot` is safe while the server runs: `VACUUM INTO` writes a consistent copy while
+other processes hold the database open, which a filesystem copy of a WAL-mode database
+mid-write is not. `--list` only reads. `morgan migrate` and `morgan forget` take a snapshot of
+their own before they change anything.
+
+```bash
 morgan restore <snapshot> --yes     # takes a before-restore snapshot first
 ```
 
-Safe while the server runs; a filesystem copy of a WAL-mode database mid-write is not
-consistent. `morgan migrate` and `morgan forget` take a snapshot of their own before they
-change anything. Morgan never deletes a snapshot that passed its check, so
+`morgan restore` is not safe while the server runs. Close every running `morgan-mcp` first,
+and run no other `morgan` command meanwhile: the restore deletes the database's `-wal` and
+`-shm` files and swaps the file in place, so on Linux or macOS a write another process makes
+meanwhile lands in the file being replaced and is lost, and on Windows the swap fails while
+another process holds the file open.
+
+Morgan never deletes a snapshot that passed its check, so
 `MORGAN_SNAPSHOT_DIR` (default `~/.local/share/morgan/snapshots`) only grows: prune it
 yourself. The snapshots sit beside the database unless you point them elsewhere, so a copy
 kept off the machine is yours to make. One file is the whole backup, and the whole exposure:

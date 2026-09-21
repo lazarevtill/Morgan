@@ -7,33 +7,27 @@ MCP server over one gate, recall that fuses vector and keyword search, and on-de
 consolidation of memories into valid-time facts by a local model. About 10,300 lines, one
 process, no services beyond a model server.
 
-## Where it came from
-
-Until September 2026 this repository was a **self-learning personal agent kernel**: the same
-memory underneath, plus a cognitive loop with perception, personalization, skills and tools; a
-persona graph; a signal recorder; an eval-gated champion-prompt optimizer; a REST/SSE gateway;
-a learning worker on an event bus with a nightly scheduler; Redis, Qdrant and MLflow backends.
-About 15,600 lines, of which the memory was the part in daily use.
-
-It was cut to the core for three reasons:
-
-1. **The learning loop was switched off.** Champion promotion shipped disarmed because its
-   gate was a bare comparison over a 12-item golden set. A loop that cannot be trusted to run
-   is cost without benefit.
-2. **Its quality was unmeasured.** Retrieval quality and the persona graph's accuracy were
-   the papers' numbers, not this system's; the harness ran over a hash embedder.
-3. **The premise had changed.** The chat assistant was to be the product; in practice the
-   owner's AI tools are the assistant and Morgan is their memory. Skills, tools, streaming and
-   a REST gateway serve an assistant, not a memory.
-
-The full build is at the tag **`legacy-v0.1.0-kernel`**, its designs and decision records under
-[`archive/`](archive/). Earlier: `legacy-v0.0.4-full` (the platform build), `legacy-v0.0.3-monolith`.
-
-## Kept from the kernel, on purpose
+Its core:
 
 - The one-database, one-gate, project-scoped memory with cascading `forget()`.
 - Bi-temporal facts with actor attribution, and the consolidation that produces them.
-- The reachability contract: a model server that is down is reported by name on every surface.
+- The reachability contract: a model server that is down, slow or refusing is reported by
+  name on every surface.
+
+## What is not in the code, and why
+
+- **No learning loop.** Nothing tunes prompts, promotes a champion or learns from signals. A
+  loop that changes behaviour needs an evaluation gate sound enough to trust, with enough items
+  and a real statistical test, and there is none yet.
+- **No assistant.** No cognitive loop, persona graph, skills, tools, streaming or REST
+  gateway. The owner's AI tools are the assistant; Morgan is their memory, and its surfaces are
+  a CLI and an MCP server.
+- **No services.** No worker, event bus, scheduler, Redis, Qdrant or MLflow. One process and
+  one SQLite file hold everything, and consolidation runs when asked.
+
+The archived agent kernel that has all of the above is at the git tag
+**`legacy-v0.1.0-kernel`**, its designs and decision records under [`archive/`](archive/);
+`legacy-v0.0.4-full` and `legacy-v0.0.3-monolith` are older builds.
 
 ## What retrieval actually measures
 
@@ -104,9 +98,8 @@ recall ([`measurements/2026-09-phase0-baseline.md`](measurements/2026-09-phase0-
 - **Multi-hop composition does not happen.** Recall ranks memories; it has no mechanism to
   combine two of them into one answer, and the numbers say so.
 - **Model-backed entity extraction** for scripts without letter case.
-- **Bring learning back only against a sound gate.** Anything from the archived kernel returns
-  designed against this core, gated by an evaluation with enough items and a real statistical
-  test, not before.
+- **Learning, only against a sound gate.** Nothing from the archived kernel is built on this
+  core until an evaluation with enough items and a real statistical test can gate it.
 
 ## Working agreement
 
