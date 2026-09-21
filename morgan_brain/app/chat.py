@@ -77,9 +77,10 @@ class Chat:
         self._gate.require_writable()
         hkey = session_key(user_id, session_id)
         history = self._history.recent(hkey, project=project)
-        memories = await self._gate.recall(MemoryQuery(user_id=user_id, project=project, text=text))
+        recalled = await self._gate.recall(MemoryQuery(user_id=user_id, project=project, text=text))
         result = await self._client.agenerate(
-            build_messages(memories=memories, history=history, text=text), model=self._model
+            build_messages(memories=recalled.memories, history=history, text=text),
+            model=self._model,
         )
         reply = result.text
 

@@ -31,8 +31,8 @@ from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.payloads import (
     fact_to_dict,
     forget_result,
-    memory_to_dict,
     merge_forget_reports,
+    recall_result,
 )
 
 
@@ -84,7 +84,7 @@ async def cmd_remember(
 async def cmd_recall(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
     ctx = build_memory_context(settings)
     try:
-        results = await ctx.gate.recall(
+        outcome = await ctx.gate.recall(
             MemoryQuery(
                 user_id=settings.owner_user_id,
                 project=project,
@@ -95,11 +95,7 @@ async def cmd_recall(args: argparse.Namespace, settings: Settings, project: str)
         )
     finally:
         ctx.conn.close()
-    return {
-        "project": project,
-        "all_projects": args.all_projects,
-        "results": [memory_to_dict(m) for m in results],
-    }
+    return recall_result(outcome, project=project, all_projects=args.all_projects)
 
 
 async def cmd_facts(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:

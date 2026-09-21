@@ -43,6 +43,8 @@ async def test_a_stored_name_does_not_outrank_what_meaning_and_keywords_both_ran
     for content in (NAMED, PLAIN):
         await gate.store(Memory(user_id="u", project="p", content=content))
 
-    hits = await gate.recall(MemoryQuery(user_id="u", project="p", text="Harbor", top_k=8))
+    hits = (
+        await gate.recall(MemoryQuery(user_id="u", project="p", text="Harbor", top_k=8))
+    ).memories
 
     assert [m.content for m in hits] == [PLAIN, NAMED]

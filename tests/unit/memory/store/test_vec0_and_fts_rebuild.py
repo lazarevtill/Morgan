@@ -151,7 +151,7 @@ async def test_recall_answers_from_both_rebuilt_indexes(tmp_path):
 
     assert [h.id for h in vector_hits] == ["m1"]
     assert sorted(keyword_hits) == ["m0", "m1", "m2"]
-    assert "m1" in [m.id for m in recalled]
+    assert "m1" in [m.id for m in recalled.memories]
 
 
 async def test_a_stored_memory_writes_its_status_scope_and_author_to_both_indexes(tmp_path):

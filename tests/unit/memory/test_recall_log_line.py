@@ -84,7 +84,7 @@ async def test_recall_done_carries_its_four_fields(capsys):
     assert entry["embed_latency_ms"] >= 0
     assert entry["embed_outcome"] == "ok"
     assert entry["degraded"] is None
-    assert entry["reason"] is None
+    assert entry["reason"] == "no_floor"  # this module has no floor configured
     assert entry["query_language"] == "ru"
 
 
@@ -96,12 +96,13 @@ async def test_recall_done_is_emitted_once_on_an_empty_project(capsys):
             MemoryQuery(user_id="u1", project="empty", text="anything", top_k=5)
         )
 
-    assert found == []
+    assert found.memories == []
     assert capsys.readouterr().out == ""
     done = [entry for entry in logs if entry["event"] == "recall.done"]
     assert len(done) == 1
     assert done[0]["query_language"] == "en"
     assert done[0]["embed_outcome"] == "ok"
+    assert done[0]["reason"] == "empty"
 
 
 async def test_recall_done_is_emitted_once_even_when_the_floor_declines(capsys):
@@ -124,11 +125,12 @@ async def test_recall_done_is_emitted_once_even_when_the_floor_declines(capsys):
             MemoryQuery(user_id="u1", project="p", text=_QUERY_TEXT, top_k=5)
         )
 
-    assert found == []  # the floor declined: proof this hit the early return, not the merge
+    assert found.memories == []  # the floor declined: proof this hit the early return
     assert capsys.readouterr().out == ""
     done = [entry for entry in logs if entry["event"] == "recall.done"]
     assert len(done) == 1
     assert done[0]["embed_outcome"] == "ok"
+    assert done[0]["reason"] == "declined"
 
 
 async def test_recall_done_logs_unreachable_and_still_raises(capsys):

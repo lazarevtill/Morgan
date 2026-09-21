@@ -314,7 +314,7 @@ async def run_probes(
         found = await gate.recall(
             MemoryQuery(user_id=user_id, project=project, text=probe.query, top_k=k)
         )
-        results.append(ProbeResult(probe=probe, retrieved=tuple(m.id for m in found)))
+        results.append(ProbeResult(probe=probe, retrieved=tuple(m.id for m in found.memories)))
     return results
 
 

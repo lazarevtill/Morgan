@@ -10,7 +10,7 @@ from __future__ import annotations
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from morgan_brain.memory.migrations import DatabaseNeedsMigration
 from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, TemporalFact
@@ -33,6 +33,30 @@ class ForgetReport:
     facts: int = 0
     history: int = 0
     tables_skipped: list[str] = field(default_factory=list)
+
+
+#: Why a recall returned what it did. ``empty``: nothing in scope came back, not even a fact
+#: (abstained). ``declined``: the relevance floor judged that nothing stood out above the
+#: background (abstained). ``too_few_to_judge``: fewer than ``floor.MIN_RESULTS_TO_JUDGE``
+#: vector hits, returned unjudged. ``no_floor``: returned, and no floor is configured.
+#: ``keyword_only``: reserved for phase 1a's fallback when embeddings are down; nothing emits
+#: it yet. ``None`` on the outcome: the floor judged the query and it answered.
+RecallReason = Literal["empty", "declined", "too_few_to_judge", "no_floor", "keyword_only"]
+
+
+@dataclass(frozen=True)
+class RecallOutcome:
+    """What one ``recall()`` returned, and why.
+
+    An empty list used to stand for four situations the caller could not tell apart --
+    nothing stored, the floor declining, too few results to judge, no floor configured -- and
+    the owner cannot act on one without knowing which it is. ``reason`` is the same string the
+    ``recall.done`` log line carries.
+    """
+
+    memories: list[Memory]
+    abstained: bool
+    reason: RecallReason | None
 
 
 class MemoryGate:
@@ -65,7 +89,7 @@ class MemoryGate:
         self._require_scope(user_id)
         return await self._store.get(memory_id, user_id=user_id)
 
-    async def recall(self, query: MemoryQuery) -> list[Memory]:
+    async def recall(self, query: MemoryQuery) -> RecallOutcome:
         self._require_scope(query.user_id)
         return await self._store.recall(query)
 

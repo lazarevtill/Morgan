@@ -223,11 +223,11 @@ class MemoryConsolidator:
         store, then runs propose + apply.
         """
         # Recall recent episodics (up to 50).
-        episodics = await self._gate.recall(
+        recalled = await self._gate.recall(
             MemoryQuery(user_id=user_id, project=project, text="", top_k=50)
         )
         # Filter to episodic kind only (fact_memories are also returned by recall).
-        episodics = [m for m in episodics if m.kind is MemoryKind.EPISODIC]
+        episodics = [m for m in recalled.memories if m.kind is MemoryKind.EPISODIC]
 
         existing_facts = await self._gate.current_facts(user_id=user_id, project=project)
 

@@ -23,7 +23,7 @@ from datetime import datetime
 import structlog
 
 from morgan_brain.memory.embedder import Embedder
-from morgan_brain.memory.gate import ForgetReport
+from morgan_brain.memory.gate import ForgetReport, RecallOutcome, RecallReason
 from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
@@ -163,20 +163,20 @@ class MemoryModule:
         memory = self._episodics.get(memory_id)
         return memory if memory is not None and memory.user_id == user_id else None
 
-    async def recall(self, query: MemoryQuery) -> list[Memory]:
+    async def recall(self, query: MemoryQuery) -> RecallOutcome:
         # None means "no project filter" at the store layer -- the cross-project escape hatch.
         project = None if query.all_projects else query.project
         embed_started = time.monotonic()
         try:
             q_vector = await self._embedder.embed(query.text)
         except ProviderRefused:
-            self._log_recall_done(query, time.monotonic() - embed_started, "refused")
+            self._log_recall_done(query, time.monotonic() - embed_started, "refused", reason=None)
             raise
         except ProviderUnreachable as exc:
-            self._log_recall_done(query, time.monotonic() - embed_started, exc.outcome)
+            self._log_recall_done(query, time.monotonic() - embed_started, exc.outcome, reason=None)
             raise
         except Exception:
-            self._log_recall_done(query, time.monotonic() - embed_started, "error")
+            self._log_recall_done(query, time.monotonic() - embed_started, "error", reason=None)
             raise
         embed_elapsed = time.monotonic() - embed_started
         vec_hits = await self._vectors.search(
@@ -185,6 +185,14 @@ class MemoryModule:
             top_k=query.top_k * 2,
             project=project,
         )
+        # The floor judges on vector evidence alone, so it rules before anything else is
+        # gathered: a decline returns nothing, facts included. Judged after the fact merge, a
+        # decline dropped the facts along with the memories and said nothing about why.
+        verdict = self._floor_verdict(query, project, vec_hits)
+        if verdict == "declined":
+            return self._recall_done(
+                query, embed_elapsed, RecallOutcome([], abstained=True, reason="declined")
+            )
         vector_ranking = [h.id for h in vec_hits]
         fts_ranking = self._fts.search(
             query.text,
@@ -221,31 +229,51 @@ class MemoryModule:
             for f in facts
         ]
         merged = _merge_facts_and_episodics(fact_memories, episodic, query.text, query.top_k)
-        self._log_recall_done(query, embed_elapsed, "ok")
-        if not self._answer_is_worth_returning(query, project, vec_hits):
-            return []
-        return merged
+        # "empty" is decided on what comes back, facts included: a project holding only facts
+        # answers with them, and "abstained" beside them would contradict the result.
+        if not merged:
+            outcome = RecallOutcome([], abstained=True, reason="empty")
+        else:
+            outcome = RecallOutcome(merged, abstained=False, reason=verdict)
+        return self._recall_done(query, embed_elapsed, outcome)
+
+    def _recall_done(
+        self, query: MemoryQuery, embed_elapsed_seconds: float, outcome: RecallOutcome
+    ) -> RecallOutcome:
+        """Log ``recall.done`` for a recall whose embedding came back, and return *outcome*.
+
+        Every such path ends here, so the line carries the reason the caller is given."""
+        self._log_recall_done(query, embed_elapsed_seconds, "ok", reason=outcome.reason)
+        return outcome
 
     def _log_recall_done(
-        self, query: MemoryQuery, embed_elapsed_seconds: float, embed_outcome: EmbedOutcome
+        self,
+        query: MemoryQuery,
+        embed_elapsed_seconds: float,
+        embed_outcome: EmbedOutcome,
+        *,
+        reason: RecallReason | None,
     ) -> None:
         """One line per recall -- answered, declined, or one whose embedding never came back:
         1a's availability trigger reads it, not memory, and a recall that failed to embed is
-        exactly the case it counts. `degraded` and `reason` are None until 1a's keyword-only
-        fallback and Task 22's abstain reasons fill them in."""
+        exactly the case it counts. *reason* is the outcome's, and ``None`` when the embedding
+        never came back, since there is no outcome then. `degraded` is None until 1a's
+        keyword-only fallback fills it in."""
         log.info(
             "recall.done",
             embed_latency_ms=round(embed_elapsed_seconds * 1000, 1),
             embed_outcome=embed_outcome,
             degraded=None,
-            reason=None,
+            reason=reason,
             query_language=language.of(query.text),
         )
 
-    def _answer_is_worth_returning(
+    def _floor_verdict(
         self, query: MemoryQuery, project: str | None, vec_hits: list[VectorHit]
-    ) -> bool:
-        """Whether this query found anything, or only the nearest of many unrelated things.
+    ) -> RecallReason | None:
+        """The relevance floor's verdict: ``"declined"`` when this query found only the nearest
+        of many unrelated things, ``None`` when it was judged and answered, or why it was not
+        judged at all -- ``"no_floor"`` or ``"too_few_to_judge"``.
 
         Off unless a threshold is configured: the right value depends on the corpus and the
         embedding model, and shipping someone else's constant would reject real answers
@@ -258,7 +286,12 @@ class MemoryModule:
         owner's archive. A genuine identifier hit is ranked by the vector search too.
         """
         if self._floor_margin is None:
-            return True
+            return "no_floor"
+        margin = answer_margin([h.score for h in vec_hits])
+        if margin is None:
+            # Fewer than floor.MIN_RESULTS_TO_JUDGE hits: no background to judge against, so
+            # the results go back unjudged.
+            return "too_few_to_judge"
         # words(), not split(): the index matches a name exactly, and a raw split leaves the
         # punctuation attached, so "harbor?" at the end of a question never matched "harbor".
         entity_ranking = self._entities.search(
@@ -268,11 +301,12 @@ class MemoryModule:
             project=project,
         )
         ranked = {h.id for h in vec_hits[: query.top_k]}
-        return should_answer(
-            margin=answer_margin([h.score for h in vec_hits]),
+        answered = should_answer(
+            margin=margin,
             threshold=self._floor_margin,
             has_exact_match=any(memory_id in ranked for memory_id in entity_ranking),
         )
+        return None if answered else "declined"
 
     async def upsert_fact(self, fact: TemporalFact) -> str:
         return await self._temporal.upsert_fact(fact, now=self._clock())

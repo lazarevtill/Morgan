@@ -229,7 +229,13 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
         all_projects: bool = False,
         top_k: int = 8,
     ) -> dict[str, Any]:
-        """Search memories by meaning and by keyword, project-scoped by default."""
+        """Search memories by meaning and by keyword, project-scoped by default.
+
+        ``abstained`` is true when ``results`` is empty, and ``reason`` says why: ``empty``
+        (nothing stored in scope) or ``declined`` (the relevance floor found nothing that stood
+        out above the background). Results come back with ``reason`` ``too_few_to_judge`` or
+        ``no_floor`` when the floor did not judge them, and ``null`` when it judged them and
+        they answered."""
         args = argparse.Namespace(query=query, all_projects=all_projects, top_k=top_k)
         return await cmd_recall(args, settings, project or PERSONAL_PROJECT)
 

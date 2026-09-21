@@ -206,8 +206,8 @@ def test_recall_finds_the_moved_memories_under_personal(tmp_path):
         got = await module.recall(
             MemoryQuery(user_id="u", project=PERSONAL_PROJECT, text="harbor plan", top_k=8)
         )
-        assert all(m.project == PERSONAL_PROJECT for m in got)
-        return [m.id for m in got]
+        assert all(m.project == PERSONAL_PROJECT for m in got.memories)
+        return [m.id for m in got.memories]
 
     # A superset, not an equality: the moved facts are surfaced too (alongside episodics,
     # never instead of them -- see module.py's `recall`), and the second upsert's key

@@ -54,7 +54,9 @@ async def test_an_exactly_matching_memory_survives_a_project_full_of_facts(gate)
     )
     await _add_facts(gate, 12)
 
-    found = await gate.recall(MemoryQuery(user_id="u", project="p", text="harbor", top_k=8))
+    found = (
+        await gate.recall(MemoryQuery(user_id="u", project="p", text="harbor", top_k=8))
+    ).memories
 
     assert any("harbor" in m.content for m in found), [m.content for m in found]
 
@@ -63,7 +65,9 @@ async def test_facts_still_fill_the_window_when_there_is_little_else(gate):
     """The budget reserves room for episodics; it must not waste it when none exist."""
     await _add_facts(gate, 12)
 
-    found = await gate.recall(MemoryQuery(user_id="u", project="p", text="value3", top_k=8))
+    found = (
+        await gate.recall(MemoryQuery(user_id="u", project="p", text="value3", top_k=8))
+    ).memories
 
     assert len(found) == 8
 
@@ -95,7 +99,9 @@ async def test_the_facts_that_survive_the_budget_are_the_ones_the_query_asked_ab
             )
         )
 
-    found = await gate.recall(MemoryQuery(user_id="u", project="p", text="harbor", top_k=8))
+    found = (
+        await gate.recall(MemoryQuery(user_id="u", project="p", text="harbor", top_k=8))
+    ).memories
 
     facts = [m.content for m in found if m.kind is MemoryKind.SEMANTIC]
     assert any("harbor" in c for c in facts), facts

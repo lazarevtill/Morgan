@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from morgan_brain.memory.gate import ForgetReport
+from morgan_brain.memory.gate import ForgetReport, RecallOutcome
 from morgan_brain.memory.migrations import Step
 from morgan_brain.memory.snapshot import RestoreResult, SnapshotResult
 from morgan_brain.memory.store.spaces import EmbeddingSpace
@@ -27,6 +27,18 @@ def memory_to_dict(m: Memory) -> dict[str, Any]:
         "source": m.source.value,
         "importance": m.importance,
         "created_at": m.created_at.isoformat() if m.created_at else None,
+    }
+
+
+def recall_result(outcome: RecallOutcome, *, project: str, all_projects: bool) -> dict[str, Any]:
+    """What recall found, and whether it abstained and why: an empty ``results`` is either
+    ``empty`` (nothing in scope) or ``declined`` (the floor judged nothing stood out)."""
+    return {
+        "project": project,
+        "all_projects": all_projects,
+        "abstained": outcome.abstained,
+        "reason": outcome.reason,
+        "results": [memory_to_dict(m) for m in outcome.memories],
     }
 
 

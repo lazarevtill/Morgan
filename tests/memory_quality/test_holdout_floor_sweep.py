@@ -118,7 +118,7 @@ async def _sweep(
         found = await gate.recall(
             MemoryQuery(user_id=USER_ID, all_projects=True, text=probe.query, top_k=k)
         )
-        results.append(ProbeResult(probe=probe, retrieved=tuple(m.id for m in found)))
+        results.append(ProbeResult(probe=probe, retrieved=tuple(m.id for m in found.memories)))
 
     lines = []
     for split, label in ((Split.FIT, "fit"), (Split.SEALED, "sealed")):

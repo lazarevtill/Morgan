@@ -19,13 +19,16 @@ from morgan_brain.memory.store.db import open_db
 from morgan_brain.models import Memory
 
 
-def build_memory_module(path: str, *, dim: int = 4) -> MemoryModule:
+def build_memory_module(
+    path: str, *, dim: int = 4, floor_margin: float | None = None
+) -> MemoryModule:
     """Build a MemoryModule over the durable stack rooted at *path* (or ``:memory:``)."""
     return _build(
         open_db(path),
         embedder=FakeEmbedder(dim=dim),
         dim=dim,
         clock=lambda: datetime.now(UTC),
+        floor_margin=floor_margin,
     )
 
 

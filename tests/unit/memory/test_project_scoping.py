@@ -18,7 +18,7 @@ async def test_recall_defaults_to_the_query_project(tmp_path):
     m = _module(path)
     await m.store(Memory(user_id="u", project="acme", content="harbor mirror note"))
     await m.store(Memory(user_id="u", project="personal", content="harbor sailing note"))
-    got = await m.recall(MemoryQuery(user_id="u", project="acme", text="harbor"))
+    got = (await m.recall(MemoryQuery(user_id="u", project="acme", text="harbor"))).memories
     assert [x.content for x in got] == ["harbor mirror note"]
 
 
@@ -27,7 +27,9 @@ async def test_all_projects_crosses_the_boundary(tmp_path):
     m = _module(path)
     await m.store(Memory(user_id="u", project="acme", content="harbor mirror note"))
     await m.store(Memory(user_id="u", project="personal", content="harbor sailing note"))
-    got = await m.recall(MemoryQuery(user_id="u", text="harbor", all_projects=True, top_k=10))
+    got = (
+        await m.recall(MemoryQuery(user_id="u", text="harbor", all_projects=True, top_k=10))
+    ).memories
     assert len(got) == 2
 
 
@@ -44,7 +46,7 @@ async def test_recall_defaults_to_the_default_project_when_unspecified(tmp_path)
     m = _module(path)
     await m.store(Memory(user_id="u", content="unscoped note about harbor"))
     await m.store(Memory(user_id="u", project="acme", content="scoped note about harbor"))
-    got = await m.recall(MemoryQuery(user_id="u", text="harbor"))
+    got = (await m.recall(MemoryQuery(user_id="u", text="harbor"))).memories
     assert [x.content for x in got] == ["unscoped note about harbor"]
 
 
@@ -160,7 +162,7 @@ async def test_migration_backfills_default_project_on_a_pre_existing_database(tm
     conn.close()
 
     m = _module(path)
-    got = await m.recall(MemoryQuery(user_id="u", text="harbor"))
+    got = (await m.recall(MemoryQuery(user_id="u", text="harbor"))).memories
     assert "old harbor note" in [x.content for x in got]
     facts = await m.current_facts(user_id="u")
     assert [f.object for f in facts] == ["Berlin"]

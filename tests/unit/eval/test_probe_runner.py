@@ -49,7 +49,7 @@ async def test_the_corpus_is_isolated_in_its_own_project(gate):
     elsewhere = await gate.recall(
         MemoryQuery(user_id="owner", project="some-real-project", text="harbor", top_k=5)
     )
-    assert elsewhere == []
+    assert elsewhere.memories == []
 
 
 async def test_a_probe_that_retrieves_nothing_still_produces_a_result(gate):

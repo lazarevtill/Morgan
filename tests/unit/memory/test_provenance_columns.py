@@ -245,7 +245,9 @@ async def test_reads_answer_on_a_database_still_waiting_for_step_four(tmp_path):
     FtsIndex(module._conn).add(_memory_id("Morgan"), _CONTENT, user_id="u", project="Morgan")
     gate = MemoryGate(module, read_only_reason="1 step pending")
 
-    recalled = await gate.recall(MemoryQuery(user_id="u", project="Morgan", text="Kafka"))
+    recalled = (
+        await gate.recall(MemoryQuery(user_id="u", project="Morgan", text="Kafka"))
+    ).memories
     memory = await gate.get(_memory_id("Morgan"), user_id="u")
     [fact] = await gate.current_facts(user_id="u", project="Morgan")
 

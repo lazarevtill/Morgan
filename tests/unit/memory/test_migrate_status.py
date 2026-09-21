@@ -62,7 +62,7 @@ async def test_recall_still_answers_on_the_old_schema(tmp_path):
 
     from morgan_brain.models import MemoryQuery
 
-    assert await read_only.recall(MemoryQuery(user_id="u", project="p", text="Harbor"))
+    assert (await read_only.recall(MemoryQuery(user_id="u", project="p", text="Harbor"))).memories
 
 
 def test_the_steps_are_numbered_from_one_and_the_first_two_are_light():

@@ -24,7 +24,9 @@ async def test_forget_removes_from_every_index(tmp_path):
     report = await m.forget(user_id="u", project="p")
     assert report.memories == 1
     reopened = _module(path)
-    assert await reopened.recall(MemoryQuery(user_id="u", project="p", text="harbor")) == []
+    assert (
+        await reopened.recall(MemoryQuery(user_id="u", project="p", text="harbor"))
+    ).memories == []
 
 
 async def test_forget_is_project_scoped(tmp_path):
@@ -33,7 +35,7 @@ async def test_forget_is_project_scoped(tmp_path):
     await m.store(Memory(user_id="u", project="acme", content="harbor"))
     await m.store(Memory(user_id="u", project="personal", content="harbor"))
     await m.forget(user_id="u", project="acme")
-    left = await m.recall(MemoryQuery(user_id="u", text="harbor", all_projects=True))
+    left = (await m.recall(MemoryQuery(user_id="u", text="harbor", all_projects=True))).memories
     assert len(left) == 1
 
 
@@ -124,5 +126,5 @@ async def test_forget_refuses_to_run_inside_a_write_transaction(tmp_path):
     with pytest.raises(RuntimeError, match="write transaction"), gate.write_transaction():
         await gate.forget(user_id="u", project="p")
 
-    left = await gate.recall(MemoryQuery(user_id="u", project="p", text="harbor"))
+    left = (await gate.recall(MemoryQuery(user_id="u", project="p", text="harbor"))).memories
     assert [m.content for m in left] == ["harbor mirror secret"]

@@ -56,7 +56,9 @@ def gate(tmp_path):
 
 
 async def _contents(gate: MemoryGate, project: str) -> list[str]:
-    found = await gate.recall(MemoryQuery(user_id="owner", project=project, text="", top_k=100))
+    found = (
+        await gate.recall(MemoryQuery(user_id="owner", project=project, text="", top_k=100))
+    ).memories
     return [m.content for m in found]
 
 
@@ -74,7 +76,7 @@ async def test_user_and_assistant_turns_keep_their_attribution(gate, tmp_path):
     stored = await gate.recall(
         MemoryQuery(user_id="owner", project=ARCHIVE_PROJECT, text="", top_k=100)
     )
-    by_content = {m.content: m.source for m in stored}
+    by_content = {m.content: m.source for m in stored.memories}
     assert by_content["I prefer terse answers"] is MemorySource.USER_STATED
     assert by_content["Understood"] is MemorySource.AGENT_INFERRED
 

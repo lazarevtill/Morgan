@@ -9,14 +9,14 @@ from tests.unit.memory.conftest import build_memory_module as _module
 async def test_keyword_recall_survives_restart(tmp_path):
     path = str(tmp_path / "m.db")
     await _module(path).store(Memory(user_id="u", content="the Harbor mirror blocked the deploy"))
-    got = await _module(path).recall(MemoryQuery(user_id="u", text="Harbor"))
+    got = (await _module(path).recall(MemoryQuery(user_id="u", text="Harbor"))).memories
     assert any("Harbor" in m.content for m in got)
 
 
 async def test_cyrillic_keyword_recall_survives_restart(tmp_path):
     path = str(tmp_path / "m.db")
     await _module(path).store(Memory(user_id="u", content="Ромашка сохранила образец в архиве"))
-    got = await _module(path).recall(MemoryQuery(user_id="u", text="образец"))
+    got = (await _module(path).recall(MemoryQuery(user_id="u", text="образец"))).memories
     assert any("образец" in m.content for m in got)
 
 
@@ -25,12 +25,12 @@ async def test_entity_recall_survives_restart(tmp_path):
     await _module(path).store(
         Memory(user_id="u", content="a note", entities=[Entity(name="Harbor", type="org")])
     )
-    got = await _module(path).recall(MemoryQuery(user_id="u", text="harbor"))
+    got = (await _module(path).recall(MemoryQuery(user_id="u", text="harbor"))).memories
     assert any(m.content == "a note" for m in got)
 
 
 async def test_recall_is_user_scoped_after_restart(tmp_path):
     path = str(tmp_path / "m.db")
     await _module(path).store(Memory(user_id="u1", content="secret harbor note"))
-    got = await _module(path).recall(MemoryQuery(user_id="u2", text="harbor"))
+    got = (await _module(path).recall(MemoryQuery(user_id="u2", text="harbor"))).memories
     assert got == []

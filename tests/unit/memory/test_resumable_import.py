@@ -89,4 +89,4 @@ async def test_an_edited_turn_is_rewritten_rather_than_skipped(gate_and_embedder
             user_id="owner", project=ARCHIVE_PROJECT, text="wording", top_k=5
         )
     )
-    assert [m.content for m in found] == ["the corrected wording"]
+    assert [m.content for m in found.memories] == ["the corrected wording"]

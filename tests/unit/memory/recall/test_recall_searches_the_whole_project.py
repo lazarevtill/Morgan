@@ -21,7 +21,9 @@ async def test_a_memory_that_does_not_carry_the_name_in_the_question_is_still_se
     ):
         await gate.store(Memory(user_id="u", project="p", content=content))
 
-    hits = await gate.recall(MemoryQuery(user_id="u", project="p", text="Harbor", top_k=8))
+    hits = (
+        await gate.recall(MemoryQuery(user_id="u", project="p", text="Harbor", top_k=8))
+    ).memories
 
     assert {m.content for m in hits} == {
         "yesterday Harbor blocked the deploy again",

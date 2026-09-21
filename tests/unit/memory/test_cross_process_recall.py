@@ -28,7 +28,7 @@ async def test_recall_reconstructs_foreign_episodic_from_vector_payload(tmp_path
         )
     )
     # Simulate the other process: a fresh MemoryModule instance over the same file.
-    hits = await _module(path).recall(MemoryQuery(user_id="u1", text="Rust"))
+    hits = (await _module(path).recall(MemoryQuery(user_id="u1", text="Rust"))).memories
     rust = next((h for h in hits if "Rust" in h.content), None)
     assert rust is not None, "foreign episodic was dropped instead of reconstructed"
     # Reconstructed faithfully (kind + source recovered from the durable episodic record).
@@ -47,5 +47,5 @@ async def test_reconstructed_recall_stays_user_scoped(tmp_path) -> None:
             source=MemorySource.USER_STATED,
         )
     )
-    other = await _module(path).recall(MemoryQuery(user_id="u2", text="secret"))
+    other = (await _module(path).recall(MemoryQuery(user_id="u2", text="secret"))).memories
     assert not any("secret" in h.content for h in other)

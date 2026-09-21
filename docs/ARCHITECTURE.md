@@ -40,15 +40,23 @@ morgan-mcp ──┘        │                 ├─ FTS5 keyword index      o
 
 1. Vector and FTS5 search each return their top 2k over the whole project, or every project
    with `all_projects`.
-2. Reciprocal rank fusion merges the two rankings. The entity index is not a third: a stored
+2. With `MORGAN_RECALL_FLOOR_MARGIN` set, the floor judges the vector hits alone
+   (`recall/floor.py`): recall declines unless the best one stands that far above the
+   background the same query pulled up, or an exact entity match lands on a memory the vector
+   search also ranked. A decline returns nothing, facts included. Fewer than five vector hits
+   are no background to judge against, so they go back unjudged. Unset, a non-empty project
+   always answers.
+3. Reciprocal rank fusion merges the two rankings. The entity index is not a third: a stored
    name is in the memory's text, which the keyword search already matches.
-3. Currently-valid facts for the project are placed first, but budgeted: episodics keep half
+4. Currently-valid facts for the project are placed first, but budgeted: episodics keep half
    the window whenever they have hits, and the facts that survive a narrow budget are the
    ones the query mentions. Facts fill the whole window only when little else came back.
-4. With `MORGAN_RECALL_FLOOR_MARGIN` set, recall returns nothing unless the best vector hit
-   stands that far above the background the same query pulled up (`recall/floor.py`), or an
-   exact entity match lands on a memory the vector search also ranked. Unset, a non-empty
-   project always answers.
+
+Recall returns a `RecallOutcome`: the memories, `abstained`, and a `reason`, which the CLI's
+`--json`, the MCP result and the `recall.done` log line all carry. An empty result is
+abstained, as `empty` (nothing in scope, not even a fact) or `declined` (the floor). Results
+come back with `too_few_to_judge`, `no_floor`, or `null` when the floor judged them and they
+answered. `keyword_only` is reserved for phase 1a's fallback when embeddings are down.
 
 Facts never suppress episodics. Prepending every fact and then truncating meant that once
 a project held `top_k` facts, no memory could be returned however exactly it matched --

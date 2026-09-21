@@ -14,11 +14,18 @@ def _render_remember(data: dict[str, Any]) -> str:
     return f"Stored memory {data['id']} in project {data['project']!r}."
 
 
+#: Why an empty recall is empty, in words: the owner acts differently on each.
+_ABSTAINED = {
+    "empty": "empty",
+    "declined": "declined: nothing stood out above the background",
+}
+
+
 def _render_recall(data: dict[str, Any]) -> str:
     if not data["results"]:
-        return (
-            f"No memories found (project={data['project']!r}, all_projects={data['all_projects']})."
-        )
+        scope = "any project" if data["all_projects"] else f"project {data['project']!r}"
+        why = _ABSTAINED.get(data["reason"], str(data["reason"]))
+        return f"No memories found in {scope} ({why})."
     return "\n".join(
         f"{i + 1}. [{r['kind']}/{r['project']}] {r['content']}"
         for i, r in enumerate(data["results"])

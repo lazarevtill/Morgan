@@ -68,7 +68,7 @@ async def test_a_word_stored_on_an_unrelated_memory_does_not_overrule_the_floor(
     # falls outside the results; the six it does return are equally mediocre.
     gate = await _gate(tmp_path, ubuntu_vector=[0.0, 0.0, 1.0, 0.0])
 
-    found = await gate.recall(MemoryQuery(user_id="u", project="p", text=QUERY, top_k=3))
+    found = (await gate.recall(MemoryQuery(user_id="u", project="p", text=QUERY, top_k=3))).memories
 
     assert found == [], [m.content for m in found]
 
@@ -78,6 +78,6 @@ async def test_an_exact_match_the_vector_search_also_ranked_still_answers(tmp_pa
     # override is for.
     gate = await _gate(tmp_path, ubuntu_vector=FLAT)
 
-    found = await gate.recall(MemoryQuery(user_id="u", project="p", text=QUERY, top_k=8))
+    found = (await gate.recall(MemoryQuery(user_id="u", project="p", text=QUERY, top_k=8))).memories
 
     assert any("Ubuntu" in m.content for m in found), [m.content for m in found]
