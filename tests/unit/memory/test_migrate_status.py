@@ -209,6 +209,46 @@ async def test_every_write_through_a_read_only_gate_is_refused(tmp_path):
             await write()
 
 
+def _add_a_column_the_schema_already_has(c: sqlite3.Connection, s: migrations.Stores) -> None:
+    """What a provenance step does to a database written before it: fails on a new one."""
+    c.execute("ALTER TABLE memories ADD COLUMN content TEXT")
+
+
+async def test_a_new_database_starts_at_the_codes_version_and_opens_writable(tmp_path, monkeypatch):
+    """A new file is created by this code at the schema its last step leaves. No step has
+    anything to re-derive in it, and a heavy one would open it read-only on its first day and
+    then fail on the columns the stores had just created."""
+    monkeypatch.setenv("MORGAN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
+    heavy = migrations.Step(3, "a heavy step", True, _add_a_column_the_schema_already_has)
+    monkeypatch.setattr(migrations, "_STEPS", (*_existing(), heavy))
+
+    ctx = build_memory_context(Settings())
+    try:
+        assert ctx.gate.read_only_reason is None
+        assert _version(ctx.conn) == 3
+        assert migrations.pending(ctx.conn) == ()
+        await ctx.gate.store(Memory(user_id="u", project="p", content="the first day"))
+    finally:
+        ctx.conn.close()
+
+
+def test_a_version_zero_database_that_holds_tables_still_gets_its_steps(tmp_path, monkeypatch):
+    """``user_version`` 0 alone does not say "new": a database written before step 1 existed
+    reads 0 too, and it is the one every step was written for."""
+    _RAN.clear()
+    path = str(tmp_path / "m.db")
+    conn = build_memory_module(path)._conn
+    conn.execute("PRAGMA user_version = 0")
+    conn.close()
+    monkeypatch.setattr(migrations, "_STEPS", (*_existing(), LIGHT))
+
+    reopened = build_memory_module(path)._conn
+
+    assert _RAN == ["light"]
+    assert _version(reopened) == 3
+
+
 def _existing() -> tuple[migrations.Step, ...]:
     """The steps every database written before phase 0 has been through: ``user_version`` 2.
 

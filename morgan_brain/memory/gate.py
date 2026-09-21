@@ -52,7 +52,7 @@ class MemoryGate:
         return self._read_only_reason
 
     async def store(self, memory: Memory) -> str:
-        self._require_writable()
+        self.require_writable()
         self._require_scope(memory.user_id)
         return await self._store.store(memory)
 
@@ -70,7 +70,7 @@ class MemoryGate:
         return await self._store.recall(query)
 
     async def upsert_fact(self, fact: TemporalFact) -> str:
-        self._require_writable()
+        self.require_writable()
         self._require_scope(fact.user_id)
         return await self._store.upsert_fact(fact)
 
@@ -90,14 +90,14 @@ class MemoryGate:
     async def close_fact(
         self, fact_id: str, *, user_id: str, project: str, now: datetime | None = None
     ) -> None:
-        self._require_writable()
+        self.require_writable()
         self._require_scope(user_id, project)
         await self._store.close_fact(fact_id, user_id=user_id, project=project, now=now)
 
     async def set_confidence(
         self, fact_id: str, *, user_id: str, project: str, value: float
     ) -> None:
-        self._require_writable()
+        self.require_writable()
         self._require_scope(user_id, project)
         await self._store.set_confidence(fact_id, user_id=user_id, project=project, value=value)
 
@@ -116,11 +116,16 @@ class MemoryGate:
         return self._store.write_transaction()
 
     async def forget(self, *, user_id: str, project: str) -> ForgetReport:
-        self._require_writable()
+        self.require_writable()
         self._require_scope(user_id, project)
         return await self._store.forget(user_id=user_id, project=project)
 
-    def _require_writable(self) -> None:
+    def require_writable(self) -> None:
+        """Raise ``DatabaseNeedsMigration`` if writes are refused; every write method does.
+
+        Public for a command whose write comes after costly work -- a model call, an embedding,
+        a history row written outside the gate: it refuses first, and nothing else happens.
+        """
         if self._read_only_reason is not None:
             raise DatabaseNeedsMigration(self._read_only_reason)
 

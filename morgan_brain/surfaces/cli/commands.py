@@ -128,6 +128,9 @@ async def cmd_consolidate(
     """
     ctx = build_app_context(settings)
     try:
+        # Before the model call a proposal costs: on a database waiting for `morgan migrate`
+        # every fact it proposed would be refused.
+        ctx.gate.require_writable()
         if args.all_projects:
             projects = await ctx.gate.distinct_projects(settings.owner_user_id) or [project]
         else:
@@ -168,6 +171,9 @@ async def cmd_import(args: argparse.Namespace, settings: Settings, project: str)
 
     ctx = build_memory_context(settings)
     try:
+        # Before the export is read: on a database waiting for `morgan migrate` every memory
+        # in it would be refused.
+        ctx.gate.require_writable()
         report = await import_chatgpt(
             Path(args.path), gate=ctx.gate, user_id=settings.owner_user_id, progress=progress
         )

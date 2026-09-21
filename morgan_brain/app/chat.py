@@ -55,7 +55,13 @@ class Chat:
     async def ask(
         self, *, user_id: str, project: str, text: str, session_id: str | None = None
     ) -> str:
-        """Answer *text* for *user_id* in *project*, and remember the exchange."""
+        """Answer *text* for *user_id* in *project*, and remember the exchange.
+
+        On a database waiting for ``morgan migrate`` it refuses before anything else: the
+        model call and the two history rows below would otherwise happen, and only the
+        memories after them would be refused.
+        """
+        self._gate.require_writable()
         hkey = session_key(user_id, session_id)
         history = self._history.recent(hkey, project=project)
         memories = await self._gate.recall(MemoryQuery(user_id=user_id, project=project, text=text))

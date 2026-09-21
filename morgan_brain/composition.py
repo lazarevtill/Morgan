@@ -24,7 +24,7 @@ from morgan_brain.config import Settings, get_settings
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
-from morgan_brain.memory.migrations import Step, Stores, pending, upgrade
+from morgan_brain.memory.migrations import Step, Stores, pending, stamp_if_new, upgrade
 from morgan_brain.memory.module import MemoryModule
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.memory.store.entities import EntityIndex
@@ -135,9 +135,12 @@ def build_memory_module(
 ) -> MemoryModule:
     """Every store over one connection, with the pending light migration steps run.
 
-    A heavy step is left for ``morgan migrate``; ``build_memory_context`` then opens the gate
-    read-only. Also the seam tests use with a small fake embedder.
+    A database with none of Morgan's tables is stamped at the code's version first, before
+    any store creates one: this code writes it at the latest schema. A heavy step is left for
+    ``morgan migrate``; ``build_memory_context`` then opens the gate read-only. Also the seam
+    tests use with a small fake embedder.
     """
+    stamp_if_new(conn)
     stores = migration_stores(conn)
     module = MemoryModule(
         embedder=embedder,
