@@ -19,7 +19,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from morgan_brain.memory.store.db import write_transaction
-from morgan_brain.models import DEFAULT_PROJECT, Message, Role
+from morgan_brain.models import PERSONAL_PROJECT, Message, Role
 
 
 def session_key(user_id: str, session_id: str | None) -> str:
@@ -87,11 +87,11 @@ class SessionHistoryStore:
         if "project" not in cols:
             self._conn.execute(
                 f"ALTER TABLE session_history ADD COLUMN project TEXT NOT NULL "
-                f"DEFAULT '{DEFAULT_PROJECT}'"
+                f"DEFAULT '{PERSONAL_PROJECT}'"
             )
             self._conn.commit()
 
-    def append(self, session_id: str, message: Message, *, project: str = DEFAULT_PROJECT) -> None:
+    def append(self, session_id: str, message: Message, *, project: str = PERSONAL_PROJECT) -> None:
         """Append *message* to the history for *session_id*.
 
         Synchronous — intended for the cold-path turn-storage subscriber which

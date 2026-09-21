@@ -65,8 +65,9 @@ come in" are answered by the directory names.
 
 - **All memory access goes through `MemoryGate`.** No caller holds the `MemoryModule`.
 - **Every read and write is project-scoped.** `Memory` and `TemporalFact` carry a required
-  `project`; the gate rejects an empty one. `all_projects=True` is the explicit cross-project
-  escape hatch, never the default.
+  `project`; the gate rejects an empty one. A write that names no project lands in `personal`,
+  and the result says so; there is no silent default. `all_projects=True` is the explicit
+  cross-project escape hatch, never the default.
 - **One write path.** `MemoryModule.store` writes every index in one transaction: episodic
   row, vector, FTS5, entity index. Entities are extracted there when the caller gave none.
   Every row carries its provenance: origin, client, session, working directory, author and
@@ -116,7 +117,8 @@ come in" are answered by the directory names.
   unprompted, and `install-skill` allows exactly those in Claude Code. `ask_morgan` stores the
   exchange, so it is a write.
 - **A project is a repository.** The CLI names it after the enclosing git repository; a linked
-  worktree belongs to the repository it was created from, a submodule is its own.
+  worktree belongs to the repository it was created from, a submodule is its own. Outside one,
+  the project is `personal`.
 - **No listener beyond loopback without a key.** `network.assert_safe_bind` refuses to start
   `morgan-mcp --transport http` on a non-loopback host while `MORGAN_API_KEY` is unset or the
   placeholder.

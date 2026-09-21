@@ -32,7 +32,7 @@ from morgan_brain.memory.store.tables import project_tables
 from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.memory.store.vectors import SqliteVectorIndex, VectorHit, VectorRecord
 from morgan_brain.models import (
-    DEFAULT_PROJECT,
+    PERSONAL_PROJECT,
     Entity,
     Memory,
     MemoryKind,
@@ -235,7 +235,7 @@ class MemoryModule:
         *,
         user_id: str,
         subject: str | None = None,
-        project: str | None = DEFAULT_PROJECT,
+        project: str | None = PERSONAL_PROJECT,
         all_projects: bool = False,
     ) -> list[TemporalFact]:
         resolved_project = None if all_projects else project

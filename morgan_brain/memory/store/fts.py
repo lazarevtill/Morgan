@@ -16,7 +16,7 @@ import re
 import sqlite3
 
 from morgan_brain.memory.store.db import write_transaction
-from morgan_brain.models import DEFAULT_PROJECT
+from morgan_brain.models import PERSONAL_PROJECT
 
 _TOKEN = re.compile(r"\w+", re.UNICODE)
 
@@ -54,7 +54,7 @@ class FtsIndex:
         FTS5 virtual tables cannot be ``ALTER``ed, so ``fts_memories`` is self-contained
         (it carries its own ``content`` column, not an external-content reference) -- its
         existing rows are read out, the table is dropped and recreated with the ``project``
-        column, and the rows are reinserted with ``DEFAULT_PROJECT`` backfilled.
+        column, and the rows are reinserted with ``PERSONAL_PROJECT`` backfilled.
         """
         cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(fts_memories)")}
         if "project" not in cols:
@@ -77,12 +77,12 @@ class FtsIndex:
                 self._conn.execute(
                     "INSERT INTO fts_memories (memory_id, user_id, project, content) "
                     "VALUES (?, ?, ?, ?)",
-                    (r["memory_id"], r["user_id"], DEFAULT_PROJECT, r["content"]),
+                    (r["memory_id"], r["user_id"], PERSONAL_PROJECT, r["content"]),
                 )
             self._conn.commit()
 
     def add(
-        self, memory_id: str, content: str, *, user_id: str, project: str = DEFAULT_PROJECT
+        self, memory_id: str, content: str, *, user_id: str, project: str = PERSONAL_PROJECT
     ) -> None:
         with write_transaction(self._conn):
             self._conn.execute("DELETE FROM fts_memories WHERE memory_id = ?", (memory_id,))
@@ -98,7 +98,7 @@ class FtsIndex:
         *,
         user_id: str,
         top_k: int,
-        project: str | None = DEFAULT_PROJECT,
+        project: str | None = PERSONAL_PROJECT,
     ) -> list[str]:
         """Rank memories by keyword match."""
         match = to_match_query(text)

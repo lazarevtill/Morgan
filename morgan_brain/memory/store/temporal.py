@@ -11,7 +11,7 @@ from itertools import pairwise
 from typing import Any
 
 from morgan_brain.memory.store.db import write_transaction
-from morgan_brain.models import DEFAULT_PROJECT, MemorySource, TemporalFact
+from morgan_brain.models import PERSONAL_PROJECT, MemorySource, TemporalFact
 
 #: The columns migration step 4 added. ``TemporalFact`` validates each from its stored text.
 _PROVENANCE = ("author_id", "scope")
@@ -90,7 +90,7 @@ class SqliteTemporalStore:
         cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(facts)")}
         if "project" not in cols:
             self._conn.execute(
-                f"ALTER TABLE facts ADD COLUMN project TEXT NOT NULL DEFAULT '{DEFAULT_PROJECT}'"
+                f"ALTER TABLE facts ADD COLUMN project TEXT NOT NULL DEFAULT '{PERSONAL_PROJECT}'"
             )
             # The old index doesn't cover `project`; drop it so the index created after this
             # migration covers the new column.
@@ -202,7 +202,7 @@ class SqliteTemporalStore:
         *,
         user_id: str,
         subject: str | None = None,
-        project: str | None = DEFAULT_PROJECT,
+        project: str | None = PERSONAL_PROJECT,
     ) -> list[TemporalFact]:
         sql = "SELECT * FROM facts WHERE user_id=? AND valid_to IS NULL"
         params: list[object] = [user_id]

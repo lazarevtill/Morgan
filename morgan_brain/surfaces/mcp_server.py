@@ -18,8 +18,10 @@ Project scoping
 An MCP client is usually working inside a repository, but this server is a long-lived daemon
 on the owner's homelab -- its *own* working directory means nothing to a client running on a
 laptop. Project therefore comes from the tool's explicit ``project`` argument; when omitted it
-falls back to ``DEFAULT_PROJECT`` (the same system-wide default the CLI falls back to outside
+falls back to ``PERSONAL_PROJECT`` (the same system-wide default the CLI falls back to outside
 a git repo). This is the one place the CLI's git-root ``detect_project`` must NOT be copied.
+``remember`` reports the fallback: a call with no ``project`` gets back
+``"project_defaulted": true``, so a client can tell a silent default from a named one.
 
 Two transports, because the deployment is remote-first
 --------------------------------------------------------
@@ -47,7 +49,7 @@ from starlette.responses import JSONResponse, Response
 
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.logging_setup import configure_logging
-from morgan_brain.models import DEFAULT_PROJECT
+from morgan_brain.models import PERSONAL_PROJECT
 from morgan_brain.surfaces.cli.commands import (
     cmd_ask,
     cmd_facts,
@@ -207,12 +209,14 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
     async def remember(
         text: str, project: str | None = None, ctx: _ToolContext | None = None
     ) -> dict[str, Any]:
-        """Store a memory in a project."""
+        """Store a memory in a project. *project* is passed through as given -- ``None`` and
+        all -- so ``cmd_remember`` is the one place that resolves it to ``PERSONAL_PROJECT``
+        and reports whether it had to."""
         args = argparse.Namespace(text=text)
         return await cmd_remember(
             args,
             settings,
-            project or DEFAULT_PROJECT,
+            project,
             client=_client_name(ctx),
             session_id=session_id,
         )
@@ -225,7 +229,7 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
     ) -> dict[str, Any]:
         """Search memories by meaning and by keyword, project-scoped by default."""
         args = argparse.Namespace(query=query, all_projects=all_projects, top_k=top_k)
-        return await cmd_recall(args, settings, project or DEFAULT_PROJECT)
+        return await cmd_recall(args, settings, project or PERSONAL_PROJECT)
 
     async def facts(
         project: str | None = None,
@@ -234,14 +238,14 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
     ) -> dict[str, Any]:
         """Currently-valid temporal facts for a project, optionally filtered by subject."""
         args = argparse.Namespace(subject=subject, all_projects=all_projects)
-        return await cmd_facts(args, settings, project or DEFAULT_PROJECT)
+        return await cmd_facts(args, settings, project or PERSONAL_PROJECT)
 
     async def forget(project: str | None = None, all_projects: bool = False) -> dict[str, Any]:
         """Cascading erasure of everything stored under a project -- the same honest report
         (including which tables were skipped, and the path of the snapshot taken first, the
         undo) the ``morgan forget`` CLI prints."""
         args = argparse.Namespace(all_projects=all_projects)
-        return await cmd_forget(args, settings, project or DEFAULT_PROJECT)
+        return await cmd_forget(args, settings, project or PERSONAL_PROJECT)
 
     async def ask_morgan(
         text: str, project: str | None = None, ctx: _ToolContext | None = None
@@ -251,7 +255,7 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
         return await cmd_ask(
             args,
             settings,
-            project or DEFAULT_PROJECT,
+            project or PERSONAL_PROJECT,
             client=_client_name(ctx),
             session_id=session_id,
         )

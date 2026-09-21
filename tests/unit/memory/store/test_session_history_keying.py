@@ -34,8 +34,8 @@ def test_history_is_isolated_per_user_for_same_session_id() -> None:
         Message(user_id="bob", role=Role.USER, content="I am Bob"),
     )
 
-    alice = store.recent(session_key("alice", "s1"), project="default")
-    bob = store.recent(session_key("bob", "s1"), project="default")
+    alice = store.recent(session_key("alice", "s1"), project="personal")
+    bob = store.recent(session_key("bob", "s1"), project="personal")
 
     assert [m.content for m in alice] == ["I am Alice"]
     assert [m.content for m in bob] == ["I am Bob"]

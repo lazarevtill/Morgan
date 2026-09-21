@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from morgan_brain.memory.migrations import DatabaseNeedsMigration
-from morgan_brain.models import DEFAULT_PROJECT, Memory, MemoryQuery, TemporalFact
+from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, TemporalFact
 
 if TYPE_CHECKING:
     from morgan_brain.memory.module import MemoryModule
@@ -79,7 +79,7 @@ class MemoryGate:
         *,
         user_id: str,
         subject: str | None = None,
-        project: str | None = DEFAULT_PROJECT,
+        project: str | None = PERSONAL_PROJECT,
         all_projects: bool = False,
     ) -> list[TemporalFact]:
         self._require_scope(user_id, None if all_projects else project)

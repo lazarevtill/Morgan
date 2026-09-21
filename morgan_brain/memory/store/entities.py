@@ -11,7 +11,7 @@ import sqlite3
 from collections.abc import Iterable
 
 from morgan_brain.memory.store.db import write_transaction
-from morgan_brain.models import DEFAULT_PROJECT
+from morgan_brain.models import PERSONAL_PROJECT
 
 
 class EntityIndex:
@@ -48,7 +48,7 @@ class EntityIndex:
         if "project" not in cols:
             self._conn.execute(
                 f"ALTER TABLE memory_entities ADD COLUMN project TEXT NOT NULL "
-                f"DEFAULT '{DEFAULT_PROJECT}'"
+                f"DEFAULT '{PERSONAL_PROJECT}'"
             )
             # The old index doesn't cover `project`; drop it so the index script below (run
             # after this migration) recreates it with the new column.
@@ -61,7 +61,7 @@ class EntityIndex:
         names: Iterable[str],
         *,
         user_id: str,
-        project: str = DEFAULT_PROJECT,
+        project: str = PERSONAL_PROJECT,
     ) -> None:
         with write_transaction(self._conn):
             self._conn.execute("DELETE FROM memory_entities WHERE memory_id = ?", (memory_id,))
@@ -77,7 +77,7 @@ class EntityIndex:
         *,
         user_id: str,
         top_k: int,
-        project: str | None = DEFAULT_PROJECT,
+        project: str | None = PERSONAL_PROJECT,
     ) -> list[str]:
         """Rank memories by how many of *terms* they mention."""
         wanted = [t.lower() for t in terms]

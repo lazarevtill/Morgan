@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from morgan_brain.models import DEFAULT_PROJECT
+from morgan_brain.models import PERSONAL_PROJECT
 
 
 def detect_project(cwd: Path | None = None) -> str:
-    """Return the enclosing git repository's name, or DEFAULT_PROJECT outside one.
+    """Return the enclosing git repository's name, or PERSONAL_PROJECT outside one.
 
     Walks up looking for ``.git`` rather than shelling out to ``git rev-parse --show-toplevel``.
     Same answer, and it drops a process spawn from every single CLI invocation -- ``morgan
@@ -22,10 +22,10 @@ def detect_project(cwd: Path | None = None) -> str:
     for candidate in (start, *start.parents):
         marker = candidate / ".git"
         if marker.is_dir():
-            return candidate.name or DEFAULT_PROJECT
+            return candidate.name or PERSONAL_PROJECT
         if marker.is_file():
-            return _repository_behind(candidate, marker) or DEFAULT_PROJECT
-    return DEFAULT_PROJECT
+            return _repository_behind(candidate, marker) or PERSONAL_PROJECT
+    return PERSONAL_PROJECT
 
 
 def _repository_behind(checkout: Path, pointer: Path) -> str:

@@ -33,8 +33,8 @@ from morgan_brain.memory.store import projects, spaces
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
-from morgan_brain.memory.store.tables import PROJECT_TABLES
-from morgan_brain.models import Entity
+from morgan_brain.memory.store.tables import PROJECT_TABLES, project_tables
+from morgan_brain.models import PERSONAL_PROJECT, Entity
 
 
 class Stores(NamedTuple):
@@ -186,6 +186,49 @@ def _add_provenance(conn: sqlite3.Connection, stores: Stores) -> dict[str, int]:
     return counts
 
 
+#: The project every memory, fact and index row landed in before this step existed -- named
+#: nothing, told the owner nothing. Frozen as a literal, like ``_ARCHIVE_PROJECTS`` above: a
+#: step is history, and the constant it moves rows *to* is ``PERSONAL_PROJECT``, not this one.
+_OLD_DEFAULT_PROJECT = "default"
+
+
+def _rename_default_project(conn: sqlite3.Connection, stores: Stores) -> dict[str, int]:
+    """Move every row filed under ``'default'`` to ``PERSONAL_PROJECT``. Heavy: it rewrites
+    every project-keyed table.
+
+    Walks ``tables.project_tables(conn)`` rather than a fixed list, so a table this database
+    has never created -- the version-0 test runs every step on one that lacks ``vec_items``,
+    ``fts_memories`` and ``session_history`` -- is skipped instead of raising, and a table
+    ``PROJECT_TABLES`` does not yet know about (a later embedding space, once one is
+    registered) is still reached.
+
+    ``vec_items`` is a sqlite-vec vec0 virtual table with ``project`` as a metadata column,
+    and ``fts_memories`` is FTS5 with ``project`` UNINDEXED -- both cannot be ``ALTER``ed, the
+    reason every other project-column migration in this package reads a table's rows out,
+    drops it and reinserts them. Renaming a value needs none of that: verified in a scratch
+    database on this repository's sqlite-vec (0.1.9), a plain ``UPDATE ... SET project = ?
+    WHERE project = ?`` rewrites the metadata of a vec0 table and an UNINDEXED FTS5 column in
+    place, rowids and embeddings untouched, and both tables still answer a KNN / MATCH query
+    correctly afterwards. So one statement, the same shape for every table, does the whole
+    step. Returns the rows moved, per table -- ``0`` for a table with no ``'default'`` row,
+    which is every table on the owner's live archive today: that is what makes this step
+    worth counting rather than assuming.
+    """
+    counts: dict[str, int] = {}
+    for table in project_tables(conn):
+        if not _table_exists(conn, table):
+            continue
+        # `table` is never caller-supplied: it comes from `PROJECT_TABLES` or from
+        # `embedding_spaces.table_name`, itself written only by this package's own migrations
+        # and stores. DML takes no bound parameters for an identifier either way.
+        cur = conn.execute(
+            f"UPDATE {table} SET project = ? WHERE project = ?",  # noqa: S608 # nosec B608
+            (PERSONAL_PROJECT, _OLD_DEFAULT_PROJECT),
+        )
+        counts[table] = cur.rowcount
+    return counts
+
+
 #: In order. Step *n* brings a database from ``user_version`` *n - 1* to *n*; append only.
 #: Steps 1 and 2 rewrite and drop, yet stay light: they predate the split, and every Morgan
 #: that shipped them already ran them on open.
@@ -195,6 +238,7 @@ _STEPS: tuple[Step, ...] = (
     Step(2, "drop the semantic index", False, _drop_the_semantic_index),
     Step(3, "create embedding_spaces and projects", False, _create_embedding_spaces_and_projects),
     Step(4, "provenance columns", True, _add_provenance),
+    Step(5, "rename default to personal", True, _rename_default_project),
 )
 
 

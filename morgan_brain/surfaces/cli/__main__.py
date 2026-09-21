@@ -20,6 +20,7 @@ from pathlib import Path
 
 from morgan_brain.config import Settings, get_settings
 from morgan_brain.logging_setup import configure_logging
+from morgan_brain.models import PERSONAL_PROJECT
 from morgan_brain.surfaces.cli.commands import (
     cmd_ask,
     cmd_consolidate,
@@ -70,7 +71,7 @@ def _add_common(sp: argparse.ArgumentParser) -> None:
         "--project",
         default=None,
         help="Project to scope this command to (default: the current git repository's "
-        "directory name; DEFAULT_PROJECT outside a repo).",
+        "directory name; 'personal' outside a repo).",
     )
     sp.add_argument(
         "--all-projects",
@@ -185,7 +186,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def _dispatch(args: argparse.Namespace, settings: Settings, project: str) -> int:
+async def _dispatch(
+    args: argparse.Namespace, settings: Settings, project: str, *, remember_project: str | None
+) -> int:
     if args.command in _SINGLE_PROJECT_ONLY and args.all_projects:
         message = (
             f"morgan {args.command}: --all-projects is not valid here "
@@ -214,7 +217,14 @@ async def _dispatch(args: argparse.Namespace, settings: Settings, project: str) 
 
     handler, renderer = HANDLERS[args.command], RENDERERS[args.command]
     try:
-        data = await handler(args, settings, project)
+        # `remember` alone takes an *optional* project -- it is the one command whose result
+        # says whether the project came from the caller or from no one naming it -- so it is
+        # called directly rather than through the shared `handler(args, settings, project)`
+        # signature every other verb still uses.
+        if args.command == "remember":
+            data = await cmd_remember(args, settings, remember_project)
+        else:
+            data = await handler(args, settings, project)
     except Exception as exc:  # noqa: BLE001 -- a CLI user gets a clean message, not a traceback
         if args.json:
             print(json.dumps({"error": str(exc)}, ensure_ascii=False))
@@ -250,10 +260,19 @@ def main(argv: list[str] | None = None) -> int:
             stderr=sys.stderr,
         )
     settings = get_settings()
+    cwd = Path.cwd()
     # getattr: not every verb takes --project. `import` decides the destination from the
     # holdout rule, so it deliberately has no such flag to read.
-    project = getattr(args, "project", None) or detect_project(Path.cwd())
-    return asyncio.run(_dispatch(args, settings, project))
+    named = getattr(args, "project", None)
+    project = named or detect_project(cwd)
+    # `None` only when the caller named no project AND the CLI is outside a repository --
+    # `cmd_remember`'s one case for `project_defaulted`. A name detected from a repository is
+    # not a default: it is reported as named, same as an explicit `--project`.
+    if named is not None:
+        remember_project = named
+    else:
+        remember_project = None if project == PERSONAL_PROJECT else project
+    return asyncio.run(_dispatch(args, settings, project, remember_project=remember_project))
 
 
 if __name__ == "__main__":

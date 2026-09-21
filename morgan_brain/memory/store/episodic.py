@@ -14,7 +14,7 @@ from typing import Any
 
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import project_tables
-from morgan_brain.models import DEFAULT_PROJECT, Entity, Memory, MemoryKind, MemorySource
+from morgan_brain.models import PERSONAL_PROJECT, Entity, Memory, MemoryKind, MemorySource
 
 #: The columns migration step 4 added. ``Memory`` validates each from its stored text.
 _PROVENANCE = (
@@ -64,7 +64,8 @@ class EpisodicStore:
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(memories)")}
         if "project" not in cols:
             conn.execute(
-                f"ALTER TABLE memories ADD COLUMN project TEXT NOT NULL DEFAULT '{DEFAULT_PROJECT}'"
+                "ALTER TABLE memories ADD COLUMN project TEXT NOT NULL "
+                f"DEFAULT '{PERSONAL_PROJECT}'"
             )
             conn.commit()
 

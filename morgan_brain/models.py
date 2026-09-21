@@ -19,8 +19,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-#: The implicit project every memory belongs to unless the caller names another one.
-DEFAULT_PROJECT = "default"
+#: The project a write lands in when the caller names none: outside a repository on the CLI,
+#: or an MCP call with no ``project`` argument. There is no silent default -- both surfaces
+#: report when they used it.
+PERSONAL_PROJECT = "personal"
 
 
 class Identified(BaseModel):
@@ -75,7 +77,7 @@ class MemoryKind(str, Enum):
 
 
 class Memory(UserScoped):
-    project: str = Field(default=DEFAULT_PROJECT, min_length=1)
+    project: str = Field(default=PERSONAL_PROJECT, min_length=1)
     kind: MemoryKind = MemoryKind.EPISODIC
     content: str
     source: MemorySource = MemorySource.USER_STATED
@@ -96,7 +98,7 @@ class Memory(UserScoped):
 class TemporalFact(UserScoped):
     """A semantic fact with a validity interval. Supersession, not deletion."""
 
-    project: str = Field(default=DEFAULT_PROJECT, min_length=1)
+    project: str = Field(default=PERSONAL_PROJECT, min_length=1)
     subject: str  # usually an entity name or "user"
     predicate: str  # e.g. "lives_in", "works_at", "prefers"
     object: str  # the value
@@ -117,7 +119,7 @@ class MemoryQuery(BaseModel):
     #: min_length matches ``Memory.project``. Without it an empty project reached recall and
     #: silently matched nothing in every signal — a wrong answer rather than a refusal,
     #: in the seam whose whole job is refusing.
-    project: str = Field(default=DEFAULT_PROJECT, min_length=1)
+    project: str = Field(default=PERSONAL_PROJECT, min_length=1)
     all_projects: bool = False
     text: str
     top_k: int = 8
@@ -132,7 +134,7 @@ class Role(str, Enum):
 
 
 class Message(UserScoped):
-    project: str = Field(default=DEFAULT_PROJECT, min_length=1)
+    project: str = Field(default=PERSONAL_PROJECT, min_length=1)
     role: Role
     content: str
     session_id: str | None = None

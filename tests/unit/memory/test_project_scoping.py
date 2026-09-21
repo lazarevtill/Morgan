@@ -37,7 +37,7 @@ async def test_project_is_required_to_be_non_empty():
 
 
 async def test_recall_defaults_to_the_default_project_when_unspecified(tmp_path):
-    """Memories stored without an explicit project land in DEFAULT_PROJECT, and a query that
+    """Memories stored without an explicit project land in PERSONAL_PROJECT, and a query that
     also doesn't specify a project only ever sees that project — not a project picked at
     random by another caller."""
     path = str(tmp_path / "m.db")
@@ -99,7 +99,7 @@ def test_vector_scoping_happens_inside_the_knn_not_after(tmp_path):
 async def test_migration_backfills_default_project_on_a_pre_existing_database(tmp_path):
     """A database written by pre-Task-12 Morgan has no project column anywhere. Reopening it
     with the new store classes must migrate in place -- ALTER for regular tables, drop+rebuild
-    for the FTS5/vec0 virtual tables -- and existing data must land in DEFAULT_PROJECT and stay
+    for the FTS5/vec0 virtual tables -- and existing data must land in PERSONAL_PROJECT and stay
     fully queryable, including the vector signal."""
     path = str(tmp_path / "m.db")
     conn = open_db(path)

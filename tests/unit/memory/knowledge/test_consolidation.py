@@ -117,7 +117,7 @@ async def test_apply_add_creates_current_fact() -> None:
     batch = FactOpBatch(
         ops=[FactOp(op=FactOpKind.ADD, subject="user", predicate="lives_in", object="Berlin")]
     )
-    applied = await consolidator.apply("u1", batch, project="default")
+    applied = await consolidator.apply("u1", batch, project="personal")
 
     assert len(applied) == 1
     current = await temporal.current_facts(user_id="u1")
@@ -149,7 +149,7 @@ async def test_apply_update_closes_old_fact_and_opens_new() -> None:
     batch = FactOpBatch(
         ops=[FactOp(op=FactOpKind.UPDATE, subject="user", predicate="lives_in", object="Munich")]
     )
-    applied = await consolidator.apply("u1", batch, project="default")
+    applied = await consolidator.apply("u1", batch, project="personal")
 
     assert len(applied) == 1
     current = await temporal.current_facts(user_id="u1")
@@ -187,7 +187,7 @@ async def test_apply_delete_closes_interval_not_hard_delete() -> None:
     batch = FactOpBatch(
         ops=[FactOp(op=FactOpKind.DELETE, subject="user", predicate="prefers", object="dark_mode")]
     )
-    applied = await consolidator.apply("u1", batch, project="default")
+    applied = await consolidator.apply("u1", batch, project="personal")
 
     assert len(applied) == 1
     # No longer current
@@ -211,7 +211,7 @@ async def test_apply_noop_is_skipped() -> None:
     batch = FactOpBatch(
         ops=[FactOp(op=FactOpKind.NOOP, subject="user", predicate="lives_in", object="Berlin")]
     )
-    applied = await consolidator.apply("u1", batch, project="default")
+    applied = await consolidator.apply("u1", batch, project="personal")
 
     assert applied == []
     current = await temporal.current_facts(user_id="u1")
@@ -240,7 +240,7 @@ async def test_apply_add_dedup_skips_existing_fact() -> None:
     batch = FactOpBatch(
         ops=[FactOp(op=FactOpKind.ADD, subject="user", predicate="lives_in", object="Berlin")]
     )
-    applied = await consolidator.apply("u1", batch, project="default")
+    applied = await consolidator.apply("u1", batch, project="personal")
 
     # Should be treated as NOOP — not applied
     assert applied == []
@@ -277,7 +277,7 @@ async def test_consolidate_orchestrates_propose_and_apply() -> None:
         )
     )
 
-    ops = await consolidator.consolidate("u1", project="default")
+    ops = await consolidator.consolidate("u1", project="personal")
 
     assert len(ops) >= 1
     current = await temporal.current_facts(user_id="u1")
@@ -307,7 +307,7 @@ async def test_decay_reduces_confidence_with_age() -> None:
     )
 
     # Run decay far in the future (> 1 half-life of 30 days)
-    await consolidator.decay_confidence("u1", project="default", half_life_days=30.0, now=T_FAR)
+    await consolidator.decay_confidence("u1", project="personal", half_life_days=30.0, now=T_FAR)
 
     current = await temporal.current_facts(user_id="u1")
     assert len(current) == 1
@@ -333,7 +333,7 @@ async def test_decay_flags_facts_below_threshold_as_stale() -> None:
     # Very far future → confidence will be below default threshold 0.2
     very_far = datetime(2030, 1, 1, tzinfo=UTC)
     stale = await consolidator.decay_confidence(
-        "u1", project="default", half_life_days=30.0, now=very_far, stale_threshold=0.9
+        "u1", project="personal", half_life_days=30.0, now=very_far, stale_threshold=0.9
     )
 
     assert len(stale) >= 1
@@ -356,7 +356,7 @@ async def test_decay_deterministic_given_same_clock() -> None:
         )
     )
 
-    await consolidator.decay_confidence("u1", project="default", half_life_days=30.0, now=T_FAR)
+    await consolidator.decay_confidence("u1", project="personal", half_life_days=30.0, now=T_FAR)
     conf_a = (await temporal.current_facts(user_id="u1"))[0].confidence
 
     # Reset confidence to 0.9 manually by upserting again
@@ -372,7 +372,7 @@ async def test_decay_deterministic_given_same_clock() -> None:
             confidence=0.9,
         )
     )
-    await consolidator2.decay_confidence("u1", project="default", half_life_days=30.0, now=T_FAR)
+    await consolidator2.decay_confidence("u1", project="personal", half_life_days=30.0, now=T_FAR)
     conf_b = (await temporal2.current_facts(user_id="u1"))[0].confidence
 
     assert conf_a == pytest.approx(conf_b)

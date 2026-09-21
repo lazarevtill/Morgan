@@ -113,12 +113,12 @@ def test_project_defaults_to_the_git_repo_name(tmp_path):
     assert detect_project(tmp_path) == tmp_path.name
 
 
-def test_project_falls_back_to_default_outside_a_repo(tmp_path):
-    from morgan_brain.surfaces.cli.project import DEFAULT_PROJECT, detect_project
+def test_project_falls_back_to_personal_outside_a_repo(tmp_path):
+    from morgan_brain.surfaces.cli.project import PERSONAL_PROJECT, detect_project
 
     outside = tmp_path / "no-git-here"
     outside.mkdir()
-    assert detect_project(outside) == DEFAULT_PROJECT
+    assert detect_project(outside) == PERSONAL_PROJECT
 
 
 def test_recall_is_project_scoped_by_default(tmp_path):

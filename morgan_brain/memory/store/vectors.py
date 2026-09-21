@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from morgan_brain.memory.store.db import write_transaction
-from morgan_brain.models import DEFAULT_PROJECT
+from morgan_brain.models import PERSONAL_PROJECT
 
 
 @dataclass
@@ -30,7 +30,7 @@ class VectorRecord:
     id: str
     user_id: str
     vector: list[float]
-    project: str = DEFAULT_PROJECT
+    project: str = PERSONAL_PROJECT
     payload: dict[str, Any] = field(default_factory=dict)
 
 
@@ -75,12 +75,13 @@ class SqliteVectorIndex:
         a vec0 virtual table -- like FTS5, it cannot be ``ALTER``ed -- so its rows (the packed
         embedding blobs, which have no other source of truth) are read out, the table is
         dropped and recreated with the ``project`` metadata column, and the rows are
-        reinserted with ``DEFAULT_PROJECT`` backfilled.
+        reinserted with ``PERSONAL_PROJECT`` backfilled.
         """
         meta_cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(vec_meta)")}
         if "project" not in meta_cols:
             self._conn.execute(
-                f"ALTER TABLE vec_meta ADD COLUMN project TEXT NOT NULL DEFAULT '{DEFAULT_PROJECT}'"
+                "ALTER TABLE vec_meta ADD COLUMN project TEXT NOT NULL "
+                f"DEFAULT '{PERSONAL_PROJECT}'"
             )
             self._conn.commit()
 
@@ -101,7 +102,7 @@ class SqliteVectorIndex:
                 self._conn.execute(
                     "INSERT INTO vec_items (rowid, embedding, user_id, project) "
                     "VALUES (?, ?, ?, ?)",
-                    (r["rowid"], r["embedding"], r["user_id"], DEFAULT_PROJECT),
+                    (r["rowid"], r["embedding"], r["user_id"], PERSONAL_PROJECT),
                 )
             self._conn.commit()
 
@@ -143,7 +144,7 @@ class SqliteVectorIndex:
         user_id: str,
         vector: list[float],
         top_k: int,
-        project: str | None = DEFAULT_PROJECT,
+        project: str | None = PERSONAL_PROJECT,
     ) -> list[VectorHit]:
         # user_id and project are both vec0 metadata columns, so the filter applies INSIDE the
         # KNN -- see the module docstring for why post-filtering would silently drop results.

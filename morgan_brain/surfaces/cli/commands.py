@@ -25,7 +25,7 @@ from morgan_brain.composition import (
 )
 from morgan_brain.config import Settings
 from morgan_brain.memory import snapshot
-from morgan_brain.models import Memory, MemoryQuery, MemorySource, OriginKind
+from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, MemorySource, OriginKind
 from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.payloads import (
     fact_to_dict,
@@ -38,18 +38,28 @@ from morgan_brain.surfaces.cli.payloads import (
 async def cmd_remember(
     args: argparse.Namespace,
     settings: Settings,
-    project: str,
+    project: str | None,
     *,
     client: str = "cli",
     session_id: str = "",
 ) -> dict[str, Any]:
     """*client* and *session_id* default to the CLI's own values; the MCP server passes its
-    caller's ``clientInfo.name`` and its own per-process session id instead."""
+    caller's ``clientInfo.name`` and its own per-process session id instead.
+
+    *project* is ``None`` exactly when the caller named none: an MCP call with no ``project``
+    argument, or the CLI run outside a git repository (``surfaces.cli.__main__`` passes the
+    detected repository name through as a string, never ``None``, when one was found). This
+    is the one place that resolves it to ``PERSONAL_PROJECT`` and the one place the result
+    says so, in ``project_defaulted`` -- there is no other way a caller learns a write landed
+    in the personal project by default rather than by name.
+    """
+    project_defaulted = project is None
+    resolved_project = project if project is not None else PERSONAL_PROJECT
     ctx = build_memory_context(settings)
     try:
         memory = Memory(
             user_id=settings.owner_user_id,
-            project=project,
+            project=resolved_project,
             content=args.text,
             source=MemorySource.USER_STATED,
             origin_kind=OriginKind.REMEMBER,
@@ -61,7 +71,13 @@ async def cmd_remember(
         memory_id = await ctx.gate.store(memory)
     finally:
         ctx.conn.close()
-    return {"stored": True, "id": memory_id, "project": project, "content": args.text}
+    return {
+        "stored": True,
+        "id": memory_id,
+        "project": resolved_project,
+        "project_defaulted": project_defaulted,
+        "content": args.text,
+    }
 
 
 async def cmd_recall(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
