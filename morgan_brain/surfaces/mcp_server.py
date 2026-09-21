@@ -209,14 +209,16 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
     async def remember(
         text: str, project: str | None = None, ctx: _ToolContext | None = None
     ) -> dict[str, Any]:
-        """Store a memory in a project. *project* is passed through as given -- ``None`` and
-        all -- so ``cmd_remember`` is the one place that resolves it to ``PERSONAL_PROJECT``
-        and reports whether it had to."""
+        """Store a memory in a project. *project* is passed through as given, ``None``
+        included, so ``cmd_remember`` is the one place that resolves it to
+        ``PERSONAL_PROJECT`` and reports whether it had to -- except an empty string, which a
+        client sends the same as omitting the argument: ``Memory.project`` rejects it
+        (``min_length=1``) rather than defaulting it, so it is folded into ``None`` here."""
         args = argparse.Namespace(text=text)
         return await cmd_remember(
             args,
             settings,
-            project,
+            project or None,
             client=_client_name(ctx),
             session_id=session_id,
         )

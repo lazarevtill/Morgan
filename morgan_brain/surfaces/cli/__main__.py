@@ -260,18 +260,19 @@ def main(argv: list[str] | None = None) -> int:
             stderr=sys.stderr,
         )
     settings = get_settings()
-    cwd = Path.cwd()
     # getattr: not every verb takes --project. `import` decides the destination from the
     # holdout rule, so it deliberately has no such flag to read.
     named = getattr(args, "project", None)
-    project = named or detect_project(cwd)
-    # `None` only when the caller named no project AND the CLI is outside a repository --
-    # `cmd_remember`'s one case for `project_defaulted`. A name detected from a repository is
-    # not a default: it is reported as named, same as an explicit `--project`.
-    if named is not None:
-        remember_project = named
-    else:
-        remember_project = None if project == PERSONAL_PROJECT else project
+    detected = detect_project(Path.cwd())
+    # The one place a `None` project resolves to `PERSONAL_PROJECT`, for every verb but
+    # `remember`: it needs the unresolved value -- `None` exactly when the caller named
+    # nothing and no repository was detected -- to report `project_defaulted` correctly.
+    # `detected` may itself equal `PERSONAL_PROJECT` when it names a repository that happens
+    # to be called that; unlike the old `project == PERSONAL_PROJECT` check this replaced,
+    # a detected name is never mistaken for a default here, because `detect_project` returns
+    # `None`, not the sentinel string, when there is no repository to detect.
+    project = named or detected or PERSONAL_PROJECT
+    remember_project = named or detected
     return asyncio.run(_dispatch(args, settings, project, remember_project=remember_project))
 
 

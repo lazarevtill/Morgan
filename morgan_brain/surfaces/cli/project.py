@@ -4,11 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from morgan_brain.models import PERSONAL_PROJECT
 
+def detect_project(cwd: Path | None = None) -> str | None:
+    """Return the enclosing git repository's name, or ``None`` outside one.
 
-def detect_project(cwd: Path | None = None) -> str:
-    """Return the enclosing git repository's name, or PERSONAL_PROJECT outside one.
+    ``None``, never ``PERSONAL_PROJECT``: this function only detects, it does not resolve. A
+    caller that finds no repository decides for itself whether that means "fall back to the
+    personal project" -- conflating the two here once made a repository literally named
+    ``personal`` indistinguishable from no repository at all, since both produced the same
+    string. Resolving ``None`` to the personal project, and reporting that the caller named
+    nothing, happens at each surface's one call site instead (``surfaces.cli.__main__.main``;
+    an MCP tool never calls this at all -- see ``surfaces.mcp_server``'s module docstring).
 
     Walks up looking for ``.git`` rather than shelling out to ``git rev-parse --show-toplevel``.
     Same answer, and it drops a process spawn from every single CLI invocation -- ``morgan
@@ -22,10 +28,10 @@ def detect_project(cwd: Path | None = None) -> str:
     for candidate in (start, *start.parents):
         marker = candidate / ".git"
         if marker.is_dir():
-            return candidate.name or PERSONAL_PROJECT
+            return candidate.name or None
         if marker.is_file():
-            return _repository_behind(candidate, marker) or PERSONAL_PROJECT
-    return PERSONAL_PROJECT
+            return _repository_behind(candidate, marker) or None
+    return None
 
 
 def _repository_behind(checkout: Path, pointer: Path) -> str:

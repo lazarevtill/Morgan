@@ -24,6 +24,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS facts (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
+    -- pre-phase-0 default; kept for fresh/migrated parity, no writer relies on it
     project TEXT NOT NULL DEFAULT 'default',
     subject TEXT NOT NULL,
     predicate TEXT NOT NULL,

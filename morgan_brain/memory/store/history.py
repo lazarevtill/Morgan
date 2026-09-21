@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS session_history (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id  TEXT NOT NULL,
     user_id     TEXT NOT NULL,
+    -- pre-phase-0 default; kept for fresh/migrated parity, no writer relies on it
     project     TEXT NOT NULL DEFAULT 'default',
     role        TEXT NOT NULL,
     content     TEXT NOT NULL,

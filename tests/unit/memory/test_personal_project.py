@@ -41,8 +41,11 @@ _DIM = 4
 _NOW = datetime(2026, 9, 1, tzinfo=UTC)
 
 
-def test_outside_a_repository_the_project_is_personal(tmp_path):
-    assert detect_project(tmp_path) == PERSONAL_PROJECT == "personal"
+def test_outside_a_repository_detect_project_returns_none(tmp_path):
+    """``detect_project`` only detects -- it never resolves to ``PERSONAL_PROJECT`` itself,
+    or a repository literally named ``personal`` would be indistinguishable from no
+    repository at all. Each surface resolves ``None`` at its own one call site."""
+    assert detect_project(tmp_path) is None
 
 
 async def test_remember_says_when_it_defaulted(tmp_path, settings_for_tmp):
@@ -63,6 +66,17 @@ async def test_mcp_remember_without_a_project_reports_it_defaulted(settings_for_
 
     assert defaulted["project"] == "personal" and defaulted["project_defaulted"] is True
     assert named["project"] == "Morgan" and named["project_defaulted"] is False
+
+
+async def test_mcp_remember_with_an_empty_project_lands_in_personal(settings_for_tmp):
+    """An empty string is what some client sends for "no project", same as omitting the
+    argument -- ``Memory.project`` rejects it outright (``min_length=1``) rather than
+    defaulting it, so it must be folded into the same "named nothing" case as ``None``."""
+    server = build_server(settings_for_tmp)
+
+    result = await server.call_tool("remember", {"text": "x", "project": ""})
+
+    assert result["project"] == "personal" and result["project_defaulted"] is True
 
 
 def _stores(conn: sqlite3.Connection) -> migrations.Stores:

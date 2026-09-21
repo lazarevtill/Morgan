@@ -41,6 +41,7 @@ class EpisodicStore:
             CREATE TABLE IF NOT EXISTS memories (
                 id               TEXT PRIMARY KEY,
                 user_id          TEXT NOT NULL,
+                -- pre-phase-0 default; kept for fresh/migrated parity, no writer relies on it
                 project          TEXT NOT NULL DEFAULT 'default',
                 kind             TEXT NOT NULL,
                 source           TEXT NOT NULL,

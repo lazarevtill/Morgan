@@ -113,12 +113,40 @@ def test_project_defaults_to_the_git_repo_name(tmp_path):
     assert detect_project(tmp_path) == tmp_path.name
 
 
-def test_project_falls_back_to_personal_outside_a_repo(tmp_path):
-    from morgan_brain.surfaces.cli.project import PERSONAL_PROJECT, detect_project
+def test_detect_project_returns_none_outside_a_repo(tmp_path):
+    """``detect_project`` only detects; it never resolves to the personal project itself --
+    that happens once, at each surface's own call site -- so outside a repository it returns
+    ``None``, not a sentinel string."""
+    from morgan_brain.surfaces.cli.project import detect_project
 
     outside = tmp_path / "no-git-here"
     outside.mkdir()
-    assert detect_project(outside) == PERSONAL_PROJECT
+    assert detect_project(outside) is None
+
+
+def test_remember_inside_a_repo_named_personal_is_not_defaulted(tmp_path):
+    """A repository literally named 'personal' is a *named* project, detected from its own
+    enclosing .git -- not the caller failing to name one. Regression for conflating "no
+    enclosing repository" with "a repository that happens to be named the same as the
+    personal-project sentinel": both used to produce the string 'personal', so `remember`
+    could not tell them apart and reported `project_defaulted: true` for a real, named
+    project."""
+    repo = tmp_path / "personal"
+    repo.mkdir()
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "init", "-q"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+    env = _hash_env(tmp_path / "data")
+
+    out = _run(["remember", "a fact worth keeping", "--json"], env, repo)
+
+    assert out.returncode == 0, out.stderr
+    result = json.loads(out.stdout)
+    assert result["project"] == "personal"
+    assert result["project_defaulted"] is False
 
 
 def test_recall_is_project_scoped_by_default(tmp_path):
