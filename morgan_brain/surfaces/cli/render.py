@@ -42,7 +42,8 @@ def _render_forget(data: dict[str, Any]) -> str:
     scope = "all projects" if data["all_projects"] else f"project {data['project']!r}"
     lines = [
         f"Forgot {scope}: memories={data['memories']} facts={data['facts']} "
-        f"history={data['history']}"
+        f"history={data['history']}",
+        f"Snapshot (undo with `morgan restore`): {data['snapshot']}",
     ]
     lines.extend(f"WARNING: {w}" for w in data["warnings"])
     return "\n".join(lines)

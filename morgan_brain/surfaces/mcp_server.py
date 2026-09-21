@@ -206,7 +206,8 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
 
     async def forget(project: str | None = None, all_projects: bool = False) -> dict[str, Any]:
         """Cascading erasure of everything stored under a project -- the same honest report
-        (including which tables were skipped) the ``morgan forget`` CLI prints."""
+        (including which tables were skipped, and the path of the snapshot taken first, the
+        undo) the ``morgan forget`` CLI prints."""
         args = argparse.Namespace(all_projects=all_projects)
         return await cmd_forget(args, settings, project or DEFAULT_PROJECT)
 

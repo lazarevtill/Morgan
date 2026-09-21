@@ -20,8 +20,11 @@ from morgan_brain.app.chatgpt_import import (
 from morgan_brain.composition import (
     build_app_context,
     build_memory_context,
+    sqlite_path,
+    utcnow,
 )
 from morgan_brain.config import Settings
+from morgan_brain.memory import snapshot
 from morgan_brain.models import Memory, MemoryQuery, MemorySource
 from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.payloads import (
@@ -89,8 +92,24 @@ async def cmd_facts(args: argparse.Namespace, settings: Settings, project: str) 
 
 
 async def cmd_forget(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
+    """Erase everything stored under a project (or every project), behind a snapshot taken
+    first -- forget has no undo, so the snapshot is the undo.
+
+    ``require_writable()`` is called explicitly, before the snapshot: on a database waiting
+    for ``morgan migrate``, ``gate.forget()`` would refuse anyway, but only after the
+    snapshot had already been written. Checking first means a forget that cannot run leaves
+    no snapshot behind.
+    """
     ctx = build_memory_context(settings)
     try:
+        ctx.gate.require_writable()
+        taken = snapshot.take(
+            sqlite_path(settings.temporal_db_url),
+            into=Path(settings.snapshot_dir),
+            reason="forget",
+            clock=utcnow,
+            busy_timeout_ms=settings.db_busy_timeout_ms,
+        )
         if args.all_projects:
             projects = await ctx.gate.distinct_projects(settings.owner_user_id)
             if not projects:
@@ -106,6 +125,7 @@ async def cmd_forget(args: argparse.Namespace, settings: Settings, project: str)
         ctx.conn.close()
     result = forget_result(report, project=project, all_projects=args.all_projects)
     result["projects"] = projects
+    result["snapshot"] = str(taken.path)
     return result
 
 
