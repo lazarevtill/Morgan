@@ -121,6 +121,18 @@ def _quick_check(path: Path) -> str:
         conn.close()
 
 
+def _require_ok(path: Path) -> None:
+    """Raise ``SnapshotCorrupt`` unless *path* passes ``PRAGMA quick_check``.
+
+    A plain function, not inlined at each call site: ``restore()`` calls this from inside a
+    ``try``/``except`` that cleans up its own scratch file, and a ``raise`` written directly
+    inside that block reads as though it might be caught there too.
+    """
+    check = _quick_check(path)
+    if check != "ok":
+        raise SnapshotCorrupt(path, f"{path} failed PRAGMA quick_check: {check}")
+
+
 def _describe(path: Path) -> tuple[int, dict[str, int]]:
     """``user_version`` and a row count per content table (``_COUNT_SQL``), skipping any table
     the copy does not have."""
@@ -246,7 +258,9 @@ def restore(
     clock: Callable[[], datetime],
     busy_timeout_ms: int = 5000,
 ) -> RestoreResult:
-    """Replace *db_path* with *source*, behind a safety snapshot of *db_path* taken first.
+    """Replace *db_path* with a copy of *source*, behind a safety snapshot of *db_path*
+    taken first. *source* is only ever read -- a restore does not delete the snapshot it
+    restores from (SPEC-phase0 SS3.2: Morgan never deletes a snapshot).
 
     In order: ``quick_check`` *source* itself, raising ``SnapshotCorrupt`` on anything but
     ``"ok"`` -- a restore never reads from a copy that failed its own check; refuse with
@@ -254,18 +268,21 @@ def restore(
     ``migrations._STEPS`` knows how to read, naming both numbers; count *db_path*'s rows
     before anything changes; ``take()`` a safety copy of *db_path* under the fixed reason
     ``"before-restore"`` -- taken unconditionally, because a restore is the one command whose
-    own mistake cannot be undone by running it again; ``os.replace`` *db_path* with *source*
-    and drop any stale ``-wal``/``-shm`` sidecar left next to the old file, which belongs to
-    a database that no longer exists at that path; ``quick_check`` the result; count rows
-    after.
+    own mistake cannot be undone by running it again; copy *source* to a scratch file next to
+    *db_path* (``f"{db_path}.restoring"``) and ``quick_check`` the copy; drop *db_path*'s own
+    ``-wal``/``-shm`` -- their content is already captured durably in the safety snapshot
+    above, and removing them now, before the swap, closes the window a crash could otherwise
+    land in: a restored file paired with the *old* database's WAL, which a later
+    ``PRAGMA journal_mode=WAL`` open could try to replay onto it; ``os.replace`` the scratch
+    copy onto *db_path* -- same directory as *db_path*, so the swap is a same-volume rename
+    even when *source* itself lives on a different drive; ``quick_check`` the result; count
+    rows after. The scratch copy is removed on any failure between its creation and the swap.
 
     On Windows, ``os.replace`` raises ``PermissionError`` while another process still holds
     *db_path* open -- caught and re-raised naming the fix (close the sessions running
     ``morgan-mcp``) rather than forced.
     """
-    check = _quick_check(source)
-    if check != "ok":
-        raise SnapshotCorrupt(source, f"{source} failed PRAGMA quick_check: {check}")
+    _require_ok(source)
 
     snapshot_version, _ = _describe(source)
     code_version = len(migrations._STEPS)
@@ -278,20 +295,28 @@ def restore(
         db_path, into=into, reason="before-restore", clock=clock, busy_timeout_ms=busy_timeout_ms
     )
 
+    # Same directory as db_path, never db_path itself: `source` is copied here rather than
+    # moved into place directly, so it survives the restore untouched at its own path.
+    scratch = Path(f"{db_path}.restoring")
     try:
-        os.replace(source, db_path)
-    except PermissionError as exc:
-        raise PermissionError(
-            f"could not replace {db_path}: another process still has it open -- close any "
-            "running morgan-mcp sessions and try again"
-        ) from exc
+        shutil.copyfile(source, scratch)
+        _require_ok(scratch)
 
-    Path(f"{db_path}-wal").unlink(missing_ok=True)
-    Path(f"{db_path}-shm").unlink(missing_ok=True)
+        Path(f"{db_path}-wal").unlink(missing_ok=True)
+        Path(f"{db_path}-shm").unlink(missing_ok=True)
 
-    check_after = _quick_check(Path(db_path))
-    if check_after != "ok":
-        raise SnapshotCorrupt(Path(db_path), f"{db_path} failed PRAGMA quick_check: {check_after}")
+        try:
+            os.replace(scratch, db_path)
+        except PermissionError as exc:
+            raise PermissionError(
+                f"could not replace {db_path}: another process still has it open -- close any "
+                "running morgan-mcp sessions and try again"
+            ) from exc
+    except BaseException:
+        scratch.unlink(missing_ok=True)
+        raise
+
+    _require_ok(Path(db_path))
 
     _, after = _describe(Path(db_path))
     return RestoreResult(before=before, after=after, safety=safety)
