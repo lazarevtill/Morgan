@@ -77,7 +77,7 @@ From `~` (home folder):
   "embedding_dim": 4096,
   "embedding_endpoint": "<embedding-endpoint>",
   "llm_endpoint": "<chat-endpoint>",
-  "llm_model": "ornith15",
+  "llm_model": "<chat-model>",
   "sqlite_vec": "v0.1.9",
   "fts5": true,
   "provider": "reachable",
@@ -102,7 +102,7 @@ changed there):
   "embedding_dim": 4096,
   "embedding_endpoint": "<embedding-endpoint>",
   "llm_endpoint": "<chat-endpoint>",
-  "llm_model": "ornith15",
+  "llm_model": "<chat-model>",
   "sqlite_vec": "v0.1.9",
   "fts5": true,
   "provider": "reachable",
@@ -267,13 +267,20 @@ export $(grep -E '^MORGAN_EMBEDDING_(ENDPOINT|MODEL|DIM)=' ~/.config/morgan/.env
 ```
 
 Each of the grid's 6 "cold" conditions waits for its own genuine idle-and-unloaded state
-before running (per-condition, not shared across the cold half of the grid -- see the
-concerns in `task-3-report.md` for why this makes the wall-clock cost higher than the
-brief's "about three 30-minute idle waits" estimate, which this script does not force down
-to match).
+before running (per-condition, not shared across the cold half of the grid), which costs up
+to 6 waits there plus 3 more for `--cold-starts 3` -- more than the brief's "about three
+30-minute idle waits" estimate. Before spending that time, weigh it against what it buys: a
+"cold" condition is one cold request followed by 499 warm ones, and the p1 of 500 samples is
+roughly the 5th-smallest -- one buried cold sample is statistically invisible next to its
+warm twin's distribution. Six separate half-hour waits may not be worth more than one shared
+wait covering the whole cold half of the grid (only the first sub-condition run then
+genuinely cold, the rest warm-but-labelled-cold); this script does not make that call for
+the controller, it just implements the literal per-condition reading.
 
 **tolerance: pending (default 0.995)** -- Task 3b writes the full run's numbers and the
-tolerance verdict into this section.
+tolerance verdict into this section, by this rule: **tolerance = 0.995, unless the worst
+condition's p1 is below 0.998, in which case tolerance = that p1 rounded down to three
+digits minus 0.003 -- naming the condition that set it.**
 
 ## 4. The `PARTITION KEY` measurement
 

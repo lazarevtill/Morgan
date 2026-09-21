@@ -268,6 +268,10 @@ async def post_embeddings(
     state.mark()
     resp.raise_for_status()
     data: list[dict[str, Any]] = resp.json()["data"]
+    # The OpenAI-compatible response is not guaranteed to preserve request order; pairing a
+    # fresh embedding with the wrong stored vector would read as "the model is
+    # nondeterministic" and corrupt the tolerance this script exists to set.
+    data.sort(key=lambda item: item.get("index", 0))
     return [item["embedding"] for item in data]
 
 
