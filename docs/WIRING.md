@@ -237,8 +237,9 @@ that passed its check.
 
 `morgan restore <file>` alone only prints what it would replace, and exits 2. With `--yes` it
 checks the snapshot, refuses one written by a newer Morgan, takes a `before-restore` snapshot
-of the database as it is, and swaps the file in. On Windows, close every running `morgan-mcp`
-first: a file another process holds open cannot be replaced.
+of the database as it is, and swaps the file in. Close every running `morgan-mcp` first, on
+every platform: on Linux or macOS a write another process makes meanwhile is lost with the
+replaced file, and on Windows a file another process holds open cannot be replaced.
 
 After an upgrade of Morgan, `morgan doctor`'s `migration` line says whether the database waits
 for `morgan migrate`. Light steps run by themselves when the database is opened. A heavy step
