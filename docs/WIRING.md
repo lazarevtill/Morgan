@@ -2,7 +2,7 @@
 
 ## 1. Install
 
-Python 3.12. From the repository root:
+Python 3.12 or later. From the repository root:
 
 ```bash
 uv tool install --editable .   # morgan and morgan-mcp, on your PATH in every directory
@@ -67,9 +67,9 @@ answers `/embeddings` with a 501.
 ## 4. Check: `morgan doctor`
 
 ```
-database: /home/you/.local/share/morgan/morgan.db
-env_file: /home/you/.config/morgan/.env (present)
-env_file: /home/you/code/my-repo/.env (absent)
+database: ~/.local/share/morgan/morgan.db
+env_file: ~/.config/morgan/.env (present)
+env_file: ~/code/my-repo/.env (absent)
 project: my-repo
 all_projects: False
 embedding_backend: provider
@@ -78,25 +78,28 @@ embedding_endpoint: http://gpu-box:8082/v1
 llm_endpoint: http://gpu-box:8081/v1
 llm_model: qwen2.5-7b-instruct
 data_flow: gpu-box (MORGAN_LLM_ENDPOINT) receives ask: the question, the memories recalled for it and the recent history; consolidate: up to 50 memories per project, with the project's current facts
-data_flow: gpu-box (MORGAN_EMBEDDING_ENDPOINT) receives remember: the memory's text; recall: the query; import: every imported message, plus the five fingerprint strings alone every MORGAN_IMPORT_CANARY_EVERY memories stored and once more at the end; doctor --vectors: a sample of stored memories; a process's first embedding call: up to 5 stored memories, while the embedding space's fingerprint is unrecorded
+data_flow: gpu-box (MORGAN_EMBEDDING_ENDPOINT) receives remember: the memory's text; recall: the query; import: every imported message; doctor --vectors: a sample of stored memories; a process's first embedding call: up to 5 stored memories, while the embedding space's fingerprint is unrecorded
 sqlite_vec: v0.1.9
 fts5: True
 provider: reachable (0.3 s)
 embedding_provider: slow (41.8 s; MORGAN_DOCTOR_SLOW_AFTER_SECONDS=2.0)
 embedding_space: 1 (mxbai-embed-large, 1024 dims): fingerprint matches (min cosine 0.9993); strings sha256 82b4fe781cb3d981d562c08cb1de3ce802abc22ea5d2e956e11672f66b340f6f
 migration: user_version 7 of 7, nothing pending
-snapshots: 1 in /home/you/.local/share/morgan/snapshots, newest morgan-20260921T101500Z-migrate.db, 1843200 bytes in all
+snapshots: 1 in ~/.local/share/morgan/snapshots, newest morgan-20260921T101500Z-migrate.db, 1843200 bytes in all
 memories: 12 in project 'my-repo' (128 across all projects)
 fts: 12 in project 'my-repo' (128 across all projects)
 vectors: 12 in project 'my-repo' (128 across all projects)
 rows_by_project: {'my-repo': 12, 'personal': 116}
 rows_missing_provenance: 0
 rows_missing_provenance_reason: None
-project 'my-repo': personal, capture on, consolidate on
+project 'my-repo': unclassified, capture on, consolidate on
 project 'personal': unclassified, capture on, consolidate on
-code_root: /home/you/code
-code_root: /home/you/work (not a directory)
+code_root: ~/code
+code_root: ~/work (not a directory)
+vector_audit: none (not requested; pass --vectors)
 ```
+
+Paths print in full; `~` stands for your home folder here.
 
 `doctor` only reads. It opens the database read-only and changes nothing in it -- no table
 is created, no migration step runs, the journal mode is left as it is -- so it is safe to run
@@ -141,23 +144,27 @@ recorded for its active space: `matches`, `MISMATCH` (a different model is answe
 vectors would be searched with the wrong one), or `unrecorded` (a process's first embedding
 call records it, once a sample of stored memories shows the model answering wrote them).
 `doctor` never records one. `migration` lists the steps `morgan migrate`
-would run, heavy or light; `doctor` runs none. `snapshots` counts what `morgan snapshot` and
-`morgan migrate` left behind, which Morgan never deletes.
+would run, heavy or light; `doctor` runs none. `snapshots` counts the files in
+`MORGAN_SNAPSHOT_DIR` that `snapshot`, `migrate`, `forget` and `restore` left there, which
+Morgan never deletes.
 
 The `memories`/`fts`/`vectors` lines are scoped to `project`, with the total across every
-project beside them -- run from the wrong directory, a scoped zero used to print under a label
-that read like the whole database was empty. `rows_by_project` gives every project's own
-count, and `rows_missing_provenance` counts rows carrying the signature of a pre-phase-0
-process still writing after `morgan migrate` (an empty `author_id`, or a NULL `vec_items`
-status); it reads `None` with a reason on a database that has not been through `morgan
-migrate` yet, where the columns it counts do not exist. Each `project` line is a row of the
-`projects` table: its classification and whether capture and consolidation are on. A
-`MORGAN_CODE_ROOTS` entry that is not a directory is marked so.
+project beside them, so a zero from the wrong directory does not read as an empty database.
+`rows_by_project` gives every project's own count, and `rows_missing_provenance` counts rows
+that an older Morgan, still running somewhere, wrote after `morgan migrate` (an empty
+`author_id`, or a NULL `vec_items` status); it reads `None` with a reason on a database that
+has not been through `morgan migrate` yet, where the columns it counts do not exist. Each
+`project` line is a row of the `projects` table: its classification and whether capture and
+consolidation are on. Migration step 7 seeds one row, `unclassified`, for each project a
+database already held; nothing adds a row for a project written to later, and a project with
+no row is consolidated. A `MORGAN_CODE_ROOTS` entry that is not a directory is marked so;
+nothing walks the roots yet.
 
 The plain embedding probe above already sends the five fingerprint strings to the embedding
 host on every `doctor` run, to say whether it answers at all. `morgan doctor --vectors` sends
-more: a sample of `MORGAN_VECTOR_AUDIT_SAMPLE_ROWS` (180) stored vectors, spread evenly across
-the active embedding space's table, re-embedded and compared against what is stored, at
+more: a sample of up to `MORGAN_VECTOR_AUDIT_SAMPLE_ROWS` (180) stored vectors in `project`
+(every project with `--all-projects`), spread evenly across the active embedding space's
+table, re-embedded and compared against what is stored, at
 `MORGAN_EMBEDDING_FINGERPRINT_TOLERANCE`. A line to stderr says so first -- the host itself is
 in `data_flow`, above -- because stdout still carries `--json`. `--clients N` runs the same
 sample through N independent, concurrent embedders instead of one, and reports each client's
@@ -190,9 +197,10 @@ the embedding host is unreachable or refused, `vector_audit` reads `None` and
 
 ## 5. The CLI
 
-Every command takes `--project` (default: the current git repository's name; a linked
-worktree counts as the repository it came from), `--json`, and where it makes sense
-`--all-projects`.
+Every command takes `--json`. `remember`, `recall`, `facts`, `forget`, `ask`, `consolidate`
+and `doctor` also take `--project` (default: the current git repository's name; a linked
+worktree counts as the repository it came from; outside a repository, `personal`) and, where
+it makes sense, `--all-projects`.
 
 ```bash
 morgan remember "the Harbor mirror blocked the deploy"   # embedding model only
@@ -202,7 +210,47 @@ morgan ask "what do you know about the deploy"            # chat model: recall, 
 morgan consolidate                                        # chat model: memories → facts
 morgan forget                                             # everything under this project
 morgan import ~/Downloads/conversations.json              # seed from a ChatGPT export
+morgan doctor                                             # see section 4
+morgan snapshot                                           # a verified copy of the database
+morgan restore <snapshot> --yes                           # put a snapshot back
+morgan migrate                                            # upgrade the database, behind a snapshot
+morgan install-skill                                      # see section 7
 ```
+
+`remember` with no `--project` outside a repository stores in `personal`, and its `--json`
+result says so with `project_defaulted: true`. `recall`'s `--json` result carries `abstained`
+and `reason`: an empty result is `empty` (nothing stored in scope) or `declined` (with
+`MORGAN_RECALL_FLOOR_MARGIN` set, nothing stood out above the background); results carry
+`too_few_to_judge` or `no_floor` when the floor did not judge them, and `null` when it did.
+`forget` takes a snapshot first and prints its path: `morgan restore` with that path is the
+undo.
+
+### Snapshots, restore and migrate
+
+`snapshot`, `restore` and `migrate` act on the whole database file and take no `--project`.
+
+`morgan snapshot [--reason <word>]` writes a `VACUUM INTO` copy of the database into
+`MORGAN_SNAPSHOT_DIR` (default `snapshots/` beside the database), named by UTC time and
+reason, and checks it with `PRAGMA quick_check` before reporting it; `--list` lists them. The
+copy is consistent while other processes hold the file open. Morgan never deletes a snapshot
+that passed its check.
+
+`morgan restore <file>` alone only prints what it would replace, and exits 2. With `--yes` it
+checks the snapshot, refuses one written by a newer Morgan, takes a `before-restore` snapshot
+of the database as it is, and swaps the file in. On Windows, close every running `morgan-mcp`
+first: a file another process holds open cannot be replaced.
+
+After an upgrade of Morgan, `morgan doctor`'s `migration` line says whether the database waits
+for `morgan migrate`. Light steps run by themselves when the database is opened. A heavy step
+(one that rewrites, moves or deletes rows) waits for `morgan migrate`, and until it runs every
+write -- `remember`, `ask`, `consolidate`, `forget`, `import`, and the MCP tools that write --
+fails with a message that begins "writes are blocked until `morgan migrate` runs" and names the
+pending steps; `recall` and `facts` still answer. `morgan migrate --dry-run` lists the pending
+steps. `morgan migrate` takes a `migrate` snapshot, runs every pending step in one
+transaction, checks the result, prints the row counts before and after, and then checks the
+embedding space against the embedding server. A step that fails rolls the whole run back, and
+the error names the snapshot. Close sessions still running an older `morgan-mcp` before you
+migrate: an older process writing afterwards is what `rows_missing_provenance` counts.
 
 `import` seeds memory from a ChatGPT export so a fresh brain is not an empty box. It writes
 to `archive/chatgpt`, not to your working project, and takes no `--project`: a fifth of the
@@ -222,28 +270,39 @@ error object), naming the suspect range, the suspect memory ids and the setting 
 addresses the model, and pointing at `morgan doctor --vectors`. **The suspects are not
 repaired.** They are already stored, in every index, with whatever vectors they were given --
 the canary runs after the stretch is stored, not before -- and re-running the import skips
-every id already there unchanged, suspects included, rather than re-embedding them. Real
-remediation (re-embedding the named suspects, or holding a stretch back until its own canary
-passes) is a phase-0 gap, tracked as an owner follow-up rather than built here.
+every id already there unchanged, suspects included, rather than re-embedding them. Nothing
+re-embeds named memory ids, and nothing holds a stretch back until its own canary passes.
 
 `MORGAN_EMBEDDING_BACKEND=hash` replaces the embedding call with a deterministic stub, so the
 memory commands run with no model server at all (keyword and entity search still work; vector
 similarity does not mean anything).
 
-When the model server is down, every command that needs it says which endpoint it could not
-reach and exits 1; under `--json` the error is the whole of stdout.
+When a model server is down, too slow or refuses the request, every command that needs it
+says which endpoint and which setting to check, and exits 1; under `--json` the error is the
+whole of stdout. An embedding call is retried first, within
+`MORGAN_EMBEDDING_RETRY_BUDGET_SECONDS` (60 s; `MORGAN_EMBEDDING_IMPORT_RETRY_BUDGET_SECONDS`,
+600 s, for an import) when the host answered slowly, with a 5xx other than 501 or a 429, or
+dropped the connection -- a cold host loading its model looks like that -- and within
+`MORGAN_EMBEDDING_UNREACHABLE_BUDGET_SECONDS` (5 s) when no connection could be made. A
+refusal (a 4xx other than 429, a 501, a redirect) is not retried.
 
 ## 6. The MCP server
 
-The same five operations for any MCP client, through the same gate. `project` is a tool
-argument (the server is a daemon; its own working directory means nothing to a client).
-Every tool declares MCP's hints: `recall` and `facts` are read-only, `remember` and
-`ask_morgan` write (a turn stores the exchange), `forget` is destructive.
+The same five operations for any MCP client, through the same gate, returning the same
+results the CLI's `--json` prints. `project` is a tool argument (the server is a daemon; its
+own working directory means nothing to a client). A call that names no project works in
+`personal`: `remember` says so with `project_defaulted: true`, and `forget` without a
+`project` erases `personal`. Every tool declares MCP's hints: `recall` and `facts` are
+read-only, `remember` and `ask_morgan` write (a turn stores the exchange), `forget` is
+destructive. Errors come back as the tool's error result, with the message the CLI prints: an
+unreachable, slow or refusing model server, an `EmbeddingSpaceMismatch`, or a database waiting
+for `morgan migrate`, which refuses the three tools that write while `recall` and `facts`
+still answer.
 
 ```bash
 claude mcp add -s user morgan -- morgan-mcp --transport stdio   # Claude Code, every project
 morgan-mcp --transport http                                 # loopback, MORGAN_MCP_HOST/PORT
-MORGAN_API_KEY=… morgan-mcp --transport http --host 100.64.0.7   # other machines, over the overlay
+MORGAN_API_KEY=… morgan-mcp --transport http --host <overlay-address>   # other machines
 ```
 
 `-s user` matters: Claude Code's default scope registers a server only for the project the

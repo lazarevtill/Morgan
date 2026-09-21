@@ -11,10 +11,11 @@ one `MemoryGate`. The model server is any OpenAI-compatible endpoint (llama-serv
 default). One process, no queue, no worker, no scheduler.
 
 Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
-`docs/ROADMAP.md` (what was cut and why). The archived kernel this was cut from is at the
-tag `legacy-v0.1.0-kernel` with its designs under `docs/archive/`.
+`docs/ROADMAP.md` (what was cut and why), `docs/decisions/` (decisions the code has not caught
+up with yet). The archived kernel this was cut from is at the tag `legacy-v0.1.0-kernel` with
+its designs under `docs/archive/`.
 
-## Package map (`morgan_brain/`, ~5,000 lines)
+## Package map (`morgan_brain/`, ~10,300 lines)
 
 The tree is grouped by what a file does, so "where does a write go" and "where does a request
 come in" are answered by the directory names.
@@ -34,7 +35,8 @@ come in" are answered by the directory names.
   chat model and sends no request: it registers the settings' embedding model and width on a
   writable database that has no embedding space, refusing instead when the vector table was
   created at another width (the hash backend registers none), and it refuses a space of
-  another width than `MORGAN_EMBEDDING_DIM`. `build_app_context` adds the chat model.
+  another width than `MORGAN_EMBEDDING_DIM`. While a heavy migration step waits, it opens the
+  gate read-only and registers nothing. `build_app_context` adds the chat model.
 - `memory/` — the core. `gate.py` is the only door and `module.py` is the one write path and
   the fused recall; `embedder.py` is the embedding seam; `fingerprint.py` is the five frozen
   strings that identify an embedding space and the pure arithmetic (`cosine`, `compare`,
@@ -70,16 +72,18 @@ come in" are answered by the directory names.
   `ProviderUnreachable`, `ProviderRefused`, `EmbeddingSpaceMismatch`, and `is_refusal`,
   which statuses refuse a request, for the embedder and `doctor` alike).
 - `app/chat.py` — one turn: recall, answer, remember. Not a surface: the one use-case both
-  surfaces call.
+  surfaces call. `app/chatgpt_import.py` seeds memory from a ChatGPT export, routes a fifth of
+  the conversations to a holdout project, and runs the import canary.
 - `surfaces/` — where requests come in. `cli/` (`__main__` parses and dispatches, `commands`
   answers, `maintenance` answers `morgan snapshot`, `morgan restore` and `morgan migrate`,
   `payloads` shapes the result, `render` prints it, `doctor` diagnoses by reading only -- it
   opens the file read-only, builds no store, creates no table and runs no migration step --
   and probes the chat and embedding servers separately, telling reachable, slow, refused and
-  unreachable apart, `install_skill` writes the packaged `skill/SKILL.md` into the coding
-  agents installed here), `mcp_server.py` (five MCP tools over stdio or streamable-HTTP,
-  calling those same command handlers), and `network.py`, the bind guard that protects the
-  HTTP one.
+  unreachable apart, `project` names the project after the enclosing git repository and holds
+  `classify`, which nothing calls yet, `install_skill` writes the packaged `skill/SKILL.md`
+  into the coding agents installed here), `mcp_server.py` (five MCP tools over stdio or
+  streamable-HTTP, calling those same command handlers), and `network.py`, the bind guard
+  that protects the HTTP one.
 
 ## Invariants
 
@@ -116,7 +120,9 @@ come in" are answered by the directory names.
   and any re-embed take a `VACUUM INTO` snapshot first, into `MORGAN_SNAPSHOT_DIR`, which
   Morgan never prunes.
 - **Facts evolve, they don't overwrite.** Update = close the old interval, open a new one. A
-  key has at most one current fact, and a unique index on `facts` enforces it.
+  key has at most one current fact, and a unique index on `facts` enforces it. The key is
+  (`user_id`, `project`, `subject`, `predicate`); it gains `author_id` and `scope` in phase 2
+  (`docs/decisions/0001-fact-key-and-forget-reach.md`).
 - **Facts are surfaced alongside episodics, never instead of them.** Recall budgets the
   fact block so a matching memory cannot be pushed out of the window by fact volume.
 - **Actor attribution.** Every memory records its `MemorySource`. The reply to `ask` is
@@ -159,18 +165,34 @@ come in" are answered by the directory names.
 ## Known limitations
 
 - `recall` declines to answer only when `MORGAN_RECALL_FLOOR_MARGIN` is set. The value belongs
-  to the embedding model: 0.11 for Qwen3-Embedding-0.6B, measured on the bundled probes and on
-  a real archive. Other models are unmeasured.
+  to the embedding model: 0.08 for `qwen3-embedding:8b`, measured on a 3,010-memory archive
+  with 128 labelled questions (`docs/measurements/2026-09-phase0-baseline.md`); 0.11 for
+  Qwen3-Embedding-0.6B, measured on the bundled probes and on a real archive. Other models are
+  unmeasured.
+- `consolidate` reads a project's episodics with `recall(text="", top_k=50)`: the memories
+  nearest an empty query's embedding, not the most recent, and fewer than 50 when the project
+  holds facts, which take up to half of those places. With `MORGAN_RECALL_FLOOR_MARGIN` set,
+  the floor can decline that query, and consolidate then has nothing to read.
+- The import canary catches a model that is still answering wrong when a check runs; a single
+  transient wrong vector between two checks passes it. Suspect memories stay stored, a re-run
+  of the import skips them, and `doctor --vectors` samples rather than checks every row.
+  Nothing re-embeds named memory ids.
+- `morgan-mcp` builds a FastMCP server, and FastMCP's own settings read a `./.env` in the
+  folder the client starts the server in. FastMCP passes every one of its settings
+  explicitly, so the `FASTMCP_*` values in that file change nothing, and Morgan's settings
+  never read it; but a `./.env` there that is not UTF-8 stops `morgan-mcp` at start with a
+  `UnicodeDecodeError`.
 - Entity extraction is deterministic and cased-script only; scripts without letter case
   (Chinese, Japanese, Arabic, Hebrew) yield nothing rather than a guess. A capitalised word is
   a name only where the text capitalises it away from a sentence, clause or line start, so a
   name that only ever opens sentences in a memory is not indexed. Code in a memory still
   yields words like `true` and `error`.
-- A superseded memory outranks the current one in half the knowledge-update probes. Fusion
-  is rank-only and carries no recency term. Supersession lives on facts; the probes store
-  episodics, which carry none.
+- A superseded memory outranks the current one in 7 of the 10 knowledge-update probes
+  (`qwen3-embedding:8b`). Fusion is rank-only and carries no recency term. Supersession lives
+  on facts; the probes store episodics, which carry none.
 - Multi-hop questions are not answered. Recall ranks memories and has no mechanism to
-  compose two of them; measured recall@8 is 0.38 against 0.95 for single-hop.
+  compose two of them; measured recall@8 is 0.62 against 0.90 for single-hop
+  (`qwen3-embedding:8b`).
 
 ## Build, test, run
 
