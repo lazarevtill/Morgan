@@ -4,11 +4,13 @@ them to be "the same space".
 Morgan checks only a vector's width today: two models of the same width are indistinguishable
 to ``store/vectors.py``, so swapping one in leaves every stored vector searched by a model that
 never wrote it -- wrong answers, no error. Embedding these five strings once, storing the
-result, and re-embedding them on open is how a same-width model swap is caught instead.
+result, and re-embedding them on a process's first embedding call is how a same-width model
+swap is caught instead.
 
 This module is pure: no I/O, no settings, no logging. It knows nothing of the database or the
-embedding endpoint; ``store/spaces.py`` persists what this module computes, and later tasks
-call ``compare`` to decide whether a database's vectors still match the model in front of it.
+embedding endpoint; ``store/spaces.py`` persists what this module computes, and
+``checked_embedder.py`` calls ``compare`` to decide whether a database's vectors still match
+the model in front of it.
 """
 
 from __future__ import annotations
@@ -74,8 +76,8 @@ def cosine(a: list[float], b: list[float]) -> float:
     Raises ``ValueError`` naming both widths on a mismatch, and ``ValueError`` mentioning
     "zero" on either vector being the zero vector -- a zero vector has no direction, so its
     cosine similarity is mathematically undefined (0/0), not a legitimate 0.0 or ``nan``. A
-    fake or broken embedding server that returns all zeros (``tests/fakes.py::model_server``
-    does, by default) must fail a comparison loudly rather than pass it silently.
+    fake or broken embedding server that returns all zeros must fail a comparison loudly
+    rather than pass it silently.
     """
     _require_same_width(a, b)
     dot: float = sum(x * y for x, y in zip(a, b, strict=True))

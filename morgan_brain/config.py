@@ -99,6 +99,15 @@ class Settings(BaseSettings):
     #: Must match the embedding model's output dimension (mxbai-embed-large → 1024,
     #: nomic-embed-text → 768). Probed against a live embed() call at startup.
     embedding_dim: int = 1024
+    #: The lowest cosine a fresh embedding may have against the active space's fingerprint,
+    #: string by string, or against a stored row's vector, before the model answering is
+    #: called a different one. Measured, not chosen: re-embedding 500 stored rows under seven
+    #: batch, concurrency and cold-start conditions never went below 0.99820, and the worst
+    #: first percentile was 0.99860 (docs/measurements/2026-09-phase0-baseline.md).
+    embedding_fingerprint_tolerance: float = Field(default=0.995, gt=0.0, le=1.0)
+    #: How many stored memories ride along on the first embedding request when the active space
+    #: has no fingerprint yet: it is recorded only if their fresh vectors match the stored ones.
+    embedding_fingerprint_sample_rows: int = Field(default=5, ge=0)
     #: "provider" → call the configured embedding endpoint. "hash" → a deterministic sha256
     #: stub, for the memory commands to run with no model server at all.
     embedding_backend: Literal["provider", "hash"] = "provider"

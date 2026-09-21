@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+import structlog
 
 from morgan_brain.config import Settings
 
@@ -26,6 +28,19 @@ def _no_env_files(monkeypatch: pytest.MonkeyPatch, _empty_config_home: Path) -> 
     """
     monkeypatch.setitem(Settings.model_config, "env_file", None)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(_empty_config_home))
+
+
+@pytest.fixture(autouse=True)
+def _structlog_config_restored() -> Iterator[None]:
+    """Leave structlog configured as the test found it.
+
+    A CLI or MCP entrypoint run in-process calls ``configure_logging``, which points structlog
+    at the ``sys.stderr`` it sees -- under pytest, that test's capture stream, closed when the
+    test ends. Left in place, the next test whose code logs anything writes to a closed file.
+    """
+    saved = structlog.get_config()
+    yield
+    structlog.configure(**saved)
 
 
 @pytest.fixture

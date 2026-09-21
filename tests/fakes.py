@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import threading
 from collections import deque
 from collections.abc import AsyncIterator, Iterator
@@ -13,13 +15,25 @@ from typing import Any
 from morgan_brain.providers.wire import ChatMessage, ChatResult, StreamDelta, ToolSpec
 
 
+def _unit_vector(text: str, dim: int) -> list[float]:
+    """A deterministic unit vector for *text*. Every component is at least 1/256 before
+    normalising, so no text maps to the zero vector."""
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    raw = [(digest[i % len(digest)] + 1) / 256.0 for i in range(dim)]
+    norm = math.sqrt(sum(x * x for x in raw))
+    return [x / norm for x in raw]
+
+
 @contextmanager
 def model_server(*, embeddings: bool = True, embedding_dim: int = 1024) -> Iterator[str]:
     """An OpenAI-compatible model server on a free loopback port; yields its ``/v1`` URL.
 
-    It lists no models and embeds every input as a zero vector ``embedding_dim`` wide. With
-    ``embeddings=False`` it answers embedding requests with a 501, as a llama-server started
-    without ``--embeddings`` does. Real sockets, so a probe is tested the way it runs.
+    It lists no models and embeds every input as a unit vector ``embedding_dim`` wide derived
+    from a hash of the text: the same text gets the same vector in every process, so a
+    fingerprint recorded by one is matched by the next, and no vector is the zero vector that
+    ``fingerprint.cosine`` rightly refuses. With ``embeddings=False`` it answers embedding
+    requests with a 501, as a llama-server started without ``--embeddings`` does. Real
+    sockets, so a probe is tested the way it runs.
     """
 
     class Handler(BaseHTTPRequestHandler):
@@ -36,8 +50,11 @@ def model_server(*, embeddings: bool = True, embedding_dim: int = 1024) -> Itera
             elif not embeddings:
                 self._reply(501, {"error": "this server was started without --embeddings"})
             else:
-                count = len(body["input"]) if isinstance(body["input"], list) else 1
-                vectors = [{"index": i, "embedding": [0.0] * embedding_dim} for i in range(count)]
+                texts = body["input"] if isinstance(body["input"], list) else [body["input"]]
+                vectors = [
+                    {"index": i, "embedding": _unit_vector(text, embedding_dim)}
+                    for i, text in enumerate(texts)
+                ]
                 self._reply(200, {"object": "list", "data": vectors})
 
         def _reply(self, status: int, payload: dict[str, Any]) -> None:

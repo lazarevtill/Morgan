@@ -95,6 +95,58 @@ class ProviderUnreachable(ConnectionError):
         )
 
 
+class EmbeddingSpaceMismatch(Exception):
+    """The model answering embedding requests is not the one that wrote the stored vectors.
+
+    Two models of the same width are indistinguishable by width alone, so without this every
+    stored vector would be searched by a model that never wrote it: wrong answers, no error.
+    Raised by ``memory/checked_embedder.py`` on a process's first embedding call, when the
+    model's answers fall outside the measured tolerance of the active space's fingerprint, or
+    of the vectors already stored, or come back at another width. The message names the space,
+    the setting that addresses the model, what went wrong, what it means and what to check.
+    """
+
+    def __init__(self, *, space_id: int, model: str, dims: int, setting: str, detail: str) -> None:
+        self.space_id = space_id
+        self.model = model
+        self.dims = dims
+        self.setting = setting
+        self.detail = detail
+        super().__init__(
+            f"embedding space {space_id} ({model}, {dims} dims) does not match the model at "
+            f"{setting}: {detail}; stored vectors would be searched with the wrong model; "
+            "check MORGAN_EMBEDDING_MODEL or run `morgan doctor --vectors`"
+        )
+
+    @classmethod
+    def cosines(
+        cls,
+        *,
+        space_id: int,
+        model: str,
+        dims: int,
+        setting: str,
+        against: Literal["fingerprint", "stored-row"],
+        min_cosine: float,
+        tolerance: float,
+        failed: int,
+        compared: int,
+    ) -> EmbeddingSpaceMismatch:
+        """Fresh vectors fell below *tolerance* against *against*: ``"fingerprint"`` (the five
+        fixed strings) or ``"stored-row"`` (memories whose vectors are already stored)."""
+        what = "strings" if against == "fingerprint" else "stored rows"
+        detail = f"{against} cosine {min_cosine:.4f} < {tolerance} on {failed} of {compared} {what}"
+        return cls(space_id=space_id, model=model, dims=dims, setting=setting, detail=detail)
+
+    @classmethod
+    def width(
+        cls, *, space_id: int, model: str, dims: int, setting: str, got: int
+    ) -> EmbeddingSpaceMismatch:
+        """The model answered at a width other than the space's."""
+        detail = f"it returned a {got}-dimensional vector but the active space is {dims} wide"
+        return cls(space_id=space_id, model=model, dims=dims, setting=setting, detail=detail)
+
+
 @runtime_checkable
 class ChatClient(Protocol):
     """What the core needs from a chat model: one call, messages in, a result out."""

@@ -33,10 +33,13 @@ come in" are answered by the directory names.
 - `memory/` — the core. `gate.py` is the only door and `module.py` is the one write path and
   the fused recall; `embedder.py` is the embedding seam; `fingerprint.py` is the five frozen
   strings that identify an embedding space and the pure arithmetic (`cosine`, `compare`,
-  `pack`/`unpack`) over their vectors, with no I/O of its own; `migrations.py` upgrades a
-  database written by an older version, its light steps when it is opened and its heavy ones
-  under `morgan migrate`; `snapshot.py` writes and lists verified `VACUUM INTO` copies of the
-  whole database, and restores one behind a safety snapshot of its own. Below them:
+  `pack`/`unpack`) over their vectors, with no I/O of its own; `checked_embedder.py` wraps an
+  embedder so that a process's first request also carries those strings, and refuses with
+  `EmbeddingSpaceMismatch` when the model answering is not the one that wrote the active
+  space; `migrations.py` upgrades a database written by an older version, its light steps
+  when it is opened and its heavy ones under `morgan migrate`; `snapshot.py` writes and lists
+  verified `VACUUM INTO` copies of the whole database, and restores one behind a safety
+  snapshot of its own. Below them:
   - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
     `history`, `spaces` (the `embedding_spaces` table and its one-active partial index),
     `projects` (the `projects` table; its queries land in a later task). Each owns its schema
@@ -52,7 +55,7 @@ come in" are answered by the directory names.
 - `providers/` — the only place a model SDK is imported: `openai_compat.py` (chat),
   `embeddings.py`, `structured.py` (JSON-validated output), `factory.py` (settings → adapters,
   and where embeddings are sent), `wire.py` (message types, `ChatClient`,
-  `ProviderUnreachable`).
+  `ProviderUnreachable`, `EmbeddingSpaceMismatch`).
 - `app/chat.py` — one turn: recall, answer, remember. Not a surface: the one use-case both
   surfaces call.
 - `surfaces/` — where requests come in. `cli/` (`__main__` parses and dispatches, `commands`
@@ -103,6 +106,10 @@ come in" are answered by the directory names.
   fact block so a matching memory cannot be pushed out of the window by fact volume.
 - **Actor attribution.** Every memory records its `MemorySource`. The reply to `ask` is
   stored as `agent_inferred`; never treat an inference as a user statement.
+- **One embedding space is active, and it is fingerprinted.** `embedding_spaces` records
+  model, width, prefixes and the vectors of five fixed strings; a model that answers outside
+  the measured tolerance of that fingerprint is a named error, never a silently wrong search. A
+  same-width swap is caught like a width change.
 - **A model server that is down is reported by name.** Adapters raise
   `providers.wire.ProviderUnreachable` carrying the endpoint and the setting that addresses
   it; the CLI and MCP tools print its message. The factory hands each adapter that setting,

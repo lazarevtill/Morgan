@@ -16,6 +16,7 @@ ranking silently changes for unnormalised llama-server embeddings.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import struct
 from dataclasses import dataclass, field
@@ -43,6 +44,12 @@ class VectorHit:
 
 def _pack(vector: list[float]) -> bytes:
     return struct.pack(f"{len(vector)}f", *vector)
+
+
+def _unpack(blob: bytes) -> list[float]:
+    """The inverse of ``_pack``, in the same native byte order. ``fingerprint.pack`` writes
+    little-endian explicitly; the two agree on every platform Morgan runs on."""
+    return list(struct.unpack(f"{len(blob) // 4}f", blob))
 
 
 class SqliteVectorIndex:
@@ -189,3 +196,46 @@ class SqliteVectorIndex:
             self._conn.execute(
                 "DELETE FROM vec_meta WHERE id IN (SELECT value FROM json_each(?))", (id_json,)
             )
+
+
+#: A vec0 table name is interpolated into SQL, so it must be a plain identifier. It comes from
+#: ``embedding_spaces.table_name``, which Morgan writes itself; this keeps it that way.
+_TABLE_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def stored_sample(
+    conn: sqlite3.Connection, *, table_name: str, n: int
+) -> list[tuple[str, list[float]]]:
+    """Up to *n* stored memories, chosen at random, each as its text and the vector stored for
+    it in *table_name* -- the active embedding space's vec0 table. Reads only.
+
+    ``memory/checked_embedder.py`` re-embeds these texts when the active space has no
+    fingerprint yet, and records one only if the fresh vectors match these: whatever model
+    answers first must prove it is the one that wrote the rows, not be trusted for going first.
+    Random rather than the newest or oldest, so a process that checks sees any part of the
+    archive. A memory whose vector is missing is skipped, so fewer than *n* may come back.
+    """
+    if n <= 0:
+        return []
+    if not _TABLE_NAME.fullmatch(table_name):
+        raise ValueError(f"not a vector table name: {table_name!r}")
+    rows = conn.execute(
+        """
+        SELECT m.rowid AS rowid, e.content AS content
+        FROM vec_meta m JOIN memories e ON e.id = m.id
+        WHERE m.rowid IN (
+            SELECT m2.rowid FROM vec_meta m2 JOIN memories e2 ON e2.id = m2.id
+            ORDER BY random() LIMIT ?
+        )
+        """,
+        (n,),
+    ).fetchall()
+    # One point lookup per row: vec0 answers `rowid = ?` from its rowid index, while
+    # `rowid IN (...)` scans every stored vector -- 49 MB on a 3,000-memory archive.
+    lookup = f"SELECT embedding FROM {table_name} WHERE rowid = ?"  # noqa: S608 # nosec B608
+    pairs: list[tuple[str, list[float]]] = []
+    for row in rows:
+        hit = conn.execute(lookup, (row["rowid"],)).fetchone()
+        if hit is not None:
+            pairs.append((row["content"], _unpack(hit["embedding"])))
+    return pairs
