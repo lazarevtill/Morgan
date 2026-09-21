@@ -108,6 +108,33 @@ class CheckedEmbedder:
             return
         await self._first_call(space, [])
 
+    async def check(self) -> None:
+        """Re-check the active space right now, never short-circuited by ``_checked``.
+
+        ``memory/module.py::MemoryModule.check_embedding_space`` calls this for the import
+        canary (Task 26): every ``MORGAN_IMPORT_CANARY_EVERY`` memories an import stores, and
+        once more at the end, so a model that starts answering wrong mid-import is caught
+        within one stretch rather than only once every memory since is a suspect.
+
+        Sends the five fingerprint strings alone, in their own small call -- no memory content
+        rides along, unlike a process's first call -- and compares the answer against the
+        recorded fingerprint with the same comparison and tolerance ``embed_batch``'s first
+        call uses. It never records: a space with no fingerprint recorded yet (or no active
+        space at all) has nothing to compare a fresh embedding against, so it fails closed,
+        raising ``EmbeddingSpaceMismatch`` by name rather than passing silently.
+        """
+        space = spaces.active(self._conn)
+        if space is None or space.fingerprint is None:
+            raise EmbeddingSpaceMismatch.no_fingerprint(
+                space_id=space.id if space is not None else 0,
+                model=self._model,
+                dims=space.dims if space is not None else 0,
+                setting=self._setting,
+            )
+        answered = await self._inner.embed_batch(list(fingerprint.STRINGS))
+        self._require_answers(space, answered)
+        self._require_fingerprint(space, space.fingerprint, answered)
+
     async def _first_call(
         self, space: spaces.EmbeddingSpace | None, texts: list[str]
     ) -> list[list[float]]:

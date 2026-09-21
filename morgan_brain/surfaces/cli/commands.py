@@ -254,7 +254,11 @@ async def cmd_import(args: argparse.Namespace, settings: Settings, project: str)
         # in it would be refused.
         ctx.gate.require_writable()
         report = await import_chatgpt(
-            Path(args.path), gate=ctx.gate, user_id=settings.owner_user_id, progress=progress
+            Path(args.path),
+            gate=ctx.gate,
+            user_id=settings.owner_user_id,
+            progress=progress,
+            canary_every=settings.import_canary_every,
         )
     finally:
         print(file=sys.stderr)

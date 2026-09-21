@@ -93,6 +93,20 @@ class MemoryGate:
         self._require_scope(query.user_id)
         return await self._store.recall(query)
 
+    async def check_embedding_space(self) -> None:
+        """Re-check the active embedding space now, rather than trusting the check a process
+        made on its first embedding call.
+
+        The import canary (Task 26) calls this every ``MORGAN_IMPORT_CANARY_EVERY`` memories
+        and once more at the end, so a model that starts answering wrong mid-import is caught
+        within one stretch instead of at the end. Not user- or project-scoped -- the embedding
+        space is a property of the database, not of any one owner's data -- and not a write:
+        it reads the recorded fingerprint and sends its own small embedding request, but
+        stores nothing. Raises ``EmbeddingSpaceMismatch`` like any other embedding-space
+        failure; a no-op on an embedder that does none of this checking (the hash backend).
+        """
+        await self._store.check_embedding_space()
+
     async def upsert_fact(self, fact: TemporalFact) -> str:
         self.require_writable()
         self._require_scope(fact.user_id)

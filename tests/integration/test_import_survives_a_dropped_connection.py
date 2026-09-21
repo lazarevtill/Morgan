@@ -37,7 +37,13 @@ async def test_an_import_survives_a_dropped_connection(tmp_path):
         result = await cmd_import(argparse.Namespace(path=str(export)), settings, "ignored")
 
     assert result["memories"] == _TURNS
-    assert calls.total == _TURNS + 1, "the dropped request was not retried exactly once"
+    # _TURNS requests, one of them retried once, plus the canary's own request once the
+    # import ends (Task 26): 4 memories is under MORGAN_IMPORT_CANARY_EVERY's default of 50,
+    # so no canary runs mid-import, but the tail canary still runs once after the last memory.
+    assert calls.total == _TURNS + 1 + 1, (
+        "the dropped request was not retried exactly once, or the tail canary did not run "
+        "exactly once"
+    )
     indexed = _ids_in_every_index(settings)
     memories = indexed.pop("memories")
     assert len(memories) == _TURNS

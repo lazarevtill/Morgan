@@ -170,6 +170,14 @@ class Settings(BaseSettings):
     #: has no fingerprint yet: it is recorded only if their fresh vectors match the stored ones.
     #: At least one: zero would record whatever model happened to answer first.
     embedding_fingerprint_sample_rows: int = Field(default=5, ge=1)
+    #: How many memories ``morgan import`` stores before it re-checks the active embedding
+    #: space against its recorded fingerprint (``MemoryGate.check_embedding_space``), and once
+    #: more at the end for whatever was stored since the last check. A model that starts
+    #: answering wrong mid-import is caught within one stretch this size, rather than only
+    #: once the whole import finishes and every memory since is a suspect. Counts only
+    #: memories the importer actually embedded and stored; a piece already stored under an
+    #: unchanged id costs no embedding and does not count.
+    import_canary_every: int = Field(default=50, ge=1)
     #: How many stored vectors ``doctor --vectors`` draws for its re-embed-and-compare audit,
     #: spread evenly across the active space's table. 180 is enough to notice a server that
     #: answered a handful of rows wrong without re-embedding the whole archive on every run.

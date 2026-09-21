@@ -22,6 +22,7 @@ from datetime import datetime
 
 import structlog
 
+from morgan_brain.memory.checked_embedder import CheckedEmbedder
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.gate import ForgetReport, RecallOutcome, RecallReason
 from morgan_brain.memory.knowledge.extract import extract_entity_names, words
@@ -162,6 +163,16 @@ class MemoryModule:
         """
         memory = self._episodics.get(memory_id)
         return memory if memory is not None and memory.user_id == user_id else None
+
+    async def check_embedding_space(self) -> None:
+        """Re-check the active embedding space right now, for an import's canary (Task 26).
+
+        Delegates to the embedder's own ``check()`` when it is a ``CheckedEmbedder`` --
+        ``FakeEmbedder``, the hash stub, answers no model and checks nothing, the same as
+        every other call this module makes to it, so this is a no-op then.
+        """
+        if isinstance(self._embedder, CheckedEmbedder):
+            await self._embedder.check()
 
     async def recall(self, query: MemoryQuery) -> RecallOutcome:
         # None means "no project filter" at the store layer -- the cross-project escape hatch.

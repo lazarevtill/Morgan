@@ -28,6 +28,7 @@ from typing import Any
 
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.models import Memory, MemoryKind, MemorySource, OriginKind
+from morgan_brain.providers.wire import EmbeddingSpaceMismatch
 
 #: Where imported conversations live. Not a working project: a corpus to recall across and
 #: consolidate from, kept out of the way of the projects real work happens in.
@@ -71,6 +72,30 @@ class ImportReport:
     #: Turns not stored: tool output, empty content, and pieces an earlier run already
     #: imported unchanged.
     skipped_turns: int = 0
+
+
+class ImportStopped(Exception):
+    """The import canary caught the model answering outside the recorded fingerprint's
+    tolerance, and stopped before trusting anything stored since the last good check.
+
+    *first* and *last* are the 1-based ordinals -- counting only memories the importer
+    actually embedded and stored, never a piece skipped because it was already there
+    unchanged -- of every memory stored since the canary last matched. *suspect_ids* carries
+    their memory ids, for a caller that wants to act on them directly rather than parse the
+    message. Storage is idempotent by id: once ``morgan doctor --vectors`` confirms the model
+    is sound again, re-running the same import is safe -- it skips everything already stored
+    and picks up exactly where this stopped.
+    """
+
+    def __init__(self, *, first: int, last: int, suspect_ids: list[str], setting: str) -> None:
+        self.first = first
+        self.last = last
+        self.suspect_ids = suspect_ids
+        super().__init__(
+            f"import stopped: memories {first}-{last} may be embedded with the wrong vectors "
+            f"({setting} stopped matching the recorded fingerprint); run `morgan doctor "
+            "--vectors`, then re-run the import to pick up where this stopped"
+        )
 
 
 def is_held_out(conversation_id: str) -> bool:
@@ -149,18 +174,35 @@ def _messages(conversation: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 async def import_chatgpt(
-    path: Path, *, gate: MemoryGate, user_id: str, progress: Any = None
+    path: Path,
+    *,
+    gate: MemoryGate,
+    user_id: str,
+    progress: Any = None,
+    canary_every: int = 50,
 ) -> ImportReport:
     """Import every usable turn of *path* through *gate*, returning what was written.
 
     *progress*, when given, is called with ``(conversations_done, total)`` -- an import of a
     few thousand turns takes minutes of embedding calls and a silent one looks hung.
+
+    Every *canary_every* memories this actually stores -- never a piece skipped because it
+    was already there unchanged, which costs no embedding -- it re-checks the active embedding
+    space against its recorded fingerprint (``MemoryGate.check_embedding_space``), and once
+    more at the end for whatever was stored since the last good check. A mismatch raises
+    ``ImportStopped`` naming the suspect range rather than trusting anything embedded after a
+    model that may have started answering wrong. ``surfaces/cli/commands.py::cmd_import``
+    passes ``settings.import_canary_every``; this function reads no settings of its own.
     """
     # to_thread: a real export is tens of megabytes, and reading it inline would block the
     # loop the embedding calls below run on.
     raw = await asyncio.to_thread(path.read_text, encoding="utf-8")
     conversations = json.loads(raw)
     kept = held = stored = skipped = 0
+    total_stored = 0
+    #: Memory ids stored since the last canary that still matched -- the suspects a failure
+    #: names, and what a caller acts on directly without parsing the message.
+    since_last_canary: list[str] = []
 
     for done, conversation in enumerate(conversations, start=1):
         conversation_id = str(conversation.get("conversation_id") or conversation.get("id") or done)
@@ -201,7 +243,12 @@ async def import_chatgpt(
                     )
                 )
                 stored += 1
+                total_stored += 1
+                since_last_canary.append(memory_id)
                 wrote_any = True
+                if total_stored % canary_every == 0:
+                    await _run_canary(gate, total_stored, since_last_canary)
+                    since_last_canary = []
 
         if wrote_any:
             held += project == HOLDOUT_PROJECT
@@ -209,4 +256,26 @@ async def import_chatgpt(
         if progress is not None:
             progress(done, len(conversations))
 
+    if since_last_canary:
+        await _run_canary(gate, total_stored, since_last_canary)
+
     return ImportReport(conversations=kept, held_out=held, memories=stored, skipped_turns=skipped)
+
+
+async def _run_canary(gate: MemoryGate, total_stored: int, since_last_canary: list[str]) -> None:
+    """Re-check the active embedding space; a mismatch stops the import rather than trusting
+    anything stored since the last good check.
+
+    *total_stored* is the ordinal of the last memory stored so far; *since_last_canary* the
+    ids stored since the previous good canary (or the start of the import), in order, so the
+    suspect range is ``total_stored - len(since_last_canary) + 1`` through *total_stored*.
+    """
+    try:
+        await gate.check_embedding_space()
+    except EmbeddingSpaceMismatch as exc:
+        raise ImportStopped(
+            first=total_stored - len(since_last_canary) + 1,
+            last=total_stored,
+            suspect_ids=list(since_last_canary),
+            setting=exc.setting,
+        ) from exc

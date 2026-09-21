@@ -78,7 +78,7 @@ embedding_endpoint: http://gpu-box:8082/v1
 llm_endpoint: http://gpu-box:8081/v1
 llm_model: qwen2.5-7b-instruct
 data_flow: gpu-box (MORGAN_LLM_ENDPOINT) receives ask: the question, the memories recalled for it and the recent history; consolidate: up to 50 memories per project, with the project's current facts
-data_flow: gpu-box (MORGAN_EMBEDDING_ENDPOINT) receives remember: the memory's text; recall: the query; import: every imported message; doctor --vectors: a sample of stored memories; a process's first embedding call: up to 5 stored memories, while the embedding space's fingerprint is unrecorded
+data_flow: gpu-box (MORGAN_EMBEDDING_ENDPOINT) receives remember: the memory's text; recall: the query; import: every imported message, plus the five fingerprint strings alone every MORGAN_IMPORT_CANARY_EVERY memories stored and once more at the end; doctor --vectors: a sample of stored memories; a process's first embedding call: up to 5 stored memories, while the embedding space's fingerprint is unrecorded
 sqlite_vec: v0.1.9
 fts5: True
 provider: reachable (0.3 s)
@@ -209,6 +209,17 @@ to `archive/chatgpt`, not to your working project, and takes no `--project`: a f
 conversations go to `archive/chatgpt-holdout` instead, reserved for evaluating the memory
 against conversations nothing has learned from. Expect it to take a while, since every turn
 costs an embedding call; progress goes to stderr. Re-running updates in place.
+
+An import runs a canary: every `MORGAN_IMPORT_CANARY_EVERY` (50) memories it actually stores
+-- never one skipped because it was already there unchanged -- it re-sends the five
+fingerprint strings alone and compares them against the embedding space's recorded
+fingerprint, and once more at the end for whatever was stored since the last good check. A
+model that starts answering wrong mid-import is bounded to one such stretch rather than
+discovered only once every memory since is a suspect. A mismatch raises `ImportStopped`,
+naming the suspect range and the setting that addresses the model, and pointing at `morgan
+doctor --vectors`; storage is idempotent by id, so once the model is confirmed sound,
+re-running the same import picks up exactly where it stopped and rewrites nothing already
+stored correctly.
 
 `MORGAN_EMBEDDING_BACKEND=hash` replaces the embedding call with a deterministic stub, so the
 memory commands run with no model server at all (keyword and entity search still work; vector

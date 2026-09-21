@@ -281,6 +281,24 @@ class EmbeddingSpaceMismatch(Exception):
             established=False,
         )
 
+    @classmethod
+    def no_fingerprint(
+        cls, *, space_id: int, model: str, dims: int, setting: str
+    ) -> EmbeddingSpaceMismatch:
+        """No fingerprint is recorded for the active space (or none is active at all), so a
+        re-check -- ``CheckedEmbedder.check()``, the import canary -- has nothing recorded to
+        compare a fresh embedding against. Refused by name: a check with nothing to compare
+        against must never read as a silent pass."""
+        detail = "no fingerprint is recorded for the active embedding space yet"
+        return cls(
+            space_id=space_id,
+            model=model,
+            dims=dims,
+            setting=setting,
+            detail=detail,
+            established=False,
+        )
+
 
 @runtime_checkable
 class ChatClient(Protocol):
