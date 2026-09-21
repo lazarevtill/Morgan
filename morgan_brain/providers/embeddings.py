@@ -18,19 +18,14 @@ import json
 import re
 import time
 from dataclasses import dataclass
-from typing import Literal
 from urllib.parse import quote, quote_plus
 
 import httpx
 import structlog
 
-from morgan_brain.providers.wire import Outcome, ProviderRefused, ProviderUnreachable
+from morgan_brain.providers.wire import EmbedOutcome, Outcome, ProviderRefused, ProviderUnreachable
 
 log = structlog.get_logger("embed")
-
-#: What `embed.done` names a call's result: `Outcome` (`ProviderUnreachable`'s two) plus the
-#: two cases that never retry -- a plain success, and a refusal (`ProviderRefused`).
-EmbedOutcome = Literal["ok", "slow", "unreachable", "refused"]
 
 #: How much of a server's words an error quotes -- its answer to a refused request, or the
 #: text of the failure that ended a call -- once every key in them is redacted.
@@ -147,22 +142,28 @@ class OpenAICompatEmbedder:
         # line, and a slow client build is no less a cost to the caller waiting on an answer.
         call_started = time.monotonic()
         attempts = _AttemptCounter()
-        outcome: EmbedOutcome = "ok"
+        # "error" until proven otherwise: a call that raises must never be logged "ok", and an
+        # exception this adapter does not classify (a malformed 200 reply, say) must still log
+        # something truthful rather than fall through to the initial value of a happier default.
+        outcome: EmbedOutcome = "error"
         try:
             # One client for every attempt of the call. Building it loads a TLS context,
             # 0.2-0.5 s on a loaded Windows machine, which is no part of waiting for an answer:
             # the retry budget's own clock starts once it is built, in `_retried`.
             async with httpx.AsyncClient() as client:
-                return await self._retried(client, texts, attempts)
+                result = await self._retried(client, texts, attempts)
         except ProviderRefused:
             outcome = "refused"
             raise
         except ProviderUnreachable as exc:
             outcome = exc.outcome
             raise
+        else:
+            outcome = "ok"
+            return result
         finally:
             # Never the input text or the key: `inputs` is a count, and every other field is
-            # a number or one of the four outcome words.
+            # a number or one of the five outcome words.
             log.info(
                 "embed.done",
                 latency_ms=round((time.monotonic() - call_started) * 1000, 1),

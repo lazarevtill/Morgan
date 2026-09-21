@@ -79,6 +79,12 @@ class StreamDelta(BaseModel):
 #: was made and the answer never came, came as a server error, or was cut off.
 Outcome = Literal["unreachable", "slow"]
 
+#: What `embed.done` and `recall.done` name an embedding call's result: `Outcome`'s two, plus
+#: a plain success, a refusal (`ProviderRefused`), and `"error"` for anything else that escaped
+#: classification -- a malformed reply, say. The default on any exception path must be
+#: `"error"`, never `"ok"`: a call that raised is not the one that answered.
+EmbedOutcome = Literal["ok", "slow", "unreachable", "refused", "error"]
+
 #: How long a cold embedding host takes to load its model, said with every failure that looks
 #: like one. Measured: 7-8 s over three runs, 43 s on a first load from disk
 #: (docs/measurements/2026-09-phase0-baseline.md).

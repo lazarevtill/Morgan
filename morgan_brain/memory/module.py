@@ -43,6 +43,7 @@ from morgan_brain.models import (
     MemoryQuery,
     TemporalFact,
 )
+from morgan_brain.providers.wire import EmbedOutcome, ProviderRefused, ProviderUnreachable
 
 log = structlog.get_logger("recall")
 
@@ -166,8 +167,18 @@ class MemoryModule:
         # None means "no project filter" at the store layer -- the cross-project escape hatch.
         project = None if query.all_projects else query.project
         embed_started = time.monotonic()
-        q_vector = await self._embedder.embed(query.text)
-        embed_latency_ms = (time.monotonic() - embed_started) * 1000
+        try:
+            q_vector = await self._embedder.embed(query.text)
+        except ProviderRefused:
+            self._log_recall_done(query, time.monotonic() - embed_started, "refused")
+            raise
+        except ProviderUnreachable as exc:
+            self._log_recall_done(query, time.monotonic() - embed_started, exc.outcome)
+            raise
+        except Exception:
+            self._log_recall_done(query, time.monotonic() - embed_started, "error")
+            raise
+        embed_elapsed = time.monotonic() - embed_started
         vec_hits = await self._vectors.search(
             user_id=query.user_id,
             vector=q_vector,
@@ -210,19 +221,26 @@ class MemoryModule:
             for f in facts
         ]
         merged = _merge_facts_and_episodics(fact_memories, episodic, query.text, query.top_k)
-        # One line per recall, win or decline: 1a's availability trigger reads it, not memory.
-        # `degraded` and `reason` are None until 1a's keyword-only fallback and Task 22's
-        # abstain reasons fill them in.
+        self._log_recall_done(query, embed_elapsed, "ok")
+        if not self._answer_is_worth_returning(query, project, vec_hits):
+            return []
+        return merged
+
+    def _log_recall_done(
+        self, query: MemoryQuery, embed_elapsed_seconds: float, embed_outcome: EmbedOutcome
+    ) -> None:
+        """One line per recall -- answered, declined, or one whose embedding never came back:
+        1a's availability trigger reads it, not memory, and a recall that failed to embed is
+        exactly the case it counts. `degraded` and `reason` are None until 1a's keyword-only
+        fallback and Task 22's abstain reasons fill them in."""
         log.info(
             "recall.done",
-            embed_latency_ms=round(embed_latency_ms, 1),
+            embed_latency_ms=round(embed_elapsed_seconds * 1000, 1),
+            embed_outcome=embed_outcome,
             degraded=None,
             reason=None,
             query_language=language.of(query.text),
         )
-        if not self._answer_is_worth_returning(query, project, vec_hits):
-            return []
-        return merged
 
     def _answer_is_worth_returning(
         self, query: MemoryQuery, project: str | None, vec_hits: list[VectorHit]
