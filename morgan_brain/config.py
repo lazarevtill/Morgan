@@ -107,7 +107,8 @@ class Settings(BaseSettings):
     embedding_fingerprint_tolerance: float = Field(default=0.995, gt=0.0, le=1.0)
     #: How many stored memories ride along on the first embedding request when the active space
     #: has no fingerprint yet: it is recorded only if their fresh vectors match the stored ones.
-    embedding_fingerprint_sample_rows: int = Field(default=5, ge=0)
+    #: At least one: zero would record whatever model happened to answer first.
+    embedding_fingerprint_sample_rows: int = Field(default=5, ge=1)
     #: "provider" → call the configured embedding endpoint. "hash" → a deterministic sha256
     #: stub, for the memory commands to run with no model server at all.
     embedding_backend: Literal["provider", "hash"] = "provider"

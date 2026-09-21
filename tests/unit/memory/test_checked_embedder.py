@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 
 import pytest
+from pydantic import ValidationError
 from structlog.testing import capture_logs
 
 from morgan_brain.config import Settings
@@ -22,7 +23,9 @@ from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.module import MemoryModule
 from morgan_brain.memory.store import spaces, vectors
 from morgan_brain.models import Memory, MemoryKind
+from morgan_brain.providers.embeddings import OpenAICompatEmbedder
 from morgan_brain.providers.wire import EmbeddingSpaceMismatch
+from tests.fakes import model_server
 from tests.unit.memory.conftest import build_memory_module
 
 
@@ -267,6 +270,97 @@ async def test_by_default_a_stored_row_from_another_model_refuses(tmp_path, sett
     assert spaces.active(conn).fingerprint is None
 
 
+async def test_a_nan_answer_against_a_recorded_fingerprint_is_refused_and_not_cached(
+    conn, settings
+):
+    _a_space_with_a_recorded_fingerprint(conn, dims=4)
+    embedder = CheckedEmbedder(_nan_model(dims=4), conn=conn, settings=settings, sample=_no_sample)
+
+    with pytest.raises(EmbeddingSpaceMismatch, match="non-finite"):
+        await embedder.embed("a real query")
+
+    assert checked_embedder._checked == set()
+    with pytest.raises(EmbeddingSpaceMismatch, match="non-finite"):
+        await embedder.embed("again")
+
+
+async def test_a_nan_answer_over_a_stored_sample_records_nothing(conn, settings):
+    spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
+    embedder = CheckedEmbedder(
+        _nan_model(dims=4),
+        conn=conn,
+        settings=settings,
+        sample=lambda n: [("id-1 text", [1.0, 0.0, 0.0, 0.0])],
+    )
+
+    with pytest.raises(EmbeddingSpaceMismatch, match="non-finite"):
+        await embedder.embed("a real query")
+
+    assert spaces.active(conn).fingerprint is None
+    assert checked_embedder._checked == set()
+
+
+def test_a_sample_of_zero_rows_is_refused_by_the_settings():
+    # Zero rows would record whatever model answered first, unverified.
+    with pytest.raises(ValidationError):
+        Settings(embedding_fingerprint_sample_rows=0)
+
+
+async def test_an_empty_sample_over_stored_rows_is_refused_and_records_nothing(tmp_path, settings):
+    # Only a space with no stored vectors at all may record its fingerprint unverified.
+    module = build_memory_module(str(tmp_path / "m.db"))
+    await _store(module, "a memory the stored model embedded")
+    conn = module._conn
+    spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
+    embedder = CheckedEmbedder(
+        _other_model(dims=4), conn=conn, settings=settings, sample=_no_sample
+    )
+
+    with pytest.raises(EmbeddingSpaceMismatch, match="cannot be verified"):
+        await embedder.embed("q")
+    with pytest.raises(EmbeddingSpaceMismatch, match="cannot be verified"):
+        await embedder.embed("q")
+
+    assert spaces.active(conn).fingerprint is None
+    assert checked_embedder._checked == set()
+
+
+async def test_the_stored_sample_draws_past_a_memory_whose_vector_is_missing(tmp_path):
+    module = build_memory_module(str(tmp_path / "m.db"))
+    for text in ("kept", "vector lost one", "vector lost two"):
+        await _store(module, text)
+    conn = module._conn
+    conn.execute(
+        "DELETE FROM vec_items WHERE rowid IN "
+        "(SELECT rowid FROM vec_meta WHERE id IN "
+        "(SELECT id FROM memories WHERE content LIKE 'vector lost%'))"
+    )
+    conn.commit()
+
+    # Random order: a sample that stopped at the first n candidates would mostly come back
+    # empty here, because two of the three have no vector to pair with.
+    for _ in range(20):
+        pairs = vectors.stored_sample(conn, table_name="vec_items", n=1)
+        assert [text for text, _ in pairs] == ["kept"]
+
+
+async def test_a_server_that_reorders_its_answers_still_passes_the_check(conn, tmp_path):
+    spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
+    with model_server(embedding_dim=4) as url:
+        in_order = Settings(data_dir=str(tmp_path), embedding_endpoint=url)
+        expected = await _adapter(url, in_order).embed("a real query")
+        await CheckedEmbedder(_adapter(url, in_order), conn=conn, settings=in_order).embed("q")
+    assert spaces.active(conn).fingerprint is not None
+    checked_embedder._checked.clear()  # a new process
+
+    with model_server(embedding_dim=4, reorder=True) as url:
+        reordered = Settings(data_dir=str(tmp_path), embedding_endpoint=url)
+        embedder = CheckedEmbedder(_adapter(url, reordered), conn=conn, settings=reordered)
+        got = await embedder.embed("a real query")
+
+    assert got == expected
+
+
 # --- helpers ---------------------------------------------------------------------------------
 
 
@@ -292,11 +386,17 @@ class _RecordingEmbedder:
     """An embedding model that records every request it is sent, one list of inputs each."""
 
     def __init__(
-        self, *, dims: int, model: str, answers: dict[str, list[float]] | None = None
+        self,
+        *,
+        dims: int,
+        model: str,
+        answers: dict[str, list[float]] | None = None,
+        nan: bool = False,
     ) -> None:
         self._dims = dims
         self._model = model
         self._answers = answers or {}
+        self._nan = nan
         self.calls: list[list[str]] = []
 
     async def embed(self, text: str) -> list[float]:
@@ -304,6 +404,8 @@ class _RecordingEmbedder:
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         self.calls.append(list(texts))
+        if self._nan:
+            return [[math.nan] * self._dims for _ in texts]
         return [self._answers.get(t) or _unit(self._model, t, self._dims) for t in texts]
 
 
@@ -313,6 +415,18 @@ def _recording_embedder(*, dims: int) -> _RecordingEmbedder:
 
 def _other_model(*, dims: int) -> _RecordingEmbedder:
     return _RecordingEmbedder(dims=dims, model="model-b")
+
+
+def _nan_model(*, dims: int) -> _RecordingEmbedder:
+    """A broken model whose every component is NaN -- which Python's JSON parser accepts from a
+    bare `NaN` token, so the live adapter can hand one back too."""
+    return _RecordingEmbedder(dims=dims, model="model-a", nan=True)
+
+
+def _adapter(url: str, settings: Settings) -> OpenAICompatEmbedder:
+    return OpenAICompatEmbedder(
+        url, settings.embedding_model, timeout=10.0, setting="MORGAN_EMBEDDING_ENDPOINT"
+    )
 
 
 def _embedder_returning(answers: dict[str, list[float]]) -> _RecordingEmbedder:

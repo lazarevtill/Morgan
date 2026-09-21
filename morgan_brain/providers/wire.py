@@ -102,19 +102,33 @@ class EmbeddingSpaceMismatch(Exception):
     stored vector would be searched by a model that never wrote it: wrong answers, no error.
     Raised by ``memory/checked_embedder.py`` on a process's first embedding call, when the
     model's answers fall outside the measured tolerance of the active space's fingerprint, or
-    of the vectors already stored, or come back at another width. The message names the space,
-    the setting that addresses the model, what went wrong, what it means and what to check.
+    of the vectors already stored, come back at another width or with a non-finite component,
+    or cannot be checked against the stored vectors at all (``established`` is then false).
+    The message names the space, the setting that addresses the model, what went wrong, what
+    it means and what to check.
     """
 
-    def __init__(self, *, space_id: int, model: str, dims: int, setting: str, detail: str) -> None:
+    def __init__(
+        self,
+        *,
+        space_id: int,
+        model: str,
+        dims: int,
+        setting: str,
+        detail: str,
+        established: bool = True,
+    ) -> None:
         self.space_id = space_id
         self.model = model
         self.dims = dims
         self.setting = setting
         self.detail = detail
+        self.established = established
+        verdict = "does not match" if established else "cannot be verified against"
+        risk = "would" if established else "might"
         super().__init__(
-            f"embedding space {space_id} ({model}, {dims} dims) does not match the model at "
-            f"{setting}: {detail}; stored vectors would be searched with the wrong model; "
+            f"embedding space {space_id} ({model}, {dims} dims) {verdict} the model at "
+            f"{setting}: {detail}; stored vectors {risk} be searched with the wrong model; "
             "check MORGAN_EMBEDDING_MODEL or run `morgan doctor --vectors`"
         )
 
@@ -145,6 +159,33 @@ class EmbeddingSpaceMismatch(Exception):
         """The model answered at a width other than the space's."""
         detail = f"it returned a {got}-dimensional vector but the active space is {dims} wide"
         return cls(space_id=space_id, model=model, dims=dims, setting=setting, detail=detail)
+
+    @classmethod
+    def non_finite(
+        cls, *, space_id: int, model: str, dims: int, setting: str, value: float
+    ) -> EmbeddingSpaceMismatch:
+        """The model answered with a NaN or infinite component: no vector the space holds."""
+        detail = f"it returned a vector with a non-finite component ({value})"
+        return cls(space_id=space_id, model=model, dims=dims, setting=setting, detail=detail)
+
+    @classmethod
+    def unverified(
+        cls, *, space_id: int, model: str, dims: int, setting: str
+    ) -> EmbeddingSpaceMismatch:
+        """The space holds vectors, but none could be sampled to check the model against, so
+        no fingerprint was recorded: the model is neither proven nor disproven."""
+        detail = (
+            "the space holds stored vectors but none could be sampled to re-embed, so no "
+            "fingerprint was recorded"
+        )
+        return cls(
+            space_id=space_id,
+            model=model,
+            dims=dims,
+            setting=setting,
+            detail=detail,
+            established=False,
+        )
 
 
 @runtime_checkable

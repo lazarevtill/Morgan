@@ -203,6 +203,12 @@ class SqliteVectorIndex:
 _TABLE_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
+def _vector_table(table_name: str) -> str:
+    if not _TABLE_NAME.fullmatch(table_name):
+        raise ValueError(f"not a vector table name: {table_name!r}")
+    return table_name
+
+
 def stored_sample(
     conn: sqlite3.Connection, *, table_name: str, n: int
 ) -> list[tuple[str, list[float]]]:
@@ -213,29 +219,37 @@ def stored_sample(
     fingerprint yet, and records one only if the fresh vectors match these: whatever model
     answers first must prove it is the one that wrote the rows, not be trusted for going first.
     Random rather than the newest or oldest, so a process that checks sees any part of the
-    archive. A memory whose vector is missing is skipped, so fewer than *n* may come back.
+    archive. A memory whose vector is missing is passed over for the next one, so fewer than
+    *n* come back only when fewer than *n* memories have a vector at all.
     """
+    table = _vector_table(table_name)
     if n <= 0:
         return []
-    if not _TABLE_NAME.fullmatch(table_name):
-        raise ValueError(f"not a vector table name: {table_name!r}")
-    rows = conn.execute(
-        """
-        SELECT m.rowid AS rowid, e.content AS content
-        FROM vec_meta m JOIN memories e ON e.id = m.id
-        WHERE m.rowid IN (
-            SELECT m2.rowid FROM vec_meta m2 JOIN memories e2 ON e2.id = m2.id
-            ORDER BY random() LIMIT ?
-        )
-        """,
-        (n,),
+    # Ids only in the shuffle: the texts are read for the memories actually taken.
+    candidates = conn.execute(
+        "SELECT m.rowid AS rowid, m.id AS id FROM vec_meta m JOIN memories e ON e.id = m.id "
+        "ORDER BY random()"
     ).fetchall()
     # One point lookup per row: vec0 answers `rowid = ?` from its rowid index, while
     # `rowid IN (...)` scans every stored vector -- 49 MB on a 3,000-memory archive.
-    lookup = f"SELECT embedding FROM {table_name} WHERE rowid = ?"  # noqa: S608 # nosec B608
+    lookup = f"SELECT embedding FROM {table} WHERE rowid = ?"  # noqa: S608 # nosec B608
     pairs: list[tuple[str, list[float]]] = []
-    for row in rows:
-        hit = conn.execute(lookup, (row["rowid"],)).fetchone()
-        if hit is not None:
-            pairs.append((row["content"], _unpack(hit["embedding"])))
+    for candidate in candidates:
+        hit = conn.execute(lookup, (candidate["rowid"],)).fetchone()
+        if hit is None:
+            continue
+        memory = conn.execute(
+            "SELECT content FROM memories WHERE id = ?", (candidate["id"],)
+        ).fetchone()
+        pairs.append((memory["content"], _unpack(hit["embedding"])))
+        if len(pairs) == n:
+            break
     return pairs
+
+
+def holds_vectors(conn: sqlite3.Connection, *, table_name: str) -> bool:
+    """Whether *table_name* stores any vector at all. A vec0 scan that reads no vector column
+    stops at the first row: under a millisecond on a 3,000-row, 4,096-wide table."""
+    table = _vector_table(table_name)
+    row = conn.execute(f"SELECT EXISTS (SELECT 1 FROM {table})").fetchone()  # noqa: S608 # nosec B608
+    return bool(row[0])

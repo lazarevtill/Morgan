@@ -6,6 +6,8 @@ and stored; a later model that answers differently on them is a different space.
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from morgan_brain.memory import fingerprint
@@ -42,6 +44,16 @@ def test_a_vector_survives_pack_and_unpack():
 def test_a_zero_vector_is_a_named_error_not_a_nan():
     with pytest.raises(ValueError, match="zero"):
         fingerprint.cosine([0.0, 0.0], [1.0, 0.0])
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+def test_a_non_finite_component_is_a_named_error_not_a_nan(bad):
+    # NaN compares false against every threshold, so a NaN cosine would pass a `< tolerance`
+    # test for failure: it must never be returned at all.
+    with pytest.raises(ValueError, match="non-finite"):
+        fingerprint.cosine([bad, 0.0], [1.0, 0.0])
+    with pytest.raises(ValueError, match="non-finite"):
+        fingerprint.cosine([1.0, 0.0], [bad, 0.0])
 
 
 def test_cosine_of_mismatched_widths_names_both_lengths():

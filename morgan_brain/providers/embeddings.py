@@ -71,5 +71,8 @@ class OpenAICompatEmbedder:
                 self._url, f"{type(exc).__name__}: {exc}", setting=self._setting
             ) from exc
         resp.raise_for_status()
-        data = resp.json()["data"]
+        # Each item names the input it embeds; the order of the list is not promised. A
+        # caller that sends several texts at once -- the first request a process sends
+        # carries the fingerprint strings behind the caller's own -- splits them by position.
+        data = sorted(resp.json()["data"], key=lambda item: item["index"])
         return [item["embedding"] for item in data]

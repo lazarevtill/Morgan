@@ -16,6 +16,7 @@ the model in front of it.
 from __future__ import annotations
 
 import hashlib
+import math
 import struct
 from dataclasses import dataclass
 
@@ -77,9 +78,13 @@ def cosine(a: list[float], b: list[float]) -> float:
     "zero" on either vector being the zero vector -- a zero vector has no direction, so its
     cosine similarity is mathematically undefined (0/0), not a legitimate 0.0 or ``nan``. A
     fake or broken embedding server that returns all zeros must fail a comparison loudly
-    rather than pass it silently.
+    rather than pass it silently. The same holds for a NaN or infinite component, reported
+    as "non-finite": the cosine would come out NaN, and NaN compares false against every
+    threshold, so a test for failure written as ``cosine < tolerance`` would pass it.
     """
     _require_same_width(a, b)
+    if not all(math.isfinite(x) for x in a) or not all(math.isfinite(y) for y in b):
+        raise ValueError("cannot compute cosine similarity of a vector with a non-finite component")
     dot: float = sum(x * y for x, y in zip(a, b, strict=True))
     norm_a: float = sum(x * x for x in a) ** 0.5
     norm_b: float = sum(y * y for y in b) ** 0.5

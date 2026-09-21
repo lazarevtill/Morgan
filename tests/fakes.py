@@ -25,15 +25,19 @@ def _unit_vector(text: str, dim: int) -> list[float]:
 
 
 @contextmanager
-def model_server(*, embeddings: bool = True, embedding_dim: int = 1024) -> Iterator[str]:
+def model_server(
+    *, embeddings: bool = True, embedding_dim: int = 1024, reorder: bool = False
+) -> Iterator[str]:
     """An OpenAI-compatible model server on a free loopback port; yields its ``/v1`` URL.
 
     It lists no models and embeds every input as a unit vector ``embedding_dim`` wide derived
     from a hash of the text: the same text gets the same vector in every process, so a
     fingerprint recorded by one is matched by the next, and no vector is the zero vector that
     ``fingerprint.cosine`` rightly refuses. With ``embeddings=False`` it answers embedding
-    requests with a 501, as a llama-server started without ``--embeddings`` does. Real
-    sockets, so a probe is tested the way it runs.
+    requests with a 501, as a llama-server started without ``--embeddings`` does. With
+    ``reorder=True`` it lists its answers last input first, each still carrying the
+    ``index`` of its input: the order of the list is not part of the protocol. Real sockets,
+    so a probe is tested the way it runs.
     """
 
     class Handler(BaseHTTPRequestHandler):
@@ -55,6 +59,8 @@ def model_server(*, embeddings: bool = True, embedding_dim: int = 1024) -> Itera
                     {"index": i, "embedding": _unit_vector(text, embedding_dim)}
                     for i, text in enumerate(texts)
                 ]
+                if reorder:
+                    vectors.reverse()
                 self._reply(200, {"object": "list", "data": vectors})
 
         def _reply(self, status: int, payload: dict[str, Any]) -> None:

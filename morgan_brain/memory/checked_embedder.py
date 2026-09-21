@@ -20,6 +20,7 @@ builds a context per tool call and checks once per server lifetime; the CLI once
 
 from __future__ import annotations
 
+import math
 import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -122,7 +123,7 @@ class CheckedEmbedder:
             _unregistered.add((self._endpoint.url, self._model))
             return own
 
-        self._require_width(space, answered)
+        self._require_answers(space, answered)
         if space.fingerprint is not None:
             self._require_fingerprint(space, space.fingerprint, fresh_strings)
         else:
@@ -131,15 +132,19 @@ class CheckedEmbedder:
         return own
 
     def _sample_of(self, space: spaces.EmbeddingSpace) -> list[tuple[str, list[float]]]:
-        if self._sample_rows <= 0:
-            return []
         if self._sample is None:
             return vectors.stored_sample(
                 self._conn, table_name=space.table_name, n=self._sample_rows
             )
         return self._sample(self._sample_rows)[: self._sample_rows]
 
-    def _require_width(self, space: spaces.EmbeddingSpace, answered: list[list[float]]) -> None:
+    def _require_answers(self, space: spaces.EmbeddingSpace, answered: list[list[float]]) -> None:
+        """Every vector the model returned is the space's width and wholly finite.
+
+        Checked before any cosine: a NaN component makes every cosine NaN, which no threshold
+        can fail, and it would otherwise be handed to the caller or recorded as the space's
+        fingerprint, after which every model would match it.
+        """
         for vector in answered:
             if len(vector) != space.dims:
                 raise EmbeddingSpaceMismatch.width(
@@ -149,13 +154,22 @@ class CheckedEmbedder:
                     setting=self._endpoint.setting,
                     got=len(vector),
                 )
+            for component in vector:
+                if not math.isfinite(component):
+                    raise EmbeddingSpaceMismatch.non_finite(
+                        space_id=space.id,
+                        model=space.model,
+                        dims=space.dims,
+                        setting=self._endpoint.setting,
+                        value=component,
+                    )
 
     def _require_fingerprint(
         self, space: spaces.EmbeddingSpace, recorded: bytes, fresh_strings: list[list[float]]
     ) -> None:
         stored = spaces.unpack(recorded, dims=space.dims)
         comparison = fingerprint.compare(fresh_strings, stored)
-        failed = sum(1 for c in comparison.per_string if c < self._tolerance)
+        failed = len(comparison.per_string) - self._passing(comparison.per_string)
         if failed:
             raise EmbeddingSpaceMismatch.cosines(
                 space_id=space.id,
@@ -169,6 +183,11 @@ class CheckedEmbedder:
                 compared=len(comparison.per_string),
             )
 
+    def _passing(self, cosines: list[float]) -> int:
+        """How many reach the tolerance. Counted as passes, never as `c < tolerance` failures,
+        so a cosine that is not a number counts as a failure."""
+        return sum(1 for c in cosines if c >= self._tolerance)
+
     def _record(
         self,
         space: spaces.EmbeddingSpace,
@@ -178,15 +197,26 @@ class CheckedEmbedder:
     ) -> None:
         """Record the fingerprint, but only if the stored sample says this model wrote them.
 
+        With no sample, the fingerprint is recorded only when the space stores no vector at
+        all: there is then nothing to be wrong about. A space that stores vectors none of which
+        could be sampled is refused by name, and nothing is recorded.
+
         Runs after the embedding request returned: ``record_fingerprint`` takes its own short
         write transaction, and no lock is held across the await.
         """
+        if not rows and vectors.holds_vectors(self._conn, table_name=space.table_name):
+            raise EmbeddingSpaceMismatch.unverified(
+                space_id=space.id,
+                model=space.model,
+                dims=space.dims,
+                setting=self._endpoint.setting,
+            )
         cosines = [
             fingerprint.cosine(fresh, stored)
             for fresh, (_, stored) in zip(fresh_rows, rows, strict=True)
         ]
         min_cosine = min(cosines) if cosines else None
-        failed = sum(1 for c in cosines if c < self._tolerance)
+        failed = len(cosines) - self._passing(cosines)
         if failed:
             raise EmbeddingSpaceMismatch.cosines(
                 space_id=space.id,
