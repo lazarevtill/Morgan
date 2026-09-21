@@ -404,18 +404,18 @@ output (unredacted path):
 copy of the same 3,010-memory, 4,096-dim archive `k=8` above used.
 
 ```
-run 1 [per-project]: metadata median=52.060ms mean=52.462ms | partition median=38.126ms mean=38.622ms | order mismatches=0/200 | set mismatches=0/200
-run 1 [all-projects]: metadata median=58.481ms mean=58.479ms | partition median=74.173ms mean=74.374ms | order mismatches=1/200 | set mismatches=0/200
-run 2 [per-project]: metadata median=56.206ms mean=56.470ms | partition median=42.944ms mean=43.225ms | order mismatches=0/200 | set mismatches=0/200
-run 2 [all-projects]: metadata median=60.933ms mean=61.304ms | partition median=77.104ms mean=77.332ms | order mismatches=1/200 | set mismatches=0/200
+run 1 [per-project]: metadata median=56.123ms mean=56.586ms | partition median=40.012ms mean=40.066ms | order mismatches=0/200 | set mismatches=0/200
+run 1 [all-projects]: metadata median=60.898ms mean=61.490ms | partition median=75.990ms mean=76.519ms | order mismatches=1/200 | set mismatches=0/200
+run 2 [per-project]: metadata median=56.913ms mean=56.870ms | partition median=40.341ms mean=40.568ms | order mismatches=0/200 | set mismatches=0/200
+run 2 [all-projects]: metadata median=61.066ms mean=61.317ms | partition median=74.998ms mean=75.443ms | order mismatches=1/200 | set mismatches=0/200
 storage, same rows (3010): metadata=50,728,960B partition=67,362,816B
 storage, 20 one-memory projects: metadata=16,900,096B partition=336,449,536B
 ```
 
 | scope | k | partitioned median | metadata median | id order differs | id set differs |
 |---|---|---|---|---|---|
-| per-project | 16 | 38.1 / 42.9 ms | 52.1 / 56.2 ms | 0/200 | 0/200 |
-| all-projects | 16 | 74.2 / 77.1 ms | 58.5 / 60.9 ms | 1/200 | 0/200 |
+| per-project | 16 | 40.0 / 40.3 ms | 56.1 / 56.9 ms | 0/200 | 0/200 |
+| all-projects | 16 | 76.0 / 75.0 ms | 60.9 / 61.1 ms | 1/200 | 0/200 |
 
 At `k=16`, all-projects, the partitioned table returns ids in a different order for 1 query in
 200, in both runs; the id *set* is the same both times, so it is a tie broken in another
@@ -432,9 +432,9 @@ Each partition allocates its own 1,024-vector chunk at the table's declared widt
 holds -- so a project with a single memory costs as much disk as one with a thousand, and this
 cost grows with every project added, not with every memory.
 
-**Verdict: keep metadata columns** — per-project recall is faster with the partition (38-43 ms
-against 52-56 ms at `k=16`, 0/200 mismatches), but all-projects recall is slower (74-77 ms
-against 59-61 ms, 1/200 reordered), each project costs its own chunk on disk (20 one-memory
+**Verdict: keep metadata columns** — per-project recall is faster with the partition (40-41 ms
+against 56-57 ms at `k=16`, 0/200 mismatches), but all-projects recall is slower (75-77 ms
+against 61 ms, 1/200 reordered), each project costs its own chunk on disk (20 one-memory
 projects: 336.4 MB against 16.9 MB), and a partition key cannot be UPDATEd (step 5 renames
 projects).
 

@@ -17,8 +17,8 @@ ranking silently changes for unnormalised llama-server embeddings.
 times per-project queries: 42 ms partitioned against 59 ms. The same script also measures the
 all-projects scope and the on-disk cost (raw output
 ``2026-09-21-partition-key-all-projects.txt``, named in full in the baseline doc's §4): an
-all-projects query -- the scope the relevance floor was fitted on -- takes about 75 ms
-partitioned against about 60 ms metadata-scoped; each project gets vector chunks of its own,
+all-projects query -- the scope the relevance floor was fitted on -- takes about 76 ms
+partitioned against about 61 ms metadata-scoped; each project gets vector chunks of its own,
 1,024 vectors wide whatever it holds, so twenty projects of one memory each fill 336.4 MB
 partitioned against 16.9 MB metadata-scoped; and sqlite-vec 0.1.9
 refuses an ``UPDATE`` of a partition key, the statement migration step 5 renames a
