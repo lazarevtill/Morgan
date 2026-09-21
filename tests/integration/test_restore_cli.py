@@ -13,16 +13,7 @@ from typing import Any
 
 import pytest
 
-from morgan_brain.config import get_settings
 from morgan_brain.surfaces.cli.__main__ import main
-
-
-@pytest.fixture(autouse=True)
-def _fresh_settings() -> Any:
-    """``get_settings`` is ``lru_cache``d; these tests change the environment under it."""
-    get_settings.cache_clear()
-    yield
-    get_settings.cache_clear()
 
 
 def test_restore_returns_the_snapshot_rows(tmp_path, monkeypatch, capsys):

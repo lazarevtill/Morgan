@@ -21,7 +21,7 @@ from morgan_brain.composition import (
     build_memory_module,
     sqlite_path,
 )
-from morgan_brain.config import Settings, user_config_file
+from morgan_brain.config import Settings
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.providers.factory import (
@@ -49,13 +49,12 @@ def _collect_local_probes(
     whole body to a worker thread.
     """
     db_path = sqlite_path(settings.temporal_db_url)
-    config_file = user_config_file()
     hash_backend = settings.embedding_backend == "hash"
     report: dict[str, Any] = {
         "database": db_path if db_path == ":memory:" else str(Path(db_path).resolve()),
         # The first question after "why is my brain empty?" is "which config did it read?"
-        "config_file": str(config_file),
-        "config_file_present": config_file.is_file(),
+        # These are the files this surface read, in order, and whether each was there.
+        "env_files": list(settings.env_files_read),
         "project": project,
         "all_projects": all_projects,
         "embedding_backend": settings.embedding_backend,

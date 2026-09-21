@@ -19,10 +19,12 @@ tag `legacy-v0.1.0-kernel` with its designs under `docs/archive/`.
 The tree is grouped by what a file does, so "where does a write go" and "where does a request
 come in" are answered by the directory names.
 
-- `config.py` — the single `MORGAN_`-prefixed settings source (`get_settings()`). Reads
-  `~/.config/morgan/.env`, then `./.env`, then the environment. The database defaults to
-  `~/.local/share/morgan/`. `MORGAN_EMBEDDING_ENDPOINT` addresses embeddings separately when
-  the chat server does not serve them.
+- `config.py` — the single `MORGAN_`-prefixed settings source (`settings_for(surface)`). The
+  CLI reads `~/.config/morgan/.env`, then `./.env`, then the environment; `morgan-mcp` reads
+  the user file and the environment only, because its working directory is the client's.
+  `doctor` lists the files read. The database defaults to `~/.local/share/morgan/`.
+  `MORGAN_EMBEDDING_ENDPOINT` addresses embeddings separately when the chat server does not
+  serve them.
 - `models.py` — the domain models. Everything that persists is `user_id`- and
   `project`-keyed. `Memory` carries a `MemorySource`; `TemporalFact` carries
   `valid_from`/`valid_to`/`superseded_by`.
@@ -47,7 +49,8 @@ come in" are answered by the directory names.
     `history`, `spaces` (the `embedding_spaces` table and its one-active partial index),
     `projects` (the `projects` table, keyed by name: classification, remote, root and the
     per-project capture/consolidate switches; `get`, `all` and `seed`, migration step 7's seed
-    of one row per project already named in `memories`, `facts` or `session_history`). Each
+    of one row per project already named in `memories`, `facts` or `session_history`),
+    `tables` (`PROJECT_TABLES`, the one list of project-keyed tables `forget` reaches). Each
     owns its schema and its queries; none of them ranks anything. Every write goes through
     `db.write_transaction`.
   - `recall/` — `fusion` (reciprocal rank over vector and keyword search, rank-only),
@@ -170,7 +173,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 308 passed, 3 skipped (the live ones)
+pytest -q                     # 531 passed, 4 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

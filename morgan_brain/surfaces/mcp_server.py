@@ -47,7 +47,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from morgan_brain.config import Settings, get_settings
+from morgan_brain.config import Settings, settings_for
 from morgan_brain.logging_setup import configure_logging
 from morgan_brain.models import PERSONAL_PROJECT
 from morgan_brain.surfaces.cli.commands import (
@@ -194,13 +194,13 @@ class _BearerAuthMiddleware(BaseHTTPMiddleware):
 def build_server(settings: Settings | None = None) -> MorganMcpServer:
     """Build the MCP server over the same composition path the ``morgan`` CLI uses.
 
-    ``settings`` defaults to a fresh ``Settings()`` read of the current environment -- not the
-    cached ``get_settings()`` singleton -- so a caller that sets ``MORGAN_*`` env vars right
-    before calling this function (tests; a future multi-instance host) is honored immediately.
-    ``main()`` below explicitly passes ``get_settings()``, the one cached settings object every
-    other production entry point in this repo uses.
+    ``settings`` defaults to a fresh ``settings_for("mcp")`` read -- the user's config file and
+    the environment, never a ``./.env``: the working directory is whatever folder the client
+    has open. Fresh, so a caller that sets ``MORGAN_*`` env vars right before calling this
+    function (tests; a future multi-instance host) is honored immediately. ``main()`` below
+    passes the one it built for its own flags.
     """
-    settings = settings if settings is not None else Settings()
+    settings = settings if settings is not None else settings_for("mcp")
     mcp = FastMCP("morgan")
     #: One id for this server process's whole lifetime -- every memory any client has this
     #: process store shares it, the way the CLI's empty ``session_id`` marks a one-shot process.
@@ -279,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
     # Over stdio, stdout *is* the JSON-RPC channel: a log line there is a framing error in
     # the client. Configured before anything that might log -- including reading settings.
     configure_logging()
-    settings = get_settings()
+    settings = settings_for("mcp")
     parser = argparse.ArgumentParser(
         prog="morgan-mcp",
         description="Morgan's MCP server -- five tools over the same memory the morgan CLI uses.",

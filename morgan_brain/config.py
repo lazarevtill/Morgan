@@ -1,16 +1,17 @@
 """Single source of configuration. All variables are MORGAN_-prefixed.
 
-There is exactly one settings object in the system. Access it via ``get_settings()``.
+A process has one settings object: its entrypoint builds it once with ``settings_for(surface)``
+and passes it down, and nothing below a surface reads configuration of its own. Which ``.env``
+files that reads belongs to the surface (``env_files_for``), and the environment overrides them.
 """
 
 from __future__ import annotations
 
 import os
-from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypedDict
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, PrivateAttr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -29,21 +30,44 @@ def default_data_dir() -> str:
 def user_config_file() -> Path:
     """The owner's persistent configuration: ``$XDG_CONFIG_HOME/morgan/.env``.
 
-    Read before the working directory's ``.env`` (which overrides it, so a checkout of this
-    repository keeps its local dev overrides). Same reason as ``default_data_dir``: a
-    ``.env`` that is only found in one directory configures the CLI in exactly that one
-    directory, and the CLI's whole point is running from every other one.
+    Read by every surface, first. Same reason as ``default_data_dir``: a ``.env`` that is only
+    found in one directory configures the CLI in exactly that one directory, and the CLI's
+    whole point is running from every other one.
     """
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     return Path(base) / "morgan" / ".env"
 
 
+#: Where a request comes in. Each reads its own list of ``.env`` files.
+Surface = Literal["cli", "mcp"]
+
+
+class EnvFileRead(TypedDict):
+    """One ``.env`` file a settings object was built from, and whether it was there."""
+
+    path: str
+    present: bool
+
+
+def env_files_for(surface: Surface) -> tuple[Path, ...]:
+    """The ``.env`` files *surface* reads, in read order: a later file overrides an earlier
+    one, and a real environment variable overrides every file.
+
+    The CLI is run by the owner in a folder they chose, so a ``./.env`` there is theirs and
+    overrides the user file -- a checkout of this repository keeps its dev overrides that way.
+    ``morgan-mcp`` is started by a client in whatever folder that client has open, so a
+    ``./.env`` there belongs to whatever project is open, and a stale one would move the server
+    to another database: it reads the user file only.
+    """
+    user = user_config_file()
+    return (user, Path.cwd() / ".env") if surface == "cli" else (user,)
+
+
 class Settings(BaseSettings):
-    # Later files win: the owner's ~/.config/morgan/.env is the baseline, a ./.env in the
-    # working directory overrides it, and real environment variables override both.
+    # No env_file here: which files are read is the surface's, passed at construction by
+    # settings_for(). A Settings built directly reads the environment only.
     model_config = SettingsConfigDict(
         env_prefix="MORGAN_",
-        env_file=(str(user_config_file()), ".env"),
         extra="ignore",
     )
 
@@ -162,6 +186,15 @@ class Settings(BaseSettings):
     #: ``classify`` to call the project ``work`` rather than ``personal``.
     work_remote_globs: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
+    #: Filled by settings_for(); private, so no MORGAN_ variable can set what doctor reports.
+    _env_files_read: list[EnvFileRead] = PrivateAttr(default_factory=list)
+
+    @property
+    def env_files_read(self) -> list[EnvFileRead]:
+        """The ``.env`` files this object was built from, in read order, each with whether it
+        was there. Empty for a ``Settings`` built directly, which reads no file."""
+        return self._env_files_read
+
     @field_validator("recall_floor_margin", mode="before")
     @classmethod
     def _empty_means_no_floor(cls, value: object) -> object:
@@ -206,7 +239,17 @@ class Settings(BaseSettings):
         return self
 
 
-@lru_cache
-def get_settings() -> Settings:
-    """Return the process-wide settings singleton."""
-    return Settings()
+def settings_for(surface: Surface) -> Settings:
+    """The settings *surface* runs with: its ``.env`` files (``env_files_for``), then the
+    environment, and the list of the files it read.
+
+    The one way a process obtains its settings. Each entrypoint calls it once and passes the
+    object down; shared code takes the object it is given and never picks a surface. Not
+    cached: the working directory and ``XDG_CONFIG_HOME`` are read when it is called.
+    """
+    files = env_files_for(surface)
+    # _env_file is BaseSettings.__init__'s own keyword; mypy builds a pydantic model's __init__
+    # from its fields alone and does not see it.
+    settings = Settings(_env_file=files)  # type: ignore[call-arg]
+    settings._env_files_read = [{"path": str(f), "present": f.is_file()} for f in files]
+    return settings

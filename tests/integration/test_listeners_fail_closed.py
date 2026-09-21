@@ -11,17 +11,8 @@ from typing import Any
 
 import pytest
 
-from morgan_brain.config import get_settings
 from morgan_brain.surfaces import mcp_server
 from morgan_brain.surfaces.network import UNSET_API_KEY_SENTINEL
-
-
-@pytest.fixture(autouse=True)
-def _fresh_settings() -> Any:
-    """``get_settings`` is ``lru_cache``d; these tests change the environment under it."""
-    get_settings.cache_clear()
-    yield
-    get_settings.cache_clear()
 
 
 def test_mcp_http_refuses_a_public_bind_without_a_key(monkeypatch: pytest.MonkeyPatch) -> None:

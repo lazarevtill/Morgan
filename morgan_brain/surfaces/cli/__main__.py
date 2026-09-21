@@ -18,7 +18,7 @@ import os
 import sys
 from pathlib import Path
 
-from morgan_brain.config import Settings, get_settings
+from morgan_brain.config import Settings, settings_for
 from morgan_brain.logging_setup import configure_logging
 from morgan_brain.models import PERSONAL_PROJECT
 from morgan_brain.surfaces.cli.commands import (
@@ -259,7 +259,7 @@ def main(argv: list[str] | None = None) -> int:
             stdout=sys.stdout,
             stderr=sys.stderr,
         )
-    settings = get_settings()
+    settings = settings_for("cli")
     # getattr: not every verb takes --project. `import` decides the destination from the
     # holdout rule, so it deliberately has no such flag to read.
     named = getattr(args, "project", None)

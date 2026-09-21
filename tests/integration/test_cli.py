@@ -89,7 +89,9 @@ def test_a_cli_the_suite_starts_reads_none_of_the_developers_configuration(tmp_p
     that read it would pass or fail with the contents of their home directory."""
     out = _run(["doctor", "--json"], _hash_env(tmp_path), tmp_path)
 
-    assert json.loads(out.stdout)["config_file_present"] is False
+    env_files = json.loads(out.stdout)["env_files"]
+    assert env_files
+    assert not any(f["present"] for f in env_files)
 
 
 def test_doctor_vector_rows_catches_an_unwired_vector_store(tmp_path):
@@ -297,13 +299,16 @@ def test_the_user_config_file_is_read_from_any_working_directory(tmp_path):
     env = _env_without_morgan(XDG_CONFIG_HOME=str(config_home))
 
     report = json.loads(_run(["doctor", "--json"], env, elsewhere).stdout)
-    assert report["config_file"] == str(config_home / "morgan" / ".env")
-    assert report["config_file_present"] is True
+    assert report["env_files"] == [
+        {"path": str(config_home / "morgan" / ".env"), "present": True},
+        {"path": str(elsewhere / ".env"), "present": False},
+    ]
     assert report["database"].startswith(str(tmp_path / "from-user-config"))
     assert report["embedding_backend"] == "hash"
 
     (elsewhere / ".env").write_text(f"MORGAN_DATA_DIR={tmp_path / 'from-cwd'}\n")
     report = json.loads(_run(["doctor", "--json"], env, elsewhere).stdout)
+    assert report["env_files"][1] == {"path": str(elsewhere / ".env"), "present": True}
     assert report["database"].startswith(str(tmp_path / "from-cwd"))
 
     env["MORGAN_DATA_DIR"] = str(tmp_path / "from-env")

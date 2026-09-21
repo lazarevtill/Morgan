@@ -18,7 +18,7 @@ from typing import Any
 import structlog
 
 from morgan_brain.app.chat import Chat
-from morgan_brain.config import Settings, get_settings
+from morgan_brain.config import Settings
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
@@ -183,9 +183,7 @@ def _require_the_space_width(conn: sqlite3.Connection, settings: Settings) -> No
         )
 
 
-def build_memory_context(
-    settings: Settings | None = None, *, budget: Budget = "interactive"
-) -> MemoryContext:
+def build_memory_context(settings: Settings, *, budget: Budget = "interactive") -> MemoryContext:
     """Open the database and wire the memory core over it. Nothing is embedded.
 
     A writable database with no active embedding space is given the settings' model and
@@ -196,7 +194,6 @@ def build_memory_context(
     is how long a failing embedding call keeps retrying: ``import`` for ``morgan import``,
     ``interactive`` for everything else.
     """
-    settings = settings or get_settings()
     path = sqlite_path(settings.temporal_db_url)
     if path != ":memory:":
         pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -226,8 +223,7 @@ def build_memory_context(
     )
 
 
-def build_app_context(settings: Settings | None = None) -> AppContext:
-    settings = settings or get_settings()
+def build_app_context(settings: Settings) -> AppContext:
     memory = build_memory_context(settings)
     client = build_chat_client(settings)
     return AppContext(

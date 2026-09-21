@@ -16,20 +16,12 @@ from typing import Any
 import pytest
 
 from morgan_brain.composition import build_memory_context
-from morgan_brain.config import Settings, get_settings
+from morgan_brain.config import Settings, settings_for
 from morgan_brain.memory import migrations
 from morgan_brain.memory.migrations import DatabaseNeedsMigration
 from morgan_brain.models import Memory
 from morgan_brain.surfaces.cli.__main__ import main
 from morgan_brain.surfaces.cli.commands import cmd_forget
-
-
-@pytest.fixture(autouse=True)
-def _fresh_settings() -> Any:
-    """``get_settings`` is ``lru_cache``d; these tests change the environment under it."""
-    get_settings.cache_clear()
-    yield
-    get_settings.cache_clear()
 
 
 def test_cli_forget_writes_a_snapshot_before_erasing(tmp_path, monkeypatch, capsys):
@@ -66,7 +58,7 @@ def _a_database_with_one_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setenv("MORGAN_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("MORGAN_SNAPSHOT_DIR", str(tmp_path / "snapshots"))
     monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
-    settings = get_settings()
+    settings = settings_for("cli")
 
     async def seed() -> None:
         ctx = build_memory_context(settings)
@@ -94,7 +86,7 @@ def _a_read_only_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Se
 
     version_two = migrations._STEPS[:2]
     monkeypatch.setattr(migrations, "_STEPS", version_two)
-    settings = get_settings()
+    settings = settings_for("cli")
 
     async def seed() -> None:
         ctx = build_memory_context(settings)
@@ -113,7 +105,7 @@ def _a_read_only_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Se
 
     heavy = migrations.Step(3, "a heavy step", True, lambda c, s: None)
     monkeypatch.setattr(migrations, "_STEPS", (*version_two, heavy))
-    return get_settings()
+    return settings_for("cli")
 
 
 def _run_isolated(coro: Any) -> Any:

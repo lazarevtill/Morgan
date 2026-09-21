@@ -18,7 +18,6 @@ import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
 from mcp.types import CallToolResult
 
-from morgan_brain.config import get_settings
 from morgan_brain.memory import migrations
 from morgan_brain.memory.store import spaces
 from morgan_brain.memory.store.db import open_db
@@ -29,14 +28,6 @@ from tests.fakes import _unit_vector, flaky_model_server, model_server
 from tests.unit.memory.conftest import a_version_five_database
 
 _BLOCKED = "writes are blocked until `morgan migrate` runs: 1 step pending (3 a heavy step)"
-
-
-@pytest.fixture(autouse=True)
-def _fresh_settings() -> Any:
-    """``get_settings`` is ``lru_cache``d; these tests change the environment under it."""
-    get_settings.cache_clear()
-    yield
-    get_settings.cache_clear()
 
 
 def _touch_every_memory(conn: sqlite3.Connection, stores: migrations.Stores) -> dict[str, int]:
@@ -194,7 +185,6 @@ def test_a_space_refused_after_the_wave_says_the_migration_committed(tmp_path, m
     failed migration, which a rerun would then report as nothing to do."""
     db = _a_version_five_database(tmp_path, monkeypatch, endpoint="http://127.0.0.1:1/v1")
     monkeypatch.setenv("MORGAN_EMBEDDING_DIM", "8")
-    get_settings.cache_clear()
 
     assert main(["migrate", "--json"]) == 1
 
