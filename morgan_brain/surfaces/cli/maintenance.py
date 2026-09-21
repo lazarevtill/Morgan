@@ -27,7 +27,7 @@ from morgan_brain.memory.checked_embedder import CheckedEmbedder
 from morgan_brain.memory.store import spaces
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.providers.factory import build_embedder
-from morgan_brain.providers.wire import ProviderUnreachable
+from morgan_brain.providers.wire import ProviderRefused, ProviderUnreachable
 from morgan_brain.surfaces.cli.payloads import (
     embedding_space_to_dict,
     migration_plan_to_dict,
@@ -129,9 +129,10 @@ async def _check_the_space(settings: Settings) -> dict[str, Any] | None:
     refuses a vector table of another width than ``MORGAN_EMBEDDING_DIM``. Checked by the same
     first-call check every process makes (``CheckedEmbedder.verify``): the fingerprint is
     recorded when the stored sample matches, or compared when it was recorded before. An
-    embedding server that does not answer -- a cold host past the timeout, or none at all --
-    leaves the space unverified for the first call to verify, and that is said. ``None`` for
-    the hash backend, which no model answers and nothing registers.
+    embedding server that gives no answer -- none at all, or none within the retry budget --
+    or refuses the request leaves the space unverified for the first call to verify, and
+    that is said with the reason. ``None`` for the hash backend, which no model answers and
+    nothing registers.
     """
     if settings.embedding_backend != "provider":
         return None
@@ -146,7 +147,7 @@ async def _check_the_space(settings: Settings) -> dict[str, Any] | None:
             return None
         try:
             await embedder.verify()
-        except ProviderUnreachable as exc:
+        except (ProviderUnreachable, ProviderRefused) as exc:
             return embedding_space_to_dict(before, fingerprint="unverified", reason=str(exc))
         after = spaces.active(conn) or before
         return embedding_space_to_dict(

@@ -23,6 +23,8 @@ def test_every_stdout_line_is_a_jsonrpc_message(tmp_path):
     env.update(
         MORGAN_DATA_DIR=str(tmp_path),
         MORGAN_LLM_ENDPOINT="http://127.0.0.1:1/v1",
+        # Port 1 refuses: one refusal is all the tool call needs, not a real host's budget.
+        MORGAN_EMBEDDING_UNREACHABLE_BUDGET_SECONDS="0.5",
         PYTHONUNBUFFERED="1",
     )
     proc = subprocess.Popen(

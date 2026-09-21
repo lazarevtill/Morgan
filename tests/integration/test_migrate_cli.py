@@ -25,7 +25,7 @@ from morgan_brain.memory.store.db import open_db
 from morgan_brain.models import Memory
 from morgan_brain.surfaces.cli.__main__ import main
 from morgan_brain.surfaces.mcp_server import build_server
-from tests.fakes import _unit_vector, model_server
+from tests.fakes import _unit_vector, flaky_model_server, model_server
 from tests.unit.memory.conftest import a_version_five_database
 
 _BLOCKED = "writes are blocked until `morgan migrate` runs: 1 step pending (3 a heavy step)"
@@ -145,6 +145,29 @@ def test_migrate_registers_the_space_and_says_it_is_unverified_when_the_embedder
     )
 
 
+@pytest.mark.parametrize(
+    ("status", "reason"),
+    [
+        (401, "refused the request: HTTP 401"),
+        (503, "answered too slowly or dropped: "),
+    ],
+)
+def test_migrate_says_the_space_is_unverified_when_the_embedder_refuses_or_stays_slow(
+    tmp_path, monkeypatch, capsys, status, reason
+):
+    """A host that refuses the request, or answers only errors until the budget is spent, is no
+    reason to fail a migration that has committed: the space is left for the first call to
+    verify, and the line says why."""
+    with flaky_model_server(fail_times=99, status=status, embedding_dim=4) as url:
+        db = _a_version_five_database(tmp_path, monkeypatch, endpoint=url)
+        assert main(["migrate"]) == 0
+
+    out = capsys.readouterr().out
+    assert "space 1 unverified; the first call will verify it" in out
+    assert reason in out
+    assert _version(db) == len(migrations._STEPS)
+
+
 def test_migrate_records_the_fingerprint_when_the_embedder_answers(tmp_path, monkeypatch, capsys):
     """The stored vectors are the ones this server gives their texts, so the sample matches."""
     with model_server(embedding_dim=4) as url:
@@ -194,6 +217,10 @@ def _a_version_five_database(
     monkeypatch.setenv("MORGAN_EMBEDDING_ENDPOINT", endpoint)
     monkeypatch.setenv("MORGAN_EMBEDDING_MODEL", _MODEL)
     monkeypatch.setenv("MORGAN_EMBEDDING_DIM", "4")
+    # Budgets for a suite, not a cold host: port 1 and a failing fake give up in under a second.
+    monkeypatch.setenv("MORGAN_EMBEDDING_UNREACHABLE_BUDGET_SECONDS", "0.5")
+    monkeypatch.setenv("MORGAN_EMBEDDING_RETRY_BUDGET_SECONDS", "0.5")
+    monkeypatch.setenv("MORGAN_EMBEDDING_RETRY_BACKOFF_SECONDS", "0.05")
     db = str(data_dir / "morgan.db")
     a_version_five_database(
         db,

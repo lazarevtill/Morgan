@@ -59,8 +59,9 @@ come in" are answered by the directory names.
   against a real embedding endpoint.
 - `providers/` — the only place a model SDK is imported: `openai_compat.py` (chat),
   `embeddings.py`, `structured.py` (JSON-validated output), `factory.py` (settings → adapters,
-  where embeddings are sent, and the `CheckedEmbedder` around the embedding model), `wire.py`
-  (message types, `ChatClient`, `ProviderUnreachable`, `EmbeddingSpaceMismatch`).
+  where embeddings are sent, the `CheckedEmbedder` around the embedding model, and which
+  retry budget an embedding call gets), `wire.py` (message types, `ChatClient`,
+  `ProviderUnreachable`, `ProviderRefused`, `EmbeddingSpaceMismatch`).
 - `app/chat.py` — one turn: recall, answer, remember. Not a surface: the one use-case both
   surfaces call.
 - `surfaces/` — where requests come in. `cli/` (`__main__` parses and dispatches, `commands`
@@ -117,9 +118,13 @@ come in" are answered by the directory names.
   same-width swap is caught like a width change.
 - **A model server that is down is reported by name.** Adapters raise
   `providers.wire.ProviderUnreachable` carrying the endpoint and the setting that addresses
-  it; the CLI and MCP tools print its message. The factory hands each adapter that setting,
-  because embeddings go to the chat endpoint unless `MORGAN_EMBEDDING_ENDPOINT` is set. A bare
-  traceback is a regression, and so is sending the owner to check a server that works.
+  it; the CLI and MCP tools print its message. A transient failure is retried first, within a
+  budget: short when the host refuses connections; longer when it answers slowly or drops one,
+  as a cold host loading its model does; longer still for an import. The message says which. A
+  4xx is `ProviderRefused`, naming the key setting. A bare `HTTPStatusError` is a regression.
+  The factory hands each adapter the setting that addresses its endpoint, because embeddings
+  go to the chat endpoint unless `MORGAN_EMBEDDING_ENDPOINT` is set. A bare traceback is a
+  regression, and so is sending the owner to check a server that works.
 - **stdout is a protocol on both surfaces.** `--json` output and the MCP stdio transport are
   parsed by machines; all logs go to stderr. Never `print()` diagnostics from library code.
 - **Nothing runs a model unasked.** `ask` and `consolidate` call the chat model; nothing else

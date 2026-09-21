@@ -252,6 +252,11 @@ def test_every_command_accepts_project_all_projects_and_json_flags(command):
     assert args.json is True
 
 
+#: How long a command keeps trying port 1 to embed: long enough for one refusal, short enough
+#: for a suite. The default is sized for a real host, not for a closed port.
+_BRIEFLY = "0.5"
+
+
 def _env_without_morgan(**extra: str) -> dict[str, str]:
     """The developer's own MORGAN_* variables must not leak into a test about defaults."""
     base = {k: v for k, v in os.environ.items() if not k.startswith("MORGAN_")}
@@ -311,7 +316,9 @@ def test_json_stdout_stays_json_when_something_is_logged(tmp_path):
     stderr: a script reading --json output must never find a log line in front of the
     document."""
     env = _env_without_morgan(
-        MORGAN_DATA_DIR=str(tmp_path), MORGAN_LLM_ENDPOINT="http://127.0.0.1:1/v1"
+        MORGAN_DATA_DIR=str(tmp_path),
+        MORGAN_LLM_ENDPOINT="http://127.0.0.1:1/v1",
+        MORGAN_EMBEDDING_UNREACHABLE_BUDGET_SECONDS=_BRIEFLY,
     )
     out = _run(["remember", "x", "--json"], env, tmp_path)
     assert out.returncode == 1
@@ -327,6 +334,7 @@ def test_an_embedding_endpoint_that_is_down_is_named_with_its_setting(tmp_path):
         MORGAN_DATA_DIR=str(tmp_path),
         MORGAN_LLM_ENDPOINT="http://chat.invalid/v1",
         MORGAN_EMBEDDING_ENDPOINT="http://127.0.0.1:1/v1",
+        MORGAN_EMBEDDING_UNREACHABLE_BUDGET_SECONDS=_BRIEFLY,
     )
 
     out = _run(["recall", "x", "--json"], env, tmp_path)

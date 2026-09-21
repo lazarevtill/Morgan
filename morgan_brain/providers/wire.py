@@ -75,6 +75,16 @@ class StreamDelta(BaseModel):
     finish_reason: str | None = None
 
 
+#: What became of a model request that did not succeed: no connection could be made, or one
+#: was made and the answer never came, came as a server error, or was cut off.
+Outcome = Literal["unreachable", "slow"]
+
+#: How long a cold embedding host takes to load its model, said with every failure that looks
+#: like one. Measured: 7-8 s over three runs, 43 s on a first load from disk
+#: (docs/measurements/2026-09-phase0-baseline.md).
+COLD_LOAD = "a cold host loads the model in seconds, 43 s on a first load from disk"
+
+
 class ProviderUnreachable(ConnectionError):
     """The model endpoint could not be reached, or gave no answer in time.
 
@@ -83,14 +93,74 @@ class ProviderUnreachable(ConnectionError):
     names ``setting``, the variable that addresses the endpoint, which the adapter is given by
     the factory: embeddings go to the chat endpoint unless MORGAN_EMBEDDING_ENDPOINT is set,
     so the embedding adapter alone cannot tell which of the two to check.
+
+    ``outcome`` says which of two things happened. ``unreachable``: no connection was made --
+    the host is off or the address is wrong. ``slow``: a connection was made and the answer
+    did not come in time, came as a server error, or was cut off -- which is also how a cold
+    host loading its model looks, so that message says how long a load takes, and never
+    calls the host unreachable. ``retried`` builds the embedder's error once its budget is
+    spent; the chat adapter, which does not retry, raises the plain form.
     """
 
-    def __init__(self, endpoint: str, detail: str, *, setting: str) -> None:
+    def __init__(
+        self,
+        endpoint: str,
+        detail: str,
+        *,
+        setting: str,
+        outcome: Outcome = "unreachable",
+        verdict: str | None = None,
+    ) -> None:
         self.endpoint = endpoint
         self.detail = detail
         self.setting = setting
+        self.outcome: Outcome = outcome
+        verdict = verdict or f"is unreachable ({detail})"
         super().__init__(
-            f"model endpoint {endpoint} is unreachable ({detail}); check {setting} "
+            f"model endpoint {endpoint} {verdict}; check {setting} and run `morgan doctor`"
+        )
+
+    @classmethod
+    def retried(
+        cls,
+        endpoint: str,
+        *,
+        setting: str,
+        outcome: Outcome,
+        error: str,
+        attempts: int,
+        seconds: float,
+    ) -> ProviderUnreachable:
+        """The embedder's budget for *outcome* is spent: *attempts* attempts over *seconds*,
+        the last of which failed with *error* (an exception's name, or ``HTTP 503``)."""
+        plural = "" if attempts == 1 else "s"
+        detail = f"{error} after {attempts} attempt{plural} over {seconds:.1f} s"
+        if outcome == "unreachable":
+            verdict = f"is unreachable: {detail}"
+        else:
+            verdict = f"answered too slowly or dropped: {detail}; {COLD_LOAD}"
+        return cls(endpoint, detail, setting=setting, outcome=outcome, verdict=verdict)
+
+
+class ProviderRefused(Exception):
+    """The model endpoint answered, and refused the request: a 4xx other than 429, or a
+    redirect, which is not followed.
+
+    Not retried -- the same request gets the same answer -- and not a ``ProviderUnreachable``:
+    the host is up, so checking whether it runs sends the owner to the wrong place. On a 401
+    or 403 ``setting`` is the key setting whose value was sent; on any other status it is the
+    setting that addresses the endpoint. ``detail`` is the start of what the server said,
+    which names the problem when the server does (a model it has never heard of, say).
+    """
+
+    def __init__(self, endpoint: str, status: int, setting: str, *, detail: str = "") -> None:
+        self.endpoint = endpoint
+        self.status = status
+        self.setting = setting
+        self.detail = detail
+        said = f" ({detail})" if detail else ""
+        super().__init__(
+            f"model endpoint {endpoint} refused the request: HTTP {status}{said}; check {setting} "
             "and run `morgan doctor`"
         )
 

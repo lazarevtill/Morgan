@@ -72,9 +72,27 @@ class Settings(BaseSettings):
     #: OUTBOUND: the key Morgan presents TO the model server (llama-server's ``--api-key``).
     #: Not ``api_key`` above -- the two point in opposite directions. Empty by default.
     llm_api_key: str = ""
-    #: Request timeout (seconds) for chat + embedding calls. Sized for a network hop under
-    #: GPU load, not a loopback socket.
+    #: Request timeout (seconds) for one chat call. Sized for a network hop under GPU load,
+    #: not a loopback socket. Embedding calls do not use it: they have the budgets below.
     llm_timeout_seconds: float = Field(default=120.0, gt=0.0)
+    #: How long (seconds) one embedding call may keep retrying a host that answered slowly,
+    #: with a server error or a 429, or dropped the connection -- as a cold host loading its
+    #: model does -- before it fails, for a command or a tool call. A bound on the wall time of
+    #: the whole call, attempts and backoff included.
+    embedding_retry_budget_seconds: float = Field(default=60.0, gt=0.0)
+    #: The same bound for an import (``morgan import``), which has thousands of calls to make
+    #: and no one waiting on any single one of them.
+    embedding_import_retry_budget_seconds: float = Field(default=600.0, gt=0.0)
+    #: How long (seconds) an embedding call keeps retrying a host it cannot connect to at all
+    #: (refused, DNS, connect timeout): the host is off or the address is wrong, and waiting
+    #: on it helps no one. Counted from the start of the call, and only until a connection is
+    #: made; after that every failure counts against the budget above.
+    embedding_unreachable_budget_seconds: float = Field(default=5.0, gt=0.0)
+    #: The wait (seconds) before an embedding call's first retry, doubling before each next.
+    embedding_retry_backoff_seconds: float = Field(default=0.5, gt=0.0)
+    #: The longest (seconds) one embedding attempt may take, and never longer than what is left
+    #: of the call's budget. 50 s covers a cold host's first load from disk (43 s measured).
+    embedding_timeout_seconds: float = Field(default=50.0, gt=0.0)
     #: How structured output (fact consolidation) is requested. ``json_schema`` is native
     #: constrained decoding, which llama-server and Ollama's /v1 both support; ``json_object``
     #: for servers that only guarantee an object; ``prompted`` asks in the prompt and

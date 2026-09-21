@@ -23,6 +23,7 @@ from morgan_brain.memory.module import MemoryModule
 from morgan_brain.memory.store import spaces, vectors
 from morgan_brain.models import Memory, MemoryKind
 from morgan_brain.providers.embeddings import OpenAICompatEmbedder
+from morgan_brain.providers.factory import retry_budget_of
 from morgan_brain.providers.wire import EmbeddingSpaceMismatch
 from tests.fakes import model_server
 from tests.unit.memory.conftest import build_memory_module
@@ -523,7 +524,11 @@ def _nan_model(*, dims: int) -> _RecordingEmbedder:
 
 def _adapter(url: str, settings: Settings) -> OpenAICompatEmbedder:
     return OpenAICompatEmbedder(
-        url, settings.embedding_model, timeout=10.0, setting="MORGAN_EMBEDDING_ENDPOINT"
+        url,
+        settings.embedding_model,
+        budget=retry_budget_of(settings, "interactive"),
+        setting="MORGAN_EMBEDDING_ENDPOINT",
+        key_setting="MORGAN_LLM_API_KEY",
     )
 
 

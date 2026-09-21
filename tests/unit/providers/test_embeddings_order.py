@@ -8,7 +8,7 @@ position, so an adapter that trusted list order would hand the caller a fingerpr
 
 from __future__ import annotations
 
-from morgan_brain.providers.embeddings import OpenAICompatEmbedder
+from morgan_brain.providers.embeddings import OpenAICompatEmbedder, RetryBudget
 from tests.fakes import model_server
 
 
@@ -24,4 +24,12 @@ async def test_vectors_come_back_in_input_order_when_the_server_reorders_them() 
 
 
 def _embedder(url: str) -> OpenAICompatEmbedder:
-    return OpenAICompatEmbedder(url, "m", timeout=10.0, setting="MORGAN_EMBEDDING_ENDPOINT")
+    return OpenAICompatEmbedder(
+        url,
+        "m",
+        budget=RetryBudget(
+            seconds=10.0, unreachable_seconds=1.0, backoff_seconds=0.05, attempt_seconds=10.0
+        ),
+        setting="MORGAN_EMBEDDING_ENDPOINT",
+        key_setting="MORGAN_LLM_API_KEY",
+    )

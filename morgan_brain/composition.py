@@ -34,7 +34,7 @@ from morgan_brain.memory.store.projects import ProjectStore
 from morgan_brain.memory.store.spaces import EmbeddingSpaceStore
 from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.memory.store.vectors import SqliteVectorIndex
-from morgan_brain.providers.factory import build_chat_client, build_embedder
+from morgan_brain.providers.factory import Budget, build_chat_client, build_embedder
 from morgan_brain.providers.openai_compat import OpenAICompatAdapter
 
 log = structlog.get_logger("composition")
@@ -183,14 +183,18 @@ def _require_the_space_width(conn: sqlite3.Connection, settings: Settings) -> No
         )
 
 
-def build_memory_context(settings: Settings | None = None) -> MemoryContext:
+def build_memory_context(
+    settings: Settings | None = None, *, budget: Budget = "interactive"
+) -> MemoryContext:
     """Open the database and wire the memory core over it. Nothing is embedded.
 
     A writable database with no active embedding space is given the settings' model and
     width; a database waiting for ``morgan migrate`` registers nothing, and neither does the
     hash backend, which no model answers. A space whose width disagrees with the settings is
     refused here, from the database alone. The model is asked only when something is
-    embedded, and its first request carries the space's check (``CheckedEmbedder``).
+    embedded, and its first request carries the space's check (``CheckedEmbedder``). *budget*
+    is how long a failing embedding call keeps retrying: ``import`` for ``morgan import``,
+    ``interactive`` for everything else.
     """
     settings = settings or get_settings()
     path = sqlite_path(settings.temporal_db_url)
@@ -198,7 +202,7 @@ def build_memory_context(settings: Settings | None = None) -> MemoryContext:
         pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
     conn = open_db(path)
     try:
-        embedder = build_embedder(settings, conn=conn)
+        embedder = build_embedder(settings, conn=conn, budget=budget)
         module = build_memory_module(
             conn,
             embedder=embedder,

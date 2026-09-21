@@ -15,6 +15,10 @@ from morgan_brain.providers.wire import ChatMessage, ProviderUnreachable
 #: Port 1 on loopback is closed, so every connect is refused at once.
 _CLOSED = "http://127.0.0.1:1/v1"
 
+#: How long an embedding call keeps trying port 1: long enough for one refusal, short enough
+#: for a suite. The default is sized for a real host, not for a closed port.
+_BRIEFLY = 0.5
+
 
 async def test_a_separate_embedding_endpoint_that_is_down_is_named_by_its_own_setting():
     """The chat endpoint answers fine here; sending the owner to check it is sending them to
@@ -24,6 +28,7 @@ async def test_a_separate_embedding_endpoint_that_is_down_is_named_by_its_own_se
             llm_endpoint="http://chat.invalid/v1",
             embedding_endpoint=_CLOSED,
             embedding_backend="provider",
+            embedding_unreachable_budget_seconds=_BRIEFLY,
         )
     )
 
@@ -38,7 +43,12 @@ async def test_embeddings_sent_to_the_chat_endpoint_name_the_chat_setting():
     """With no embedding endpoint configured there is no MORGAN_EMBEDDING_ENDPOINT to check:
     the chat endpoint serves both."""
     embedder = build_embedder(
-        Settings(llm_endpoint=_CLOSED, embedding_endpoint="", embedding_backend="provider")
+        Settings(
+            llm_endpoint=_CLOSED,
+            embedding_endpoint="",
+            embedding_backend="provider",
+            embedding_unreachable_budget_seconds=_BRIEFLY,
+        )
     )
 
     with pytest.raises(ProviderUnreachable) as info:

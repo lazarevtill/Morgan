@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import socket
 import threading
 from collections import deque
 from collections.abc import AsyncIterator, Iterator
@@ -72,8 +73,90 @@ def model_server(
 
 
 @contextmanager
+def flaky_model_server(
+    fail_times: int,
+    status: int | None,
+    *,
+    after: int = 0,
+    embedding_dim: int = 1024,
+    calls: Calls | None = None,
+) -> Iterator[str]:
+    """``model_server``, failing *fail_times* embedding requests in a row; yields its URL.
+
+    The first *after* embedding requests are answered, the next *fail_times* fail, and every
+    one after that is answered again. A failure answers with *status* -- a 503 is what
+    llama-server says while it loads a model, a 401 a key it refused -- or, with
+    ``status=None``, closes the connection without a word: a dropped connection, as a host that
+    goes to sleep mid-request gives one. *calls*, when given, counts every request.
+    """
+    failures = _Failures(after=after, times=fail_times, status=status)
+    with _model_server(
+        embeddings=True, embedding_dim=embedding_dim, reorder=False, calls=calls, fail=failures
+    ) as url:
+        yield url
+
+
+@contextmanager
+def silent_model_server() -> Iterator[str]:
+    """A server that accepts every connection and never answers; yields a ``/v1`` URL.
+
+    A cold host loading its model looks like this from the client until the model is loaded:
+    the connection is made, the request is sent, and nothing comes back. The connections are
+    held open, unread, until the context exits.
+    """
+    listener = socket.create_server(("127.0.0.1", 0))
+    listener.settimeout(0.05)
+    held: list[socket.socket] = []
+    stop = threading.Event()
+
+    def accept() -> None:
+        while not stop.is_set():
+            try:
+                conn, _ = listener.accept()
+            except TimeoutError:
+                continue
+            except OSError:
+                return
+            held.append(conn)
+
+    thread = threading.Thread(target=accept, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{listener.getsockname()[1]}/v1"
+    finally:
+        stop.set()
+        thread.join()
+        for conn in held:
+            conn.close()
+        listener.close()
+
+
+class _Failures:
+    """Which embedding requests ``flaky_model_server`` fails: numbers *after* + 1 to *after* +
+    *times*, counted across every connection. ``fail()`` counts one request and says whether
+    it is one of them."""
+
+    def __init__(self, *, after: int, times: int, status: int | None) -> None:
+        self._lock = threading.Lock()
+        self._seen = 0
+        self._after = after
+        self._times = times
+        self.status = status
+
+    def fail(self) -> bool:
+        with self._lock:
+            self._seen += 1
+            return self._after < self._seen <= self._after + self._times
+
+
+@contextmanager
 def _model_server(
-    *, embeddings: bool, embedding_dim: int, reorder: bool, calls: Calls | None
+    *,
+    embeddings: bool,
+    embedding_dim: int,
+    reorder: bool,
+    calls: Calls | None,
+    fail: _Failures | None = None,
 ) -> Iterator[str]:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -90,6 +173,12 @@ def _model_server(
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
             if self.path != "/v1/embeddings":
                 self._reply(404, {"error": "not found"})
+            elif fail is not None and fail.fail():
+                if fail.status is None:
+                    # Nothing is written: the handler returns and the server closes the socket.
+                    self.close_connection = True
+                else:
+                    self._reply(fail.status, {"error": f"scripted failure {fail.status}"})
             elif not embeddings:
                 self._reply(501, {"error": "this server was started without --embeddings"})
             else:
@@ -114,7 +203,11 @@ def _model_server(
             """The suite's output is not a request log."""
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    # shutdown() waits for the loop's next poll: the default half second, paid by every test
+    # that starts a server, is most of the time such a test takes.
+    threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True
+    ).start()
     try:
         yield f"http://127.0.0.1:{server.server_address[1]}/v1"
     finally:

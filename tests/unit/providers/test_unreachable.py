@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from morgan_brain.providers.embeddings import OpenAICompatEmbedder
+from morgan_brain.providers.embeddings import OpenAICompatEmbedder, RetryBudget
 from morgan_brain.providers.openai_compat import OpenAICompatAdapter
 from morgan_brain.providers.wire import ChatMessage, ProviderUnreachable
 
@@ -40,7 +40,15 @@ async def test_stream_raises_before_yielding_anything() -> None:
 
 
 async def test_embedder_names_the_endpoint_it_could_not_reach() -> None:
-    embedder = OpenAICompatEmbedder(_CLOSED, "e", timeout=2.0, setting="MORGAN_EMBEDDING_ENDPOINT")
+    embedder = OpenAICompatEmbedder(
+        _CLOSED,
+        "e",
+        budget=RetryBudget(
+            seconds=2.0, unreachable_seconds=0.5, backoff_seconds=0.05, attempt_seconds=2.0
+        ),
+        setting="MORGAN_EMBEDDING_ENDPOINT",
+        key_setting="MORGAN_LLM_API_KEY",
+    )
     with pytest.raises(ProviderUnreachable) as info:
         await embedder.embed("hi")
     assert info.value.endpoint.startswith(_CLOSED)

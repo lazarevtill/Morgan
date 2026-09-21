@@ -242,7 +242,9 @@ async def cmd_import(args: argparse.Namespace, settings: Settings, project: str)
         # minutes of embedding calls, and a silent run is indistinguishable from a hung one.
         print(f"\rimporting conversation {done}/{total}", end="", file=sys.stderr, flush=True)
 
-    ctx = build_memory_context(settings)
+    # The import budget: thousands of embedding calls against a host that may be cold or
+    # flapping, and one dropped connection must not end the run.
+    ctx = build_memory_context(settings, budget="import")
     try:
         # Before the export is read: on a database waiting for `morgan migrate` every memory
         # in it would be refused.
