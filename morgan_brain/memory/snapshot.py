@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 
 from morgan_brain.memory import migrations
-from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store.db import open_db, readonly_uri
 
 #: ``VACUUM INTO``'s destination has no bound-parameter form -- see ``take()`` -- so the reason
 #: is restricted to this shape before it ever reaches SQL text. ``\Z`` rather than ``$``: ``$``
@@ -109,8 +109,9 @@ def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
 def _readonly_connect(path: Path) -> sqlite3.Connection:
     """A read-only connection to *path*. Describing or checking a copy must never mutate it --
     a read-write open flips ``journal_mode`` to WAL and leaves ``-wal``/``-shm`` sidecars next
-    to what is meant to be a static archive file."""
-    return sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    to what is meant to be a static archive file. The URI is ``readonly_uri``'s, encoded, so
+    a ``#`` in a directory name cannot cut the path short and open another file."""
+    return sqlite3.connect(readonly_uri(path), uri=True)
 
 
 def _quick_check(path: Path) -> str:

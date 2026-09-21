@@ -8,6 +8,7 @@ table at whatever width was set that minute, before any embedding space was regi
 
 from __future__ import annotations
 
+import shutil
 import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -233,6 +234,44 @@ async def test_a_wal_database_that_cannot_be_read_read_only_says_so_on_the_datab
     assert report["rows"] is None
     assert "probe_errors" not in report and "count_errors" not in report
     assert db.read_bytes() == before
+
+
+def _a_snapshot_in(folder: Path, settings: Settings, staging: Path) -> snapshot.SnapshotResult:
+    """A snapshot of the settings' database, taken in *staging* and moved into *folder*: made
+    without reading anything through *folder*'s name, so only doctor's reading is tested."""
+    taken = snapshot.take(
+        sqlite_path(settings.temporal_db_url),
+        into=staging,
+        reason="doctor-test",
+        clock=lambda: datetime(2026, 9, 21, tzinfo=UTC),
+    )
+    folder.mkdir()
+    shutil.move(taken.path, folder / taken.path.name)
+    staging.rmdir()
+    return taken
+
+
+async def test_a_hash_in_the_snapshot_directory_creates_nothing_and_counts_its_snapshots(
+    tmp_path, chat
+):
+    """doctor describes each snapshot through a ``file:`` URI; a ``#`` in the directory name
+    must not cut that path short and have SQLite create a file where it was cut."""
+    folder = tmp_path / "snap#dir"
+    settings = _settings(tmp_path / "data", chat, snapshot_dir=str(folder))
+    await _store(settings, ["a memory"])
+    taken = _a_snapshot_in(folder, settings, tmp_path / "staging")
+    listing = sorted(p.name for p in tmp_path.iterdir())
+
+    report = await _report(settings)
+
+    assert sorted(p.name for p in tmp_path.iterdir()) == listing
+    assert report["snapshots"] == {
+        "dir": str(folder),
+        "count": 1,
+        "newest": taken.path.name,
+        "bytes": taken.bytes,
+    }
+    assert "probe_errors" not in report
 
 
 async def test_a_missing_database_is_reported_and_not_created(tmp_path, chat):

@@ -41,6 +41,16 @@ def open_db(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connection:
     return conn
 
 
+def readonly_uri(path: str | Path) -> str:
+    """The SQLite URI that opens *path* read-only.
+
+    Built by ``Path.as_uri``, which percent-encodes the path. In a bare ``file:`` URI a ``#``
+    or ``?`` in a directory name starts the fragment or the query: SQLite opens the path cut
+    off there -- read-write, creating it -- and ``mode=ro`` never arrives.
+    """
+    return f"{Path(path).resolve().as_uri()}?mode=ro"
+
+
 def open_readonly(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connection:
     """Open an existing Morgan database only to read it: SQLite's read-only mode, sqlite-vec
     loaded, and no pragma that writes.
@@ -59,9 +69,10 @@ def open_readonly(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connecti
     """
     if path == ":memory:":
         return open_db(path, busy_timeout_ms=busy_timeout_ms)
-    uri = f"{Path(path).resolve().as_uri()}?mode=ro"
     # The busy timeout is the connection's own, not a write: a reader can meet a checkpoint.
-    conn = sqlite3.connect(uri, uri=True, timeout=busy_timeout_ms / 1000, check_same_thread=False)
+    conn = sqlite3.connect(
+        readonly_uri(path), uri=True, timeout=busy_timeout_ms / 1000, check_same_thread=False
+    )
     try:
         conn.row_factory = sqlite3.Row
         conn.enable_load_extension(True)

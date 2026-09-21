@@ -10,6 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from morgan_brain.config import Settings
 from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.render import _render_doctor
@@ -67,3 +69,24 @@ async def test_a_slow_answer_prints_its_seconds_beside_the_setting_it_crossed(tm
     assert line.startswith("provider: slow (3.")
     assert line.endswith(" s; MORGAN_DOCTOR_SLOW_AFTER_SECONDS=2.0)")
     assert report["provider_probe"]["timeout_seconds"] == 10.0
+
+
+async def test_a_connect_timeout_names_the_endpoint_not_the_probe_timeout(tmp_path, monkeypatch):
+    """No connection within the timeout is a host that is off or an address that is wrong
+    (SPEC-phase0 section 3.4): the endpoint setting is what to check, not the timeout."""
+    real_client = httpx.AsyncClient
+
+    def _never_connects(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("timed out", request=request)
+
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(transport=httpx.MockTransport(_never_connects)),
+    )
+
+    report = await _report(tmp_path)
+
+    assert report["provider"] == report["embedding_provider"] == "unreachable"
+    assert report["provider_probe"]["error"] == "ConnectTimeout; check MORGAN_LLM_ENDPOINT"
+    assert report["embedding_probe"]["error"] == "ConnectTimeout; check MORGAN_EMBEDDING_ENDPOINT"

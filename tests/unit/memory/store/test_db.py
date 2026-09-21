@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from morgan_brain.memory.store.db import open_db, write_transaction
+from morgan_brain.memory.store.db import open_db, open_readonly, write_transaction
 
 
 def test_open_db_enables_wal_and_vec(tmp_path):
@@ -77,3 +77,45 @@ def test_a_nested_block_that_raises_undoes_only_its_own_statements(tmp_path):
             conn.execute("INSERT INTO t VALUES ('inner')")
             raise RuntimeError("inner fails")
     assert other.execute("SELECT a FROM t").fetchall() == [("outer",)]
+
+
+def _a_database_with_one_row(path):
+    conn = open_db(str(path))
+    conn.execute("CREATE TABLE t (a TEXT)")
+    conn.execute("INSERT INTO t VALUES ('kept')")
+    conn.commit()
+    conn.close()
+
+
+def test_open_readonly_cannot_write(tmp_path):
+    """What ``doctor`` opens with: a write through it is SQLite's own refusal, not a promise."""
+    _a_database_with_one_row(tmp_path / "m.db")
+    conn = open_readonly(str(tmp_path / "m.db"))
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="readonly database"):
+            conn.execute("INSERT INTO t VALUES ('written')")
+        assert conn.execute("SELECT vec_version()").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_open_readonly_creates_no_missing_file(tmp_path):
+    with pytest.raises(sqlite3.OperationalError):
+        open_readonly(str(tmp_path / "absent.db"))
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_open_readonly_opens_the_path_it_is_given_whatever_its_characters(tmp_path):
+    """In a bare ``file:`` URI a ``#`` starts the fragment: SQLite would open the path cut off
+    there, read-write, creating it. The path is percent-encoded, so it is the file that opens."""
+    folder = tmp_path / "a #1 %20"
+    folder.mkdir()
+    _a_database_with_one_row(folder / "m.db")
+
+    conn = open_readonly(str(folder / "m.db"))
+    try:
+        assert conn.execute("SELECT a FROM t").fetchone()[0] == "kept"
+    finally:
+        conn.close()
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["a #1 %20"]

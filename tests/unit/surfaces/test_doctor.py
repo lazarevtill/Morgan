@@ -85,9 +85,10 @@ async def test_a_client_that_cannot_be_built_is_reported_not_raised(tmp_path, mo
 
     report = await _report(tmp_path, llm_endpoint=_CLOSED, embedding_endpoint=_CLOSED)
 
+    # A local problem: no endpoint setting is named, since neither server is at fault.
     assert report["provider"] == report["embedding_provider"] == "unreachable"
-    assert report["provider_probe"]["error"] == "OSError; check MORGAN_LLM_ENDPOINT"
-    assert report["embedding_probe"]["error"] == "OSError; check MORGAN_EMBEDDING_ENDPOINT"
+    assert report["provider_probe"]["error"] == "the HTTP client could not be built (OSError)"
+    assert report["embedding_probe"]["error"] == "the HTTP client could not be built (OSError)"
 
 
 async def test_a_database_that_will_not_open_says_so_on_every_line_it_blanks(tmp_path):

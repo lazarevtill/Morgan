@@ -37,7 +37,14 @@ import pytest
 def _morgan(
     args: list[str], *, cwd: Path, data_dir: Path, extra_env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
-    env = {**os.environ, "MORGAN_DATA_DIR": str(data_dir), "MORGAN_EMBEDDING_BACKEND": "hash"}
+    # Port 1 refuses at once: `doctor` asks the chat endpoint, and must not find one of the
+    # developer's own (or wait out its probe timeout for one that is not there).
+    env = {
+        **os.environ,
+        "MORGAN_DATA_DIR": str(data_dir),
+        "MORGAN_EMBEDDING_BACKEND": "hash",
+        "MORGAN_LLM_ENDPOINT": "http://127.0.0.1:1/v1",
+    }
     if extra_env:
         env.update(extra_env)
     return subprocess.run(

@@ -54,7 +54,7 @@ _NO_EMBEDDINGS = (
 #: and read timeouts fire first when a connect or the answer stalls, so the failure is named
 #: for what stalled; the bound catches only an answer that keeps arriving a byte at a time,
 #: which restarts httpx's read timeout with every byte.
-_BOUND_GRACE_SECONDS = 0.25
+BOUND_GRACE_SECONDS = 0.25
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,7 @@ class RetryBudget:
     for it, the wait before it shrinking to leave that. One attempt takes at most
     ``attempt_seconds`` and never longer than what is left of the budget, so the budget bounds
     the call's wall time -- but for an answer that trickles in a byte at a time, which is cut
-    off ``_BOUND_GRACE_SECONDS`` later.
+    off ``BOUND_GRACE_SECONDS`` later.
     """
 
     seconds: float
@@ -261,7 +261,7 @@ class OpenAICompatEmbedder:
         """One request. httpx's timeouts end a stalled connect or read; ``asyncio.timeout``
         bounds the whole attempt, a grace later, because httpx's read timeout restarts with
         every chunk."""
-        async with asyncio.timeout(timeout + _BOUND_GRACE_SECONDS):
+        async with asyncio.timeout(timeout + BOUND_GRACE_SECONDS):
             resp = await client.post(
                 self._url,
                 json={"model": self._model, "input": texts},

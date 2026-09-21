@@ -18,7 +18,7 @@ import pytest
 from morgan_brain.config import Settings
 from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.render import _render_doctor
-from tests.fakes import flaky_model_server, model_server, slow_model_server
+from tests.fakes import flaky_model_server, model_server, raw_model_server, slow_model_server
 
 #: Port 1 refuses at once, so the probe a test does not look at contacts no server of the
 #: developer's own.
@@ -117,3 +117,40 @@ async def test_a_slow_200_is_still_slow(tmp_path):
     assert report["embedding_provider"] == "slow"
     assert report["embedding_probe"]["error"] is None
     assert "MORGAN_DOCTOR_SLOW_AFTER_SECONDS=0.5" in _line(report, "embedding_provider")
+
+
+def _answer_200(content_type: bytes, body: bytes) -> Any:
+    head = (
+        b"HTTP/1.1 200 OK\r\nContent-Type: "
+        + content_type
+        + b"\r\nContent-Length: "
+        + str(len(body)).encode()
+        + b"\r\nConnection: close\r\n\r\n"
+    )
+    return lambda _request: head + body
+
+
+async def test_a_200_that_is_not_json_is_refused_naming_the_endpoint(tmp_path):
+    """A proxy path that answers every request with its own HTML page: up, answering 200, and
+    not an embedding server. What the page said stays out of the report."""
+    page = b"<html><title>Sign in to the gateway</title></html>"
+    with raw_model_server(_answer_200(b"text/html", page)) as embeddings:
+        report = await _report(tmp_path, embedding_endpoint=embeddings)
+
+    assert report["embedding_provider"] == "refused"
+    error = report["embedding_probe"]["error"]
+    assert error.startswith("HTTP 200, not an embeddings response (")
+    assert error.endswith("); check MORGAN_EMBEDDING_ENDPOINT")
+    assert "Sign in" not in repr(report) and "Sign in" not in _render_doctor(report)
+
+
+async def test_a_200_with_too_few_vectors_is_refused_naming_the_endpoint(tmp_path):
+    body = b'{"object": "list", "data": [{"index": 0, "embedding": [1.0, 0.0]}]}'
+    with raw_model_server(_answer_200(b"application/json", body)) as embeddings:
+        report = await _report(tmp_path, embedding_endpoint=embeddings)
+
+    assert report["embedding_provider"] == "refused"
+    assert report["embedding_probe"]["error"] == (
+        "HTTP 200, not an embeddings response (1 vectors for 5 inputs); "
+        "check MORGAN_EMBEDDING_ENDPOINT"
+    )

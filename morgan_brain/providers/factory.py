@@ -17,7 +17,11 @@ from morgan_brain.config import Settings
 from morgan_brain.memory import fingerprint
 from morgan_brain.memory.checked_embedder import CheckedEmbedder
 from morgan_brain.memory.embedder import Embedder, FakeEmbedder
-from morgan_brain.providers.embeddings import OpenAICompatEmbedder, RetryBudget
+from morgan_brain.providers.embeddings import (
+    BOUND_GRACE_SECONDS,
+    OpenAICompatEmbedder,
+    RetryBudget,
+)
 from morgan_brain.providers.openai_compat import OpenAICompatAdapter
 from morgan_brain.providers.wire import is_refusal
 
@@ -149,7 +153,9 @@ class Probe(NamedTuple):
     ``None`` when it gave no answer: refused, unresolved, or silent past the timeout. ``error``
     says what went wrong, ``None`` when nothing did: an exception's class name, an HTTP status,
     and the setting to check -- never a server's own words, which may quote back the key the
-    request carried. ``vectors`` is an embedding probe's answer, one per input, else ``None``.
+    request carried. A 2xx with an ``error`` is an answer that was not what was asked for: an
+    embedding probe answered with something other than embeddings. ``vectors`` is an embedding
+    probe's answer, one per input, else ``None``.
     """
 
     seconds: float
@@ -179,26 +185,40 @@ async def _probe(
     with what *hints* says that status means; one a retry may mend, a 429 or another 5xx, is
     named by its status alone.
 
+    No connection within *timeout* (``ConnectTimeout``) is a host that is off or an address
+    that is wrong, and names *setting*; a connection that gave no answer within it names the
+    timeout setting. httpx's own timeouts end a stalled connect or read and say which; the
+    overall bound comes ``BOUND_GRACE_SECONDS`` later, as the embedder's does, so it catches
+    only an answer that trickles in a byte at a time.
+
     The clock starts once the client is built: building it loads a TLS context, which is no
     part of the server's answer. Building it can fail on its own -- a CA bundle that is not
-    there -- and is then reported like any request that got no answer, timed from the attempt
-    to build it.
+    there -- which is this machine's problem, not either server's, and is said so with no
+    endpoint setting named.
     """
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     started = time.monotonic()
     try:
-        async with httpx.AsyncClient() as client:
-            started = time.monotonic()
-            async with asyncio.timeout(timeout):
+        client = httpx.AsyncClient()
+    except Exception as exc:  # noqa: BLE001 -- a local failure is a finding, not a crash
+        error = f"the HTTP client could not be built ({type(exc).__name__})"
+        return Probe(time.monotonic() - started, None, error), None
+    async with client:
+        started = time.monotonic()
+        try:
+            async with asyncio.timeout(timeout + BOUND_GRACE_SECONDS):
                 resp = await client.request(
                     method, url, headers=headers, json=body, timeout=timeout
                 )
-    except (httpx.TimeoutException, TimeoutError):
-        error = f"no answer within {timeout:g} s ({_PROBE_TIMEOUT_SETTING})"
-        return Probe(time.monotonic() - started, None, error), None
-    except Exception as exc:  # noqa: BLE001 -- no answer is a normal finding, not an error
-        error = f"{type(exc).__name__}; check {setting}"
-        return Probe(time.monotonic() - started, None, error), None
+        except httpx.ConnectTimeout:
+            error = f"ConnectTimeout; check {setting}"
+            return Probe(time.monotonic() - started, None, error), None
+        except (httpx.TimeoutException, TimeoutError):
+            error = f"no answer within {timeout:g} s ({_PROBE_TIMEOUT_SETTING})"
+            return Probe(time.monotonic() - started, None, error), None
+        except Exception as exc:  # noqa: BLE001 -- no answer is a normal finding, not an error
+            error = f"{type(exc).__name__}; check {setting}"
+            return Probe(time.monotonic() - started, None, error), None
     seconds = time.monotonic() - started
     status = resp.status_code
     if 200 <= status < 300:
@@ -255,12 +275,19 @@ async def check_embeddings_reachable(settings: Settings) -> Probe:
     )
     if resp is None:
         return probe
+    # A 200 that is not an embeddings response -- a proxy's HTML page, say -- is the wrong
+    # server at that address: named by the endpoint setting, never by what the page said.
     try:
         # Each item names the input it embeds; the order of the list is not promised.
         data = sorted(resp.json()["data"], key=lambda item: item["index"])
         vectors = [[float(x) for x in item["embedding"]] for item in data]
     except Exception as exc:  # noqa: BLE001 -- a malformed answer is a finding, not a crash
-        return probe._replace(error=f"the answer carried no embeddings ({type(exc).__name__})")
+        return probe._replace(error=_not_embeddings(type(exc).__name__, endpoint.setting))
     if len(vectors) != len(texts):
-        return probe._replace(error=f"{len(vectors)} vectors answered for {len(texts)} inputs")
+        found = f"{len(vectors)} vectors for {len(texts)} inputs"
+        return probe._replace(error=_not_embeddings(found, endpoint.setting))
     return probe._replace(vectors=vectors)
+
+
+def _not_embeddings(why: str, setting: str) -> str:
+    return f"HTTP 200, not an embeddings response ({why}); check {setting}"

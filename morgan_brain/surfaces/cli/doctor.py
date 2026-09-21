@@ -19,12 +19,12 @@ servers and fail on their own: ``provider`` is the chat endpoint, which ``ask`` 
 embeds -- ``"not used"`` under the hash backend, which calls no server. Each is ``reachable``;
 ``slow``, when it answered after ``MORGAN_DOCTOR_SLOW_AFTER_SECONDS`` or answered a 429 or
 another 5xx; ``refused``, when it answered and refused the request (a 401 or 403 for the key,
-another 4xx or a 501 for the endpoint); or ``unreachable``, when no answer came within
-``MORGAN_DOCTOR_PROBE_TIMEOUT_SECONDS`` or no connection was made. A host that answered is
-never called unreachable: the embedding host loads its model on the first request after idle,
-so slow is its normal first answer. The embedding probe embeds the five fingerprint strings,
-and ``embedding_space`` compares their vectors with the fingerprint the database recorded --
-compares only: recording one is a write.
+another 4xx, a 501, or a 200 that is not an embeddings response for the endpoint); or
+``unreachable``, when no answer came within ``MORGAN_DOCTOR_PROBE_TIMEOUT_SECONDS`` or no
+connection was made. A host that answered is never called unreachable: the embedding host
+loads its model on the first request after idle, so slow is its normal first answer. The
+embedding probe embeds the five fingerprint strings, and ``embedding_space`` compares their
+vectors with the fingerprint the database recorded -- compares only: recording one is a write.
 """
 
 from __future__ import annotations
@@ -437,13 +437,16 @@ def _verdict(probe: Probe, settings: Settings) -> str:
     """``unreachable`` only when no answer came: none within the timeout, or no connection.
     A host that answered is never unreachable. It is ``refused`` when the answer refuses the
     request (``is_refusal``: a 401 or 403 for the key, another 4xx, a redirect or a 501 for
-    the endpoint), as an embedding call's ``ProviderRefused`` classifies it; ``slow`` when it
+    the endpoint), as an embedding call's ``ProviderRefused`` classifies it, or is a 2xx that
+    is not what was asked for (an embeddings request answered with a web page); ``slow`` when it
     answered after ``MORGAN_DOCTOR_SLOW_AFTER_SECONDS`` -- however much after -- or answered
     a 429 or another 5xx, which a retry may mend, as a host loading its model answers; and
     ``reachable`` otherwise."""
     if probe.status is None:
         return "unreachable"
     if 200 <= probe.status < 300:
+        if probe.error is not None:
+            return "refused"
         return "slow" if probe.seconds > settings.doctor_slow_after_seconds else "reachable"
     return "refused" if is_refusal(probe.status) else "slow"
 

@@ -103,7 +103,7 @@ def test_doctor_reports_actionable_status(tmp_path):
 def test_a_cli_the_suite_starts_reads_none_of_the_developers_configuration(tmp_path):
     """The developer's ~/.config/morgan/.env points at their real model servers. A test
     that read it would pass or fail with the contents of their home directory."""
-    out = _run(["doctor", "--json"], _hash_env(tmp_path), tmp_path)
+    out = _run(["doctor", "--json"], _hash_env(tmp_path, MORGAN_LLM_ENDPOINT=_CLOSED), tmp_path)
 
     env_files = json.loads(out.stdout)["env_files"]
     assert env_files
@@ -115,7 +115,7 @@ def test_doctor_rows_vectors_catches_an_unwired_vector_store(tmp_path):
     together normally, but if the vector store were never actually written to, `rows.vectors`
     would stay 0 while `rows.memories`/`rows.fts` go non-zero -- doctor must be able to show
     that divergence, not paper over it."""
-    env = _hash_env(tmp_path)
+    env = _hash_env(tmp_path, MORGAN_LLM_ENDPOINT=_CLOSED)
     assert _run(["remember", "a fact worth keeping"], env, tmp_path).returncode == 0
     out = _run(["doctor", "--json"], env, tmp_path)
     report = json.loads(out.stdout)

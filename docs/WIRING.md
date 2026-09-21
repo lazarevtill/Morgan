@@ -125,9 +125,12 @@ under the hash backend it reads `not used`. Each reads one of four:
   first answer: that is `slow`, and it works.
 - `refused`: it answered, and refused the request. A 401 or 403 names the key setting the
   request carried (`MORGAN_EMBEDDING_API_KEY` when embeddings have their own endpoint, else
-  `MORGAN_LLM_API_KEY`); any other 4xx, a redirect or a 501 names the endpoint setting.
-- `unreachable`: no answer came within `MORGAN_DOCTOR_PROBE_TIMEOUT_SECONDS` (60 s), or no
-  connection was made. A host that answered is never unreachable.
+  `MORGAN_LLM_API_KEY`); any other 4xx, a redirect, a 501, or a 200 that is not an
+  embeddings response (a proxy's web page) names the endpoint setting.
+- `unreachable`: no answer came within `MORGAN_DOCTOR_PROBE_TIMEOUT_SECONDS` (60 s), which
+  names that setting, or no connection was made, which names the endpoint setting. A host that
+  answered is never unreachable. When this machine cannot build an HTTP client at all, the
+  line says so and names neither.
 
 Each line says why: how long the answer took, the timeout it missed, the HTTP status, the
 setting to check. `--json` gives each probe's `seconds`, `timeout_seconds`,

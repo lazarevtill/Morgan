@@ -190,3 +190,20 @@ def _memory_rows(path: str | Path) -> list[tuple]:
         ).fetchall()
     finally:
         conn.close()
+
+
+async def test_a_snapshot_directory_with_a_hash_in_its_name_is_read_from_its_own_files(tmp_path):
+    """Verifying and describing a snapshot opens it through a ``file:`` URI. Unencoded, a ``#``
+    in the directory name cut the path there: SQLite created an empty file at the cut-off path,
+    verified that and described that -- a corrupt snapshot would have passed its check."""
+    db = await _closed_db_with_one_memory(tmp_path / "morgan.db")
+    into = tmp_path / "snap#dir"
+
+    taken = snapshot.take(
+        db, into=into, reason="hash", clock=lambda: datetime(2026, 9, 21, tzinfo=UTC)
+    )
+    [listed] = snapshot.list_snapshots(into)
+
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["morgan.db", "snap#dir"]
+    assert taken.counts["memories"] == 1
+    assert (listed.user_version, listed.counts) == (taken.user_version, taken.counts)

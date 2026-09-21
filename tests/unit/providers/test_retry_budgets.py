@@ -18,7 +18,7 @@ import re
 import pytest
 
 from morgan_brain.config import Settings
-from morgan_brain.providers.embeddings import _BOUND_GRACE_SECONDS
+from morgan_brain.providers.embeddings import BOUND_GRACE_SECONDS
 from morgan_brain.providers.factory import build_embedder
 from morgan_brain.providers.wire import ProviderUnreachable
 from tests.fakes import model_server, silent_model_server
@@ -47,7 +47,7 @@ async def test_an_answer_that_trickles_in_still_ends_inside_the_budget(client_re
         pytest.raises(ProviderUnreachable) as exc,
     ):
         await build_embedder(_at(settings, url)).embed("x")
-    assert client_ready.since() < 1.2 + _BOUND_GRACE_SECONDS + TOLERANCE
+    assert client_ready.since() < 1.2 + BOUND_GRACE_SECONDS + TOLERANCE
     assert "answered too slowly or dropped: ReadTimeout after " in str(exc.value)
 
 
