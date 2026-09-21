@@ -24,13 +24,19 @@ interrupted run picks back up instead of restarting the whole grid. Nothing abou
 were sampled is stored: the sample is a deterministic function of (db, --rows), so a resumed
 run reselects the same rows without ever persisting memory content or ids to disk.
 
-Conditions and their wait cost, once run in full (`--rows 500`, no `--quick`):
+Conditions and their wait cost, run unrestricted (`--rows 500`, no `--quick`, no
+`--cold-conditions`):
     3 batch sizes x 2 (warm/cold) x 2 client counts = 12 conditions x 500 rows = ~6,000 calls.
     Each "cold" condition waits, on its own, for the embedding host to report the model
     unloaded (native Ollama ``/api/ps``) AND for 30 minutes to have passed since this script's
     own last request -- 6 such waits in the full grid. ``--cold-starts N`` adds N more of the
     same wait, each followed by timing a single embed call rather than a whole condition; it
     measures load latency, not drift, and is otherwise independent of the grid above.
+    ``--cold-conditions "8:1"`` restricts the grid's cold half to just that one
+    batch:concurrency combination (the warm half always runs in full), bringing the wait
+    count down to 1 (that condition) + N (``--cold-starts``) -- see
+    docs/measurements/2026-09-phase0-baseline.md Section 3 for which shape the controller
+    actually ran and why.
 
 ``--quick`` shrinks the grid to warm-only, batch sizes {1, 8}, both client counts -- enough to
 exercise every code path (sampling, batching, single- and two-client dispatch, progress
@@ -40,8 +46,8 @@ persistence) without an idle wait, for a fast smoke test:
 
 The full run (see docs/measurements/2026-09-phase0-baseline.md for the exact invocation used):
 
-    measure_repeat_distribution.py --db SNAPSHOT.db --rows 500 --cold-starts 3 \\
-        --results-json OUT.json --results-md OUT.md
+    measure_repeat_distribution.py --db SNAPSHOT.db --rows 500 --cold-conditions "8:1" \\
+        --cold-starts 3 --results-json OUT.json --results-md OUT.md
 """
 
 from __future__ import annotations
@@ -92,16 +98,34 @@ class Condition:
         return f"batch{self.batch_size}_{self.warmth}_c{self.concurrency}"
 
 
-def build_plan(*, quick: bool) -> list[Condition]:
+def parse_cold_conditions(spec: str | None) -> set[tuple[int, int]] | None:
+    """Parse ``--cold-conditions "8:1,32:2"`` into ``{(8, 1), (32, 2)}``. ``None`` (the
+    default, *spec* not given) means every cold batch/concurrency combination runs -- the
+    full grid. A given set restricts the *cold* half of the grid to exactly those
+    combinations; the warm half is never restricted by this option."""
+    if spec is None:
+        return None
+    pairs: set[tuple[int, int]] = set()
+    for part in spec.split(","):
+        batch_str, _, concurrency_str = part.partition(":")
+        pairs.add((int(batch_str), int(concurrency_str)))
+    return pairs
+
+
+def build_plan(
+    *, quick: bool, cold_conditions: set[tuple[int, int]] | None = None
+) -> list[Condition]:
     batches = QUICK_BATCH_SIZES if quick else FULL_BATCH_SIZES
     warmths = QUICK_WARMTH if quick else FULL_WARMTH
     concurrencies = QUICK_CONCURRENCY if quick else FULL_CONCURRENCY
-    return [
-        Condition(batch_size=b, warmth=w, concurrency=c)
-        for w in warmths
-        for b in batches
-        for c in concurrencies
-    ]
+    plan = []
+    for w in warmths:
+        for b in batches:
+            for c in concurrencies:
+                if w == "cold" and cold_conditions is not None and (b, c) not in cold_conditions:
+                    continue
+                plan.append(Condition(batch_size=b, warmth=w, concurrency=c))
+    return plan
 
 
 # ------------------------------------------------------------------------------------ sampling
@@ -410,6 +434,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Shrink the grid for a fast smoke test: warm only, batch sizes 1 and 8.",
     )
     parser.add_argument(
+        "--cold-conditions",
+        default=None,
+        help='Restrict the grid\'s cold half to these batch:concurrency pairs, e.g. "8:1" '
+        'or "8:1,32:2". Omit to run every cold combination (the full grid). Never '
+        "restricts the warm half.",
+    )
+    parser.add_argument(
         "--results-json",
         type=Path,
         default=None,
@@ -450,7 +481,9 @@ async def run_grid(
     texts = [r.content for r in rows]
 
     async with httpx.AsyncClient() as probe_client:
-        for condition in build_plan(quick=args.quick):
+        cold_conditions = parse_cold_conditions(args.cold_conditions)
+        plan = build_plan(quick=args.quick, cold_conditions=cold_conditions)
+        for condition in plan:
             if condition.key in data["conditions"]:
                 log(f"skip {condition.key}: already in {args.results_json}")
                 continue
@@ -539,6 +572,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     if not args.model:
         log("no --model given and $MORGAN_EMBEDDING_MODEL is unset")
+        return 2
+    try:
+        parse_cold_conditions(args.cold_conditions)
+    except ValueError:
+        log(f'--cold-conditions {args.cold_conditions!r} is not "batch:concurrency[,...]"')
         return 2
 
     results_json = args.results_json or Path(f"{args.db.stem}.repeat-distribution.json")

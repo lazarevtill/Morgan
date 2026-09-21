@@ -47,10 +47,55 @@ Success: no issues found in 48 source files
 (`test_a_run_completes_and_scores_over_the_labelled_set`) asserts only that a run completes
 and scores -- on purpose, per its own docstring: a hash embedder has no semantic similarity,
 so any quality number it produced would be an artefact of sha256, and the test prints nothing.
-This card was produced with the same module's public API
-(`load_probe_set`/`run_probes`/`score_run`/`describe_run`, `Settings(embedding_backend="hash",
-embedding_dim=64)`, `FakeEmbedder(dim=64)`) run ad hoc for this record; the live scorecard
-below is the one the checked-in live test actually prints with `-s`.
+This is the phase-0 exit criterion ("the hash scorecard unchanged to the digit"), so whoever
+runs that exit must be able to reproduce this card exactly -- the exact driver, runnable from
+the worktree root with the same interpreter as every other command in this file:
+
+```python
+import asyncio
+import subprocess
+from pathlib import Path
+
+from morgan_brain.composition import build_memory_module
+from morgan_brain.config import Settings
+from morgan_brain.eval.retrieval import describe_run, load_probe_set, run_probes, score_run
+from morgan_brain.memory.embedder import FakeEmbedder
+from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.store.db import open_db
+
+PROBES = Path("tests/memory_quality/probes.json")
+K = 8
+
+
+def commit() -> str | None:
+    out = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True
+    )
+    return out.stdout.strip() or None
+
+
+async def main() -> None:
+    settings = Settings(embedding_backend="hash", embedding_dim=64)
+    conn = open_db(":memory:")
+    module = build_memory_module(conn=conn, embedder=FakeEmbedder(dim=64), dim=64)
+    probe_set = load_probe_set(PROBES)
+
+    results = await run_probes(probe_set, gate=MemoryGate(module), user_id="owner", k=K)
+    card = score_run(results, k=K)
+    run = describe_run(
+        settings=settings, probe_path=PROBES, probe_set=probe_set, conn=conn,
+        k=K, floor_margin=None, commit=commit(),
+    )
+    print(run.format())
+    print(card.format(K))
+
+
+asyncio.run(main())
+```
+
+Save as e.g. `hash_scorecard.py` in the worktree root and run
+`.venv/Scripts/python.exe hash_scorecard.py` (not committed -- it duplicates no production
+logic, only composes the same public API the live test below already imports). Output:
 
 ```
 run: embedding=hash stub (dim 64)  k=8  floor=off  probes=probes.json@510b5f20fe94 (86 memories, 60 probes)  db-upgrade=2  commit=24f1566
@@ -119,9 +164,13 @@ an empty database. See the row counts below for what the database actually holds
 
 ### Live database row counts -- read-only
 
-Opened with a raw `sqlite3` URI (`file:...?mode=ro`), `sqlite-vec` loaded directly into that
+Database: `~/.local/share/morgan/morgan.db` (the owner's live database -- not the eval
+snapshot used elsewhere in this file). Opened with a raw `sqlite3` URI,
+`file:~/.local/share/morgan/morgan.db?mode=ro`, `sqlite-vec` loaded directly into that
 connection, never through `morgan_brain`'s `open_db` (which switches journal mode -- a write
--- as a side effect of opening). Nothing in this database was written.
+-- as a side effect of opening). Nothing in this database was written. Raw output (unredacted
+path):
+`~/Documents/GitHub/morgan-research-2026-09-19/measurements/2026-09-21-live-db-row-counts.txt`.
 
 Per table:
 
@@ -254,28 +303,34 @@ and `--cold-starts` need a genuine 30-minute idle wait and are exercised only by
 
 ### The full run -- not run by this task; the controller runs it in the background
 
-~6,000 embeddings (3 batch sizes x 2 warmth x 2 client counts x 500 rows) plus
-`--cold-starts 3`. Exact invocation (env export first, chat key never exported):
+The script's grid, run with every batch/warmth/concurrency combination and no
+`--cold-conditions` restriction, costs up to 9 separate 30-minute idle waits (6 "cold"
+conditions, each waiting on its own genuine idle-and-unloaded state, plus 3 for
+`--cold-starts 3`) -- more than the brief's "about three 30-minute idle waits" estimate. The
+counter-argument: a "cold" condition is 500 rows, i.e. one cold request followed by 499 warm
+ones, and the p1 of 500 samples is roughly the 5th-smallest -- one buried cold sample barely
+moves the reported p1 away from what a fully-warm condition would show, so six separate
+half-hour waits buy very little over one.
+
+**Controller ruling:** the background run uses the full *warm* grid (all 3 batch sizes x
+both client counts = 6 warm conditions) plus exactly **one** cold condition (batch 8, one
+client) plus `--cold-starts 3` -- about 4 waits total, not 9. The tolerance is set from the
+worst condition among *those*, not from the full 12-condition grid. `--cold-conditions "8:1"`
+implements this restriction (added to the script for this ruling; the warm half is never
+restricted by this option). Exact invocation (env export first, chat key never exported):
 
 ```
 export $(grep -E '^MORGAN_EMBEDDING_(ENDPOINT|MODEL|DIM)=' ~/.config/morgan/.env | xargs)
 .venv/Scripts/python.exe scripts/measure_repeat_distribution.py \
   --db ~/Documents/GitHub/morgan-eval-brain-2026-09-19-qwen3-8b/morgan.db \
-  --rows 500 --cold-starts 3 \
+  --rows 500 --cold-conditions "8:1" --cold-starts 3 \
   --results-json ~/Documents/GitHub/morgan-research-2026-09-19/measurements/2026-09-XX-repeat-distribution.json \
   --results-md ~/Documents/GitHub/morgan-research-2026-09-19/measurements/2026-09-XX-repeat-distribution.md
 ```
 
-Each of the grid's 6 "cold" conditions waits for its own genuine idle-and-unloaded state
-before running (per-condition, not shared across the cold half of the grid), which costs up
-to 6 waits there plus 3 more for `--cold-starts 3` -- more than the brief's "about three
-30-minute idle waits" estimate. Before spending that time, weigh it against what it buys: a
-"cold" condition is one cold request followed by 499 warm ones, and the p1 of 500 samples is
-roughly the 5th-smallest -- one buried cold sample is statistically invisible next to its
-warm twin's distribution. Six separate half-hour waits may not be worth more than one shared
-wait covering the whole cold half of the grid (only the first sub-condition run then
-genuinely cold, the rest warm-but-labelled-cold); this script does not make that call for
-the controller, it just implements the literal per-condition reading.
+This produces 6 warm conditions + 1 cold condition x 500 rows = 3,500 embeddings, plus 3
+single cold-start timings -- read the numbers when they land as measuring 7 conditions, not
+12; batch sizes 1 and 32 have no cold measurement in this run.
 
 **tolerance: pending (default 0.995)** -- Task 3b writes the full run's numbers and the
 tolerance verdict into this section, by this rule: **tolerance = 0.995, unless the worst
@@ -284,28 +339,35 @@ digits minus 0.003 -- naming the condition that set it.**
 
 ## 4. The `PARTITION KEY` measurement
 
-On a scratch copy of the eval snapshot (never the original -- verified byte-for-byte
-identical by checksum immediately after copying, before anything touched the copy), a second
-`vec_items` table was built with `project TEXT PARTITION KEY` (sqlite-vec 0.1.9) alongside the
-existing metadata-column table, populated from the same rows. 200 queries, evenly spread
-across the table, used each row's own stored vector as the query vector (no embedding call
-needed) with `k=8`, filtered by the same `user_id`/`project` metadata both tables carry. Run
-twice, independently, for stability:
+`scripts/measure_partition_key.py`: copies `--db` first (never touches the source -- opened
+read-only, copied via `shutil.copy2`, the copy deleted afterward unless `--keep-copy`), builds
+a second `vec_items_pk` table on the copy with `project TEXT PARTITION KEY` (sqlite-vec
+0.1.9) alongside the existing metadata-column `vec_items`, populated from the same rows. Runs
+`--queries` KNN queries, evenly spread across the table, against both tables -- each query
+uses a sampled row's own stored vector (no embedding call needed) and the same
+`user_id`/`project` filter both tables carry -- and reports wall time and returned-id
+equality per table, `--runs` times for stability. No host, model, or path is hardcoded; every
+value above comes from the command below.
+
+```bash
+.venv/Scripts/python.exe scripts/measure_partition_key.py \
+  --db ~/Documents/GitHub/morgan-eval-brain-2026-09-19-qwen3-8b/morgan.db \
+  --queries 200 --k 8 --runs 2 \
+  --results-json ~/Documents/GitHub/morgan-research-2026-09-19/measurements/2026-09-21-partition-key.json
+```
+
+Raw output (unredacted path):
+`~/Documents/GitHub/morgan-research-2026-09-19/measurements/2026-09-21-partition-key.json`.
 
 ```
-run 1  metadata-column vec_items   : min=47.85ms  median=59.99ms  mean=60.57ms  max=79.62ms
-       PARTITION KEY   vec_items_pk: min=32.73ms  median=41.18ms  mean=41.48ms  max=51.63ms
-       id mismatches: 0 / 200
-
-run 2  metadata-column vec_items   : min=50.32ms  median=62.36ms  mean=62.22ms  max=86.50ms
-       PARTITION KEY   vec_items_pk: min=32.38ms  median=42.74ms  mean=42.85ms  max=56.82ms
-       id mismatches: 0 / 200
+run 1: metadata median=58.63ms mean=58.88ms (min=47.23ms max=73.09ms) | partition median=41.94ms mean=42.13ms (min=32.45ms max=53.97ms) | mismatches=0/200
+run 2: metadata median=58.71ms mean=59.15ms (min=47.24ms max=72.04ms) | partition median=41.96ms mean=42.12ms (min=32.93ms max=52.55ms) | mismatches=0/200
 ```
 
-**Verdict: recall time drops clearly (~30% faster on both median and mean, in both runs)
+**Verdict: recall time drops clearly (~28% faster on both median and mean, in both runs)
 with identical ids returned (0/200 mismatches, both runs) -- take the `PARTITION KEY`.**
 
 ## 5. Commit
 
-This file and `scripts/measure_repeat_distribution.py` are committed together. No file under
-`morgan_brain/` changed in this task.
+This file, `scripts/measure_repeat_distribution.py`, and `scripts/measure_partition_key.py`
+are committed together. No file under `morgan_brain/` changed in this task.
