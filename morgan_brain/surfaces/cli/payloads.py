@@ -8,9 +8,11 @@ stops them drifting apart.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from morgan_brain.memory.gate import ForgetReport
+from morgan_brain.memory.migrations import Step
 from morgan_brain.memory.snapshot import RestoreResult, SnapshotResult
 from morgan_brain.models import Memory, TemporalFact
 
@@ -55,6 +57,50 @@ def restore_to_dict(result: RestoreResult) -> dict[str, Any]:
         "before": dict(result.before),
         "after": dict(result.after),
         "safety_snapshot": str(result.safety.path),
+    }
+
+
+def _step_to_dict(step: Step) -> dict[str, Any]:
+    return {"number": step.number, "name": step.name, "heavy": step.heavy}
+
+
+def migration_plan_to_dict(
+    *, database: str, dry_run: bool, user_version: int, code_version: int, pending: Sequence[Step]
+) -> dict[str, Any]:
+    """What ``morgan migrate`` would run: under ``--dry-run``, or when nothing is pending."""
+    return {
+        "database": database,
+        "dry_run": dry_run,
+        "user_version": user_version,
+        "code_version": code_version,
+        "pending": [_step_to_dict(s) for s in pending],
+    }
+
+
+def migration_to_dict(
+    *,
+    database: str,
+    snapshot: SnapshotResult,
+    from_version: int,
+    user_version: int,
+    code_version: int,
+    applied: Sequence[tuple[Step, dict[str, int]]],
+    after: dict[str, int],
+    quick_check: str,
+) -> dict[str, Any]:
+    """What ``morgan migrate`` ran. ``before`` is counted off the snapshot and ``after`` off the
+    migrated database, so equal counts say no row was lost on the way."""
+    return {
+        "database": database,
+        "dry_run": False,
+        "snapshot": str(snapshot.path),
+        "from_version": from_version,
+        "user_version": user_version,
+        "code_version": code_version,
+        "steps": [{**_step_to_dict(s), "counts": dict(counts)} for s, counts in applied],
+        "before": dict(snapshot.counts),
+        "after": dict(after),
+        "quick_check": quick_check,
     }
 
 

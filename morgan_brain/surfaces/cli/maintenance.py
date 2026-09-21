@@ -1,7 +1,7 @@
-"""``morgan snapshot`` and ``morgan restore`` -- a verified VACUUM INTO copy of the whole
-database, and putting one back.
+"""``morgan snapshot``, ``morgan restore`` and ``morgan migrate`` -- a verified VACUUM INTO
+copy of the whole database, putting one back, and running the migration steps an open may not.
 
-Neither is project-scoped: each acts on the whole database file, not one project's rows, so
+None is project-scoped: each acts on the whole database file, not one project's rows, so
 these handlers -- unlike every other verb -- ignore ``--project``/``--all-projects``, and
 their subparsers in ``__main__.py`` offer neither flag.
 """
@@ -9,14 +9,21 @@ their subparsers in ``__main__.py`` offer neither flag.
 from __future__ import annotations
 
 import argparse
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from morgan_brain.composition import sqlite_path
+from morgan_brain.composition import migration_stores, sqlite_path
 from morgan_brain.config import Settings
-from morgan_brain.memory import snapshot
-from morgan_brain.surfaces.cli.payloads import restore_to_dict, snapshot_to_dict
+from morgan_brain.memory import migrations, snapshot
+from morgan_brain.memory.store.db import open_db
+from morgan_brain.surfaces.cli.payloads import (
+    migration_plan_to_dict,
+    migration_to_dict,
+    restore_to_dict,
+    snapshot_to_dict,
+)
 
 
 def _utcnow() -> datetime:
@@ -75,3 +82,82 @@ async def cmd_restore(args: argparse.Namespace, settings: Settings, project: str
         busy_timeout_ms=settings.db_busy_timeout_ms,
     )
     return restore_to_dict(result)
+
+
+def _user_version(conn: sqlite3.Connection) -> int:
+    return int(conn.execute("PRAGMA user_version").fetchone()[0])
+
+
+async def cmd_migrate(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
+    """List the pending migration steps, or run every one of them behind a snapshot.
+
+    *project* is accepted only because ``main()`` computes it for every verb before
+    dispatching -- a migration covers the whole database, so it is never read here.
+    """
+    return _migrate(settings, dry_run=args.dry_run)
+
+
+def _migrate(settings: Settings, *, dry_run: bool) -> dict[str, Any]:
+    """``cmd_migrate``'s work, which is blocking file and database I/O from start to end.
+
+    In order: open the database and read what is pending, building no store, so ``--dry-run``
+    writes nothing -- not even a table -- and stops there; nothing pending stops there too.
+    Otherwise a ``migrate`` snapshot, taken before anything changes (``VACUUM INTO`` cannot run
+    inside the transaction that follows); then the stores, and every pending step in one write
+    transaction (``migrations.migrate``); then ``PRAGMA quick_check`` once it has committed. A
+    step that raises rolls the whole wave back, and the error names the snapshot, which stays.
+    """
+    db_path = sqlite_path(settings.temporal_db_url)
+    if not Path(db_path).is_file():
+        raise FileNotFoundError(f"no database at {db_path}: nothing to migrate")
+    code_version = len(migrations._STEPS)
+
+    conn = open_db(db_path, busy_timeout_ms=settings.db_busy_timeout_ms)
+    try:
+        from_version = _user_version(conn)
+        steps = migrations.pending(conn)
+        if dry_run or not steps:
+            return migration_plan_to_dict(
+                database=db_path,
+                dry_run=dry_run,
+                user_version=from_version,
+                code_version=code_version,
+                pending=steps,
+            )
+
+        taken = snapshot.take(
+            db_path,
+            into=Path(settings.snapshot_dir),
+            reason="migrate",
+            clock=_utcnow,
+            busy_timeout_ms=settings.db_busy_timeout_ms,
+        )
+        stores = migration_stores(conn)
+        try:
+            applied = migrations.migrate(conn, stores)
+        except Exception as exc:
+            raise RuntimeError(
+                f"migration failed and was rolled back, so the database is as it was at "
+                f"user_version {from_version}: {exc} (the snapshot taken first is {taken.path})"
+            ) from exc
+        check = str(conn.execute("PRAGMA quick_check").fetchone()[0])
+        user_version = _user_version(conn)
+    finally:
+        conn.close()
+
+    if check != "ok":
+        raise RuntimeError(
+            f"{db_path} failed PRAGMA quick_check after migrating: {check} -- "
+            f"`morgan restore {taken.path} --yes` puts back the database as it was"
+        )
+    _, after = snapshot._describe(Path(db_path))
+    return migration_to_dict(
+        database=db_path,
+        snapshot=taken,
+        from_version=from_version,
+        user_version=user_version,
+        code_version=code_version,
+        applied=applied,
+        after=after,
+        quick_check=check,
+    )

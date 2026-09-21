@@ -1,19 +1,28 @@
-"""Bring a database written by an older Morgan up to what this one writes, once, on open.
+"""Bring a database written by an older Morgan up to what this one writes.
 
 Some stored data is derived by code rather than given by the caller -- a memory's entities
 are extracted from its content when it is stored. When that code changes, nothing already
-stored changes with it, so each such change adds a step here that re-derives what is stored.
+stored changes with it, so each such change adds a numbered step here that re-derives what
+is stored.
+
+A step is light or heavy. A light step only adds a table or a defaulted column, and runs when
+the database is opened (``upgrade``). A heavy step rewrites, moves or deletes rows, and runs
+only under ``morgan migrate`` (``migrate``), behind a snapshot: a client that merely opened
+the file has no snapshot behind it and no way back. Steps run strictly in order, so a light
+step queued behind a heavy one waits for ``migrate`` with it; until then the database opens
+read-only and every write raises ``DatabaseNeedsMigration``.
 
 The number of steps a database has been through is SQLite's own ``user_version`` header
 field. It is read and advanced inside the same write transaction as the steps, so two
 processes opening one file at once run each step once, and a step that fails leaves both
-the data and the counter as they were for the next open to retry.
+the data and the counter as they were, for the next open or ``morgan migrate`` to retry.
 """
 
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from itertools import takewhile
 from typing import NamedTuple
 
 from morgan_brain.memory.knowledge.extract import extract_entity_names
@@ -28,6 +37,32 @@ class Stores(NamedTuple):
 
     episodics: EpisodicStore
     entities: EntityIndex
+
+
+class Step(NamedTuple):
+    """One numbered change to what is stored.
+
+    *run* returns the rows it touched, per table, or ``None`` when it counts nothing;
+    ``migrate`` reports them. *heavy* is true for any step that rewrites, moves or deletes
+    rows -- those run only under ``morgan migrate``.
+    """
+
+    number: int
+    name: str
+    heavy: bool
+    run: Callable[[sqlite3.Connection, Stores], dict[str, int] | None]
+
+
+class DatabaseNeedsMigration(Exception):
+    """A write reached a database whose next step is heavy and has not been run.
+
+    *reason* names the pending steps and the command that runs them. It is the whole message,
+    and both surfaces show it to the owner: the CLI as its error, an MCP client as the tool's.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 def _reextract_entities(conn: sqlite3.Connection, stores: Stores) -> None:
@@ -65,10 +100,12 @@ def _drop_the_semantic_index(conn: sqlite3.Connection, stores: Stores) -> None:
 
 
 #: In order. Step *n* brings a database from ``user_version`` *n - 1* to *n*; append only.
-_STEPS: tuple[Callable[[sqlite3.Connection, Stores], None], ...] = (
+#: Steps 1 and 2 rewrite and drop, yet stay light: they predate the split, and every Morgan
+#: that shipped them already ran them on open.
+_STEPS: tuple[Step, ...] = (
     # A capital counts as a name only where its position does not explain it.
-    _reextract_entities,
-    _drop_the_semantic_index,
+    Step(1, "reextract entities", False, _reextract_entities),
+    Step(2, "drop the semantic index", False, _drop_the_semantic_index),
 )
 
 
@@ -76,14 +113,59 @@ def _version(conn: sqlite3.Connection) -> int:
     return int(conn.execute("PRAGMA user_version").fetchone()[0])
 
 
-def upgrade(conn: sqlite3.Connection, stores: Stores) -> None:
-    """Run every step the database behind *conn* has not been through."""
-    if _version(conn) >= len(_STEPS):
+def _advance(conn: sqlite3.Connection, step: Step) -> None:
+    # PRAGMA takes no bound parameters; the value is an int a Step carries.
+    conn.execute(f"PRAGMA user_version = {int(step.number)}")
+
+
+def pending(conn: sqlite3.Connection, steps: Sequence[Step] | None = None) -> tuple[Step, ...]:
+    """The steps the database behind *conn* has not been through, in order.
+
+    *steps* defaults to ``_STEPS``, looked up when called rather than bound when defined, so
+    opening, ``morgan migrate`` and ``restore``'s version check all read the one list.
+    """
+    done = _version(conn)
+    return tuple(s for s in (_STEPS if steps is None else steps) if s.number > done)
+
+
+def _light_prefix(steps: Sequence[Step]) -> tuple[Step, ...]:
+    """The steps before the first heavy one: all that may run on open."""
+    return tuple(takewhile(lambda s: not s.heavy, steps))
+
+
+def upgrade(
+    conn: sqlite3.Connection, stores: Stores, *, steps: Sequence[Step] | None = None
+) -> None:
+    """Run the consecutive pending light steps, stopping at the first heavy one.
+
+    Nothing to run means no write lock: a database waiting for ``morgan migrate`` is opened
+    by every client, and none of them should queue behind another process's write to find
+    that out.
+    """
+    if not _light_prefix(pending(conn, steps)):
         return
     with write_transaction(conn):
         # Read again under the lock: another process may have upgraded since the check above.
-        done = _version(conn)
-        for number, step in enumerate(_STEPS[done:], start=done + 1):
-            step(conn, stores)
-            # PRAGMA takes no bound parameters; the value is an int this function counted.
-            conn.execute(f"PRAGMA user_version = {int(number)}")
+        for step in _light_prefix(pending(conn, steps)):
+            step.run(conn, stores)
+            _advance(conn, step)
+
+
+def migrate(
+    conn: sqlite3.Connection, stores: Stores, *, steps: Sequence[Step] | None = None
+) -> list[tuple[Step, dict[str, int]]]:
+    """Run every pending step, light and heavy, in one write transaction.
+
+    ``user_version`` advances after each step, inside the transaction, so a step that raises
+    rolls back the whole wave: the data and the counter stay where they were before this call.
+    Returns each step run with the rows it reported touching (``{}`` when it counts nothing).
+    The caller takes the snapshot first -- ``VACUUM INTO`` cannot run inside a transaction.
+    """
+    applied: list[tuple[Step, dict[str, int]]] = []
+    with write_transaction(conn):
+        # Read under the lock, for the same reason as ``upgrade``.
+        for step in pending(conn, steps):
+            counts = step.run(conn, stores)
+            _advance(conn, step)
+            applied.append((step, dict(counts or {})))
+    return applied

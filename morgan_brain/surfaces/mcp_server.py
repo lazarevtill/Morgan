@@ -65,8 +65,10 @@ TOOL_NAMES: tuple[str, ...] = ("remember", "recall", "facts", "forget", "ask_mor
 #: asking. Read-only is the hint that lets it, so only the tools that read make that claim:
 #: ``ask_morgan`` sounds like a query, but a turn stores both halves of the exchange. Every
 #: tool states every hint, and registering a tool missing from this table fails, so none is
-#: left to a client's defaults. Opening the database can upgrade it (``memory.migrations``);
-#: that re-derives stored data and changes no memory a caller wrote.
+#: left to a client's defaults. Opening the database runs only its light migration steps
+#: (``memory.migrations``), which re-derive stored data and change no memory a caller wrote.
+#: While a heavy step waits for ``morgan migrate``, every write tool raises
+#: ``DatabaseNeedsMigration``, and the SDK hands its message to the client as an error result.
 TOOL_ANNOTATIONS: dict[str, ToolAnnotations] = {
     "remember": ToolAnnotations(
         readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False

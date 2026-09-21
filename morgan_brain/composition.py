@@ -12,6 +12,7 @@ import asyncio
 import pathlib
 import sqlite3
 import threading
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -23,7 +24,7 @@ from morgan_brain.config import Settings, get_settings
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
-from morgan_brain.memory.migrations import Stores, upgrade
+from morgan_brain.memory.migrations import Step, Stores, pending, upgrade
 from morgan_brain.memory.module import MemoryModule
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.memory.store.entities import EntityIndex
@@ -116,6 +117,14 @@ class AppContext(MemoryContext):
     client: OpenAICompatAdapter
 
 
+def migration_stores(conn: sqlite3.Connection) -> Stores:
+    """The stores a migration step reads and writes, opened over *conn*.
+
+    One place builds them, for the light steps an open runs and for ``morgan migrate``.
+    """
+    return Stores(episodics=EpisodicStore(conn), entities=EntityIndex(conn))
+
+
 def build_memory_module(
     conn: sqlite3.Connection,
     *,
@@ -124,24 +133,37 @@ def build_memory_module(
     clock: Any = utcnow,
     floor_margin: float | None = None,
 ) -> MemoryModule:
-    """Every store over one connection, upgraded to what this version writes.
+    """Every store over one connection, with the pending light migration steps run.
 
-    Also the seam tests use with a small fake embedder.
+    A heavy step is left for ``morgan migrate``; ``build_memory_context`` then opens the gate
+    read-only. Also the seam tests use with a small fake embedder.
     """
-    entities = EntityIndex(conn)
-    episodics = EpisodicStore(conn)
+    stores = migration_stores(conn)
     module = MemoryModule(
         embedder=embedder,
         vectors=SqliteVectorIndex(conn, dim=dim),
         temporal=SqliteTemporalStore(conn=conn),
         clock=clock,
         fts=FtsIndex(conn),
-        entities=entities,
-        episodics=episodics,
+        entities=stores.entities,
+        episodics=stores.episodics,
         floor_margin=floor_margin,
     )
-    upgrade(conn, Stores(episodics=episodics, entities=entities))
+    upgrade(conn, stores)
     return module
+
+
+def _read_only_reason(remaining: Sequence[Step]) -> str | None:
+    """What every write says while steps are left after the light ones ran, or ``None``.
+
+    Steps are left only when the next one is heavy; each is named, because ``morgan migrate``
+    runs all of them, light ones queued behind a heavy step included.
+    """
+    if not remaining:
+        return None
+    count = f"{len(remaining)} step{'' if len(remaining) == 1 else 's'} pending"
+    names = ", ".join(f"{s.number} {s.name}" for s in remaining)
+    return f"writes are blocked until `morgan migrate` runs: {count} ({names})"
 
 
 def build_memory_context(settings: Settings | None = None) -> MemoryContext:
@@ -159,7 +181,7 @@ def build_memory_context(settings: Settings | None = None) -> MemoryContext:
         floor_margin=settings.recall_floor_margin,
     )
     return MemoryContext(
-        gate=MemoryGate(module),
+        gate=MemoryGate(module, read_only_reason=_read_only_reason(pending(conn))),
         conn=conn,
         history=SessionHistoryStore(conn, clock=utcnow),
         embedder=embedder,

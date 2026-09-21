@@ -32,9 +32,9 @@ come in" are answered by the directory names.
   chat model; `build_app_context` adds it.
 - `memory/` — the core. `gate.py` is the only door and `module.py` is the one write path and
   the fused recall; `embedder.py` is the embedding seam; `migrations.py` upgrades a database
-  written by an older version when it is opened; `snapshot.py` writes and lists verified
-  `VACUUM INTO` copies of the whole database, and restores one behind a safety snapshot of
-  its own. Below them:
+  written by an older version, its light steps when it is opened and its heavy ones under
+  `morgan migrate`; `snapshot.py` writes and lists verified `VACUUM INTO` copies of the
+  whole database, and restores one behind a safety snapshot of its own. Below them:
   - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
     `history`. Each owns its schema and its queries; none of them ranks anything. Every write
     goes through `db.write_transaction`.
@@ -52,12 +52,12 @@ come in" are answered by the directory names.
 - `app/chat.py` — one turn: recall, answer, remember. Not a surface: the one use-case both
   surfaces call.
 - `surfaces/` — where requests come in. `cli/` (`__main__` parses and dispatches, `commands`
-  answers, `maintenance` answers `morgan snapshot` and `morgan restore`, `payloads` shapes
-  the result, `render` prints it, `doctor` diagnoses and probes the chat and embedding
-  servers separately, `install_skill` writes the packaged `skill/SKILL.md` into the coding
-  agents installed here), `mcp_server.py` (five MCP tools over stdio or streamable-HTTP,
-  calling those same command handlers), and `network.py`, the bind guard that protects the
-  HTTP one.
+  answers, `maintenance` answers `morgan snapshot`, `morgan restore` and `morgan migrate`,
+  `payloads` shapes the result, `render` prints it, `doctor` diagnoses and probes the chat
+  and embedding servers separately, `install_skill` writes the packaged `skill/SKILL.md` into
+  the coding agents installed here), `mcp_server.py` (five MCP tools over stdio or
+  streamable-HTTP, calling those same command handlers), and `network.py`, the bind guard
+  that protects the HTTP one.
 
 ## Invariants
 
@@ -80,10 +80,16 @@ come in" are answered by the directory names.
   project (or every project, with `all_projects`), fused by rank. Nothing narrows the
   candidates first: on a real archive a narrowing pool cut answers out and found none. The
   entity index is the relevance floor's evidence, not a third ranking.
-- **Derived data is upgraded when a database is opened.** Entities are derived from content
-  by `extract`; a change to that rule appends a step to `memory/migrations.py` that re-derives
-  what is stored. Steps are counted in SQLite's `user_version` and run inside one write
-  transaction.
+- **Light steps run on open; heavy steps run only under `morgan migrate`, behind a snapshot.**
+  Derived data is re-derived by numbered steps in `memory/migrations.py`, counted in SQLite's
+  `user_version`. A step that only adds a table or a defaulted column runs when the database
+  is opened; a step that rewrites, moves or deletes rows runs only under `morgan migrate`,
+  which takes a `VACUUM INTO` snapshot first and runs every pending step in one write
+  transaction. Until then the database opens read-only and every write says so by name.
+  `morgan restore` puts a snapshot back.
+- **Nothing destructive runs without a snapshot.** A migration wave, a project-grain `forget`
+  and any re-embed take a `VACUUM INTO` snapshot first, into `MORGAN_SNAPSHOT_DIR`, which
+  Morgan never prunes.
 - **Facts evolve, they don't overwrite.** Update = close the old interval, open a new one. A
   key has at most one current fact, and a unique index on `facts` enforces it.
 - **Facts are surfaced alongside episodics, never instead of them.** Recall budgets the

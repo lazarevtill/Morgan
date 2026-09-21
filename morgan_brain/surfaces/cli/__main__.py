@@ -30,7 +30,12 @@ from morgan_brain.surfaces.cli.commands import (
     cmd_recall,
     cmd_remember,
 )
-from morgan_brain.surfaces.cli.maintenance import cmd_restore, cmd_snapshot, restore_preview
+from morgan_brain.surfaces.cli.maintenance import (
+    cmd_migrate,
+    cmd_restore,
+    cmd_snapshot,
+    restore_preview,
+)
 from morgan_brain.surfaces.cli.project import detect_project
 from morgan_brain.surfaces.cli.render import RENDERERS
 
@@ -47,6 +52,7 @@ HANDLERS = {
     "import": cmd_import,
     "snapshot": cmd_snapshot,
     "restore": cmd_restore,
+    "migrate": cmd_migrate,
 }
 
 # Commands where --all-projects is meaningless: a write or a single chat turn always
@@ -135,6 +141,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--yes", action="store_true", help="Actually replace the database (default: preview only)."
     )
     p_restore.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON instead of human text."
+    )
+
+    # No --project/--all-projects: a migration covers the whole database, like snapshot.
+    p_migrate = sub.add_parser(
+        "migrate",
+        help="Run the pending migration steps, heavy ones included, behind a snapshot.",
+    )
+    p_migrate.add_argument(
+        "--dry-run", action="store_true", help="List the pending steps and change nothing."
+    )
+    p_migrate.add_argument(
         "--json", action="store_true", help="Emit machine-readable JSON instead of human text."
     )
 

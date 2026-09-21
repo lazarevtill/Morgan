@@ -100,6 +100,38 @@ def _render_restore(data: dict[str, Any]) -> str:
     )
 
 
+def _step_line(step: dict[str, Any]) -> str:
+    return f"{step['number']} {step['name']} ({'heavy' if step['heavy'] else 'light'})"
+
+
+def _render_migrate(data: dict[str, Any]) -> str:
+    # "steps" is present only once steps have run -- the one discriminator between the two
+    # shapes cmd_migrate returns.
+    if "steps" not in data:
+        if not data["pending"]:
+            return (
+                f"Nothing to migrate: {data['database']} is at user_version "
+                f"{data['user_version']}, and this morgan knows {data['code_version']} steps."
+            )
+        lines = [
+            f"{data['database']} is at user_version {data['user_version']}; this morgan knows "
+            f"{data['code_version']} steps. Pending:"
+        ]
+        lines.extend(f"  {_step_line(s)}" for s in data["pending"])
+        if data["dry_run"]:
+            lines.append("Dry run: nothing was changed.")
+        return "\n".join(lines)
+    lines = [f"Snapshot first: {data['snapshot']}"]
+    for s in data["steps"]:
+        counts = ", ".join(f"{table}={n}" for table, n in s["counts"].items())
+        lines.append(f"  {_step_line(s)}: {counts or 'no rows counted'}")
+    lines.append(
+        f"user_version {data['from_version']} -> {data['user_version']}, quick_check "
+        f"{data['quick_check']}; rows before={data['before']} after={data['after']}"
+    )
+    return "\n".join(lines)
+
+
 RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "remember": _render_remember,
     "recall": _render_recall,
@@ -111,4 +143,5 @@ RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "import": _render_import,
     "snapshot": _render_snapshot,
     "restore": _render_restore,
+    "migrate": _render_migrate,
 }
