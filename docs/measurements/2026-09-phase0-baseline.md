@@ -257,8 +257,11 @@ margin=0.22 sealed  n=38   recall@8=0.64  mrr=0.57  abstain=0.85
 
 ### Cold-start seconds
 
-Pending -- background run. Belongs to `scripts/measure_repeat_distribution.py
---cold-starts 3` (Section 3).
+From `2026-09-21-repeat-distribution.json`: the three cold starts measured 7.4, 8.0, and 8.4 seconds
+respectively. Each was measured with the model unloaded per the native `/api/ps` process list, after
+30 idle minutes since the script's own last request. These are substantially faster than the 43 seconds
+measured once on 2026-09-19 (a first load from disk); these three reloaded a model file the host still
+had cached in filesystem buffers.
 
 ## 3. The repeat-distribution script, and the fingerprint tolerance
 
@@ -301,7 +304,7 @@ conditions (`skip batchN_warm_cC: already in ...`) and exited 0, confirming resu
 `--quick` also runs both client counts on batch sizes 1 and 8, warm only -- cold conditions
 and `--cold-starts` need a genuine 30-minute idle wait and are exercised only by the full run.
 
-### The full run -- not run by this task; the controller runs it in the background
+### The full run
 
 The script's grid, run with every batch/warmth/concurrency combination and no
 `--cold-conditions` restriction, costs up to 9 separate 30-minute idle waits (6 "cold"
@@ -324,18 +327,27 @@ export $(grep -E '^MORGAN_EMBEDDING_(ENDPOINT|MODEL|DIM)=' ~/.config/morgan/.env
 .venv/Scripts/python.exe scripts/measure_repeat_distribution.py \
   --db ~/Documents/GitHub/morgan-eval-brain-2026-09-19-qwen3-8b/morgan.db \
   --rows 500 --cold-conditions "8:1" --cold-starts 3 \
-  --results-json ~/Documents/GitHub/morgan-research-2026-09-19/measurements/2026-09-XX-repeat-distribution.json \
-  --results-md ~/Documents/GitHub/morgan-research-2026-09-19/measurements/2026-09-XX-repeat-distribution.md
+  --results-json ~/Documents/GitHub/morgan-research-2026-09-19/measurements/2026-09-21-repeat-distribution.json \
+  --results-md ~/Documents/GitHub/morgan-research-2026-09-19/measurements/2026-09-21-repeat-distribution.md
 ```
 
 This produces 6 warm conditions + 1 cold condition x 500 rows = 3,500 embeddings, plus 3
 single cold-start timings -- read the numbers when they land as measuring 7 conditions, not
 12; batch sizes 1 and 32 have no cold measurement in this run.
 
-**tolerance: pending (default 0.995)** -- Task 3b writes the full run's numbers and the
-tolerance verdict into this section, by this rule: **tolerance = 0.995, unless the worst
-condition's p1 is below 0.998, in which case tolerance = that p1 rounded down to three
-digits minus 0.003 -- naming the condition that set it.**
+Results from `2026-09-21-repeat-distribution.md`:
+
+| condition | batch | warmth | clients | n | min | p1 | median | wall seconds |
+|---|---:|---|---:|---:|---:|---:|---:|---:|
+| batch1_warm_c1 | 1 | warm | 1 | 500 | 0.99837 | 0.99866 | 1.00000 | 273.3 |
+| batch1_warm_c2 | 1 | warm | 2 | 500 | 0.99820 | 0.99878 | 1.00000 | 252.4 |
+| batch32_warm_c1 | 32 | warm | 1 | 500 | 0.99820 | 0.99866 | 1.00000 | 261.2 |
+| batch32_warm_c2 | 32 | warm | 2 | 500 | 0.99837 | 0.99883 | 1.00000 | 253.6 |
+| batch8_cold_c1 | 8 | cold | 1 | 500 | 0.99837 | 0.99860 | 1.00000 | 271.0 |
+| batch8_warm_c1 | 8 | warm | 1 | 500 | 0.99837 | 0.99871 | 1.00000 | 261.7 |
+| batch8_warm_c2 | 8 | warm | 2 | 500 | 0.99837 | 0.99861 | 1.00000 | 253.0 |
+
+**tolerance: 0.995** (worst p1 0.99860, batch8_cold_c1, below 0.998)
 
 ## 4. The `PARTITION KEY` measurement
 
