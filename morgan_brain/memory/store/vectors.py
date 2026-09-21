@@ -233,7 +233,7 @@ class SqliteVectorIndex:
         """
         id_json = json.dumps(ids)
         with write_transaction(self._conn):
-            _delete_vectors(self._conn, "vec_items", rowids(self._conn, id_json))
+            _delete_vectors(self._conn, "vec_items", vector_rowids(self._conn, id_json))
             _delete_meta(self._conn, id_json)
 
 
@@ -255,7 +255,7 @@ def _exists(conn: sqlite3.Connection, table_name: str) -> bool:
     return row is not None
 
 
-def rowids(conn: sqlite3.Connection, memory_ids: str) -> str:
+def vector_rowids(conn: sqlite3.Connection, memory_ids: str) -> str:
     """The ``vec_meta`` rowids of the memory ids in the JSON array *memory_ids*, as a JSON
     array. A memory's vector sits at that rowid in every embedding space's vec0 table: it is
     the rowid ``upsert`` writes ``vec_items`` at, and the one ``stored_sample`` and
@@ -267,12 +267,12 @@ def rowids(conn: sqlite3.Connection, memory_ids: str) -> str:
     return json.dumps([int(r["rowid"]) for r in found])
 
 
-def _delete_vectors(conn: sqlite3.Connection, table_name: str, vector_rowids: str) -> int:
+def _delete_vectors(conn: sqlite3.Connection, table_name: str, rowids: str) -> int:
     table = _vector_table(table_name)
     # `table` is `vec_items` or a name from `embedding_spaces.table_name`, which Morgan writes
     # itself, checked to be a plain identifier by `_vector_table`; never caller input.
     sql = f"DELETE FROM {table} WHERE rowid IN (SELECT value FROM json_each(?))"  # noqa: S608 # nosec B608
-    return conn.execute(sql, (vector_rowids,)).rowcount
+    return conn.execute(sql, (rowids,)).rowcount
 
 
 def _delete_meta(conn: sqlite3.Connection, memory_ids: str) -> int:

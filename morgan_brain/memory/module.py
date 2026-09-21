@@ -43,8 +43,8 @@ from morgan_brain.memory.store.vectors import (
     VectorHit,
     VectorRecord,
     delete_meta,
-    rowids,
     vector_deleter,
+    vector_rowids,
 )
 from morgan_brain.models import (
     PERSONAL_PROJECT,
@@ -450,7 +450,7 @@ class MemoryModule:
                 user_id=user_id,
                 project=project,
                 memory_ids=memory_ids,
-                vector_rowids=rowids(conn, memory_ids),
+                vector_rowids=vector_rowids(conn, memory_ids),
             )
             erased = {table: delete(conn, erasure) for table, delete in plan}
 
