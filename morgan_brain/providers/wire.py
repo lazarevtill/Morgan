@@ -153,6 +153,15 @@ class ProviderUnreachable(ConnectionError):
         return cls(endpoint, detail, setting=setting, outcome=outcome, verdict=verdict)
 
 
+def is_refusal(status: int) -> bool:
+    """Whether an HTTP *status* refuses the request rather than failing it for now: a redirect
+    (never followed), a 4xx other than 429, or a 501. The same request gets the same answer, so
+    it is not retried. A 429 or any other 5xx may pass -- a host loading its model answers 503
+    -- and is retried. The one classification an embedding call and ``morgan doctor``'s probes
+    both make."""
+    return status == 501 or (status != 429 and status < 500)
+
+
 class ProviderRefused(Exception):
     """The model endpoint answered, and refused the request: a 4xx other than 429, a 501 (the
     server serves no embeddings), or a redirect, which is not followed.

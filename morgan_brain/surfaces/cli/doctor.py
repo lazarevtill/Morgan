@@ -1,11 +1,14 @@
 """``morgan doctor`` -- what this install reads, where it sends text, and whether each model
 server answers, changing nothing.
 
-doctor only reads. It opens the database with sqlite-vec loaded and runs SELECTs: it builds no
-store, creates no table and runs no migration step, so a database another install still writes
-to, or one waiting for ``morgan migrate``, is left as it was found. A table that was never
-created is named absent, never counted as an honest zero, and a database file that does not
-exist is reported missing, not created.
+doctor only reads. It opens the database read-only (``store/db.py::open_readonly``: SQLite's
+read-only mode, sqlite-vec loaded, no pragma that writes) and runs SELECTs: it builds no store,
+creates no table, runs no migration step and never switches the journal mode, so a database
+another install still writes to, one waiting for ``morgan migrate`` or one ``morgan restore``
+just put in place is left as it was found, byte for byte. A table that was never created is
+named absent, never counted as an honest zero; a database file that does not exist is reported
+missing, not created; and one that cannot be read read-only is reported as that, never opened
+another way.
 
 Every probe is independent and failure-tolerant, so one broken thing reports itself rather
 than hiding the rest.
@@ -14,12 +17,14 @@ The chat server and the embedding server are probed separately, because they are
 servers and fail on their own: ``provider`` is the chat endpoint, which ``ask`` and
 ``consolidate`` need, and ``embedding_provider`` is where every ``remember`` and ``recall``
 embeds -- ``"not used"`` under the hash backend, which calls no server. Each is ``reachable``;
-``slow``, when it answered after ``MORGAN_DOCTOR_SLOW_AFTER_SECONDS``; or ``unreachable``, when
-no answer came within ``MORGAN_DOCTOR_PROBE_TIMEOUT_SECONDS`` or the answer was an error. A
-host that answers slowly is never called unreachable: the embedding host loads its model on the
-first request after idle, so slow is its normal first answer. The embedding probe embeds the
-five fingerprint strings, and ``embedding_space`` compares their vectors with the fingerprint
-the database recorded -- compares only: recording one is a write.
+``slow``, when it answered after ``MORGAN_DOCTOR_SLOW_AFTER_SECONDS`` or answered a 429 or
+another 5xx; ``refused``, when it answered and refused the request (a 401 or 403 for the key,
+another 4xx or a 501 for the endpoint); or ``unreachable``, when no answer came within
+``MORGAN_DOCTOR_PROBE_TIMEOUT_SECONDS`` or no connection was made. A host that answered is
+never called unreachable: the embedding host loads its model on the first request after idle,
+so slow is its normal first answer. The embedding probe embeds the five fingerprint strings,
+and ``embedding_space`` compares their vectors with the fingerprint the database recorded --
+compares only: recording one is a write.
 """
 
 from __future__ import annotations
@@ -35,7 +40,7 @@ from morgan_brain.composition import sqlite_path
 from morgan_brain.config import Settings
 from morgan_brain.memory import fingerprint, migrations, snapshot
 from morgan_brain.memory.store import projects, spaces
-from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store.db import open_db, open_readonly
 from morgan_brain.providers.factory import (
     Probe,
     chat_endpoint_of,
@@ -43,6 +48,7 @@ from morgan_brain.providers.factory import (
     check_llm_reachable,
     embedding_endpoint_of,
 )
+from morgan_brain.providers.wire import is_refusal
 from morgan_brain.surfaces.cli.payloads import embedding_space_to_dict, migration_status_to_dict
 
 #: What the chat endpoint receives, by the command that sends it (``app/chat.py`` builds the
@@ -294,10 +300,12 @@ def _collect_local_probes(settings: Settings, *, project: str, all_projects: boo
         _database_unread(report, f"no database yet at {db_path}")
         return _Local(report)
 
+    # Read-only, and never retried with a connection that writes: a database doctor cannot
+    # read that way is reported as that.
     try:
-        conn = open_db(db_path, busy_timeout_ms=settings.db_busy_timeout_ms)
+        conn = open_readonly(db_path, busy_timeout_ms=settings.db_busy_timeout_ms)
     except Exception as exc:  # noqa: BLE001 -- report, don't crash the diagnostic tool
-        _database_unread(report, f"failed to open database: {exc}")
+        _database_unread(report, f"failed to open database read-only: {exc}")
         return _Local(report)
     try:
         return _read_database(conn, report, settings, project=project, all_projects=all_projects)
@@ -426,12 +434,18 @@ def _read_database(
 
 
 def _verdict(probe: Probe, settings: Settings) -> str:
-    """``unreachable`` only when no answer came in time or the answer was an error: a host
-    that answered successfully is ``reachable``, or ``slow`` when that took longer than
-    ``MORGAN_DOCTOR_SLOW_AFTER_SECONDS`` -- however much longer."""
-    if probe.status is None or not 200 <= probe.status < 300:
+    """``unreachable`` only when no answer came: none within the timeout, or no connection.
+    A host that answered is never unreachable. It is ``refused`` when the answer refuses the
+    request (``is_refusal``: a 401 or 403 for the key, another 4xx, a redirect or a 501 for
+    the endpoint), as an embedding call's ``ProviderRefused`` classifies it; ``slow`` when it
+    answered after ``MORGAN_DOCTOR_SLOW_AFTER_SECONDS`` -- however much after -- or answered
+    a 429 or another 5xx, which a retry may mend, as a host loading its model answers; and
+    ``reachable`` otherwise."""
+    if probe.status is None:
         return "unreachable"
-    return "slow" if probe.seconds > settings.doctor_slow_after_seconds else "reachable"
+    if 200 <= probe.status < 300:
+        return "slow" if probe.seconds > settings.doctor_slow_after_seconds else "reachable"
+    return "refused" if is_refusal(probe.status) else "slow"
 
 
 def _probe_to_dict(probe: Probe, settings: Settings) -> dict[str, Any]:

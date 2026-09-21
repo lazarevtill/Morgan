@@ -94,7 +94,7 @@ async def test_no_key_appears_in_the_report_or_its_rendering(tmp_path):
         report = await _report(tmp_path, llm_endpoint=chat, embedding_endpoint=embed, **keys)
 
     assert report["provider"] == "reachable"
-    assert report["embedding_provider"] == "unreachable"
+    assert report["embedding_provider"] == "refused"
     assert "HTTP 401" in report["embedding_probe"]["error"]
     assert "MORGAN_EMBEDDING_API_KEY" in report["embedding_probe"]["error"]
     printed = "\n".join([repr(report), json.dumps(report, default=str), _render_doctor(report)])

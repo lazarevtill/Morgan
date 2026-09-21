@@ -19,6 +19,7 @@ from morgan_brain.memory.checked_embedder import CheckedEmbedder
 from morgan_brain.memory.embedder import Embedder, FakeEmbedder
 from morgan_brain.providers.embeddings import OpenAICompatEmbedder, RetryBudget
 from morgan_brain.providers.openai_compat import OpenAICompatAdapter
+from morgan_brain.providers.wire import is_refusal
 
 #: Which retry budget an embedding call is given: a command's or tool call's, where someone
 #: is waiting on the answer, or an import's, which has thousands of calls to make.
@@ -168,14 +169,20 @@ async def _probe(
     setting: str,
     key_setting: str,
     body: dict[str, Any] | None = None,
+    hints: dict[int, str] | None = None,
 ) -> tuple[Probe, httpx.Response | None]:
     """One request, timed, and the answer it got. Never raises.
 
     *setting* is the variable that addresses *url* and *key_setting* the one whose value is
-    sent as *api_key*; an error names the one to check. The clock starts once the client is
-    built: building it loads a TLS context, which is no part of the server's answer. Building
-    it can fail on its own -- a CA bundle that is not there -- and is then reported like any
-    request that got no answer, timed from the attempt to build it.
+    sent as *api_key*; an error names the one to check. An answer that refuses the request
+    (``is_refusal``) names *key_setting* on a 401 or 403 and *setting* on any other status,
+    with what *hints* says that status means; one a retry may mend, a 429 or another 5xx, is
+    named by its status alone.
+
+    The clock starts once the client is built: building it loads a TLS context, which is no
+    part of the server's answer. Building it can fail on its own -- a CA bundle that is not
+    there -- and is then reported like any request that got no answer, timed from the attempt
+    to build it.
     """
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     started = time.monotonic()
@@ -196,8 +203,11 @@ async def _probe(
     status = resp.status_code
     if 200 <= status < 300:
         return Probe(seconds, status, None), resp
-    advice = f"; check {key_setting}" if status in (401, 403) else ""
-    return Probe(seconds, status, f"HTTP {status}{advice}"), None
+    if not is_refusal(status):
+        return Probe(seconds, status, f"HTTP {status}"), None
+    means = f" ({hints[status]})" if hints and status in hints else ""
+    check = key_setting if status in (401, 403) else setting
+    return Probe(seconds, status, f"HTTP {status}{means}; check {check}"), None
 
 
 async def check_llm_reachable(settings: Settings) -> Probe:
@@ -241,10 +251,9 @@ async def check_embeddings_reachable(settings: Settings) -> Probe:
         setting=endpoint.setting,
         key_setting=key.setting,
         body={"model": settings.embedding_model, "input": texts},
+        hints={501: "the server does not serve embeddings"},
     )
     if resp is None:
-        if probe.status == 501:
-            return probe._replace(error=f"{probe.error}: the server serves no embeddings")
         return probe
     try:
         # Each item names the input it embeds; the order of the list is not promised.

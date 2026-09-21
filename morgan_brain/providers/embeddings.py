@@ -23,7 +23,13 @@ from urllib.parse import quote, quote_plus
 import httpx
 import structlog
 
-from morgan_brain.providers.wire import EmbedOutcome, Outcome, ProviderRefused, ProviderUnreachable
+from morgan_brain.providers.wire import (
+    EmbedOutcome,
+    Outcome,
+    ProviderRefused,
+    ProviderUnreachable,
+    is_refusal,
+)
 
 log = structlog.get_logger("embed")
 
@@ -207,8 +213,7 @@ class OpenAICompatEmbedder:
                 outcome, error = "slow", exc
             except httpx.HTTPStatusError as exc:
                 connected = True
-                status = exc.response.status_code
-                if status == 501 or (status != 429 and status < 500):
+                if is_refusal(exc.response.status_code):
                     raise self._refused(exc.response) from exc
                 outcome, error = "slow", exc
             except httpx.TransportError as exc:

@@ -10,6 +10,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
 import sqlite_vec  # type: ignore[import-untyped]
 
@@ -37,6 +38,41 @@ def open_db(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connection:
     conn.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.commit()
+    return conn
+
+
+def open_readonly(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connection:
+    """Open an existing Morgan database only to read it: SQLite's read-only mode, sqlite-vec
+    loaded, and no pragma that writes.
+
+    ``open_db`` sets ``journal_mode=WAL``, which rewrites the header of a file in rollback-
+    journal mode -- a snapshot, or one ``morgan restore`` just put in place -- and so cannot be
+    what a command that only looks uses. A read-only connection never creates the file and
+    never changes it. On a WAL database it reads the ``-wal`` as every reader does, which needs
+    the ``-shm``: SQLite makes both when they are missing, and a read-only connection cannot
+    remove them again; the next writer to close does.
+
+    SQLite opens lazily, so one read here makes a file that cannot be read -- not a database,
+    or a WAL database whose ``-shm`` cannot be made -- raise ``sqlite3.Error`` from this call
+    rather than from the caller's first query. ``:memory:`` is a new, empty database with
+    nothing on disk to protect, and opens as ``open_db`` opens it.
+    """
+    if path == ":memory:":
+        return open_db(path, busy_timeout_ms=busy_timeout_ms)
+    uri = f"{Path(path).resolve().as_uri()}?mode=ro"
+    # The busy timeout is the connection's own, not a write: a reader can meet a checkpoint.
+    conn = sqlite3.connect(uri, uri=True, timeout=busy_timeout_ms / 1000, check_same_thread=False)
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.enable_load_extension(True)
+        try:
+            sqlite_vec.load(conn)
+        finally:
+            conn.enable_load_extension(False)
+        conn.execute("SELECT COUNT(*) FROM sqlite_master").fetchone()
+    except BaseException:
+        conn.close()
+        raise
     return conn
 
 

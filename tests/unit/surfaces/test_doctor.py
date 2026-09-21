@@ -59,7 +59,7 @@ async def test_embeddings_are_probed_on_the_chat_server_when_they_fall_back_to_i
 
     assert report["provider"] == "reachable"
     assert report["embedding_endpoint"] == chat
-    assert report["embedding_provider"] == "unreachable"
+    assert report["embedding_provider"] == "refused"
 
 
 async def test_the_hash_backend_uses_no_embedding_server(tmp_path):

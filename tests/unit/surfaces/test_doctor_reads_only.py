@@ -20,6 +20,7 @@ from morgan_brain.composition import build_memory_context, sqlite_path
 from morgan_brain.config import Settings
 from morgan_brain.memory import migrations, snapshot
 from morgan_brain.memory.store.db import open_db
+from morgan_brain.models import Memory
 from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.render import _render_doctor
 from tests.fakes import model_server
@@ -124,6 +125,114 @@ async def test_doctor_on_a_version_two_database_runs_no_step_and_creates_no_tabl
     assert "embedding_spaces" in report["embedding_space_reason"]
     assert report["rows_all_projects"]["memories"] == 1
     assert report["rows_all_projects"]["history"] is None
+
+
+def _journal(path: Path) -> tuple[int, int]:
+    """Header bytes 18 and 19, the file format's write and read versions: 1 for a rollback
+    journal, 2 for WAL. Read from the bytes, so looking changes nothing."""
+    header = path.read_bytes()[:20]
+    return header[18], header[19]
+
+
+def _sidecars(db: Path) -> list[str]:
+    return sorted(
+        p.name for p in db.parent.iterdir() if p.name in (f"{db.name}-wal", f"{db.name}-shm")
+    )
+
+
+def _wal_bytes(db: Path) -> int:
+    return Path(f"{db}-wal").stat().st_size
+
+
+def _block_the_shm(db: Path) -> None:
+    """A directory where a WAL reader's shared-memory file would be made."""
+    Path(f"{db}-shm").mkdir()
+
+
+async def _store(settings: Settings, contents: list[str]) -> Path:
+    """Store *contents* in project ``p`` and close; the file is left in WAL mode, with no
+    ``-wal`` or ``-shm`` beside it once the last connection has closed."""
+    ctx = build_memory_context(settings)
+    try:
+        for content in contents:
+            await ctx.gate.store(
+                Memory(
+                    user_id=settings.owner_user_id,
+                    project="p",
+                    content=content,
+                    author_id=settings.owner_user_id,
+                )
+            )
+    finally:
+        ctx.conn.close()
+    return Path(sqlite_path(settings.temporal_db_url))
+
+
+async def test_a_rollback_journal_database_is_left_byte_for_byte_as_it_was(tmp_path, chat):
+    """A snapshot is written in rollback-journal mode and ``morgan restore`` puts one in place
+    without opening it to write: doctor, run next, must not be what switches it to WAL."""
+    settings = _settings(tmp_path, chat)
+    db = await _store(settings, ["the first memory", "the second memory"])
+    conn = sqlite3.connect(db)
+    conn.execute("PRAGMA journal_mode=DELETE")
+    conn.close()
+    before = db.read_bytes()
+    assert _journal(db) == (1, 1) and _sidecars(db) == []
+
+    report = await _report(settings)
+
+    assert report["database_error"] is None
+    assert report["rows"]["memories"] == 2
+    assert db.read_bytes() == before
+    assert _journal(db) == (1, 1)
+    assert _sidecars(db) == []
+
+
+async def test_a_wal_database_another_process_is_writing_is_counted_with_its_wal(tmp_path, chat):
+    """Rows a live writer has committed to the ``-wal`` and not yet checkpointed into the file
+    are rows: a read-only open reads them, as every SQLite reader of a WAL database does."""
+    settings = _settings(tmp_path, chat)
+    db = await _store(settings, ["in the file"])
+    writer = build_memory_context(settings)
+    try:
+        writer.conn.execute("PRAGMA wal_autocheckpoint=0")
+        for content in ("in the wal", "also in the wal"):
+            await writer.gate.store(
+                Memory(
+                    user_id=settings.owner_user_id,
+                    project="p",
+                    content=content,
+                    author_id=settings.owner_user_id,
+                )
+            )
+        assert _wal_bytes(db) > 0
+
+        report = await _report(settings)
+    finally:
+        writer.conn.close()
+
+    assert report["database_error"] is None
+    assert report["rows"] == {"scope": "project 'p'", "memories": 3, "fts": 3, "vectors": 3}
+
+
+async def test_a_wal_database_that_cannot_be_read_read_only_says_so_on_the_database_line(
+    tmp_path, chat
+):
+    """A reader of a WAL database needs its ``-shm``; when that cannot be made, the read-only
+    open cannot proceed. doctor says so where the database is named, on every line that reads
+    it, and never falls back to an open that writes."""
+    settings = _settings(tmp_path, chat)
+    db = await _store(settings, ["a memory"])
+    _block_the_shm(db)
+    before = db.read_bytes()
+
+    report = await _report(settings)
+
+    assert report["database_error"].startswith("failed to open database read-only: ")
+    assert report["migration_reason"] == report["database_error"]
+    assert report["rows"] is None
+    assert "probe_errors" not in report and "count_errors" not in report
+    assert db.read_bytes() == before
 
 
 async def test_a_missing_database_is_reported_and_not_created(tmp_path, chat):

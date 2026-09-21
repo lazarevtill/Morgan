@@ -96,7 +96,9 @@ def _render_probe(name: str, verdict: str, probe: dict[str, Any] | None) -> str:
     if verdict == "unreachable":
         return f"{name}: unreachable ({probe['error']})"
     parts = [f"{probe['seconds']:.1f} s"]
-    if verdict == "slow":
+    # Named only when the clock is why it is slow: a 503 answered at once is slow for what it
+    # said, and its status follows.
+    if verdict == "slow" and probe["seconds"] > probe["slow_after_seconds"]:
         parts.append(f"MORGAN_DOCTOR_SLOW_AFTER_SECONDS={probe['slow_after_seconds']}")
     if probe["error"]:
         parts.append(str(probe["error"]))

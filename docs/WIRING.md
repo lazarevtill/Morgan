@@ -98,10 +98,12 @@ code_root: /home/you/code
 code_root: /home/you/work (not a directory)
 ```
 
-`doctor` only reads. It changes nothing in the database -- no table is created, no migration
-step runs -- so it is safe to run on a database another install still writes to, or on one
-waiting for `morgan migrate`. On a fresh install the first line reads `(no database yet)` and
-the counts are `None`: the first command that stores a memory creates the file.
+`doctor` only reads. It opens the database read-only and changes nothing in it -- no table
+is created, no migration step runs, the journal mode is left as it is -- so it is safe to run
+on a database another install still writes to, on one waiting for `morgan migrate`, or on one
+`morgan restore` just put back. On a fresh install the first line reads `(no database yet)`
+and the counts are `None`: the first command that stores a memory creates the file. A file
+that cannot be read that way is named on the same line, with the reason.
 
 Every probe is independent, so one failure does not hide the rest. The first lines answer
 "why is my brain empty?": a database somewhere other than where you expect, or a `.env` file
@@ -114,14 +116,22 @@ host name alone; when one server answers both, it is one line.
 The two model servers are probed separately, each with one request. `provider` is the chat
 endpoint, which only `ask` and `consolidate` need. `embedding_provider` is the endpoint every
 `remember` and `recall` embeds with, probed by embedding the five fixed strings the embedding
-space is fingerprinted with, so a chat server that serves no embeddings shows as unreachable
-here; under the hash backend it reads `not used`. Each reads `reachable`, `slow` when the
-answer took longer than `MORGAN_DOCTOR_SLOW_AFTER_SECONDS` (2 s), or `unreachable` when no
-answer came within `MORGAN_DOCTOR_PROBE_TIMEOUT_SECONDS` (60 s) or the answer was an error --
-the line names the timeout, the HTTP status, or the setting to check. An embedding host that
-unloads its model when idle takes tens of seconds over its first answer: that is `slow`, and it
-works. `--json` gives each probe's `seconds`, `timeout_seconds`, `slow_after_seconds` and
-`error` under `provider_probe` and `embedding_probe`.
+space is fingerprinted with, so a chat server that serves no embeddings shows as refused here;
+under the hash backend it reads `not used`. Each reads one of four:
+
+- `reachable`: it answered, within `MORGAN_DOCTOR_SLOW_AFTER_SECONDS` (2 s).
+- `slow`: it answered after that, or answered a 429 or a 5xx other than 501, which a retry may
+  mend. An embedding host that unloads its model when idle takes tens of seconds over its
+  first answer: that is `slow`, and it works.
+- `refused`: it answered, and refused the request. A 401 or 403 names the key setting the
+  request carried (`MORGAN_EMBEDDING_API_KEY` when embeddings have their own endpoint, else
+  `MORGAN_LLM_API_KEY`); any other 4xx, a redirect or a 501 names the endpoint setting.
+- `unreachable`: no answer came within `MORGAN_DOCTOR_PROBE_TIMEOUT_SECONDS` (60 s), or no
+  connection was made. A host that answered is never unreachable.
+
+Each line says why: how long the answer took, the timeout it missed, the HTTP status, the
+setting to check. `--json` gives each probe's `seconds`, `timeout_seconds`,
+`slow_after_seconds` and `error` under `provider_probe` and `embedding_probe`.
 
 `embedding_space` compares the five strings' fresh vectors with the fingerprint the database
 recorded for its active space: `matches`, `MISMATCH` (a different model is answering: stored

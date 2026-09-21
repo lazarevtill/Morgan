@@ -65,17 +65,19 @@ come in" are answered by the directory names.
   `embeddings.py`, `structured.py` (JSON-validated output), `factory.py` (settings → adapters,
   where embeddings are sent, the `CheckedEmbedder` around the embedding model, and which
   retry budget an embedding call gets), `wire.py` (message types, `ChatClient`,
-  `ProviderUnreachable`, `ProviderRefused`, `EmbeddingSpaceMismatch`).
+  `ProviderUnreachable`, `ProviderRefused`, `EmbeddingSpaceMismatch`, and `is_refusal`,
+  which statuses refuse a request, for the embedder and `doctor` alike).
 - `app/chat.py` — one turn: recall, answer, remember. Not a surface: the one use-case both
   surfaces call.
 - `surfaces/` — where requests come in. `cli/` (`__main__` parses and dispatches, `commands`
   answers, `maintenance` answers `morgan snapshot`, `morgan restore` and `morgan migrate`,
   `payloads` shapes the result, `render` prints it, `doctor` diagnoses by reading only -- it
-  builds no store, creates no table and runs no migration step -- and probes the chat and
-  embedding servers separately, telling slow from unreachable, `install_skill` writes the
-  packaged `skill/SKILL.md` into the coding agents installed here), `mcp_server.py` (five MCP
-  tools over stdio or streamable-HTTP, calling those same command handlers), and
-  `network.py`, the bind guard that protects the HTTP one.
+  opens the file read-only, builds no store, creates no table and runs no migration step --
+  and probes the chat and embedding servers separately, telling reachable, slow, refused and
+  unreachable apart, `install_skill` writes the packaged `skill/SKILL.md` into the coding
+  agents installed here), `mcp_server.py` (five MCP tools over stdio or streamable-HTTP,
+  calling those same command handlers), and `network.py`, the bind guard that protects the
+  HTTP one.
 
 ## Invariants
 
@@ -174,7 +176,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 579 passed, 4 skipped (the live ones)
+pytest -q                     # 590 passed, 4 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 
