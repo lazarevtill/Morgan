@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from morgan_brain.memory.gate import ForgetReport
+from morgan_brain.memory.snapshot import SnapshotResult
 from morgan_brain.models import Memory, TemporalFact
 
 
@@ -37,6 +38,15 @@ def fact_to_dict(f: TemporalFact) -> dict[str, Any]:
         "source": f.source.value,
         "valid_from": f.valid_from.isoformat() if f.valid_from else None,
         "last_confirmed": f.last_confirmed.isoformat() if f.last_confirmed else None,
+    }
+
+
+def snapshot_to_dict(result: SnapshotResult) -> dict[str, Any]:
+    return {
+        "path": str(result.path),
+        "bytes": result.bytes,
+        "user_version": result.user_version,
+        "counts": dict(result.counts),
     }
 
 

@@ -30,6 +30,7 @@ from morgan_brain.surfaces.cli.commands import (
     cmd_recall,
     cmd_remember,
 )
+from morgan_brain.surfaces.cli.maintenance import cmd_snapshot
 from morgan_brain.surfaces.cli.project import detect_project
 from morgan_brain.surfaces.cli.render import RENDERERS
 
@@ -44,6 +45,7 @@ HANDLERS = {
     "consolidate": cmd_consolidate,
     "doctor": cmd_doctor,
     "import": cmd_import,
+    "snapshot": cmd_snapshot,
 }
 
 # Commands where --all-projects is meaningless: a write or a single chat turn always
@@ -105,6 +107,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_doctor = sub.add_parser("doctor", help="Diagnose the local Morgan installation.")
     _add_common(p_doctor)
+
+    # No --project/--all-projects: a snapshot is of the whole database, not one project.
+    p_snapshot = sub.add_parser(
+        "snapshot", help="Write a verified VACUUM INTO copy of the whole database."
+    )
+    p_snapshot.add_argument(
+        "--reason",
+        default="manual",
+        help="Short reason recorded in the snapshot's filename (default: manual).",
+    )
+    p_snapshot.add_argument(
+        "--list", action="store_true", help="List existing snapshots instead of taking one."
+    )
+    p_snapshot.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON instead of human text."
+    )
 
     # No --project: the destination follows the holdout rule, not the caller's working
     # directory, and offering a flag that cannot be honoured would be worse than omitting it.

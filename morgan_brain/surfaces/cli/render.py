@@ -76,6 +76,23 @@ def _render_import(data: dict[str, Any]) -> str:
     )
 
 
+def _render_snapshot(data: dict[str, Any]) -> str:
+    # "snapshots" is present only under --list -- the one discriminator between the two
+    # shapes cmd_snapshot returns.
+    if "snapshots" in data:
+        if not data["snapshots"]:
+            return "No snapshots yet."
+        return "\n".join(
+            f"{s['path']} ({s['bytes']} bytes, user_version={s['user_version']}, "
+            f"counts={s['counts']})"
+            for s in data["snapshots"]
+        )
+    return (
+        f"Wrote {data['path']} ({data['bytes']} bytes, user_version={data['user_version']}, "
+        f"counts={data['counts']})"
+    )
+
+
 RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "remember": _render_remember,
     "recall": _render_recall,
@@ -85,4 +102,5 @@ RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "consolidate": _render_consolidate,
     "doctor": _render_doctor,
     "import": _render_import,
+    "snapshot": _render_snapshot,
 }

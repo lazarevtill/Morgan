@@ -87,6 +87,15 @@ class Settings(BaseSettings):
     data_dir: str = Field(default_factory=default_data_dir)
     #: "" → derived from data_dir (sqlite:///{data_dir}/morgan.db).
     temporal_db_url: str = ""
+    #: Where ``morgan snapshot`` writes its VACUUM INTO copies. "" → derived from data_dir
+    #: ({data_dir}/snapshots), the same way temporal_db_url derives its path.
+    snapshot_dir: str = ""
+    #: PRAGMA busy_timeout (milliseconds) for a connection this process opens: how long a
+    #: writer waits on another process's lock before giving up. store/db.py::open_db's own
+    #: default is the same number; this is the setting a caller threads through when it wants
+    #: that wait configurable -- ``morgan snapshot``'s VACUUM INTO against the live database
+    #: is the first one that does.
+    db_busy_timeout_ms: int = Field(default=5000, gt=0)
     #: Must match the embedding model's output dimension (mxbai-embed-large → 1024,
     #: nomic-embed-text → 768). Probed against a live embed() call at startup.
     embedding_dim: int = 1024
@@ -119,12 +128,18 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _fill_data_dir_defaults(self) -> Settings:
-        """Expand ``~`` in data_dir and derive temporal_db_url from it when not overridden."""
+        """Expand ``~`` in data_dir and derive temporal_db_url / snapshot_dir from it when not
+        overridden."""
         self.data_dir = str(Path(self.data_dir).expanduser())
         if not self.temporal_db_url:
             # as_posix(): the path component of a URL uses forward slashes on every
             # platform. Interpolating the native path mixed separators on Windows.
             self.temporal_db_url = f"sqlite:///{(Path(self.data_dir) / 'morgan.db').as_posix()}"
+        self.snapshot_dir = str(
+            Path(self.snapshot_dir).expanduser()
+            if self.snapshot_dir
+            else Path(self.data_dir) / "snapshots"
+        )
         return self
 
 

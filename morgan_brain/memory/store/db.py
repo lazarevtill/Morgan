@@ -13,11 +13,15 @@ from contextlib import contextmanager
 
 import sqlite_vec  # type: ignore[import-untyped]
 
-_BUSY_TIMEOUT_MS = 5000
 
+def open_db(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connection:
+    """Open (or create) the Morgan database with WAL, a busy timeout, and sqlite-vec loaded.
 
-def open_db(path: str) -> sqlite3.Connection:
-    """Open (or create) the Morgan database with WAL, a busy timeout, and sqlite-vec loaded."""
+    *busy_timeout_ms* defaults to today's hardcoded value so every existing caller keeps
+    working untouched; a caller that wants it configurable threads through
+    ``Settings.db_busy_timeout_ms`` instead (``morgan snapshot``'s VACUUM INTO against the
+    live database is the first one that does).
+    """
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
 
@@ -30,7 +34,7 @@ def open_db(path: str) -> sqlite3.Connection:
     # ":memory:" has no journal to switch; WAL is meaningless and PRAGMA returns "memory".
     if path != ":memory:":
         conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute(f"PRAGMA busy_timeout={_BUSY_TIMEOUT_MS}")
+    conn.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.commit()
     return conn
