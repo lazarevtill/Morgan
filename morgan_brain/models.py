@@ -49,6 +49,26 @@ class MemorySource(str, Enum):
     TOOL_OBSERVED = "tool_observed"
 
 
+class OriginKind(str, Enum):
+    """Which path wrote a memory. ``unknown`` is a row from before its writer said."""
+
+    REMEMBER = "remember"
+    ASK = "ask"
+    IMPORT = "import"
+    EXTRACTED = "extracted"
+    UNKNOWN = "unknown"
+
+
+class Scope(str, Enum):
+    PRIVATE = "private"
+    SHARED = "shared"
+
+
+class MemoryStatus(str, Enum):
+    STORED = "stored"
+    QUARANTINED = "quarantined"
+
+
 class MemoryKind(str, Enum):
     EPISODIC = "episodic"  # what happened, when
     SEMANTIC = "semantic"  # what's true
@@ -62,6 +82,15 @@ class Memory(UserScoped):
     entities: list[Entity] = Field(default_factory=list)
     importance: float = Field(default=0.5, ge=0.0, le=1.0)
     embedding: list[float] | None = None
+    # Provenance: where the row came from. ``cwd`` is where the writer ran, never the project.
+    origin_kind: OriginKind = OriginKind.UNKNOWN
+    client: str = ""
+    session_id: str = ""
+    cwd: str = ""
+    author_id: str = ""
+    scope: Scope = Scope.PRIVATE
+    instruction_like: bool = False
+    status: MemoryStatus = MemoryStatus.STORED
 
 
 class TemporalFact(UserScoped):
@@ -77,6 +106,8 @@ class TemporalFact(UserScoped):
     valid_to: datetime | None = None  # None = currently valid
     superseded_by: str | None = None  # id of the fact that replaced this one
     last_confirmed: datetime | None = None
+    author_id: str = ""
+    scope: Scope = Scope.PRIVATE
 
 
 class MemoryQuery(BaseModel):

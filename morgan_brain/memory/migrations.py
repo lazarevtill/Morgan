@@ -76,20 +76,19 @@ def _reextract_entities(conn: sqlite3.Connection, stores: Stores) -> None:
     Both copies are rewritten: the entity index recall searches, and the list stored on the
     memory itself, which is what a memory read back carries. Rewriting one would leave the two
     disagreeing about the same memory.
+
+    The memory's row is rewritten in its ``entities`` column only (``set_entities``), never
+    through ``put``: this step runs on the schema of version 0, which lacks every column a
+    later step added and ``put`` names.
     """
     episodics, entities = stores
     for memory_id in episodics.ids():
         memory = episodics.get(memory_id)
         if memory is None:
             continue
-        memory.entities = [Entity(name=n) for n in extract_entity_names(memory.content)]
-        episodics.put(memory)
-        entities.add(
-            memory.id,
-            [e.name for e in memory.entities],
-            user_id=memory.user_id,
-            project=memory.project,
-        )
+        names = extract_entity_names(memory.content)
+        episodics.set_entities(memory.id, [Entity(name=n) for n in names])
+        entities.add(memory.id, names, user_id=memory.user_id, project=memory.project)
 
 
 def _drop_the_semantic_index(conn: sqlite3.Connection, stores: Stores) -> None:
@@ -119,6 +118,57 @@ def _create_embedding_spaces_and_projects(conn: sqlite3.Connection, stores: Stor
     projects.create_schema(conn)
 
 
+#: The projects ``app/chatgpt_import.py`` writes: the only rows whose origin is known. Named
+#: here as literals because a step is frozen history, and ``memory/`` does not import ``app/``;
+#: a test holds them equal to ``ARCHIVE_PROJECT`` and ``HOLDOUT_PROJECT``.
+_ARCHIVE_PROJECTS = ("archive/chatgpt", "archive/chatgpt-holdout")
+
+#: Step 4's columns, in the order it adds them, each with a constant default. The stores'
+#: ``CREATE TABLE`` ends with the same columns in the same order, so a database this code
+#: creates and one migrated through step 4 have the same schema; a test compares the two.
+_PROVENANCE_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("memories", "ALTER TABLE memories ADD COLUMN origin_kind TEXT NOT NULL DEFAULT 'unknown'"),
+    ("memories", "ALTER TABLE memories ADD COLUMN client TEXT NOT NULL DEFAULT ''"),
+    ("memories", "ALTER TABLE memories ADD COLUMN session_id TEXT NOT NULL DEFAULT ''"),
+    ("memories", "ALTER TABLE memories ADD COLUMN cwd TEXT NOT NULL DEFAULT ''"),
+    ("memories", "ALTER TABLE memories ADD COLUMN author_id TEXT NOT NULL DEFAULT ''"),
+    ("memories", "ALTER TABLE memories ADD COLUMN scope TEXT NOT NULL DEFAULT 'private'"),
+    ("memories", "ALTER TABLE memories ADD COLUMN instruction_like INTEGER NOT NULL DEFAULT 0"),
+    ("memories", "ALTER TABLE memories ADD COLUMN status TEXT NOT NULL DEFAULT 'stored'"),
+    ("facts", "ALTER TABLE facts ADD COLUMN author_id TEXT NOT NULL DEFAULT ''"),
+    ("facts", "ALTER TABLE facts ADD COLUMN scope TEXT NOT NULL DEFAULT 'private'"),
+)
+
+
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
+    ).fetchone()
+    return row is not None
+
+
+def _add_provenance(conn: sqlite3.Connection, stores: Stores) -> dict[str, int]:
+    """Give every memory and fact its provenance columns, and fill in what is known.
+
+    Heavy: the backfill rewrites every memory. Each existing memory's author is its owner.
+    Its origin is known only for the two archive projects, which only the ChatGPT import
+    writes; every other row stays ``unknown``, because guessing an origin would be worse than
+    saying none was recorded. ``memories`` always exists here, because *stores* opened it;
+    ``facts`` exists only if its store ever opened this file, and when it is made later its
+    ``CREATE TABLE`` carries the columns. Returns the memories the backfill rewrote.
+    """
+    for table, add_column in _PROVENANCE_COLUMNS:
+        if _table_exists(conn, table):
+            conn.execute(add_column)
+    rewritten = conn.execute(
+        "UPDATE memories SET author_id = user_id WHERE author_id = ''"
+    ).rowcount
+    conn.execute(
+        "UPDATE memories SET origin_kind = 'import' WHERE project IN (?, ?)", _ARCHIVE_PROJECTS
+    )
+    return {"memories": rewritten}
+
+
 #: In order. Step *n* brings a database from ``user_version`` *n - 1* to *n*; append only.
 #: Steps 1 and 2 rewrite and drop, yet stay light: they predate the split, and every Morgan
 #: that shipped them already ran them on open.
@@ -127,6 +177,7 @@ _STEPS: tuple[Step, ...] = (
     Step(1, "reextract entities", False, _reextract_entities),
     Step(2, "drop the semantic index", False, _drop_the_semantic_index),
     Step(3, "create embedding_spaces and projects", False, _create_embedding_spaces_and_projects),
+    Step(4, "provenance columns", True, _add_provenance),
 )
 
 

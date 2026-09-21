@@ -10,10 +10,27 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
+from typing import Any
 
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import project_tables
 from morgan_brain.models import DEFAULT_PROJECT, Entity, Memory, MemoryKind, MemorySource
+
+#: The columns migration step 4 added. ``Memory`` validates each from its stored text.
+_PROVENANCE = (
+    "origin_kind",
+    "client",
+    "session_id",
+    "cwd",
+    "author_id",
+    "scope",
+    "instruction_like",
+    "status",
+)
+
+
+def _entities_json(entities: list[Entity]) -> str:
+    return json.dumps([{"name": e.name, "type": e.type} for e in entities])
 
 
 class EpisodicStore:
@@ -22,15 +39,23 @@ class EpisodicStore:
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS memories (
-                id         TEXT PRIMARY KEY,
-                user_id    TEXT NOT NULL,
-                project    TEXT NOT NULL DEFAULT 'default',
-                kind       TEXT NOT NULL,
-                source     TEXT NOT NULL,
-                content    TEXT NOT NULL,
-                importance REAL NOT NULL,
-                entities   TEXT NOT NULL,
-                created_at TEXT
+                id               TEXT PRIMARY KEY,
+                user_id          TEXT NOT NULL,
+                project          TEXT NOT NULL DEFAULT 'default',
+                kind             TEXT NOT NULL,
+                source           TEXT NOT NULL,
+                content          TEXT NOT NULL,
+                importance       REAL NOT NULL,
+                entities         TEXT NOT NULL,
+                created_at       TEXT,
+                origin_kind      TEXT NOT NULL DEFAULT 'unknown',
+                client           TEXT NOT NULL DEFAULT '',
+                session_id       TEXT NOT NULL DEFAULT '',
+                cwd              TEXT NOT NULL DEFAULT '',
+                author_id        TEXT NOT NULL DEFAULT '',
+                scope            TEXT NOT NULL DEFAULT 'private',
+                instruction_like INTEGER NOT NULL DEFAULT 0,
+                status           TEXT NOT NULL DEFAULT 'stored'
             );
             CREATE INDEX IF NOT EXISTS idx_memories_user ON memories (user_id);
             """
@@ -48,8 +73,10 @@ class EpisodicStore:
             self._conn.execute(
                 """
                 INSERT OR REPLACE INTO memories
-                    (id, user_id, project, kind, source, content, importance, entities, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, user_id, project, kind, source, content, importance, entities, created_at,
+                     origin_kind, client, session_id, cwd, author_id, scope, instruction_like,
+                     status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     memory.id,
@@ -59,15 +86,46 @@ class EpisodicStore:
                     memory.source.value,
                     memory.content,
                     memory.importance,
-                    json.dumps([{"name": e.name, "type": e.type} for e in memory.entities]),
+                    _entities_json(memory.entities),
                     memory.created_at.isoformat() if memory.created_at else None,
+                    memory.origin_kind.value,
+                    memory.client,
+                    memory.session_id,
+                    memory.cwd,
+                    memory.author_id,
+                    memory.scope.value,
+                    int(memory.instruction_like),
+                    memory.status.value,
                 ),
             )
 
+    def set_entities(self, memory_id: str, entities: list[Entity]) -> None:
+        """Rewrite one memory's stored entity list, and nothing else in its row.
+
+        Migration step 1 writes through this rather than ``put``: it runs on databases from
+        before step 4, whose ``memories`` lacks the provenance columns ``put`` names. This
+        statement names only columns every version of the table has.
+        """
+        with write_transaction(self._conn):
+            self._conn.execute(
+                "UPDATE memories SET entities = ? WHERE id = ?",
+                (_entities_json(entities), memory_id),
+            )
+
     def get(self, memory_id: str) -> Memory | None:
+        """The memory stored under *memory_id*, or ``None``.
+
+        Reads whatever columns the row has. A database still waiting for migration step 4 has
+        no provenance columns, and it opens read-only with its reads answering, so each of
+        those fields is taken from the row when present and left to ``Memory``'s default when
+        not.
+        """
         row = self._conn.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
         if row is None:
             return None
+        # Membership in a Row tests its values, so the column names are taken out first.
+        present = set(row.keys())
+        provenance: dict[str, Any] = {c: row[c] for c in _PROVENANCE if c in present}
         return Memory(
             id=row["id"],
             user_id=row["user_id"],
@@ -78,6 +136,7 @@ class EpisodicStore:
             importance=row["importance"],
             entities=[Entity(**e) for e in json.loads(row["entities"])],
             created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else None,
+            **provenance,
         )
 
     def ids(self) -> list[str]:

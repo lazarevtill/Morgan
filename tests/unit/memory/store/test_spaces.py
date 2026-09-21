@@ -126,11 +126,14 @@ def test_a_fresh_database_and_a_migrated_one_end_with_the_same_schema(tmp_path):
 
     old_path = _old_database_missing_both_tables(tmp_path, "old.db")
     migrated = open_db(old_path)
-    assert [s.number for s in migrations.pending(migrated)] == [3]
+    # Up to step 3 only: the fixture is built by this code, so its tables already carry what
+    # later steps add, and a later step run on it would fail on columns it already has.
+    through_three = migrations._STEPS[:3]
+    assert [s.number for s in migrations.pending(migrated, through_three)] == [3]
 
-    migrations.upgrade(migrated, migration_stores(migrated))
+    migrations.upgrade(migrated, migration_stores(migrated), steps=through_three)
 
-    assert migrations.pending(migrated) == ()
+    assert migrations.pending(migrated, through_three) == ()
     for table in ("embedding_spaces", "projects"):
         assert _table_sql(fresh, table) == _table_sql(migrated, table)
         assert _table_sql(fresh, table) is not None

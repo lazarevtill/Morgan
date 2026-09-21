@@ -13,6 +13,7 @@ import json
 from morgan_brain.composition import build_memory_module
 from morgan_brain.config import Settings
 from morgan_brain.eval.retrieval import describe_run, load_probe_set
+from morgan_brain.memory import migrations
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.store.db import open_db
 
@@ -67,7 +68,8 @@ def test_the_block_names_everything_the_numbers_depend_on(tmp_path):
         "probes.json@",
         "2 memories",
         "1 probes",
-        "db-upgrade=3",
+        # A new database starts at the code's version: the number of migration steps.
+        f"db-upgrade={len(migrations._STEPS)}",
         "commit=6795b3d",
     ):
         assert expected in block, (expected, block)

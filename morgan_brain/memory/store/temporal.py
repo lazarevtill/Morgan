@@ -8,9 +8,13 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 from itertools import pairwise
+from typing import Any
 
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.models import DEFAULT_PROJECT, MemorySource, TemporalFact
+
+#: The columns migration step 4 added. ``TemporalFact`` validates each from its stored text.
+_PROVENANCE = ("author_id", "scope")
 
 # The index is created separately, after the project-column migration below runs -- for a
 # pre-existing database the `facts` table exists without `project` at this point, and a
@@ -29,7 +33,9 @@ CREATE TABLE IF NOT EXISTS facts (
     valid_from TEXT,
     valid_to TEXT,
     superseded_by TEXT,
-    last_confirmed TEXT
+    last_confirmed TEXT,
+    author_id TEXT NOT NULL DEFAULT '',
+    scope TEXT NOT NULL DEFAULT 'private'
 );
 """
 
@@ -121,6 +127,13 @@ class SqliteTemporalStore:
             self._conn.execute(_ONE_CURRENT_FACT_INDEX)
 
     def _row_to_fact(self, row: sqlite3.Row) -> TemporalFact:
+        """Read whatever columns the row has. A database still waiting for migration step 4
+        has no ``author_id`` or ``scope``, and recall reads current facts on it while it is
+        read-only; each is taken from the row when present and left to the default when not.
+        """
+        # Membership in a Row tests its values, so the column names are taken out first.
+        present = set(row.keys())
+        provenance: dict[str, Any] = {c: row[c] for c in _PROVENANCE if c in present}
         return TemporalFact(
             id=row["id"],
             user_id=row["user_id"],
@@ -134,6 +147,7 @@ class SqliteTemporalStore:
             valid_to=_dt(row["valid_to"]),
             superseded_by=row["superseded_by"],
             last_confirmed=_dt(row["last_confirmed"]),
+            **provenance,
         )
 
     async def upsert_fact(self, fact: TemporalFact, *, now: datetime) -> str:
@@ -161,7 +175,9 @@ class SqliteTemporalStore:
                     (_iso(now), fact.id, old_id),
                 )
             self._conn.execute(
-                "INSERT INTO facts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO facts (id, user_id, project, subject, predicate, object, source, "
+                "confidence, valid_from, valid_to, superseded_by, last_confirmed, author_id, "
+                "scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     fact.id,
                     fact.user_id,
@@ -175,6 +191,8 @@ class SqliteTemporalStore:
                     _iso(fact.valid_to),
                     fact.superseded_by,
                     _iso(fact.last_confirmed),
+                    fact.author_id,
+                    fact.scope.value,
                 ),
             )
         return fact.id
