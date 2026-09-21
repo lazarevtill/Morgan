@@ -9,7 +9,7 @@ import socket
 import threading
 import time
 from collections import deque
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -27,15 +27,18 @@ def _unit_vector(text: str, dim: int) -> list[float]:
 
 
 class Calls:
-    """The requests a model server has received, of any kind: ``total``."""
+    """The requests a model server has received, of any kind: ``total``, and ``times``, when
+    each arrived (``time.monotonic``)."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self.total = 0
+        self.times: list[float] = []
 
     def count(self) -> None:
         with self._lock:
             self.total += 1
+            self.times.append(time.monotonic())
 
 
 @contextmanager
@@ -80,7 +83,7 @@ def flaky_model_server(
     *,
     after: int = 0,
     fail_for: float | None = None,
-    echo_key: bool = False,
+    echo: Callable[[str], str] | None = None,
     embedding_dim: int = 1024,
     calls: Calls | None = None,
 ) -> Iterator[str]:
@@ -91,13 +94,12 @@ def flaky_model_server(
     within that many seconds of the first one fails too: a host loading its model for a while.
     A failure answers with *status* -- a 503 is what llama-server says while it loads a model,
     a 401 a key it refused -- or, with ``status=None``, closes the connection without a word: a
-    dropped connection, as a host that goes to sleep mid-request gives one. With *echo_key* the
-    failure's body repeats the bearer token it was sent, and names another one, as a careless
-    gateway might. *calls*, when given, counts every request.
+    dropped connection, as a host that goes to sleep mid-request gives one. With *echo* the
+    failure's body is, byte for byte, what *echo* makes of the bearer token the request carried:
+    a careless gateway repeating a credential back, in whatever encoding it writes.
+    *calls*, when given, counts every request.
     """
-    failures = _Failures(
-        after=after, times=fail_times, status=status, seconds=fail_for, echo_key=echo_key
-    )
+    failures = _Failures(after=after, times=fail_times, status=status, seconds=fail_for, echo=echo)
     with _model_server(
         embeddings=True, embedding_dim=embedding_dim, reorder=False, calls=calls, fail=failures
     ) as url:
@@ -154,6 +156,63 @@ def silent_model_server(*, trickle_every: float | None = None) -> Iterator[str]:
         listener.close()
 
 
+@contextmanager
+def raw_model_server(reply: Callable[[bytes], bytes]) -> Iterator[str]:
+    """A server that reads each request whole and answers with exactly the bytes *reply* makes
+    of it, then closes; yields a ``/v1`` URL. For the answers no well-behaved server gives: a
+    malformed head, which httpx reports by quoting the line it could not parse."""
+    listener = socket.create_server(("127.0.0.1", 0))
+    listener.settimeout(0.05)
+    stop = threading.Event()
+
+    def answer(conn: socket.socket) -> None:
+        with conn:
+            conn.settimeout(5.0)
+            data = b""
+            try:
+                while b"\r\n\r\n" not in data:
+                    chunk = conn.recv(65536)
+                    if not chunk:
+                        return
+                    data += chunk
+                head, _, body = data.partition(b"\r\n\r\n")
+                length = 0
+                for line in head.split(b"\r\n"):
+                    name, _, value = line.partition(b":")
+                    if name.strip().lower() == b"content-length":
+                        length = int(value)
+                while len(body) < length:
+                    chunk = conn.recv(65536)
+                    if not chunk:
+                        return
+                    body += chunk
+                # Every byte of the request is read first: closing a socket with unread input
+                # resets the connection, and the client would see that instead of this answer.
+                conn.sendall(reply(head + b"\r\n\r\n" + body))
+                conn.shutdown(socket.SHUT_WR)
+            except OSError:
+                return
+
+    def accept() -> None:
+        while not stop.is_set():
+            try:
+                conn, _ = listener.accept()
+            except TimeoutError:
+                continue
+            except OSError:
+                return
+            threading.Thread(target=answer, args=(conn,), daemon=True).start()
+
+    thread = threading.Thread(target=accept, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{listener.getsockname()[1]}/v1"
+    finally:
+        stop.set()
+        thread.join()
+        listener.close()
+
+
 class _Failures:
     """Which embedding requests ``flaky_model_server`` fails: numbers *after* + 1 to *after* +
     *times*, counted across every connection, and any that arrives within *seconds* of the
@@ -166,7 +225,7 @@ class _Failures:
         times: int,
         status: int | None,
         seconds: float | None = None,
-        echo_key: bool = False,
+        echo: Callable[[str], str] | None = None,
     ) -> None:
         self._lock = threading.Lock()
         self._seen = 0
@@ -175,7 +234,7 @@ class _Failures:
         self._times = times
         self._seconds = seconds
         self.status = status
-        self.echo_key = echo_key
+        self.echo = echo
 
     def fail(self) -> bool:
         with self._lock:
@@ -215,13 +274,9 @@ def _model_server(
                 if fail.status is None:
                     # Nothing is written: the handler returns and the server closes the socket.
                     self.close_connection = True
-                elif fail.echo_key:
-                    sent = self.headers.get("Authorization", "")
-                    error = (
-                        f"invalid api key {sent.removeprefix('Bearer ')}; got Authorization: "
-                        f"{sent}; expected Bearer server-side-token"
-                    )
-                    self._reply(fail.status, {"error": error})
+                elif fail.echo is not None:
+                    token = self.headers.get("Authorization", "").removeprefix("Bearer ")
+                    self._send(fail.status, fail.echo(token).encode())
                 else:
                     self._reply(fail.status, {"error": f"scripted failure {fail.status}"})
             elif not embeddings:
@@ -237,7 +292,9 @@ def _model_server(
                 self._reply(200, {"object": "list", "data": vectors})
 
         def _reply(self, status: int, payload: dict[str, Any]) -> None:
-            data = json.dumps(payload).encode()
+            self._send(status, json.dumps(payload).encode())
+
+        def _send(self, status: int, data: bytes) -> None:
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))

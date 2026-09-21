@@ -10,13 +10,20 @@ from __future__ import annotations
 
 import re
 import time
+from urllib.parse import quote, quote_plus
 
 import pytest
 
 from morgan_brain.config import Settings
 from morgan_brain.providers.factory import build_embedder
 from morgan_brain.providers.wire import ProviderRefused, ProviderUnreachable
-from tests.fakes import Calls, flaky_model_server, silent_model_server
+from tests.fakes import (
+    Calls,
+    flaky_model_server,
+    model_server,
+    raw_model_server,
+    silent_model_server,
+)
 
 _CLOSED = "http://127.0.0.1:1/v1"
 
@@ -45,7 +52,7 @@ async def test_a_five_hundred_is_never_a_bare_http_error(tmp_path):
         flaky_model_server(fail_times=99, status=503) as url,
         pytest.raises(ProviderUnreachable) as exc,
     ):
-        await build_embedder(_settings(url, retry_budget=1.0)).embed("x")
+        await build_embedder(_settings(url, retry_budget=1.5)).embed("x")
     assert "attempts" in str(exc.value) and "MORGAN_EMBEDDING_ENDPOINT" in str(exc.value)
     # A host that answered is never called unreachable.
     assert "answered too slowly or dropped: " in str(exc.value)
@@ -60,7 +67,7 @@ async def test_exhaustion_names_the_last_error_and_the_attempts():
         flaky_model_server(fail_times=99, status=503) as url,
         pytest.raises(ProviderUnreachable) as exc,
     ):
-        await build_embedder(_settings(url, retry_budget=1.0, backoff=0.4)).embed("x")
+        await build_embedder(_settings(url, retry_budget=1.5, backoff=0.4)).embed("x")
     assert re.search(
         r"answered too slowly or dropped: HTTP 503 after \d+ attempts? over ", str(exc.value)
     )
@@ -76,7 +83,7 @@ async def test_a_refused_connection_spends_only_the_unreachable_budget():
 
 async def test_an_unreachable_host_says_so_by_class():
     with pytest.raises(ProviderUnreachable) as exc:
-        await build_embedder(_settings(_CLOSED, unreachable_budget=0.5)).embed("x")
+        await build_embedder(_settings(_CLOSED, unreachable_budget=1.0)).embed("x")
     assert "is unreachable: Connect" in str(exc.value)
     assert exc.value.outcome == "unreachable"
 
@@ -112,8 +119,8 @@ async def test_a_host_that_fails_fast_past_half_the_budget_is_still_answered():
     """A host that answers 503 while it loads, for more than half the budget, and then answers:
     the call must still be trying when it does. Doubling backoff alone gave up at about half
     of the budget, blaming a cold load it had not waited for."""
-    with flaky_model_server(fail_times=0, status=503, fail_for=0.9) as url:
-        vector = await build_embedder(_settings(url, retry_budget=1.5, backoff=0.05)).embed("x")
+    with flaky_model_server(fail_times=0, status=503, fail_for=1.8) as url:
+        vector = await build_embedder(_settings(url, retry_budget=3.0, backoff=0.1)).embed("x")
     assert len(vector) == 1024
 
 
@@ -131,14 +138,15 @@ async def test_fast_failures_spend_the_whole_budget_before_giving_up():
 
 async def test_a_capped_backoff_asks_again_soon_after_the_host_comes_up():
     """The wait between attempts stops growing at the cap, so a long budget keeps asking at a
-    steady rate: a host up at 2.0 s is asked again within one capped wait of that. Doubling
-    without a cap would next ask at about 3.4 s."""
-    with flaky_model_server(fail_times=0, status=503, fail_for=2.0) as url:
-        embedder = build_embedder(_settings(url, retry_budget=6.0, backoff=0.1, backoff_cap=0.2))
-        started = time.monotonic()
-        await embedder.embed("x")
-        elapsed = time.monotonic() - started
-    assert elapsed < 2.9
+    steady rate: a host up 2.0 s after the first request is asked again within one capped
+    wait of that. Doubling without a cap would next ask 3.1 s after it. Timed from the first
+    request, so building the client does not count."""
+    calls = Calls()
+    with flaky_model_server(fail_times=0, status=503, fail_for=2.0, calls=calls) as url:
+        await build_embedder(_settings(url, retry_budget=6.0, backoff=0.1, backoff_cap=0.2)).embed(
+            "x"
+        )
+    assert calls.times[-1] - calls.times[0] < 2.6
 
 
 async def test_a_five_hundred_and_one_is_refused_and_says_embeddings_are_not_served():
@@ -158,19 +166,86 @@ async def test_a_five_hundred_and_one_is_refused_and_says_embeddings_are_not_ser
     assert "MORGAN_LLM_API_KEY" not in message
 
 
-async def test_a_refusal_never_repeats_the_key_it_was_sent():
-    """The refusal quotes the server, and a careless gateway echoes the credential back: the
-    key Morgan sent, and any bearer token, are redacted before the quote is taken."""
-    key = "morgan-test-key-4711"
+#: A key as a base64 secret looks: a slash, a plus and padding, which encoders all rewrite.
+_KEY = "Zm9vYmFy/+bazQux7w=="
+
+#: How a server might write a key back: every encoding a common encoder produces.
+_ENCODINGS = {
+    "raw": lambda k: k,
+    "json with an escaped slash": lambda k: k.replace("/", "\\/"),
+    "percent-encoded": lambda k: quote(k, safe=""),
+    "percent-encoded, lower-case hex": lambda k: re.sub(
+        r"%[0-9A-F]{2}", lambda m: m.group().lower(), quote(k, safe="")
+    ),
+    "form-encoded": quote_plus,
+    "every character \\u-escaped": lambda k: "".join(f"\\u{ord(c):04x}" for c in k),
+    "punctuation \\u-escaped": lambda k: "".join(
+        c if c.isalnum() else f"\\u{ord(c):04x}" for c in k
+    ),
+    "split across a line": lambda k: f"{k[:8]}\n{k[8:]}",
+}
+
+
+@pytest.mark.parametrize("encode", _ENCODINGS.values(), ids=_ENCODINGS.keys())
+async def test_a_refusal_never_repeats_the_key_it_was_sent(encode):
+    """The refusal quotes the server, and a careless gateway echoes the credential back, bare
+    and after "Bearer ", in whatever encoding it writes: none of it reaches the message."""
+
+    def echo(token: str) -> str:
+        said = encode(token)
+        return f'{{"error": "invalid api key {said}; got Authorization: Bearer {said}"}}'
+
     with (
-        flaky_model_server(fail_times=99, status=401, echo_key=True) as url,
+        flaky_model_server(fail_times=99, status=401, echo=echo) as url,
         pytest.raises(ProviderRefused) as exc,
     ):
-        await build_embedder(_settings(url, api_key=key)).embed("x")
+        await build_embedder(_settings(url, api_key=_KEY)).embed("x")
     message = str(exc.value)
-    assert key not in message
-    assert "server-side-token" not in message
-    assert "[redacted]" in message and "HTTP 401" in message
+    assert "HTTP 401" in message and "[redacted]" in message
+    assert not _leaked(message, encode(_KEY))
+
+
+@pytest.mark.parametrize(
+    "line",
+    [b"X-Echo-Key %s", b"X-Echo Authorization: Bearer %s"],
+    ids=["bare", "after Bearer"],
+)
+async def test_an_error_text_that_quotes_the_key_is_redacted(line):
+    """httpx reports a malformed answer by quoting the line it could not parse, and the error
+    names the failure with that text: a server that echoes the key in a broken header line
+    would put it there."""
+
+    def reply(request: bytes) -> bytes:
+        return b"HTTP/1.1 200 OK\r\n" + line % _token_in(request) + b"\r\n\r\n"
+
+    with raw_model_server(reply) as url, pytest.raises(ProviderUnreachable) as exc:
+        await build_embedder(_settings(url, retry_budget=1.5, api_key=_KEY)).embed("x")
+    message = str(exc.value)
+    assert "illegal header line" in message and "[redacted]" in message
+    assert not _leaked(message, _KEY)
+
+
+async def test_an_over_long_error_text_is_cut():
+    """A 3 KB status line is quoted whole by httpx; the error keeps its start."""
+
+    def reply(request: bytes) -> bytes:
+        return b"HTTP/1.1 2x0 " + b"A" * 3000 + b"\r\n\r\n"
+
+    with raw_model_server(reply) as url, pytest.raises(ProviderUnreachable) as exc:
+        await build_embedder(_settings(url, retry_budget=1.5)).embed("x")
+    message = str(exc.value)
+    assert "illegal status line" in message
+    assert len(message) < 600
+
+
+async def test_a_key_httpx_refuses_to_send_is_not_quoted_back():
+    """A key with a line break in it is refused before it is sent, and httpx's error quotes
+    the header it would not send."""
+    key = "ab\ncd-secret-4711"
+    with model_server() as url, pytest.raises(ProviderUnreachable) as exc:
+        await build_embedder(_settings(url, api_key=key)).embed("x")
+    assert "LocalProtocolError" in str(exc.value)
+    assert "secret-4711" not in str(exc.value)
 
 
 async def test_an_unreachable_host_says_what_the_connection_failed_with():
@@ -178,7 +253,7 @@ async def test_an_unreachable_host_says_what_the_connection_failed_with():
     text is what tells them apart. A last attempt the budget cut short ends in a timeout that
     says nothing, so the error names the last failure that did say something."""
     with pytest.raises(ProviderUnreachable) as exc:
-        await build_embedder(_settings(_NO_ADDRESS, unreachable_budget=0.8)).embed("x")
+        await build_embedder(_settings(_NO_ADDRESS, unreachable_budget=1.5)).embed("x")
     assert re.search(
         r"is unreachable: ConnectError after \d+ attempts? over [\d.]+ s \(.+\);", str(exc.value)
     )
@@ -189,7 +264,7 @@ async def test_a_dropped_connection_says_how_it_was_dropped():
         flaky_model_server(fail_times=99, status=None) as url,
         pytest.raises(ProviderUnreachable) as exc,
     ):
-        await build_embedder(_settings(url, retry_budget=0.5)).embed("x")
+        await build_embedder(_settings(url, retry_budget=1.5)).embed("x")
     assert "(Server disconnected without sending a response.)" in str(exc.value)
 
 
@@ -200,6 +275,27 @@ async def test_a_host_that_never_answers_fails_inside_the_budget():
         with pytest.raises(ProviderUnreachable, match="too slowly"):
             await build_embedder(_settings(url, retry_budget=3.0, attempt_timeout=50.0)).embed("x")
         assert time.monotonic() - started < 6.0
+
+
+def _leaked(message: str, said: str, size: int = 6) -> set[str]:
+    """Every *size*-character piece of the key -- raw, and as the server wrote it (*said*) --
+    that the message contains."""
+    pieces = {
+        text[i : i + size]
+        for text in (_KEY, said)
+        for i in range(len(text) - size + 1)
+        if not text[i : i + size].isspace()
+    }
+    return {piece for piece in pieces if piece in message}
+
+
+def _token_in(request: bytes) -> bytes:
+    """The bearer token *request* carried."""
+    for line in request.split(b"\r\n"):
+        name, _, value = line.partition(b":")
+        if name.strip().lower() == b"authorization":
+            return value.strip().removeprefix(b"Bearer ")
+    raise AssertionError("the request carried no key")
 
 
 def _settings(

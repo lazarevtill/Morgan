@@ -18,18 +18,21 @@ import json
 import re
 import time
 from dataclasses import dataclass
+from urllib.parse import quote, quote_plus
 
 import httpx
 
 from morgan_brain.providers.wire import Outcome, ProviderRefused, ProviderUnreachable
 
-#: How much of a refusing server's answer its error quotes, once the key is redacted.
+#: How much of a server's words an error quotes -- its answer to a refused request, or the
+#: text of the failure that ended a call -- once every key in them is redacted.
 _QUOTED_CHARS = 200
 
-#: A bearer token anywhere in a server's answer (RFC 6750's token characters).
-_BEARER = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9\-._~+/]+=*")
+#: A bearer token anywhere in a server's words: everything after "Bearer " up to whitespace or
+#: a quote, backslashes and percent signs included, however the token was encoded.
+_BEARER = re.compile(r"(?i)\bbearer\s+[^\s\"']+")
 
-#: What stands in a quoted answer for a key.
+#: What stands in quoted text for a key.
 _REDACTED = "[redacted]"
 
 #: What a 501 means to an embedding request: the server has no embedding model to answer with.
@@ -56,7 +59,8 @@ class RetryBudget:
     shrinks so that one more attempt still has ``backoff_seconds`` of the budget left. One
     attempt takes at most ``attempt_seconds`` and never longer than what is left of the
     call's budget -- but for an answer that trickles in a byte at a time, which is cut off
-    ``_BOUND_GRACE_SECONDS`` later.
+    ``_BOUND_GRACE_SECONDS`` later -- and never less than ``backoff_seconds``, which only a
+    first attempt whose budget is already spent needs.
     """
 
     seconds: float
@@ -113,7 +117,7 @@ class OpenAICompatEmbedder:
         self._url = endpoint.rstrip("/") + "/embeddings"
         self._model = model
         self._budget = budget
-        self._api_key = api_key or ""
+        self._redact = _Redactor(api_key or "")
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._setting = setting
         self._key_setting = key_setting
@@ -123,8 +127,8 @@ class OpenAICompatEmbedder:
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         # One client for every attempt of the call, built outside any attempt's timeout:
-        # building one loads a TLS context, a fifth of a second on Windows, which is no part of
-        # waiting for an answer. The call's budget does count it, from *started*.
+        # building one loads a TLS context, 0.2-0.5 s on a loaded Windows machine, which is no
+        # part of waiting for an answer. The call's budget does count it, from *started*.
         started = time.monotonic()
         async with httpx.AsyncClient() as client:
             return await self._retried(client, texts, started=started)
@@ -142,8 +146,14 @@ class OpenAICompatEmbedder:
         while True:
             attempts += 1
             elapsed = time.monotonic() - started
-            timeout = min(budget.attempt_seconds, budget.seconds - elapsed)
-            connect = timeout if connected else min(timeout, budget.unreachable_seconds - elapsed)
+            # No attempt is given less than the first wait's length: the retry rule below leaves
+            # every later attempt that much, and a first attempt whose budget went on building
+            # the client would otherwise have no time at all, and fail as unreachable.
+            floor = budget.backoff_seconds
+            timeout = max(min(budget.attempt_seconds, budget.seconds - elapsed), floor)
+            connect = timeout
+            if not connected:
+                connect = max(min(timeout, budget.unreachable_seconds - elapsed), floor)
             outcome: Outcome
             error: Exception
             try:
@@ -168,7 +178,9 @@ class OpenAICompatEmbedder:
                 # An address httpx cannot send to at all (no scheme, a malformed proxy): no
                 # retry changes that, and the setting that holds it is what to check.
                 raise ProviderUnreachable(
-                    self._url, f"{type(exc).__name__}: {exc}", setting=self._setting
+                    self._url,
+                    f"{type(exc).__name__}: {self._redact(str(exc))}",
+                    setting=self._setting,
                 ) from exc
 
             if named is None or not _timed_out(error) or _timed_out(named):
@@ -180,14 +192,14 @@ class OpenAICompatEmbedder:
             # One more attempt is made while it can still be given the first wait's length of
             # the budget; the wait before it shrinks to leave it that. A backoff that ran past
             # the budget gave up at about half of it, on a host about to answer.
-            room = allowed - elapsed - budget.backoff_seconds
+            room = allowed - elapsed - floor
             if room <= 0:
                 raise ProviderUnreachable.retried(
                     self._url,
                     setting=self._setting,
                     outcome=outcome,
                     error=_name(named),
-                    said=_said(named),
+                    said=self._said(named),
                     attempts=attempts,
                     seconds=elapsed,
                 ) from error
@@ -226,19 +238,64 @@ class OpenAICompatEmbedder:
         setting = self._key_setting if status in (401, 403) else self._setting
         hint = _NO_EMBEDDINGS if status == 501 else ""
         return ProviderRefused(
-            self._url, status, setting, detail=self._quote(response.text), hint=hint
+            self._url, status, setting, detail=self._redact(response.text), hint=hint
         )
 
-    def _quote(self, answer: str) -> str:
-        """The start of a server's *answer*, fit to print: the key this adapter sent, and any
-        bearer token, redacted before it is cut, so a gateway that echoes a credential back
-        never puts it into a message, a log or a transcript."""
-        if self._api_key:
-            # As sent, and as a JSON string would escape it.
-            for form in {self._api_key, json.dumps(self._api_key)[1:-1]}:
-                answer = answer.replace(form, _REDACTED)
-        answer = _BEARER.sub(f"Bearer {_REDACTED}", answer)
-        return " ".join(answer.split())[:_QUOTED_CHARS]
+    def _said(self, error: Exception) -> str:
+        """What *error* said, to follow its name, redacted and cut like a server's answer: httpx
+        quotes a malformed line of the answer in it, whatever that line carried. Nothing for a
+        status, whose name is the whole of it; a timeout says nothing."""
+        if isinstance(error, httpx.HTTPStatusError):
+            return ""
+        return self._redact(str(error))
+
+
+class _Redactor:
+    """Makes a server's words fit to print: every key in them redacted, then cut.
+
+    A gateway that echoes a credential back, or a malformed answer httpx quotes in its error,
+    would otherwise put the key into a message, the MCP result that carries it, a log and a
+    transcript. The key this adapter sends is matched however the server wrote it (``_forms``),
+    and any bearer token at all is matched by ``_BEARER``. Whitespace is collapsed and the text
+    cut to ``_QUOTED_CHARS`` only after both, so no cut leaves a piece of a key behind.
+    """
+
+    def __init__(self, key: str) -> None:
+        self._key = re.compile(_forms(key), re.IGNORECASE) if key else None
+
+    def __call__(self, text: str) -> str:
+        if self._key is not None:
+            text = self._key.sub(_REDACTED, text)
+        text = _BEARER.sub(f"Bearer {_REDACTED}", text)
+        return " ".join(text.split())[:_QUOTED_CHARS]
+
+
+def _forms(key: str) -> str:
+    """A pattern for *key* in every encoding a server might write it back in, built once per
+    adapter: each character raw, JSON-escaped (with ``ensure_ascii`` on or off, and ``/`` as
+    ``\\/``), ``\\u``-escaped, or percent-encoded (a space also as ``+``), in any mix, and with
+    whitespace allowed between characters, where a server broke the key across a line. Hex digits
+    match in either case. An accepted residual: a key broken inside one character's escape, or
+    by an escaped line break (``\\n``), is not matched, and the part after the break prints.
+    """
+    return r"\s*".join(_forms_of(char) for char in key)
+
+
+def _forms_of(char: str) -> str:
+    """One character of a key, as any of its encodings: an alternation, longest first."""
+    utf16 = char.encode("utf-16-be")
+    forms = {
+        char,
+        json.dumps(char)[1:-1],
+        json.dumps(char, ensure_ascii=False)[1:-1],
+        "".join(f"\\u{int.from_bytes(utf16[i : i + 2]):04x}" for i in range(0, len(utf16), 2)),
+        quote(char, safe=""),
+        quote_plus(char),
+        "".join(f"%{byte:02x}" for byte in char.encode()),
+    }
+    if char == "/":
+        forms.add("\\/")
+    return "(?:" + "|".join(re.escape(f) for f in sorted(forms, key=len, reverse=True)) + ")"
 
 
 def _timed_out(error: Exception) -> bool:
@@ -256,11 +313,3 @@ def _name(error: Exception) -> str:
     if isinstance(error, TimeoutError):
         return "ReadTimeout"
     return type(error).__name__
-
-
-def _said(error: Exception) -> str:
-    """What *error* said, to follow its name: httpx's text for a failed connect or a dropped
-    one; nothing for a status, whose name is the whole of it, or a timeout, which is silent."""
-    if isinstance(error, httpx.HTTPStatusError):
-        return ""
-    return " ".join(str(error).split())

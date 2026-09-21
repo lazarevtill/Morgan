@@ -233,10 +233,10 @@ def _a_version_five_database(
 
 def _short_budgets(monkeypatch: pytest.MonkeyPatch) -> None:
     """Budgets for a suite, not a cold host, for the tests whose embedder never answers: port 1
-    and a failing fake give up in under a second. A test whose embedder answers keeps the
+    and a failing fake give up in a second or two. A test whose embedder answers keeps the
     defaults, so a loaded machine cannot spend its budget before the answer comes."""
-    monkeypatch.setenv("MORGAN_EMBEDDING_UNREACHABLE_BUDGET_SECONDS", "0.5")
-    monkeypatch.setenv("MORGAN_EMBEDDING_RETRY_BUDGET_SECONDS", "0.5")
+    monkeypatch.setenv("MORGAN_EMBEDDING_UNREACHABLE_BUDGET_SECONDS", "1.0")
+    monkeypatch.setenv("MORGAN_EMBEDDING_RETRY_BUDGET_SECONDS", "1.5")
     monkeypatch.setenv("MORGAN_EMBEDDING_RETRY_BACKOFF_SECONDS", "0.05")
 
 
