@@ -117,6 +117,8 @@ def test_step_four_backfills_the_author_and_marks_the_archive(tmp_path):
     assert rows["archive/chatgpt"] == "import"
     assert rows["Morgan"] == "unknown"
     assert conn.execute("SELECT COUNT(*) FROM memories WHERE author_id = ''").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM facts WHERE author_id = ''").fetchone()[0] == 0
+    assert {r["author_id"] for r in conn.execute("SELECT author_id FROM facts")} == {"u"}
 
 
 def test_step_four_is_the_heavy_provenance_step_and_counts_the_rows_it_rewrote(tmp_path):
@@ -129,7 +131,7 @@ def test_step_four_is_the_heavy_provenance_step_and_counts_the_rows_it_rewrote(t
         for step, counts in migrations.migrate(conn, _stores(conn))
     }
 
-    assert applied[4] == ("provenance columns", True, {"memories": 3})
+    assert applied[4] == ("provenance columns", True, {"memories": 3, "facts": 3})
     rows = dict(conn.execute("SELECT project, origin_kind FROM memories"))
     assert rows == {"archive/chatgpt-holdout": "import", "Morgan": "unknown", "personal": "unknown"}
 
@@ -188,11 +190,49 @@ def test_a_database_from_before_step_one_goes_through_every_step(tmp_path):
     assert [r["name"] for r in indexed] == [n.lower() for n in _NEW_NAMES]
     facts = conn.execute("SELECT project, object, author_id, scope FROM facts ORDER BY project")
     assert [tuple(r) for r in facts] == [
-        ("Morgan", "k8s", "", "private"),
-        ("archive/chatgpt", "k8s", "", "private"),
+        ("Morgan", "k8s", "u", "private"),
+        ("archive/chatgpt", "k8s", "u", "private"),
     ]
     left = conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'mem_entity_nodes'").fetchone()
     assert left is None
+
+
+def test_migrate_on_a_file_with_none_of_the_tables_reaches_the_end(tmp_path):
+    """``morgan migrate`` checks only that the file exists, and nothing stamps a file with
+    none of Morgan's tables there, so every step runs from 0. The stores it opens first have
+    already created ``memories`` with step 4's columns: step 4 must add only the ones missing,
+    or the wave rolls back and every later ``migrate`` fails the same way."""
+    path = str(tmp_path / "empty.db")
+    open_db(path).close()
+    conn = open_db(path)  # opened as ``morgan migrate`` opens it, then its stores, then the wave
+
+    migrations.migrate(conn, _stores(conn))
+
+    assert _version(conn) == len(migrations._STEPS)
+    assert migrations.pending(conn) == ()
+    new = build_memory_module(str(tmp_path / "new.db"))._conn
+    assert _columns(conn, "memories") == _columns(new, "memories")
+
+
+def test_migrate_leaves_a_facts_table_this_code_created_below_version_four(tmp_path):
+    """A version-2 database whose ``facts`` was never made, opened once by this code: the
+    temporal store creates ``facts`` with step 4's columns and step 3 runs on open. Step 4
+    then meets a version-3 database whose ``memories`` lacks the columns and whose ``facts``
+    has them."""
+    _a_database_from_before_phase_zero(
+        tmp_path, projects=["Morgan"], version=2, tables=("memories",)
+    ).close()
+    build_memory_module(str(tmp_path / "old.db"))._conn.close()
+    conn = open_db(str(tmp_path / "old.db"))
+    assert _version(conn) == 3
+
+    migrations.migrate(conn, _stores(conn))
+
+    assert migrations.pending(conn) == ()
+    new = build_memory_module(str(tmp_path / "new.db"))._conn
+    for table in ("memories", "facts"):
+        assert _columns(conn, table) == _columns(new, table)
+    assert conn.execute("SELECT author_id FROM memories").fetchone()["author_id"] == "u"
 
 
 async def test_reads_answer_on_a_database_still_waiting_for_step_four(tmp_path):
@@ -224,8 +264,8 @@ async def test_reads_answer_on_a_database_still_waiting_for_step_four(tmp_path):
 #: ``memories`` and ``facts`` exactly as every Morgan before phase 0 created them (commit
 #: 3b2b386). A database built from these is one step 4 was written for -- one this code
 #: created would already carry the columns, and step 4 would fail on the first of them.
-_PRE_PHASE_ZERO_DDL = (
-    """
+_PRE_PHASE_ZERO_DDL = {
+    "memories": """
             CREATE TABLE IF NOT EXISTS memories (
                 id         TEXT PRIMARY KEY,
                 user_id    TEXT NOT NULL,
@@ -238,7 +278,7 @@ _PRE_PHASE_ZERO_DDL = (
                 created_at TEXT
             );
     """,
-    """
+    "facts": """
 CREATE TABLE IF NOT EXISTS facts (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -254,7 +294,7 @@ CREATE TABLE IF NOT EXISTS facts (
     last_confirmed TEXT
 );
 """,
-)
+}
 
 _CONTENT = "Install the chart. Then ask Kafka again."
 #: What the rule before step 1 extracted from ``_CONTENT`` -- every sentence opener was a name
@@ -268,16 +308,20 @@ def _memory_id(project: str) -> str:
 
 
 def _a_database_from_before_phase_zero(
-    tmp_path: Path, *, projects: list[str], version: int
+    tmp_path: Path,
+    *,
+    projects: list[str],
+    version: int,
+    tables: tuple[str, ...] = ("memories", "facts"),
 ) -> sqlite3.Connection:
     """One memory and one current fact per project, in ``memories`` and ``facts`` as a Morgan
-    before phase 0 wrote them, at ``user_version`` *version*.
+    before phase 0 wrote them, at ``user_version`` *version*. Only *tables* are created.
 
     Before step 1 the stored entities are the old rule's; from step 1 on, the current rule's.
     """
     conn = open_db(str(tmp_path / "old.db"))
-    for ddl in _PRE_PHASE_ZERO_DDL:
-        conn.execute(ddl)
+    for table in tables:
+        conn.execute(_PRE_PHASE_ZERO_DDL[table])
     names = _OLD_NAMES if version == 0 else _NEW_NAMES
     for project in projects:
         conn.execute(
@@ -290,6 +334,8 @@ def _a_database_from_before_phase_zero(
                 "2026-09-01T00:00:00+00:00",
             ),
         )
+        if "facts" not in tables:
+            continue
         conn.execute(
             "INSERT INTO facts VALUES "
             "(?, 'u', ?, 'harbor', 'runs_on', 'k8s', 'user_stated', 1.0, ?, NULL, NULL, ?)",

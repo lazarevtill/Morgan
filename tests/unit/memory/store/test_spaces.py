@@ -126,8 +126,8 @@ def test_a_fresh_database_and_a_migrated_one_end_with_the_same_schema(tmp_path):
 
     old_path = _old_database_missing_both_tables(tmp_path, "old.db")
     migrated = open_db(old_path)
-    # Up to step 3 only: the fixture is built by this code, so its tables already carry what
-    # later steps add, and a later step run on it would fail on columns it already has.
+    # Up to step 3 only: this is step 3's test, and the heavy steps after it are left pending
+    # by ``upgrade``, so the pending list would name them too.
     through_three = migrations._STEPS[:3]
     assert [s.number for s in migrations.pending(migrated, through_three)] == [3]
 

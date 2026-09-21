@@ -126,17 +126,17 @@ _ARCHIVE_PROJECTS = ("archive/chatgpt", "archive/chatgpt-holdout")
 #: Step 4's columns, in the order it adds them, each with a constant default. The stores'
 #: ``CREATE TABLE`` ends with the same columns in the same order, so a database this code
 #: creates and one migrated through step 4 have the same schema; a test compares the two.
-_PROVENANCE_COLUMNS: tuple[tuple[str, str], ...] = (
-    ("memories", "ALTER TABLE memories ADD COLUMN origin_kind TEXT NOT NULL DEFAULT 'unknown'"),
-    ("memories", "ALTER TABLE memories ADD COLUMN client TEXT NOT NULL DEFAULT ''"),
-    ("memories", "ALTER TABLE memories ADD COLUMN session_id TEXT NOT NULL DEFAULT ''"),
-    ("memories", "ALTER TABLE memories ADD COLUMN cwd TEXT NOT NULL DEFAULT ''"),
-    ("memories", "ALTER TABLE memories ADD COLUMN author_id TEXT NOT NULL DEFAULT ''"),
-    ("memories", "ALTER TABLE memories ADD COLUMN scope TEXT NOT NULL DEFAULT 'private'"),
-    ("memories", "ALTER TABLE memories ADD COLUMN instruction_like INTEGER NOT NULL DEFAULT 0"),
-    ("memories", "ALTER TABLE memories ADD COLUMN status TEXT NOT NULL DEFAULT 'stored'"),
-    ("facts", "ALTER TABLE facts ADD COLUMN author_id TEXT NOT NULL DEFAULT ''"),
-    ("facts", "ALTER TABLE facts ADD COLUMN scope TEXT NOT NULL DEFAULT 'private'"),
+_PROVENANCE_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("memories", "origin_kind", "TEXT NOT NULL DEFAULT 'unknown'"),
+    ("memories", "client", "TEXT NOT NULL DEFAULT ''"),
+    ("memories", "session_id", "TEXT NOT NULL DEFAULT ''"),
+    ("memories", "cwd", "TEXT NOT NULL DEFAULT ''"),
+    ("memories", "author_id", "TEXT NOT NULL DEFAULT ''"),
+    ("memories", "scope", "TEXT NOT NULL DEFAULT 'private'"),
+    ("memories", "instruction_like", "INTEGER NOT NULL DEFAULT 0"),
+    ("memories", "status", "TEXT NOT NULL DEFAULT 'stored'"),
+    ("facts", "author_id", "TEXT NOT NULL DEFAULT ''"),
+    ("facts", "scope", "TEXT NOT NULL DEFAULT 'private'"),
 )
 
 
@@ -147,26 +147,43 @@ def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
     return row is not None
 
 
+def _column_names(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {str(r[0]) for r in conn.execute("SELECT name FROM pragma_table_info(?)", (table,))}
+
+
 def _add_provenance(conn: sqlite3.Connection, stores: Stores) -> dict[str, int]:
     """Give every memory and fact its provenance columns, and fill in what is known.
 
-    Heavy: the backfill rewrites every memory. Each existing memory's author is its owner.
-    Its origin is known only for the two archive projects, which only the ChatGPT import
-    writes; every other row stays ``unknown``, because guessing an origin would be worse than
-    saying none was recorded. ``memories`` always exists here, because *stores* opened it;
-    ``facts`` exists only if its store ever opened this file, and when it is made later its
-    ``CREATE TABLE`` carries the columns. Returns the memories the backfill rewrote.
+    Heavy: the backfill rewrites every memory and fact. Each existing row's author is its
+    owner. A memory's origin is known only for the two archive projects, which only the
+    ChatGPT import writes; every other memory stays ``unknown``, because guessing an origin
+    would be worse than saying none was recorded.
+
+    A column is added only where it is missing. The stores create the latest schema whenever
+    they create a table, so a table this code made while the database was still below
+    version 4 -- ``facts`` on an old database opened once, ``memories`` in a file ``morgan
+    migrate`` found empty -- already has step 4's columns; adding them again would fail the
+    wave, and every later ``migrate`` with it. ``memories`` always exists here, because
+    *stores* opened it; ``facts`` exists only if its store ever opened this file, and when it
+    is made later its ``CREATE TABLE`` carries the columns. Returns the rows each backfill
+    rewrote, per table.
     """
-    for table, add_column in _PROVENANCE_COLUMNS:
-        if _table_exists(conn, table):
-            conn.execute(add_column)
-    rewritten = conn.execute(
-        "UPDATE memories SET author_id = user_id WHERE author_id = ''"
-    ).rowcount
+    for table, column, definition in _PROVENANCE_COLUMNS:
+        if not _table_exists(conn, table) or column in _column_names(conn, table):
+            continue
+        # Names from the constant above, never from a caller: DDL takes no bound parameters.
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+    memories = conn.execute("UPDATE memories SET author_id = user_id WHERE author_id = ''")
+    counts = {"memories": memories.rowcount}
     conn.execute(
         "UPDATE memories SET origin_kind = 'import' WHERE project IN (?, ?)", _ARCHIVE_PROJECTS
     )
-    return {"memories": rewritten}
+    counts["facts"] = (
+        conn.execute("UPDATE facts SET author_id = user_id WHERE author_id = ''").rowcount
+        if _table_exists(conn, "facts")
+        else 0
+    )
+    return counts
 
 
 #: In order. Step *n* brings a database from ``user_version`` *n - 1* to *n*; append only.
