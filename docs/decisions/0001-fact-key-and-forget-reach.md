@@ -49,24 +49,56 @@ that holds a project's data has a `project` column, or is keyed by the project's
 listed in `NAME_KEYED_PROJECT_TABLES`.
 
 **How `forget` erases a registered table.** `forget()` walks `project_tables(conn)` and
-`NAME_KEYED_PROJECT_TABLES`. Each table is erased by a deleter its store owns, a function in the
-store's module found by the table's name in `_DELETERS` in `memory/module.py`. Each deleter is
-handed one `Erasure` (`store/tables.py`): the owner, the project, the ids of the project's
-memories, and those memories' rowids in `vec_meta`. An embedding space's vec0 table is erased by
-`vectors.vector_deleter` for its name. A memory's vector has the rowid `vec_meta` gives it in
-every space's table, the rowid `vectors.stored_sample` and `vectors.audit_sample` read any
-space's table by. Every table is resolved before any row is deleted. A registered table that
-exists and has no deleter makes `forget()` raise, naming it, with nothing erased. A table in
-`project_tables(conn)` that the database does not have is named in
-`ForgetReport.tables_skipped`. The ids and rowids are selected, and every table is erased, in
-one write transaction; the database is vacuumed once it commits.
+`NAME_KEYED_PROJECT_TABLES`. Each table is erased by a deleter its store owns: a function in the
+store's module, found by the table's name in `_DELETERS` in `memory/module.py`. Each deleter is
+handed one `Erasure` (`store/tables.py`):
+
+- the owner and the project;
+- the ids of the project's memories;
+- the rowids of the `vec_meta` rows erased with them, which is where
+  `SqliteVectorIndex.upsert` wrote their vectors in `vec_items`.
+
+The deleters erase as follows:
+
+- A table with a `user_id` and a `project` column is erased by those two columns as well as by
+  the ids, so an index row whose memory is gone goes too. No deleter matches a `project`
+  column without its `user_id`, so another owner's rows are never touched.
+- `vec_items` is erased at those rowids and by its own `user_id` and `project` columns.
+- Another embedding space's vec0 table, named in `embedding_spaces`, is erased by its own
+  `user_id` and `project` columns alone (`vectors.space_deleter`). No writer puts its vectors
+  at `vec_meta`'s rowids, so a rowid there says nothing about whose row it is.
+- The `projects` row is erased by its name.
+- The FTS5 deleter then runs `optimize` on `fts_memories`. FTS5 answers a DELETE with a
+  tombstone and keeps the row's words in its segment b-tree until a merge; `optimize` merges
+  now, so the words leave `fts_memories_data`.
+
+Every table is resolved before any row is deleted. `forget()` raises, naming the table, with
+nothing erased, when a registered table exists and has no deleter, or when a space's table has
+no `user_id` and `project` columns. A table in `project_tables(conn)` that the database does not
+have is named in `ForgetReport.tables_skipped`. The ids and rowids are selected, and every
+table is erased, in one write transaction. Once it commits, the database is vacuumed and the
+write-ahead log truncated (`PRAGMA wal_checkpoint(TRUNCATE)`). A connection in the middle of a
+read keeps the log from being truncated; `forget()` then logs the warning
+`forget.wal-not-truncated`, naming the log, and still succeeds.
 
 A store that adds a table therefore registers it in `tables.py` and maps its deleter in
-`_DELETERS`. `tests/unit/memory/test_forget_reaches_every_project_keyed_table.py` writes rows
-for two projects into every registered table through the stores' own write paths, forgets one,
-and checks each table the registry names: the forgotten project's rows are gone and the other's
-are unchanged. It checks a second embedding space's table the same way. It also checks that a
-registered table with no deleter stops `forget()` before it erases anything.
+`_DELETERS`. The tests in `tests/unit/memory/test_forget_reaches_every_project_keyed_table.py`
+cover the following:
+
+- **Every registered table.** It writes rows for two projects into every registered table
+  through the stores' own write paths and forgets one. Then it checks each table the registry
+  names: the forgotten project's rows are gone and the other's are unchanged.
+- **A second embedding space.** It registers the space and creates its vec0 table directly,
+  since no code writes a second space yet. It writes that table's rows at rowids that differ
+  from `vec_meta`'s, and checks that only the forgotten project's vector goes.
+- **Orphans.** It checks that an index row whose memory or `vec_meta` row is gone is erased,
+  and that another owner's rows in the same project are kept.
+- **Refusals.** It checks that each refusal above stops `forget()` with every row of the
+  project still present.
+
+`tests/unit/memory/test_forget_leaves_no_trace.py` reads the raw bytes of the database file
+and its `-wal` file after `forget()`, alone and beside a second open connection. It checks that
+a word of the forgotten project is in neither.
 
 **Later.** Erasing by session or by date, once `forget` can, cascades through the same
 registry.

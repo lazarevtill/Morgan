@@ -127,13 +127,32 @@ schedule of its own.
 ## Erasure (`morgan forget`)
 
 First a `forget` snapshot, the undo. Then one write transaction, holding the lock before the
-memory ids are read: memories, FTS rows, entity rows, vectors (`vec_meta` and every embedding
-space's vec0 table, `vec_items` among them), facts, session history, and the project's
-`projects` row. It walks `store/tables.py`, the registry of the tables this has to reach, and
-erases each with the deleter its store owns; a registered table with no deleter stops it by
-name before anything is erased. A memory being stored by another process is either entirely
-erased or entirely kept, because storing is one transaction too. Tables that were never created
-on this database are named in `tables_skipped` rather than counted as zero. Then `VACUUM`.
+memory ids are read. It erases:
+
+- memories, FTS rows and entity rows;
+- vectors: `vec_meta` and every embedding space's vec0 table, `vec_items` among them;
+- facts and session history;
+- the project's `projects` row.
+
+It walks `store/tables.py`, the registry of the tables this has to reach, and erases each table
+with the deleter its store owns:
+
+- Rows are matched by the memory ids, and by the owner's `user_id` and `project` columns
+  wherever a table has both, so an index row whose memory is gone goes too.
+- A space's vec0 table other than `vec_items` is matched by those columns alone.
+- A registered table with no deleter, or a space's table without those columns, stops it by
+  name before anything is erased.
+- FTS5's `optimize` then merges `fts_memories`, so the deleted words leave its segments.
+
+A memory being stored by another process is either entirely erased or entirely kept, because
+storing is one transaction too. Tables that were never created on this database are named in
+`tables_skipped` rather than counted as zero.
+
+After the commit, it runs `VACUUM`, then `PRAGMA wal_checkpoint(TRUNCATE)`, so the forgotten
+words are in neither the database file nor its write-ahead log. A connection in the middle of a
+read keeps the log from being truncated; that is logged as `forget.wal-not-truncated`, never
+raised.
+
 [`decisions/0001`](decisions/0001-fact-key-and-forget-reach.md) says what it guarantees.
 
 ## Tests (`tests/`)

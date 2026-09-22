@@ -100,8 +100,12 @@ come in" are answered by the directory names.
 - **`forget` reaches every project-keyed table.** `store/tables.py::PROJECT_TABLES` is the one
   list; a store that adds a table registers it there, and a test fails on any table with a
   `project` column missing from it. `forget` walks the registry and erases each table through
-  the deleter its store owns; a registered table with no deleter stops it by name before
-  anything is erased.
+  the deleter its store owns, by the memory ids and by the owner's `user_id` and `project`
+  columns wherever a table has both; a space's vec0 table other than `vec_items` is erased by
+  those columns alone. A registered table it cannot erase that way stops it by name before
+  anything is erased. The forgotten words leave the files: FTS5 is optimized, the database
+  vacuumed and the write-ahead log truncated, or named in a warning when another connection's
+  read holds it.
 - **Every write holds the lock from its first statement.** Other processes share the database
   file, so a write that reads before acting takes the lock before the read:
   `store/db.py::write_transaction` opens `BEGIN IMMEDIATE`, and a write inside another one
@@ -203,7 +207,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 632 passed, 4 skipped (the live ones)
+pytest -q                     # 637 passed, 4 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

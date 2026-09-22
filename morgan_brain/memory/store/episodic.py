@@ -147,8 +147,7 @@ class EpisodicStore:
 
     def delete(self, ids: list[str]) -> None:
         with write_transaction(self._conn):
-            for mid in ids:
-                self._conn.execute("DELETE FROM memories WHERE id = ?", (mid,))
+            _delete_memories(self._conn, json.dumps(ids))
 
     def distinct_projects(self, user_id: str) -> list[str]:
         """Return every project *user_id* has data under, across every project-keyed table.
@@ -184,9 +183,22 @@ class EpisodicStore:
         return row is not None
 
 
+def _delete_memories(
+    conn: sqlite3.Connection,
+    memory_ids: str,
+    user_id: str | None = None,
+    project: str | None = None,
+) -> int:
+    """The one delete of ``memories``: the rows of the ids in the JSON array *memory_ids*, and
+    every row of *user_id* under *project*. Called with ids alone, *user_id* and *project* are
+    ``None``, and ``user_id = NULL`` is true of no row, so exactly the ids' rows go."""
+    return conn.execute(
+        "DELETE FROM memories WHERE id IN (SELECT value FROM json_each(?)) "
+        "OR (user_id = ? AND project = ?)",
+        (memory_ids, user_id, project),
+    ).rowcount
+
+
 def delete_memories(conn: sqlite3.Connection, erasure: Erasure) -> int:
     """`forget()`'s deleter for ``memories``: the erased memories' rows."""
-    return conn.execute(
-        "DELETE FROM memories WHERE id IN (SELECT value FROM json_each(?))",
-        (erasure.memory_ids,),
-    ).rowcount
+    return _delete_memories(conn, erasure.memory_ids, erasure.user_id, erasure.project)

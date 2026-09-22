@@ -111,14 +111,27 @@ class EntityIndex:
 
     def delete(self, ids: list[str]) -> None:
         with write_transaction(self._conn):
-            for mid in ids:
-                self._conn.execute("DELETE FROM memory_entities WHERE memory_id = ?", (mid,))
+            _delete_entities(self._conn, json.dumps(ids))
+
+
+def _delete_entities(
+    conn: sqlite3.Connection,
+    memory_ids: str,
+    user_id: str | None = None,
+    project: str | None = None,
+) -> int:
+    """The one delete of ``memory_entities``: every name indexed for the memory ids in the JSON
+    array *memory_ids*, and every row of *user_id* under *project*, whether or not its memory
+    still exists. Called with ids alone, *user_id* and *project* are ``None``, and
+    ``user_id = NULL`` is true of no row, so exactly the ids' rows go."""
+    return conn.execute(
+        "DELETE FROM memory_entities WHERE memory_id IN (SELECT value FROM json_each(?)) "
+        "OR (user_id = ? AND project = ?)",
+        (memory_ids, user_id, project),
+    ).rowcount
 
 
 def delete_entities(conn: sqlite3.Connection, erasure: Erasure) -> int:
     """`forget()`'s deleter for ``memory_entities``: every name indexed for the erased
-    memories."""
-    return conn.execute(
-        "DELETE FROM memory_entities WHERE memory_id IN (SELECT value FROM json_each(?))",
-        (erasure.memory_ids,),
-    ).rowcount
+    memories, and every row of the erased owner and project."""
+    return _delete_entities(conn, erasure.memory_ids, erasure.user_id, erasure.project)

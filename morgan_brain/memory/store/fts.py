@@ -12,6 +12,7 @@ Two traps this module exists to handle:
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 
@@ -140,13 +141,35 @@ class FtsIndex:
 
     def delete(self, ids: list[str]) -> None:
         with write_transaction(self._conn):
-            for mid in ids:
-                self._conn.execute("DELETE FROM fts_memories WHERE memory_id = ?", (mid,))
+            _delete_keywords(self._conn, json.dumps(ids))
+
+
+def _delete_keywords(
+    conn: sqlite3.Connection,
+    memory_ids: str,
+    user_id: str | None = None,
+    project: str | None = None,
+) -> int:
+    """The one delete of ``fts_memories``: the keyword rows of the memory ids in the JSON array
+    *memory_ids*, and every row of *user_id* under *project*, whether or not its memory still
+    exists. Called with ids alone, *user_id* and *project* are ``None``, and
+    ``user_id = NULL`` is true of no row, so exactly the ids' rows go."""
+    return conn.execute(
+        "DELETE FROM fts_memories WHERE memory_id IN (SELECT value FROM json_each(?)) "
+        "OR (user_id = ? AND project = ?)",
+        (memory_ids, user_id, project),
+    ).rowcount
 
 
 def delete_keywords(conn: sqlite3.Connection, erasure: Erasure) -> int:
-    """`forget()`'s deleter for ``fts_memories``: the erased memories' keyword rows."""
-    return conn.execute(
-        "DELETE FROM fts_memories WHERE memory_id IN (SELECT value FROM json_each(?))",
-        (erasure.memory_ids,),
-    ).rowcount
+    """`forget()`'s deleter for ``fts_memories``: the erased keyword rows, and then their words.
+
+    FTS5 answers a DELETE with a tombstone and keeps the row's terms in its segment b-tree,
+    ``fts_memories_data``, until a merge -- which a small or quiet database may never reach, so
+    the words would outlive the rows and the ``VACUUM`` after them. ``optimize`` merges every
+    segment into one now, inside ``forget()``'s transaction, and the deleted terms are left out
+    of it. ``optimize`` rather than the ``secure-delete`` option, which needs SQLite 3.42.
+    """
+    erased = _delete_keywords(conn, erasure.memory_ids, erasure.user_id, erasure.project)
+    conn.execute("INSERT INTO fts_memories(fts_memories) VALUES ('optimize')")
+    return erased

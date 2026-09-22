@@ -255,46 +255,98 @@ def _exists(conn: sqlite3.Connection, table_name: str) -> bool:
     return row is not None
 
 
-def vector_rowids(conn: sqlite3.Connection, memory_ids: str) -> str:
-    """The ``vec_meta`` rowids of the memory ids in the JSON array *memory_ids*, as a JSON
-    array. A memory's vector sits at that rowid in every embedding space's vec0 table: it is
-    the rowid ``upsert`` writes ``vec_items`` at, and the one ``stored_sample`` and
-    ``audit_sample`` read any space's table by. Read it under the write lock that deletes by
-    it -- see ``SqliteVectorIndex.delete``."""
+def vector_rowids(
+    conn: sqlite3.Connection,
+    memory_ids: str,
+    user_id: str | None = None,
+    project: str | None = None,
+) -> str:
+    """The rowids of the ``vec_meta`` rows `_delete_meta` deletes for the same arguments, as a
+    JSON array: those are the rowids ``upsert`` wrote their vectors at in ``vec_items``. Read
+    them under the write lock that deletes by them -- see ``SqliteVectorIndex.delete``."""
     found = conn.execute(
-        "SELECT rowid FROM vec_meta WHERE id IN (SELECT value FROM json_each(?))", (memory_ids,)
+        "SELECT rowid FROM vec_meta WHERE id IN (SELECT value FROM json_each(?)) "
+        "OR (user_id = ? AND project = ?)",
+        (memory_ids, user_id, project),
     )
     return json.dumps([int(r["rowid"]) for r in found])
 
 
-def _delete_vectors(conn: sqlite3.Connection, table_name: str, rowids: str) -> int:
+def _delete_vectors(
+    conn: sqlite3.Connection,
+    table_name: str,
+    rowids: str,
+    user_id: str | None = None,
+    project: str | None = None,
+) -> int:
+    """The one delete of a vec0 table: the rows at the rowids in the JSON array *rowids*, and
+    every row whose own ``user_id`` and ``project`` columns are *user_id* and *project*.
+    Called with rowids alone, *user_id* and *project* are ``None``, and ``user_id = NULL`` is
+    true of no row, so exactly those rowids' rows go."""
     table = _vector_table(table_name)
     # `table` is `vec_items` or a name from `embedding_spaces.table_name`, which Morgan writes
     # itself, checked to be a plain identifier by `_vector_table`; never caller input.
-    sql = f"DELETE FROM {table} WHERE rowid IN (SELECT value FROM json_each(?))"  # noqa: S608 # nosec B608
-    return conn.execute(sql, (rowids,)).rowcount
+    sql = (
+        f"DELETE FROM {table} WHERE rowid IN (SELECT value FROM json_each(?)) "  # noqa: S608 # nosec B608
+        "OR (user_id = ? AND project = ?)"
+    )
+    return conn.execute(sql, (rowids, user_id, project)).rowcount
 
 
-def _delete_meta(conn: sqlite3.Connection, memory_ids: str) -> int:
+def _delete_meta(
+    conn: sqlite3.Connection,
+    memory_ids: str,
+    user_id: str | None = None,
+    project: str | None = None,
+) -> int:
+    """The one delete of ``vec_meta``: the rows of the memory ids in the JSON array
+    *memory_ids*, and every row of *user_id* under *project*. Called with ids alone, *user_id*
+    and *project* are ``None``, and ``user_id = NULL`` is true of no row, so exactly the ids'
+    rows go."""
     return conn.execute(
-        "DELETE FROM vec_meta WHERE id IN (SELECT value FROM json_each(?))", (memory_ids,)
+        "DELETE FROM vec_meta WHERE id IN (SELECT value FROM json_each(?)) "
+        "OR (user_id = ? AND project = ?)",
+        (memory_ids, user_id, project),
     ).rowcount
 
 
-def vector_deleter(table_name: str) -> Deleter:
-    """`forget()`'s deleter for *table_name*, ``vec_items`` or another embedding space's vec0
-    table: the erased memories' vectors, at the rowids ``vec_meta`` gives them."""
-    table = _vector_table(table_name)
-
-    def delete(conn: sqlite3.Connection, erasure: Erasure) -> int:
-        return _delete_vectors(conn, table, erasure.vector_rowids)
-
-    return delete
+def delete_vec_items(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """`forget()`'s deleter for ``vec_items``: the vectors at the erased ``vec_meta`` rows'
+    rowids, where ``upsert`` wrote them, and every vector whose own columns are the erased
+    owner and project -- one whose ``vec_meta`` row is gone included."""
+    return _delete_vectors(
+        conn, "vec_items", erasure.vector_rowids, erasure.user_id, erasure.project
+    )
 
 
 def delete_meta(conn: sqlite3.Connection, erasure: Erasure) -> int:
-    """`forget()`'s deleter for ``vec_meta``: the erased memories' rows."""
-    return _delete_meta(conn, erasure.memory_ids)
+    """`forget()`'s deleter for ``vec_meta``: the erased memories' rows, and every row of the
+    erased owner and project."""
+    return _delete_meta(conn, erasure.memory_ids, erasure.user_id, erasure.project)
+
+
+#: The columns another embedding space's vec0 table is erased by.
+_SPACE_KEY = frozenset({"user_id", "project"})
+
+
+def space_deleter(conn: sqlite3.Connection, table_name: str) -> Deleter | None:
+    """`forget()`'s deleter for *table_name*, an embedding space's vec0 table other than
+    ``vec_items``, or ``None`` when that table has no ``user_id`` and ``project`` columns.
+
+    Its rows are found by those columns alone, never by rowid: only ``upsert`` writes vectors
+    at ``vec_meta``'s rowids, and it writes ``vec_items``. A row at the same rowid in another
+    space's table may belong to another project, or another owner.
+    """
+    table = _vector_table(table_name)
+    columns = {r["name"] for r in conn.execute("SELECT name FROM pragma_table_info(?)", (table,))}
+    if not columns >= _SPACE_KEY:
+        return None
+
+    def delete(conn: sqlite3.Connection, erasure: Erasure) -> int:
+        # No rowids: a rowid in this table says nothing about whose row it is.
+        return _delete_vectors(conn, table, "[]", erasure.user_id, erasure.project)
+
+    return delete
 
 
 def _text_and_vector(

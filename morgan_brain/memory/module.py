@@ -43,7 +43,8 @@ from morgan_brain.memory.store.vectors import (
     VectorHit,
     VectorRecord,
     delete_meta,
-    vector_deleter,
+    delete_vec_items,
+    space_deleter,
     vector_rowids,
 )
 from morgan_brain.models import (
@@ -57,6 +58,7 @@ from morgan_brain.models import (
 from morgan_brain.providers.wire import EmbedOutcome, ProviderRefused, ProviderUnreachable
 
 log = structlog.get_logger("recall")
+_forget_log = structlog.get_logger("forget")
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
@@ -69,15 +71,15 @@ def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
 
 
 #: Each table ``store/tables.py`` registers, by name, mapped to the deleter of the store that
-#: owns it. An embedding space's vec0 table, named in ``embedding_spaces``, is erased by the
-#: vector store's deleter for that name instead. A store that registers a table maps its
+#: owns it. Another embedding space's vec0 table, named in ``embedding_spaces``, is erased by
+#: ``vectors.space_deleter`` for that name instead. A store that registers a table maps its
 #: deleter here; ``forget()`` refuses a registered table it finds no deleter for.
 _DELETERS: dict[str, Deleter] = {
     "memories": delete_memories,
     "facts": delete_facts,
     "memory_entities": delete_entities,
     "vec_meta": delete_meta,
-    "vec_items": vector_deleter("vec_items"),
+    "vec_items": delete_vec_items,
     "fts_memories": delete_keywords,
     "session_history": delete_history,
     "projects": delete_project,
@@ -89,7 +91,8 @@ def _erasure_plan(conn: sqlite3.Connection) -> tuple[list[tuple[str, Deleter]], 
     ``project_tables`` registers that *conn* does not have.
 
     Every table is resolved before ``forget()`` deletes anything, so a present table with no
-    deleter raises here, by name, with nothing erased. An absent table of
+    deleter -- or an embedding space's table without the ``user_id`` and ``project`` columns
+    its deleter erases by -- raises here, by name, with nothing erased. An absent table of
     ``NAME_KEYED_PROJECT_TABLES`` is passed over and not reported: ``tables_skipped`` names
     the tables with a ``project`` column.
     """
@@ -102,18 +105,40 @@ def _erasure_plan(conn: sqlite3.Connection) -> tuple[list[tuple[str, Deleter]], 
     unresolved: list[str] = []
     for table in present:
         deleter = _DELETERS.get(table)
-        if deleter is None and table in spaces:
-            deleter = vector_deleter(table)
-        if deleter is None:
-            unresolved.append(table)
-        else:
+        if deleter is not None:
             plan.append((table, deleter))
+        elif table not in spaces:
+            unresolved.append(
+                f"{table} has no deleter (its store's belongs in memory/module.py's _DELETERS)"
+            )
+        elif (deleter := space_deleter(conn, table)) is not None:
+            plan.append((table, deleter))
+        else:
+            unresolved.append(
+                f"{table}, an embedding space's table, has no user_id and project columns to "
+                "erase by"
+            )
     if unresolved:
         raise RuntimeError(
-            f"forget() erased nothing: no deleter for {', '.join(unresolved)}, registered in "
-            "store/tables.py; its store's deleter belongs in memory/module.py's _DELETERS"
+            "forget() erased nothing: it cannot erase every registered table: "
+            + "; ".join(unresolved)
         )
     return plan, skipped
+
+
+def _truncate_wal(conn: sqlite3.Connection) -> None:
+    """Empty the write-ahead log, whose frames hold what the erasure deleted until they are
+    overwritten. A connection in the middle of a read keeps SQLite from truncating it. The
+    erasure has committed by then, so that is a warning naming the log, never a failure."""
+    busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
+    if busy:
+        main = next(r["file"] for r in conn.execute("PRAGMA database_list") if r["name"] == "main")
+        _forget_log.warning(
+            "forget.wal-not-truncated",
+            wal=f"{main}-wal",
+            reason="another connection is reading the database",
+            hint="the erased rows stay in the log until a later checkpoint truncates it",
+        )
 
 
 class MemoryModule:
@@ -418,7 +443,8 @@ class MemoryModule:
         registered table absent here -- ``session_history``, opened only by
         ``build_memory_context`` -- is named in ``report.tables_skipped`` rather than counted
         as zero. Every index lives in the same SQLite database, so the whole erasure is one
-        write transaction, and the database is vacuumed once it has committed.
+        write transaction; once it has committed, the database is vacuumed and its write-ahead
+        log truncated (`_truncate_wal`).
         """
         conn = self._conn
         if conn.in_transaction:
@@ -450,11 +476,12 @@ class MemoryModule:
                 user_id=user_id,
                 project=project,
                 memory_ids=memory_ids,
-                vector_rowids=vector_rowids(conn, memory_ids),
+                vector_rowids=vector_rowids(conn, memory_ids, user_id, project),
             )
             erased = {table: delete(conn, erasure) for table, delete in plan}
 
         conn.execute("VACUUM")  # cannot run inside a transaction
+        _truncate_wal(conn)
         # `ForgetReport` counts what the owner asked to erase: memories, facts and history.
         # The index rows follow from the memories, and a `projects` row is none of the three.
         return ForgetReport(

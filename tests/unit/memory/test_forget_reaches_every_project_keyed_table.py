@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 import pytest
 
 from morgan_brain.memory.store import projects as projects_store
-from morgan_brain.memory.store import spaces, tables, vectors
+from morgan_brain.memory.store import spaces, tables
 from morgan_brain.memory.store.history import SessionHistoryStore
 from morgan_brain.memory.store.tables import NAME_KEYED_PROJECT_TABLES, project_tables
 from morgan_brain.models import Entity, Memory, Message, Role, TemporalFact
@@ -164,23 +164,25 @@ _SECOND_SPACE_DDL = f"""CREATE VIRTUAL TABLE {_SECOND_SPACE} USING vec0(
 )"""
 
 
-def _audited(conn, project: str) -> list[str]:
-    """The texts ``doctor --vectors`` reads for *project* from the second space's table."""
-    sample = vectors.audit_sample(
-        conn, table_name=_SECOND_SPACE, n=10, user_id="u", project=project, all_projects=False
-    )
-    return [text for _id, text, _vector in sample]
+def _vectors_in(conn, table: str) -> list[tuple[int, str, str]]:
+    """Every row of a vec0 table, as (rowid, user, project), read through its own SELECT."""
+    # `table` is one of this module's literals, never data.
+    sql = f"SELECT rowid, user_id, project FROM {table} ORDER BY rowid"  # noqa: S608
+    return [(r["rowid"], r["user_id"], r["project"]) for r in conn.execute(sql)]
 
 
 async def test_forget_erases_a_second_embedding_spaces_vectors(tmp_path):
-    """A space registers its vec0 table in ``embedding_spaces``, and ``vectors.py`` reads any
-    space's table at the rowid ``vec_meta`` gives a memory (``stored_sample``,
-    ``audit_sample``). The second space's vectors are written at those rowids, and the audit
-    reading them back for ``p`` proves they sit where the code looks for them."""
+    """A second space's table is erased by its own ``user_id`` and ``project`` columns. Its
+    rows are written here at rowids of their own, ``q``'s first, the order a re-embed walking
+    the archive its own way would give them: ``vec_meta`` has ``p`` at rowid 1 and ``q`` at 2,
+    this table the other way round. ``q``'s vector is kept, ``p``'s goes, and another user's
+    vector in ``p`` stays."""
     module = build_memory_module(str(tmp_path / "m.db"))
     conn = module._conn
     for project in ("p", "q"):
         await module.store(Memory(user_id="u", project=project, content=f"harbor of {project}"))
+    meta = {r["project"]: r["rowid"] for r in conn.execute("SELECT rowid, project FROM vec_meta")}
+    assert meta == {"p": 1, "q": 2}
     spaces.register(
         conn,
         model="second-model",
@@ -190,28 +192,48 @@ async def test_forget_erases_a_second_embedding_spaces_vectors(tmp_path):
         clock=_clock,
     )
     conn.execute(_SECOND_SPACE_DDL)
-    for row in conn.execute("SELECT rowid, user_id, project FROM vec_meta").fetchall():
+    for rowid, user_id, project in [(1, "u", "q"), (2, "u", "p"), (3, "v", "p")]:
         conn.execute(
             f"INSERT INTO {_SECOND_SPACE} "  # noqa: S608
             "(rowid, embedding, user_id, project, status, scope, author_id) "
             "VALUES (?, ?, ?, ?, 'stored', 'private', ?)",
-            (
-                row["rowid"],
-                struct.pack("4f", 0.5, 0.5, 0.5, 0.5),
-                row["user_id"],
-                row["project"],
-                row["user_id"],
-            ),
+            (rowid, struct.pack("4f", 0.5, 0.5, 0.5, 0.5), user_id, project, user_id),
         )
     conn.commit()
     assert _SECOND_SPACE in project_tables(conn)
-    assert _audited(conn, "p") == ["harbor of p"]
 
     await module.forget(user_id="u", project="p")
 
-    assert _rows(conn, _SECOND_SPACE, "p") == 0
-    assert _rows(conn, _SECOND_SPACE, "q") == 1
-    assert _audited(conn, "q") == ["harbor of q"]
+    assert _vectors_in(conn, _SECOND_SPACE) == [(1, "u", "q"), (3, "v", "p")]
+
+
+async def test_a_space_table_without_user_and_project_columns_stops_forget(tmp_path):
+    """A space's table is erased by its own ``user_id`` and ``project`` columns, so a
+    registered one without them cannot be erased: forget refuses it by name, and nothing
+    of ``p`` is erased anywhere."""
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "p")
+    projects_store.seed(conn, clock=_clock)
+    spaces.register(
+        conn, model="bare-model", dims=4, table_name="vec_bare", status="shadow", clock=_clock
+    )
+    conn.execute("CREATE VIRTUAL TABLE vec_bare USING vec0(embedding float[4])")
+    conn.execute(
+        "INSERT INTO vec_bare (rowid, embedding) VALUES (1, ?)",
+        (struct.pack("4f", 0.5, 0.5, 0.5, 0.5),),
+    )
+    conn.commit()
+    keyed = [t for t in project_tables(conn) if t != "vec_bare"]
+    before = {table: _rows(conn, table, "p") for table in keyed}
+    assert all(before.values()), before
+
+    with pytest.raises(RuntimeError, match="vec_bare"):
+        await module.forget(user_id="u", project="p")
+
+    assert {table: _rows(conn, table, "p") for table in keyed} == before
+    assert conn.execute("SELECT COUNT(*) FROM vec_bare").fetchone()[0] == 1
+    assert projects_store.get(conn, "p") is not None
 
 
 async def test_a_registered_table_without_a_deleter_stops_forget_before_it_erases(
@@ -240,19 +262,73 @@ async def test_a_registered_table_without_a_deleter_stops_forget_before_it_erase
 
 async def test_a_name_keyed_table_without_a_deleter_also_stops_forget(tmp_path, monkeypatch):
     """The same rule for ``NAME_KEYED_PROJECT_TABLES``: registered there with no deleter, a
-    table stops forget by name, and the project's own row in it is still there."""
+    table stops forget by name, and every row of the project -- in that table and in every
+    other -- is still there."""
     module = build_memory_module(str(tmp_path / "m.db"))
     conn = module._conn
-    await module.store(Memory(user_id="u", project="p", content="harbor mirror secret"))
+    await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "p")
+    projects_store.seed(conn, clock=_clock)
     conn.execute("CREATE TABLE stray_names (name TEXT PRIMARY KEY)")
     conn.execute("INSERT INTO stray_names VALUES ('p')")
     conn.commit()
     monkeypatch.setattr(
         tables, "NAME_KEYED_PROJECT_TABLES", (*tables.NAME_KEYED_PROJECT_TABLES, "stray_names")
     )
+    before = {table: _rows(conn, table, "p") for table in project_tables(conn)}
+    assert all(before.values()), before
 
     with pytest.raises(RuntimeError, match="stray_names"):
         await module.forget(user_id="u", project="p")
 
-    assert conn.execute("SELECT name FROM stray_names").fetchall()[0]["name"] == "p"
-    assert _rows(conn, "memories", "p") == 1
+    assert {table: _rows(conn, table, "p") for table in project_tables(conn)} == before
+    for table in tables.NAME_KEYED_PROJECT_TABLES:
+        # `table` comes from the registry, never from data.
+        sql = f"SELECT COUNT(*) FROM {table} WHERE name = 'p'"  # noqa: S608
+        assert conn.execute(sql).fetchone()[0] == 1, f"{table} lost p's row"
+
+
+#: The tables a memory is indexed in, each with a ``user_id`` and a ``project`` column.
+_INDEXES = ("memories", "memory_entities", "fts_memories", "vec_meta", "vec_items")
+
+
+def _owned(conn, table: str, user_id: str, project: str) -> int:
+    # `table` is one of `_INDEXES`, never data.
+    sql = f"SELECT COUNT(*) FROM {table} WHERE user_id = ? AND project = ?"  # noqa: S608
+    return int(conn.execute(sql, (user_id, project)).fetchone()[0])
+
+
+async def test_forget_erases_orphaned_index_rows_and_never_another_users(tmp_path):
+    """An index row of ``p`` whose memory is gone -- its ``memories`` row, or its ``vec_meta``
+    row -- is erased by its own ``user_id`` and ``project`` columns. Another user's rows in
+    ``p``, and the owner's rows in ``q``, are left as they were."""
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    harbor = [Entity(name="harbor", type="place")]
+    lost_row = Memory(user_id="u", project="p", content="harbor lost row", entities=harbor)
+    lost_meta = Memory(user_id="u", project="p", content="harbor lost meta", entities=harbor)
+    for memory in (
+        lost_row,
+        lost_meta,
+        Memory(user_id="v", project="p", content="harbor of v", entities=harbor),
+        Memory(user_id="u", project="q", content="harbor of q", entities=harbor),
+    ):
+        await module.store(memory)
+    # Orphans: every index row of `lost_row` without its memory, and `lost_meta`'s vector
+    # without the `vec_meta` row that addresses it.
+    conn.execute("DELETE FROM memories WHERE id = ?", (lost_row.id,))
+    conn.execute("DELETE FROM vec_meta WHERE id = ?", (lost_meta.id,))
+    conn.commit()
+    for table in _INDEXES[1:]:
+        assert _owned(conn, table, "u", "p") > 0, f"no orphan of p in {table}"
+    kept = {
+        (table, user_id, project): _owned(conn, table, user_id, project)
+        for table in _INDEXES
+        for user_id, project in (("v", "p"), ("u", "q"))
+    }
+    assert all(kept.values()), kept
+
+    await module.forget(user_id="u", project="p")
+
+    for table in _INDEXES:
+        assert _owned(conn, table, "u", "p") == 0, f"{table} still holds an orphan of p"
+    assert {key: _owned(conn, *key) for key in kept} == kept

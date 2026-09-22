@@ -45,18 +45,23 @@ NAME_KEYED_PROJECT_TABLES: tuple[str, ...] = ("projects",)
 class Erasure:
     """What one `forget()` erases, selected under its write lock before any row is deleted.
 
-    Both id lists are JSON arrays, bound as one parameter and expanded by ``json_each``, so
-    no deleter binds a parameter per id, and a project with more memories than
-    ``SQLITE_MAX_VARIABLE_NUMBER`` is still erased by one statement per table.
+    Every table with a ``user_id`` and a ``project`` column is erased by those columns as well
+    as by these ids, so an index row whose memory is gone goes too; no deleter matches a
+    ``project`` column without its ``user_id``. Both id lists are JSON arrays, bound as
+    one parameter and expanded by ``json_each``, so no deleter binds a parameter per id, and a
+    project with more memories than ``SQLITE_MAX_VARIABLE_NUMBER`` is still erased by one
+    statement per table.
     """
 
+    #: The owner whose rows are erased; no other owner's row is touched.
     user_id: str
     project: str
     #: The ids of every memory *user_id* stored under *project*.
     memory_ids: str
-    #: Those memories' rowids in ``vec_meta``: the rowid each one's vector has in every
-    #: embedding space's vec0 table. Selected before ``vec_meta`` loses its rows, so no vec0
-    #: table depends on the order the tables are erased in.
+    #: The rowids of the ``vec_meta`` rows erased with them, where ``upsert`` wrote their
+    #: vectors in ``vec_items``. Selected before ``vec_meta`` loses its rows, so ``vec_items``
+    #: does not depend on the order the tables are erased in. No other space's table is erased
+    #: by rowid.
     vector_rowids: str
 
 
