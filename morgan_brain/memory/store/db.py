@@ -63,9 +63,12 @@ def open_readonly(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connecti
     remove them again; the next writer to close does.
 
     SQLite opens lazily, so one read here makes a file that cannot be read -- not a database,
-    or a WAL database whose ``-shm`` cannot be made -- raise ``sqlite3.Error`` from this call
-    rather than from the caller's first query. ``:memory:`` is a new, empty database with
-    nothing on disk to protect, and opens as ``open_db`` opens it.
+    or a WAL database whose ``-wal`` cannot be opened -- raise ``sqlite3.Error`` from this call
+    rather than from the caller's first query. A ``-shm`` that cannot be made is not one of
+    them everywhere: where a ``-shm`` cannot be made, a read-only connection falls back to a
+    wal-index of its own on Linux and reads the database anyway, where Windows refuses the
+    open. ``:memory:`` is a new, empty database with nothing on disk to protect, and opens as
+    ``open_db`` opens it.
     """
     if path == ":memory:":
         return open_db(path, busy_timeout_ms=busy_timeout_ms)

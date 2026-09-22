@@ -145,9 +145,14 @@ def _wal_bytes(db: Path) -> int:
     return Path(f"{db}-wal").stat().st_size
 
 
-def _block_the_shm(db: Path) -> None:
-    """A directory where a WAL reader's shared-memory file would be made."""
-    Path(f"{db}-shm").mkdir()
+def _block_the_wal(db: Path) -> None:
+    """A directory where the write-ahead log of *db* belongs, so no reader can open it.
+
+    The ``-wal``, not the ``-shm``: a directory in the way of the shared-memory file stops a
+    read-only open on Windows only -- on Linux the connection falls back to a wal-index of its
+    own and reads the database anyway. A ``-wal`` that cannot be opened stops it on both.
+    """
+    Path(f"{db}-wal").mkdir()
 
 
 async def _store(settings: Settings, contents: list[str]) -> Path:
@@ -219,12 +224,12 @@ async def test_a_wal_database_another_process_is_writing_is_counted_with_its_wal
 async def test_a_wal_database_that_cannot_be_read_read_only_says_so_on_the_database_line(
     tmp_path, chat
 ):
-    """A reader of a WAL database needs its ``-shm``; when that cannot be made, the read-only
-    open cannot proceed. doctor says so where the database is named, on every line that reads
-    it, and never falls back to an open that writes."""
+    """A reader of a WAL database needs its sidecars; when one of them cannot be opened, the
+    read-only open cannot proceed. doctor says so where the database is named, on every line
+    that reads it, and never falls back to an open that writes."""
     settings = _settings(tmp_path, chat)
     db = await _store(settings, ["a memory"])
-    _block_the_shm(db)
+    _block_the_wal(db)
     before = db.read_bytes()
 
     report = await _report(settings)

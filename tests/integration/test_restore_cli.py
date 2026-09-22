@@ -95,11 +95,16 @@ def test_a_live_wal_from_the_pre_restore_database_does_not_leak_into_the_restore
     connection that is only closed *after* the bytes are read back out, then written back to
     disk with no connection open at all -- as if the writer had crashed before a clean
     checkpoint, rather than exited normally.
+
+    The bystander reads a *table*: ``SELECT 1`` reads no page of the database, so the
+    connection never joins the write-ahead log, and the writer closing is then the last one
+    out and checkpoints the WAL away -- which is what it does on Linux. A read that touches
+    a table joins the log on every platform.
     """
     db, snap = _database_then_snapshot_then_more_rows(tmp_path, monkeypatch, capsys)
 
     bystander = sqlite3.connect(db)
-    bystander.execute("SELECT 1")
+    bystander.execute("SELECT count(*) FROM memories").fetchone()
     writer = sqlite3.connect(db)
     writer.execute("PRAGMA journal_mode=WAL")
     writer.execute(
