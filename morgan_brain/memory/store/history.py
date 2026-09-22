@@ -18,6 +18,7 @@ import sqlite3
 from collections.abc import Callable
 from datetime import datetime
 
+from morgan_brain.memory.store import projects
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import Erasure
 from morgan_brain.models import PERSONAL_PROJECT, Message, Role
@@ -62,16 +63,16 @@ class SessionHistoryStore:
         same database file as every other store (required for a single-transaction
         ``forget()``). Defaults to a private ``:memory:`` connection for tests.
     clock:
-        Optional injected callable returning the current :class:`datetime`.
-        When ``None``, ``created_at`` is stored as ``None`` and ordering is by
-        insertion rowid (still deterministic within a test run).
+        Injected callable returning the current :class:`datetime`, required because a turn's
+        project is registered in ``projects``, whose ``created_at`` is ``NOT NULL``. It is
+        also what stamps each row's own ``created_at``; ordering stays by insertion rowid.
     """
 
     def __init__(
         self,
         conn: sqlite3.Connection | None = None,
         *,
-        clock: Callable[[], datetime] | None = None,
+        clock: Callable[[], datetime],
     ) -> None:
         self._clock = clock
         self._conn = (
@@ -79,6 +80,10 @@ class SessionHistoryStore:
         )
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
+        # A turn registers its project, so this store needs the table it registers into: the
+        # composition root opens `ProjectStore` first, and this makes a history store built on
+        # its own connection -- as the tests do -- write into the same schema.
+        projects.create_schema(self._conn)
         self._conn.commit()
         self._migrate_project_column()
 
@@ -98,9 +103,15 @@ class SessionHistoryStore:
 
         Synchronous — intended for the cold-path turn-storage subscriber which
         runs after the reply is already sent to the caller.
+
+        A turn is a project-keyed write like any other, so it registers *project* in
+        ``projects`` in this same transaction: ``ask`` writes history outside the gate, and a
+        project whose only Morgan data is a transcript still gets its row.
         """
-        created_at = self._clock().isoformat() if self._clock else None
+        now = self._clock()
+        created_at = now.isoformat()
         with write_transaction(self._conn):
+            projects.register(self._conn, project, now=now)
             self._conn.execute(
                 """
                 INSERT INTO session_history

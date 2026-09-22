@@ -39,7 +39,7 @@ from morgan_brain.surfaces.cli.maintenance import (
     cmd_snapshot,
     restore_preview,
 )
-from morgan_brain.surfaces.cli.project import detect_project
+from morgan_brain.surfaces.cli.project import Repository, detect_project, read_repository
 from morgan_brain.surfaces.cli.render import RENDERERS
 
 
@@ -72,6 +72,13 @@ HANDLERS = {
 # Commands where --all-projects is meaningless: a write or a single chat turn always
 # targets exactly one project.
 _SINGLE_PROJECT_ONLY = {"remember", "ask"}
+
+#: The write commands that record what repository their project is (`_repository_to_record`).
+#: `forget` is a write and is deliberately absent: it deletes the project's `projects` row, and
+#: recording would write the owner's remote and root straight back into the database their
+#: erasure just took them out of. `import` is absent too -- it writes to the archive and
+#: holdout projects, never to the one the working directory names.
+_RECORDS_THE_REPOSITORY = {"remember", "ask", "consolidate"}
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +222,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 async def _dispatch(
-    args: argparse.Namespace, settings: Settings, project: str, *, remember_project: str | None
+    args: argparse.Namespace,
+    settings: Settings,
+    project: str,
+    *,
+    remember_project: str | None,
+    repository: Repository | None,
 ) -> int:
     if args.command in _SINGLE_PROJECT_ONLY and args.all_projects:
         message = (
@@ -254,11 +266,16 @@ async def _dispatch(
     handler, renderer = HANDLERS[args.command], RENDERERS[args.command]
     try:
         # `remember` alone takes an *optional* project -- it is the one command whose result
-        # says whether the project came from the caller or from no one naming it -- so it is
-        # called directly rather than through the shared `handler(args, settings, project)`
-        # signature every other verb still uses.
+        # says whether the project came from the caller or from no one naming it -- and the
+        # three write commands that record their repository take it as a keyword the MCP
+        # server never passes, so each is called directly rather than through the shared
+        # `handler(args, settings, project)` signature every other verb still uses.
         if args.command == "remember":
-            data = await cmd_remember(args, settings, remember_project)
+            data = await cmd_remember(args, settings, remember_project, repository=repository)
+        elif args.command == "ask":
+            data = await cmd_ask(args, settings, project, repository=repository)
+        elif args.command == "consolidate":
+            data = await cmd_consolidate(args, settings, project, repository=repository)
         else:
             data = await handler(args, settings, project)
     except ImportStopped as exc:
@@ -320,7 +337,34 @@ def main(argv: list[str] | None = None) -> int:
     # `None`, not the sentinel string, when there is no repository to detect.
     project = named or detected or PERSONAL_PROJECT
     remember_project = named or detected
-    return asyncio.run(_dispatch(args, settings, project, remember_project=remember_project))
+    return asyncio.run(
+        _dispatch(
+            args,
+            settings,
+            project,
+            remember_project=remember_project,
+            repository=_repository_to_record(args, named=named, detected=detected),
+        )
+    )
+
+
+def _repository_to_record(
+    args: argparse.Namespace, *, named: str | None, detected: str | None
+) -> Repository | None:
+    """The repository this invocation records against its project, or ``None``.
+
+    Three conditions, all of them the ruling's: the command writes and is one of
+    ``_RECORDS_THE_REPOSITORY``; the project was named by the enclosing repository, so
+    ``--project`` (a name that may belong anywhere) and the ``personal`` default outside a
+    repository both record nothing; and the write is that one project's, so ``--all-projects``
+    does not. The config file is read only when all three hold -- a read costs nothing on
+    ``morgan recall``.
+    """
+    if args.command not in _RECORDS_THE_REPOSITORY:
+        return None
+    if named is not None or detected is None or getattr(args, "all_projects", False):
+        return None
+    return read_repository(Path.cwd())
 
 
 if __name__ == "__main__":

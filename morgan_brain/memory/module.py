@@ -29,6 +29,7 @@ from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
+from morgan_brain.memory.store import projects
 from morgan_brain.memory.store import tables as registry
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex, delete_entities
@@ -195,6 +196,10 @@ class MemoryModule:
         Entities are extracted here when the caller supplied none. There is exactly one write
         path on purpose: a memory indexed by one signal and invisible to another is found by a
         search that should not find it, or missed by one that should.
+
+        The project's ``projects`` row is registered in the same transaction
+        (``store/projects.py::register``), so a project first written to after migration step 7
+        seeded the table has a row as well -- and a store that fails leaves none.
         """
         if memory.created_at is None:
             memory.created_at = self._clock()
@@ -204,12 +209,16 @@ class MemoryModule:
         # lock is never held across a model call.
         vector = await self._embedder.embed(memory.content)
         memory.embedding = vector
+        # Now, not `memory.created_at`: the row records when Morgan first wrote to the project,
+        # and an import carries the timestamps of conversations years old.
+        registered_at = self._clock()
         # One transaction for all four indexes. Written one at a time, an erasure of the
         # project from another process could land between two of them and leave the rest --
         # with the memory's text -- behind for a memory that no longer exists; and a failure
         # part-way left a memory stored in some indexes and missing from others. The vector
         # upsert is awaited but never suspends: it is SQL on this connection, nothing else.
         with write_transaction(self._conn):
+            projects.register(self._conn, memory.project, now=registered_at)
             self._episodics.put(memory)
             await self._vectors.upsert(
                 VectorRecord(
@@ -405,7 +414,34 @@ class MemoryModule:
         return None if answered else "declined"
 
     async def upsert_fact(self, fact: TemporalFact) -> str:
-        return await self._temporal.upsert_fact(fact, now=self._clock())
+        """Assert *fact*, registering its project in the same transaction.
+
+        The registration is here rather than in the temporal store because ``projects`` is not
+        that store's table: ``SqliteTemporalStore`` is built over connections that have no
+        such table at all. The store's own ``write_transaction`` joins this one as a savepoint,
+        so the fact and the row still commit or roll back together.
+        """
+        now = self._clock()
+        with write_transaction(self._conn):
+            projects.register(self._conn, fact.project, now=now)
+            return await self._temporal.upsert_fact(fact, now=now)
+
+    async def record_project(
+        self, project: str, *, classification: str, remote: str | None, root: str | None
+    ) -> bool:
+        """Record what repository *project* is; ``False`` when it has no row to record it in.
+
+        One statement under the write lock (``store/projects.py::record``). A CLI write from
+        inside a repository is the only caller: an MCP server never sees the client's checkout.
+        """
+        with write_transaction(self._conn):
+            return projects.record(
+                self._conn,
+                project,
+                classification=classification,
+                remote=remote,
+                root=root,
+            )
 
     async def current_facts(
         self,

@@ -1,11 +1,19 @@
-"""``projects`` -- one row per repository Morgan has ever written to: classification and the
-per-project capture/consolidate switches.
+"""``projects`` -- one row per repository Morgan has ever written to: classification, the
+repository it is, and the per-project capture/consolidate switches.
 
-``seed`` is migration step 7: one ``unclassified`` row per project named in ``memories``,
-``facts`` or ``session_history`` -- whichever of the three a database actually has. The disk
-walk that would fill ``remote`` and ``root`` from ``MORGAN_CODE_ROOTS`` is phase 1a; this only
-gives every project something for its switches (``capture_enabled``, ``retention_days``,
-``consolidate_enabled``) to attach to before that walk ever runs.
+Three functions write to it, and they divide the work:
+
+- ``seed`` is migration step 7: one ``unclassified`` row per project named in ``memories``,
+  ``facts`` or ``session_history`` -- whichever of the three a database actually has. It runs
+  once, for what a database already held.
+- ``register`` is every project-keyed write after that, in that write's own transaction, so a
+  project first written to after the migration has a row too.
+- ``record`` is a CLI write from inside a repository: the classification, remote and root that
+  repository has right now. It updates a row and never inserts one -- what a write registers is
+  what gets classified, so no remote or root is left behind for a project ``forget`` emptied.
+
+The disk walk over ``MORGAN_CODE_ROOTS`` that would fill ``remote`` and ``root`` for a project
+no CLI write ever reached is phase 1a.
 """
 
 from __future__ import annotations
@@ -94,6 +102,53 @@ def get(conn: sqlite3.Connection, name: str) -> Project | None:
 def all(conn: sqlite3.Connection) -> list[Project]:
     """Every project Morgan has a row for, by name."""
     return [_row_to_project(r) for r in conn.execute("SELECT * FROM projects ORDER BY name")]
+
+
+def register(conn: sqlite3.Connection, project: str, *, now: datetime) -> None:
+    """Give *project* a row if it has none: ``unclassified``, no remote, no root, created at
+    *now*. One statement, joining the caller's transaction rather than opening one.
+
+    Every project-keyed write calls this from inside its own write transaction -- the memory
+    store, a fact upsert, a session-history row -- so the row appears and disappears with the
+    data it describes: rolled back with a write that failed, and deleted by ``forget`` once
+    nothing of the project is left (``delete_project``).
+
+    ``INSERT OR IGNORE``, so the row a project already has is left exactly as it is: neither
+    restamped nor reset to ``unclassified`` by the next write to a classified project.
+    """
+    conn.execute(
+        "INSERT OR IGNORE INTO projects (name, classification, created_at) "
+        "VALUES (?, 'unclassified', ?)",
+        (project, now.isoformat()),
+    )
+
+
+def record(
+    conn: sqlite3.Connection,
+    project: str,
+    *,
+    classification: str,
+    remote: str | None,
+    root: str | None,
+) -> bool:
+    """Record what repository *project* is, and return whether a row was updated.
+
+    Only the three columns that derive from the repository and the settings; the owner's
+    switches (``capture_enabled``, ``retention_days``, ``paused_until``,
+    ``consolidate_enabled``) and the row's ``created_at`` are never touched here. The label is
+    recomputed on every CLI write rather than stored once, because a repository's remote and
+    ``MORGAN_WORK_REMOTE_GLOBS`` both change without Morgan hearing about it.
+
+    An ``UPDATE``, never an insert: the write this rides with has already registered the
+    project, so a missing row means there is nothing to describe -- a command that wrote
+    nothing, or a project another process forgot in between. Inserting one would put the
+    owner's remote and root back into a database their ``forget`` just took them out of.
+    """
+    cursor = conn.execute(
+        "UPDATE projects SET classification = ?, remote = ?, root = ? WHERE name = ?",
+        (classification, remote, root, project),
+    )
+    return cursor.rowcount > 0
 
 
 #: The tables ``seed`` reads distinct projects from, per SPEC-phase0 §3.7. A table absent on

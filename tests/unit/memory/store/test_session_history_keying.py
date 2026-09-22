@@ -8,6 +8,8 @@ A missing session_id falls back to a *per-user* bucket, never a global one
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from morgan_brain.memory.store.history import SessionHistoryStore, session_key
 from morgan_brain.models import Message, Role
 
@@ -24,7 +26,7 @@ def test_session_key_namespaces_by_user() -> None:
 
 
 def test_history_is_isolated_per_user_for_same_session_id() -> None:
-    store = SessionHistoryStore()  # :memory:
+    store = SessionHistoryStore(clock=lambda: datetime(2026, 9, 22, tzinfo=UTC))  # :memory:
     store.append(
         session_key("alice", "s1"),
         Message(user_id="alice", role=Role.USER, content="I am Alice"),

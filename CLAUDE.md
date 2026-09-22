@@ -52,8 +52,10 @@ come in" are answered by the directory names.
   - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
     `history`, `spaces` (the `embedding_spaces` table and its one-active partial index),
     `projects` (the `projects` table, keyed by name: classification, remote, root and the
-    per-project capture/consolidate switches; `get`, `all` and `seed`, migration step 7's seed
-    of one row per project already named in `memories`, `facts` or `session_history`),
+    per-project capture/consolidate switches; `get` and `all`, `seed` for migration step 7's
+    one row per project already named in `memories`, `facts` or `session_history`, `register`
+    for every project-keyed write after it, and `record` for the classification, remote and
+    root a CLI write from inside a repository fills in),
     `tables` (`PROJECT_TABLES`, the one list of project-keyed tables `forget` reaches). Each
     owns its schema and its queries; none of them ranks anything. Every write goes through
     `db.write_transaction`.
@@ -79,8 +81,9 @@ come in" are answered by the directory names.
   `payloads` shapes the result, `render` prints it, `doctor` diagnoses by reading only -- it
   opens the file read-only, builds no store, creates no table and runs no migration step --
   and probes the chat and embedding servers separately, telling reachable, slow, refused and
-  unreachable apart, `project` names the project after the enclosing git repository and holds
-  `classify`, which nothing calls yet, `install_skill` writes the packaged `skill/SKILL.md`
+  unreachable apart, `project` resolves the enclosing git repository once -- its name, its
+  root and its remote, read by parsing the repository's own git config rather than spawning
+  `git` -- and holds `classify`, `install_skill` writes the packaged `skill/SKILL.md`
   into the coding agents installed here), `mcp_server.py` (five MCP tools over stdio or
   streamable-HTTP, calling those same command handlers), and `network.py`, the bind guard
   that protects the HTTP one.
@@ -93,9 +96,9 @@ come in" are answered by the directory names.
   and the result says so; there is no silent default. `all_projects=True` is the explicit
   cross-project escape hatch, never the default.
 - **One write path.** `MemoryModule.store` writes every index in one transaction: episodic
-  row, vector, FTS5, entity index. Entities are extracted there when the caller gave none.
-  Every row carries its provenance: origin, client, session, working directory, author and
-  scope, with defaults; every writer names its origin. A memory visible to one index and not
+  row, vector, FTS5, entity index, and the project's `projects` row. Entities are extracted
+  there when the caller gave none. Every row carries its provenance: origin, client, session,
+  working directory, author and scope, with defaults; every writer names its origin. A memory visible to one index and not
   another is found by one search and missed by the next.
 - **`forget` reaches every project-keyed table.** `store/tables.py::PROJECT_TABLES` is the one
   list; a store that adds a table registers it there, and a test fails on any table with a
@@ -162,7 +165,19 @@ come in" are answered by the directory names.
   exchange, so it is a write.
 - **A project is a repository.** The CLI names it after the enclosing git repository; a linked
   worktree belongs to the repository it was created from, a submodule is its own. Outside one,
-  the project is `personal`.
+  the project is `personal`. One resolution answers the name and the repository together, so
+  the two can never come from different checkouts.
+- **Every project written to has a row, and a CLI write from inside a repository says what
+  that repository is.** A memory, a fact and a turn of session history each register their
+  project in `projects` in their own write transaction (`INSERT OR IGNORE`, `unclassified`),
+  below the gate, so both surfaces do it and a failed write leaves no row. `remember`, `ask`
+  and `consolidate` then record `classify(remote, MORGAN_WORK_REMOTE_GLOBS)`, the remote and
+  the root through the gate -- only when the project was named by the repository they ran in
+  (not `--project`, not the `personal` default, not `--all-projects`), recomputed every time,
+  and refused like any other write while a migration step waits. A read records nothing. Only
+  those three columns are written: the owner's capture, retention and consolidate switches are
+  theirs. The remote and the root are the owner's data -- never logged, and `doctor` prints
+  neither.
 - **No listener beyond loopback without a key.** `network.assert_safe_bind` refuses to start
   `morgan-mcp --transport http` on a non-loopback host while `MORGAN_API_KEY` is unset or the
   placeholder.
@@ -185,6 +200,11 @@ come in" are answered by the directory names.
   transient wrong vector between two checks passes it. Suspect memories stay stored, a re-run
   of the import skips them, and `doctor --vectors` samples rather than checks every row.
   Nothing re-embeds named memory ids.
+- A project written to only through `morgan-mcp` has a row and stays `unclassified`. The
+  server may run on another machine than the client, so it never sees the repository a call
+  came from, and its `project` argument is a name, not a checkout. The classification, remote
+  and root are recorded by a CLI write from inside the repository; the walk over
+  `MORGAN_CODE_ROOTS` that would classify the rest is phase 1a and is not built.
 - `morgan-mcp` builds a FastMCP server, and FastMCP's own settings read a `./.env` in the
   folder the client starts the server in. FastMCP passes every one of its settings
   explicitly, so the `FASTMCP_*` values in that file change nothing, and Morgan's settings
@@ -208,7 +228,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 639 passed, 4 skipped (the live ones)
+pytest -q                     # 671 passed, 4 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

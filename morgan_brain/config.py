@@ -204,10 +204,12 @@ class Settings(BaseSettings):
     #: memory/recall/floor.py for what the number means.
     recall_floor_margin: float | None = None
 
-    # --- Project classification (surfaces/cli/project.py::classify). The disk walk over
-    # code_roots is phase 1a; phase 0 only stores these and `doctor` names a root that is
-    # not a directory. Nothing here identifies the owner -- shipped empty, so a clone of
-    # this repository walks and matches nothing until its own owner sets them. ---
+    # --- Project classification (surfaces/cli/project.py::classify). `work_remote_globs`
+    # is read by every CLI write from inside a repository, which records the project's
+    # classification; the disk walk over code_roots is phase 1a, and until then `doctor` only
+    # names a root that is not a directory. Nothing here identifies the owner -- shipped
+    # empty, so a clone of this repository walks and matches nothing until its own owner
+    # sets them. ---
     #: Repository roots the phase-1a walk will scan for a project's remote and root, comma
     #: separated (``~/code,~/work``). Each entry's ``~`` is expanded eagerly, like ``data_dir``.
     code_roots: Annotated[list[str], NoDecode] = Field(default_factory=list)

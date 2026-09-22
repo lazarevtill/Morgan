@@ -92,7 +92,7 @@ vectors: 12 in project 'my-repo' (128 across all projects)
 rows_by_project: {'my-repo': 12, 'personal': 116}
 rows_missing_provenance: 0
 rows_missing_provenance_reason: None
-project 'my-repo': unclassified, capture on, consolidate on
+project 'my-repo': personal, capture on, consolidate on
 project 'personal': unclassified, capture on, consolidate on
 code_root: ~/code
 code_root: ~/work (not a directory)
@@ -155,10 +155,25 @@ that an older Morgan, still running somewhere, wrote after `morgan migrate` (an 
 `author_id`, or a NULL `vec_items` status); it reads `None` with a reason on a database that
 has not been through `morgan migrate` yet, where the columns it counts do not exist. Each
 `project` line is a row of the `projects` table: its classification and whether capture and
-consolidation are on. Migration step 7 seeds one row, `unclassified`, for each project a
-database already held; nothing adds a row for a project written to later, and a project with
-no row is consolidated. A `MORGAN_CODE_ROOTS` entry that is not a directory is marked so;
-nothing walks the roots yet.
+consolidation are on. Every project-keyed write -- a memory, a fact, a turn of session history
+-- registers its project's row in the same transaction, so every project Morgan has written to
+has one; migration step 7 seeded one, `unclassified`, for each project a database already held,
+and a project with no row at all is consolidated like any other.
+
+A CLI write run inside a git repository records what that repository is: `remember`, `ask` and
+`consolidate`, with no `--project` (a name may belong anywhere) and no `--all-projects` (the
+write is not that one project's). The label comes from the repository's `origin` remote, or its
+sole remote when it has exactly one, and `MORGAN_WORK_REMOTE_GLOBS`: `work` when a glob matches
+the remote's host or URL, `personal` when none does, `unclassified` with no remote. It is
+recomputed on every such write, because the remote and the globs both change without Morgan
+hearing about it. The remote and the root are stored beside it and never printed here: a remote
+URL can carry a token, and this report is the kind of thing that gets pasted into an issue.
+`forget` deletes the whole row with the project's data.
+
+`morgan-mcp` records nothing: the server may run on another machine than the client, so it
+never sees the repository a call came from. A project written only through MCP has a row and
+stays `unclassified` until a CLI write from inside its checkout. A `MORGAN_CODE_ROOTS` entry
+that is not a directory is marked so; nothing walks the roots yet.
 
 The plain embedding probe above already sends the five fingerprint strings to the embedding
 host on every `doctor` run, to say whether it answers at all. `morgan doctor --vectors` sends
@@ -218,7 +233,9 @@ morgan install-skill                                      # see section 7
 ```
 
 `remember` with no `--project` outside a repository stores in `personal`, and its `--json`
-result says so with `project_defaulted: true`. `recall`'s `--json` result carries `abstained`
+result says so with `project_defaulted: true`. Run inside a repository, `remember`, `ask` and
+`consolidate` also record that repository's classification, remote and root against the project
+(see section 4). `recall`'s `--json` result carries `abstained`
 and `reason`: an empty result is `empty` (nothing stored in scope) or `declined` (with
 `MORGAN_RECALL_FLOOR_MARGIN` set, nothing stood out above the background); results carry
 `too_few_to_judge` or `no_floor` when the floor did not judge them, and `null` when it did.

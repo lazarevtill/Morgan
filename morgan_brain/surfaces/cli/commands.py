@@ -18,6 +18,7 @@ from morgan_brain.app.chatgpt_import import (
     import_chatgpt,
 )
 from morgan_brain.composition import (
+    MemoryContext,
     build_app_context,
     build_memory_context,
     sqlite_path,
@@ -34,6 +35,34 @@ from morgan_brain.surfaces.cli.payloads import (
     merge_forget_reports,
     recall_result,
 )
+from morgan_brain.surfaces.cli.project import Repository, classify
+
+
+async def _record_the_repository(
+    ctx: MemoryContext, settings: Settings, project: str, repository: Repository | None
+) -> None:
+    """Record what repository *project* is, when this invocation was run from inside one.
+
+    *repository* comes from ``surfaces.cli.__main__`` and only for a write command whose
+    project was named by the enclosing git repository: never for ``--project``, never for the
+    personal default outside a repository, and never from ``morgan-mcp``, which cannot see its
+    client's checkout (the server may run on another machine). The label is recomputed on
+    every such write, because both the repository's remote and ``MORGAN_WORK_REMOTE_GLOBS``
+    change without Morgan hearing about it, and nothing sets it by hand in phase 0.
+
+    It runs after the command's own write, so a command that failed -- an unreachable model,
+    a refused embedding -- records nothing, and on a database waiting for ``morgan migrate``
+    the write is refused before this is reached.
+    """
+    if repository is None:
+        return
+    await ctx.gate.record_project(
+        user_id=settings.owner_user_id,
+        project=project,
+        classification=classify(repository.remote, settings.work_remote_globs),
+        remote=repository.remote,
+        root=str(repository.root),
+    )
 
 
 async def cmd_remember(
@@ -43,6 +72,7 @@ async def cmd_remember(
     *,
     client: str = "cli",
     session_id: str = "",
+    repository: Repository | None = None,
 ) -> dict[str, Any]:
     """*client* and *session_id* default to the CLI's own values; the MCP server passes its
     caller's ``clientInfo.name`` and its own per-process session id instead.
@@ -70,6 +100,7 @@ async def cmd_remember(
             author_id=settings.owner_user_id,
         )
         memory_id = await ctx.gate.store(memory)
+        await _record_the_repository(ctx, settings, resolved_project, repository)
     finally:
         ctx.conn.close()
     return {
@@ -161,10 +192,11 @@ async def cmd_ask(
     *,
     client: str = "cli",
     session_id: str = "",
+    repository: Repository | None = None,
 ) -> dict[str, Any]:
     """*client* and *session_id* default to the CLI's own values; the MCP server passes its
     caller's ``clientInfo.name`` and its own per-process session id instead -- the same
-    convention ``cmd_remember`` uses."""
+    convention ``cmd_remember`` uses, and so is *repository* (``_record_the_repository``)."""
     ctx = build_app_context(settings)
     try:
         reply = await ctx.chat.ask(
@@ -174,13 +206,18 @@ async def cmd_ask(
             caller_client=client,
             caller_session_id=session_id,
         )
+        await _record_the_repository(ctx, settings, project, repository)
     finally:
         ctx.conn.close()
     return {"project": project, "response": reply, "model_used": settings.llm_model}
 
 
 async def cmd_consolidate(
-    args: argparse.Namespace, settings: Settings, project: str
+    args: argparse.Namespace,
+    settings: Settings,
+    project: str,
+    *,
+    repository: Repository | None = None,
 ) -> dict[str, Any]:
     """Turn recent episodic memories into durable valid-time facts, per project.
 
@@ -216,6 +253,7 @@ async def cmd_consolidate(
                 }
                 for op in ops
             ]
+        await _record_the_repository(ctx, settings, project, repository)
     finally:
         ctx.conn.close()
     return {"project": project, "all_projects": args.all_projects, "applied": applied}

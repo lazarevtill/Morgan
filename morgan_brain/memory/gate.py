@@ -112,6 +112,32 @@ class MemoryGate:
         self._require_scope(fact.user_id)
         return await self._store.upsert_fact(fact)
 
+    async def record_project(
+        self,
+        *,
+        user_id: str,
+        project: str,
+        classification: str,
+        remote: str | None,
+        root: str | None,
+    ) -> bool:
+        """Record what repository *project* is: its classification, remote and root.
+
+        A write like any other -- refused with the rest while a heavy migration step waits --
+        and the one gate method that carries the owner's remote URL and checkout path, which
+        is why it comes through here rather than reaching into the store. It returns whether a
+        row was updated: a project with no row (nothing was written under it, or another
+        process forgot it) is left without one.
+
+        *user_id* scopes the caller, not the row: ``projects`` has no owner column, because a
+        repository's classification is the same for everyone with data in it.
+        """
+        self.require_writable()
+        self._require_scope(user_id, project)
+        return await self._store.record_project(
+            project, classification=classification, remote=remote, root=root
+        )
+
     async def current_facts(
         self,
         *,

@@ -95,11 +95,12 @@ def _a_version_four_database_with_default_rows(tmp_path: Path) -> sqlite3.Connec
     step 4's schema (the provenance columns are in every ``CREATE TABLE``), so this is exactly
     what opening a pre-Task-12 database with this code looks like, one store at a time.
 
-    Also creates ``projects`` -- empty, holding no ``'default'`` row of its own (it is keyed
-    by name, not by ``project``, and has no ``'default'`` row to move) -- because step 3
-    always creates it before step 4 ever runs on a real database, and ``PRAGMA user_version =
-    4`` below claims this one already went through step 3 too. Stamping the version without
-    the table step 3 makes would be a database no real migration could ever produce.
+    Also creates ``projects``, because step 3 always creates it before step 4 ever runs on a
+    real database, and ``PRAGMA user_version = 4`` below claims this one already went through
+    step 3 too. Stamping the version without the table step 3 makes would be a database no
+    real migration could ever produce. The ``'default'`` row the seeding below registers is an
+    artifact of writing these rows with today's stores; step 5 moves rows keyed by ``project``
+    and ``projects`` is keyed by ``name``, so it is not one of the rows counted here.
     """
     path = str(tmp_path / "old.db")
     conn = open_db(path)
@@ -108,7 +109,7 @@ def _a_version_four_database_with_default_rows(tmp_path: Path) -> sqlite3.Connec
     fts = FtsIndex(conn)
     vectors = SqliteVectorIndex(conn, dim=_DIM)
     temporal = SqliteTemporalStore(conn=conn)
-    history = SessionHistoryStore(conn)
+    history = SessionHistoryStore(conn, clock=lambda: _NOW)
     projects_store.create_schema(conn)
     conn.commit()
 
