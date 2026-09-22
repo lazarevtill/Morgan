@@ -375,6 +375,12 @@ _STEPS: tuple[Step, ...] = (
 )
 
 
+def code_version() -> int:
+    """The ``user_version`` a database is at once it has been through every step this build
+    knows. Read from ``_STEPS`` when called, like ``pending``'s default."""
+    return len(_STEPS)
+
+
 def _version(conn: sqlite3.Connection) -> int:
     return int(conn.execute("PRAGMA user_version").fetchone()[0])
 
@@ -394,7 +400,8 @@ def pending(conn: sqlite3.Connection, steps: Sequence[Step] | None = None) -> tu
     return tuple(s for s in (_STEPS if steps is None else steps) if s.number > done)
 
 
-def _holds_morgan_tables(conn: sqlite3.Connection) -> bool:
+def holds_morgan_tables(conn: sqlite3.Connection) -> bool:
+    """Whether the database behind *conn* holds any table Morgan keys by project."""
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     return not names.isdisjoint(PROJECT_TABLES)
 
@@ -409,12 +416,12 @@ def stamp_if_new(conn: sqlite3.Connection, steps: Sequence[Step] | None = None) 
     "new": a database written before step 1 existed reads 0 too, and holds tables. Call it
     before any store opens the connection.
     """
-    if _holds_morgan_tables(conn):
+    if holds_morgan_tables(conn):
         return False
     resolved = _STEPS if steps is None else steps
     with write_transaction(conn):
         # Again under the lock: another process may have created the tables since.
-        if _holds_morgan_tables(conn):
+        if holds_morgan_tables(conn):
             return False
         # PRAGMA takes no bound parameters; the value is a length this function took.
         conn.execute(f"PRAGMA user_version = {len(resolved)}")

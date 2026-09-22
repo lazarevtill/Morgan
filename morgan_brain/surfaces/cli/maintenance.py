@@ -170,7 +170,7 @@ def _migrate(settings: Settings, *, dry_run: bool) -> dict[str, Any]:
     db_path = sqlite_path(settings.temporal_db_url)
     if not Path(db_path).is_file():
         raise FileNotFoundError(f"no database at {db_path}: nothing to migrate")
-    code_version = len(migrations._STEPS)
+    code_version = migrations.code_version()
 
     conn = open_db(db_path, busy_timeout_ms=settings.db_busy_timeout_ms)
     try:
@@ -210,7 +210,7 @@ def _migrate(settings: Settings, *, dry_run: bool) -> dict[str, Any]:
             f"{db_path} failed PRAGMA quick_check after migrating: {check} -- "
             f"`morgan restore {taken.path} --yes` puts back the database as it was"
         )
-    _, after = snapshot._describe(Path(db_path))
+    _, after = snapshot.describe(Path(db_path))
     return migration_to_dict(
         database=db_path,
         snapshot=taken,

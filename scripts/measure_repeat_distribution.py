@@ -599,7 +599,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "dim": dim,
     }
     if data["meta"] and data["meta"] != meta:
-        changed = sorted(k for k in meta if data["meta"].get(k) != meta[k])
+        changed = sorted(k for k, value in meta.items() if data["meta"].get(k) != value)
         log(
             f"{results_json} was written with different parameters ({', '.join(changed)} "
             f"changed); use a different --results-json or matching --db/--endpoint/--model/"

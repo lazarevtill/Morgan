@@ -98,8 +98,8 @@ come in" are answered by the directory names.
 - **One write path.** `MemoryModule.store` writes every index in one transaction: episodic
   row, vector, FTS5, entity index, and the project's `projects` row. Entities are extracted
   there when the caller gave none. Every row carries its provenance: origin, client, session,
-  working directory, author and scope, with defaults; every writer names its origin. A memory visible to one index and not
-  another is found by one search and missed by the next.
+  working directory, author and scope, with defaults; every writer names its origin. A memory
+  visible to one index and not another is found by one search and missed by the next.
 - **`forget` reaches every project-keyed table.** `store/tables.py::PROJECT_TABLES` is the one
   list; a store that adds a table registers it there, and a test fails on any table with a
   `project` column missing from it. `forget` walks the registry and erases each table through

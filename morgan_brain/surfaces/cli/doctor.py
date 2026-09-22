@@ -362,10 +362,10 @@ def _probe_migration(conn: sqlite3.Connection, report: dict[str, Any]) -> None:
     """The database's ``user_version`` against the steps this build knows -- or, on a file that
     holds no Morgan table yet, why there is no migration state to read."""
     try:
-        if migrations._holds_morgan_tables(conn):
+        if migrations.holds_morgan_tables(conn):
             report["migration"] = migration_status_to_dict(
                 user_version=int(conn.execute("PRAGMA user_version").fetchone()[0]),
-                code_version=len(migrations._STEPS),
+                code_version=migrations.code_version(),
                 pending=migrations.pending(conn),
             )
         else:

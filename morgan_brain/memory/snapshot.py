@@ -30,7 +30,7 @@ _REASON_RE = re.compile(r"^[a-z0-9-]{1,32}\Z")
 #: The content tables a human reading ``morgan snapshot`` cares about. The index tables
 #: (``vec_items``, ``vec_meta``, ``fts_memories``) are derived, so their row counts are not the
 #: point -- and counting a ``vec0`` virtual table needs sqlite-vec loaded, which the read-only
-#: connection ``_describe`` opens on the finished copy deliberately does not do (see there).
+#: connection ``describe`` opens on the finished copy deliberately does not do (see there).
 #: Written as literal SQL, one per name, rather than built from the tuple: no interpolation
 #: means no S608/B608 finding to reason about here at all.
 _COUNT_SQL: dict[str, str] = {
@@ -134,7 +134,7 @@ def _require_ok(path: Path) -> None:
         raise SnapshotCorrupt(path, f"{path} failed PRAGMA quick_check: {check}")
 
 
-def _describe(path: Path) -> tuple[int, dict[str, int]]:
+def describe(path: Path) -> tuple[int, dict[str, int]]:
     """``user_version`` and a row count per content table (``_COUNT_SQL``), skipping any table
     the copy does not have."""
     conn = _readonly_connect(path)
@@ -226,7 +226,7 @@ def take(
         dest.unlink(missing_ok=True)
         raise SnapshotCorrupt(dest, f"{dest} failed PRAGMA quick_check: {check}")
 
-    user_version, counts = _describe(dest)
+    user_version, counts = describe(dest)
     return SnapshotResult(
         path=dest, bytes=dest.stat().st_size, user_version=user_version, counts=counts
     )
@@ -242,7 +242,7 @@ def list_snapshots(into: Path) -> list[SnapshotResult]:
         return []
     results = []
     for path in sorted(into.glob("morgan-*.db")):
-        user_version, counts = _describe(path)
+        user_version, counts = describe(path)
         results.append(
             SnapshotResult(
                 path=path, bytes=path.stat().st_size, user_version=user_version, counts=counts
@@ -265,8 +265,8 @@ def restore(
 
     In order: ``quick_check`` *source* itself, raising ``SnapshotCorrupt`` on anything but
     ``"ok"`` -- a restore never reads from a copy that failed its own check; refuse with
-    ``SnapshotTooNew`` when *source*'s ``user_version`` is ahead of what this build's
-    ``migrations._STEPS`` knows how to read, naming both numbers; count *db_path*'s rows
+    ``SnapshotTooNew`` when *source*'s ``user_version`` is ahead of what this build reads
+    (``migrations.code_version()``), naming both numbers; count *db_path*'s rows
     before anything changes; ``take()`` a safety copy of *db_path* under the fixed reason
     ``"before-restore"`` -- taken unconditionally, because a restore is the one command whose
     own mistake cannot be undone by running it again; copy *source* to a scratch file next to
@@ -285,12 +285,12 @@ def restore(
     """
     _require_ok(source)
 
-    snapshot_version, _ = _describe(source)
-    code_version = len(migrations._STEPS)
+    snapshot_version, _ = describe(source)
+    code_version = migrations.code_version()
     if snapshot_version > code_version:
         raise SnapshotTooNew(source, snapshot_version, code_version)
 
-    _, before = _describe(Path(db_path))
+    _, before = describe(Path(db_path))
 
     safety = take(
         db_path, into=into, reason="before-restore", clock=clock, busy_timeout_ms=busy_timeout_ms
@@ -319,5 +319,5 @@ def restore(
 
     _require_ok(Path(db_path))
 
-    _, after = _describe(Path(db_path))
+    _, after = describe(Path(db_path))
     return RestoreResult(before=before, after=after, safety=safety)
