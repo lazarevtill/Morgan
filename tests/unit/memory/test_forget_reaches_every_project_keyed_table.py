@@ -332,3 +332,42 @@ async def test_forget_erases_orphaned_index_rows_and_never_another_users(tmp_pat
     for table in _INDEXES:
         assert _owned(conn, table, "u", "p") == 0, f"{table} still holds an orphan of p"
     assert {key: _owned(conn, *key) for key in kept} == kept
+
+
+async def test_the_projects_row_stays_while_another_owner_has_data_in_the_project(tmp_path):
+    """A project's row is shared by every owner with data in it, so one owner's forget keeps
+    it while another's rows remain, and the last owner's forget removes it."""
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    history = SessionHistoryStore(conn, clock=_clock)
+    for user_id in ("a", "b"):
+        await module.store(Memory(user_id=user_id, project="p", content=f"harbor of {user_id}"))
+        history.append(
+            f"{user_id}:s", Message(user_id=user_id, role=Role.USER, content="tide"), project="p"
+        )
+    projects_store.seed(conn, clock=_clock)
+    assert projects_store.get(conn, "p") is not None
+
+    await module.forget(user_id="a", project="p")
+
+    assert projects_store.get(conn, "p") is not None, "b's data is still in p"
+
+    await module.forget(user_id="b", project="p")
+
+    assert projects_store.get(conn, "p") is None
+
+
+async def test_a_single_owners_forget_removes_the_projects_row_once_every_table_is_empty(
+    tmp_path,
+):
+    """With every registered table holding the owner's rows for ``p``, the row goes: the check
+    runs after the erasure, so it sees none of the rows the same forget deleted."""
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "p")
+    projects_store.seed(conn, clock=_clock)
+    assert all(_rows(conn, table, "p") for table in project_tables(conn))
+
+    await module.forget(user_id="u", project="p")
+
+    assert projects_store.get(conn, "p") is None

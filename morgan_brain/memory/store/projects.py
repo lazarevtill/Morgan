@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from morgan_brain.memory.store.db import write_transaction
-from morgan_brain.memory.store.tables import Erasure
+from morgan_brain.memory.store.tables import Erasure, project_tables
 
 #: A single statement, run with plain ``execute`` rather than ``executescript`` -- the latter
 #: issues an implicit ``COMMIT`` before it runs anything, which would end migration step 3's
@@ -157,7 +157,30 @@ def seed(conn: sqlite3.Connection, clock: Callable[[], datetime]) -> int:
     return inserted
 
 
+def _holds_rows_of(conn: sqlite3.Connection, project: str) -> bool:
+    """Whether any registered project-keyed table still holds a row of *project*, from any
+    owner."""
+    for table in project_tables(conn):
+        if not _table_exists(conn, table):
+            continue
+        # `table` comes from `project_tables`: `PROJECT_TABLES` or a name Morgan wrote to
+        # `embedding_spaces` itself, never caller input.
+        sql = f"SELECT EXISTS (SELECT 1 FROM {table} WHERE project = ?)"  # noqa: S608 # nosec B608
+        if conn.execute(sql, (project,)).fetchone()[0]:
+            return True
+    return False
+
+
 def delete_project(conn: sqlite3.Connection, erasure: Erasure) -> int:
-    """`forget()`'s deleter for ``projects``: the erased project's own row, whose remote URL
-    and root path are the owner's data like any other row it erases."""
+    """`forget()`'s deleter for ``projects``: the erased project's own row, once no row of the
+    project is left in any registered project-keyed table, from any owner.
+
+    The row has no owner. Its remote URL, root path and switches belong to everyone with data
+    in the project, so one owner's ``forget`` keeps it while another's rows remain, and the
+    last one's removes it. ``forget()`` runs this after every project-keyed table's deleter
+    (``_erasure_plan`` puts the name-keyed tables last), so the check sees what the erasure
+    left, not the rows it is about to delete.
+    """
+    if _holds_rows_of(conn, erasure.project):
+        return 0
     return conn.execute("DELETE FROM projects WHERE name = ?", (erasure.project,)).rowcount

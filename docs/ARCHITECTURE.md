@@ -132,7 +132,7 @@ memory ids are read. It erases:
 - memories, FTS rows and entity rows;
 - vectors: `vec_meta` and every embedding space's vec0 table, `vec_items` among them;
 - facts and session history;
-- the project's `projects` row.
+- the project's `projects` row, once no owner has a row left in the project.
 
 It walks `store/tables.py`, the registry of the tables this has to reach, and erases each table
 with the deleter its store owns:
@@ -143,6 +143,7 @@ with the deleter its store owns:
 - A registered table with no deleter, or a space's table without those columns, stops it by
   name before anything is erased.
 - FTS5's `optimize` then merges `fts_memories`, so the deleted words leave its segments.
+- The name-keyed tables go last, so the `projects` row's check sees what the erasure left.
 
 A memory being stored by another process is either entirely erased or entirely kept, because
 storing is one transaction too. Tables that were never created on this database are named in

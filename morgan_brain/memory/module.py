@@ -94,7 +94,8 @@ def _erasure_plan(conn: sqlite3.Connection) -> tuple[list[tuple[str, Deleter]], 
     deleter -- or an embedding space's table without the ``user_id`` and ``project`` columns
     its deleter erases by -- raises here, by name, with nothing erased. An absent table of
     ``NAME_KEYED_PROJECT_TABLES`` is passed over and not reported: ``tables_skipped`` names
-    the tables with a ``project`` column.
+    the tables with a ``project`` column. The plan erases the name-keyed tables last: the
+    ``projects`` row goes only once no project-keyed table holds a row of the project.
     """
     registered = registry.project_tables(conn)
     skipped = [t for t in registered if not _table_exists(conn, t)]

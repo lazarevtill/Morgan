@@ -67,7 +67,11 @@ The deleters erase as follows:
 - Another embedding space's vec0 table, named in `embedding_spaces`, is erased by its own
   `user_id` and `project` columns alone (`vectors.space_deleter`). No writer puts its vectors
   at `vec_meta`'s rowids, so a rowid there says nothing about whose row it is.
-- The `projects` row is erased by its name.
+- The `projects` row is erased by its name, once no registered project-keyed table holds a
+  row of the project from any owner. It has no owner of its own: its remote, root and
+  switches belong to everyone with data in the project. So one owner's `forget` keeps it
+  while another's rows remain, and the last one's removes it. The name-keyed tables are
+  erased after every project-keyed one, so the check sees what the erasure left.
 - The FTS5 deleter then runs `optimize` on `fts_memories`. FTS5 answers a DELETE with a
   tombstone and keeps the row's words in its segment b-tree until a merge; `optimize` merges
   now, so the words leave `fts_memories_data`.
@@ -93,6 +97,9 @@ cover the following:
   from `vec_meta`'s, and checks that only the forgotten project's vector goes.
 - **Orphans.** It checks that an index row whose memory or `vec_meta` row is gone is erased,
   and that another owner's rows in the same project are kept.
+- **The `projects` row.** With two owners in a project, the first owner's `forget` keeps the
+  row and the second's removes it. A single owner's `forget` removes it, with every registered
+  table holding that owner's rows beforehand.
 - **Refusals.** It checks that each refusal above stops `forget()` with every row of the
   project still present.
 
