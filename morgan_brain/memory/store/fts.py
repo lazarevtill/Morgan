@@ -65,7 +65,7 @@ class FtsIndex:
         column, and the rows are reinserted with ``PERSONAL_PROJECT`` backfilled.
 
         The table is recreated as it stood when ``project`` was added, without the columns
-        migration step 6 adds: a database this old was written before phase 0, opens
+        migration step 6 adds: a database this old predates them, opens
         read-only until ``morgan migrate`` runs, and gets them from step 6 then. A table that
         has ``project`` -- every one this code or step 6 created -- is left alone.
         """
@@ -107,7 +107,7 @@ class FtsIndex:
     ) -> None:
         """Index *content* under *memory_id*, replacing what was indexed for it before. The
         memory's status, scope and author are stored beside it, unindexed; keyword search does
-        not filter on them in phase 0."""
+        not filter on them."""
         with write_transaction(self._conn):
             self._conn.execute("DELETE FROM fts_memories WHERE memory_id = ?", (memory_id,))
             self._conn.execute(

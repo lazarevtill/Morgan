@@ -53,7 +53,7 @@ async def _record_the_repository(
     personal default outside a repository, and never from ``morgan-mcp``, which cannot see its
     client's checkout (the server may run on another machine). The label is recomputed on
     every such write, because both the repository's remote and ``MORGAN_WORK_REMOTE_GLOBS``
-    change without Morgan hearing about it, and nothing sets it by hand in phase 0.
+    change without Morgan hearing about it, and nothing sets it by hand.
 
     It runs after the command's own write, so a command that failed -- an unreachable model,
     a refused embedding -- records nothing, and on a database waiting for ``morgan migrate``

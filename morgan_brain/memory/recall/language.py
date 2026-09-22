@@ -1,8 +1,9 @@
 """The query's language, decided by script alone -- no model call.
 
-The owner writes most queries in Russian, and phase 1a's keyword-only degrade runs over FTS5's
-``unicode61`` tokenizer with no stemming, which is weakest exactly there. ``recall.done``
-records which language each query was in, so a degraded recall can be told apart by it.
+The owner writes most queries in Russian, and a keyword-only recall while embeddings are down
+-- not built -- would run over FTS5's ``unicode61`` tokenizer with no stemming, which is
+weakest exactly there. ``recall.done`` records which language each query was in, so such a
+recall could be told apart by it.
 """
 
 from __future__ import annotations

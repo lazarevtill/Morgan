@@ -1,5 +1,5 @@
 """How much does re-embedding the same text move the vector? -- the number the fingerprint
-tolerance (Task 14) is set from.
+tolerance (``MORGAN_EMBEDDING_FINGERPRINT_TOLERANCE``) is set from.
 
 Morgan's fingerprint check compares a freshly-embedded query against a vector stored earlier.
 If the embedding server is not perfectly deterministic -- batching, concurrency, and a model
@@ -35,8 +35,8 @@ Conditions and their wait cost, run unrestricted (`--rows 500`, no `--quick`, no
     ``--cold-conditions "8:1"`` restricts the grid's cold half to just that one
     batch:concurrency combination (the warm half always runs in full), bringing the wait
     count down to 1 (that condition) + N (``--cold-starts``) -- see
-    docs/measurements/2026-09-phase0-baseline.md Section 3 for which shape the controller
-    actually ran and why.
+    docs/measurements/2026-09-phase0-baseline.md Section 3 for which shape was actually run
+    and why.
 
 ``--quick`` shrinks the grid to warm-only, batch sizes {1, 8}, both client counts -- enough to
 exercise every code path (sampling, batching, single- and two-client dispatch, progress

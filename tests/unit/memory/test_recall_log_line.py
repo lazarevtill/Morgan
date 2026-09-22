@@ -1,6 +1,6 @@
 """``recall.done`` is emitted once per recall, to stderr, never stdout.
 
-Phase 1a's availability trigger and the owner's own review read this line, not memory: it must
+The owner's own review of recall's availability reads this line, not memory: it must
 carry enough to tell a slow recall from an unused one, and which language the query was in,
 without a stray ``print()`` corrupting the ``--json`` and MCP stdio protocols that also run
 through this process's stdout.

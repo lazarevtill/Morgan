@@ -15,7 +15,7 @@ from morgan_brain.models import Memory
 from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.render import _render_doctor
 
-#: ``memories`` exactly as every Morgan before phase 0 created it (frozen in
+#: ``memories`` exactly as every older Morgan created it (frozen in
 #: ``tests/unit/memory/test_provenance_columns.py::_PRE_PHASE_ZERO_DDL`` too) -- no
 #: ``author_id``, the column ``rows_missing_provenance`` checks first.
 _PRE_PHASE_ZERO_MEMORIES = """
@@ -69,8 +69,8 @@ async def _report(tmp_path: Path, *, project: str, all_projects: bool = False) -
 
 
 def _blank_the_author(tmp_path: Path) -> None:
-    """What a pre-phase-0 process's write left behind: every column phase-0 code fills in
-    with something, this one left empty."""
+    """What an older Morgan's write left behind: every column this code fills in with
+    something, this one left empty."""
     settings = _settings(tmp_path)
     conn = open_db(sqlite_path(settings.temporal_db_url))
     try:
@@ -126,8 +126,8 @@ async def test_a_vec_items_row_with_a_null_status_is_counted(tmp_path):
     against this pin: both ``INSERT`` and a plain ``UPDATE`` raise ``Expected text for TEXT
     metadata column status, received NULL``, matching the upstream tracking issue
     (asg017/sqlite-vec#141, "NULL values are not supported yet"). A real vec0 table can
-    therefore never hold the row this test counts: the pre-phase-0 writer the controller
-    ruling describes would crash before landing one, not write one quietly. The counting SQL
+    therefore never hold the row this test counts: an older Morgan's writer would crash
+    before landing one, not write one quietly. The counting SQL
     doesn't know or care whether ``vec_items`` is the real vec0 table or not, so a plain table
     of the same name and shape exercises exactly the query `doctor` runs, without fighting the
     extension's own validation to prove it -- `SqliteVectorIndex`'s `CREATE VIRTUAL TABLE IF
@@ -181,9 +181,8 @@ async def test_a_checked_table_entirely_absent_is_named_not_silently_zeroed(tmp_
 
 
 async def test_the_scoped_line_renders_with_its_total(tmp_path):
-    """`render.py` is on this task's file list and otherwise has no test touching doctor's
-    plain-text form: the spec's own example, `memories: 3 in project 'personal' (5 across all
-    projects)`, rendered from a real report rather than a hand-built dict."""
+    """doctor's plain-text form of a scoped count, `memories: 3 in project 'personal' (5
+    across all projects)`, rendered from a real report rather than a hand-built dict."""
     await _store(tmp_path, project="Morgan", count=2)
     await _store(tmp_path, project="personal", count=3)
 

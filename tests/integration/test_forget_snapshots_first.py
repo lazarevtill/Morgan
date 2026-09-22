@@ -44,8 +44,8 @@ async def test_the_mcp_tool_does_the_same(tmp_path, monkeypatch):
 
 
 async def test_a_read_only_database_refuses_before_any_snapshot_is_written(tmp_path, monkeypatch):
-    """The controller's ruling on Task 7/8: a read-only context refuses *before* the snapshot
-    is taken, so a forget that cannot run leaves no undo file behind either."""
+    """A read-only context refuses *before* the snapshot is taken, so a forget that cannot
+    run leaves no undo file behind either."""
     settings = _a_read_only_database(tmp_path, monkeypatch)
 
     with pytest.raises(DatabaseNeedsMigration):

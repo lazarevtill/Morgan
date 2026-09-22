@@ -93,7 +93,7 @@ def _a_version_four_database_with_default_rows(tmp_path: Path) -> sqlite3.Connec
 
     Built through the real store classes rather than raw SQL: today's stores already create
     step 4's schema (the provenance columns are in every ``CREATE TABLE``), so this is exactly
-    what opening a pre-Task-12 database with this code looks like, one store at a time.
+    what opening a database at ``user_version`` 4 with this code looks like, one store at a time.
 
     Also creates ``projects``, because step 3 always creates it before step 4 ever runs on a
     real database, and ``PRAGMA user_version = 4`` below claims this one already went through
@@ -173,8 +173,8 @@ def test_step_five_moves_every_default_row_and_counts_them(tmp_path):
 
 
 def test_step_five_moves_default_rows_in_every_project_keyed_table(tmp_path):
-    """Every table ``PROJECT_TABLES`` names, not just the three the brief's own test checks --
-    ``facts``, ``memory_entities`` and ``vec_meta`` included."""
+    """Every table ``PROJECT_TABLES`` names -- ``facts``, ``memory_entities`` and ``vec_meta``
+    included."""
     conn = _a_version_four_database_with_default_rows(tmp_path)
 
     applied = migrations.migrate(conn, _stores(conn))

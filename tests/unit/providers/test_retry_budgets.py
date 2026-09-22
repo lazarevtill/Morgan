@@ -32,7 +32,7 @@ async def test_a_silent_host_fails_within_the_interactive_budget_not_the_chat_ti
     with silent_model_server() as url, pytest.raises(ProviderUnreachable) as exc:
         await build_embedder(_at(settings, url)).embed("x")
     assert client_ready.since() < 1.2 + TOLERANCE
-    # Named as the spec names it once a connection was made, never by Python's builtin.
+    # Named for what happened once a connection was made, never by Python's builtin.
     assert "answered too slowly or dropped: ReadTimeout after " in str(exc.value)
     assert "TimeoutError" not in str(exc.value)
     assert "unreachable" not in str(exc.value)

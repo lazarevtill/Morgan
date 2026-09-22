@@ -206,12 +206,13 @@ class Settings(BaseSettings):
 
     # --- Project classification (surfaces/cli/project.py::classify). `work_remote_globs`
     # is read by every CLI write from inside a repository, which records the project's
-    # classification; the disk walk over code_roots is phase 1a, and until then `doctor` only
-    # names a root that is not a directory. Nothing here identifies the owner -- shipped
+    # classification; the disk walk over code_roots is not built, and `doctor` only names a
+    # root that is not a directory. Nothing here identifies the owner -- shipped
     # empty, so a clone of this repository walks and matches nothing until its own owner
     # sets them. ---
-    #: Repository roots the phase-1a walk will scan for a project's remote and root, comma
-    #: separated (``~/code,~/work``). Each entry's ``~`` is expanded eagerly, like ``data_dir``.
+    #: Repository roots, comma separated (``~/code,~/work``), for a walk that would read each
+    #: project's remote and root; nothing walks them yet. Each entry's ``~`` is expanded
+    #: eagerly, like ``data_dir``.
     code_roots: Annotated[list[str], NoDecode] = Field(default_factory=list)
     #: How many directory levels below each root that walk descends looking for a ``.git``.
     code_root_depth: int = Field(default=2, gt=0)

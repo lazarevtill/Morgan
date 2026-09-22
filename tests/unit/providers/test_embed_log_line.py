@@ -1,7 +1,7 @@
 """``embed.done`` is emitted exactly once per ``embed_batch`` call, on every outcome.
 
-Phase 1a's two-week measurement and its availability trigger (more than one recall in ten
-degraded or over budget moves the embedder local) read this line, not memory: a call that
+Any measurement of the embedder's availability -- how many calls are degraded or over budget
+-- reads this line, not memory: a call that
 never logs cannot be told apart from one that never happened. Nothing here may ever be able to
 carry the input text or the key -- only their count. The `outcome` field must never say "ok"
 for a call that raised, including one this adapter does not classify into slow/unreachable/

@@ -242,7 +242,7 @@ async def test_an_import_stores_client_cli(settings_for_tmp: Settings, tmp_path:
 
 
 async def test_consolidated_facts_carry_the_owners_authorship() -> None:
-    """Controller ruling on Task 10's review: consolidation's ``upsert_fact`` path must set
+    """Consolidation's ``upsert_fact`` path must set
     ``author_id`` and ``scope`` too, or every fact written after ``migrate`` counts as
     missing provenance -- the temporal store round-trips whatever the caller gives it."""
     module = build_memory_module(open_db(":memory:"), embedder=FakeEmbedder(dim=16), dim=16)

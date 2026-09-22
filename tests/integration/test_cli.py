@@ -127,7 +127,7 @@ def test_doctor_rows_vectors_catches_an_unwired_vector_store(tmp_path):
 
 
 def test_doctor_vectors_json_reports_the_audit_and_notices_on_stderr(tmp_path):
-    """M9: ``--vectors`` end to end through a real subprocess, not only the report-builder
+    """``--vectors`` end to end through a real subprocess, not only the report-builder
     unit tests -- the argparse flags, ``cmd_doctor``'s pass-through and ``_render_vector_audit``
     all sit between them and what ``--json`` actually prints."""
     with model_server(embedding_dim=8) as url:

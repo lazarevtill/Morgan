@@ -278,7 +278,7 @@ def _value(rest: str, lines: Iterator[str]) -> str:
             pending = ""
 
 
-#: ``classify``'s answer when nothing given matches -- SPEC-phase0 §3.7's third label.
+#: ``classify``'s answer when nothing given matches -- the third label, beside the two below.
 _UNCLASSIFIED = "unclassified"
 _WORK = "work"
 _PERSONAL = "personal"

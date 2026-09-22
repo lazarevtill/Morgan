@@ -72,8 +72,8 @@ async def test_a_slow_answer_prints_its_seconds_beside_the_setting_it_crossed(tm
 
 
 async def test_a_connect_timeout_names_the_endpoint_not_the_probe_timeout(tmp_path, monkeypatch):
-    """No connection within the timeout is a host that is off or an address that is wrong
-    (SPEC-phase0 section 3.4): the endpoint setting is what to check, not the timeout."""
+    """No connection within the timeout is a host that is off or an address that is wrong:
+    the endpoint setting is what to check, not the timeout."""
     real_client = httpx.AsyncClient
 
     def _never_connects(request: httpx.Request) -> httpx.Response:

@@ -112,7 +112,7 @@ class CheckedEmbedder:
         """Re-check the active space right now, never short-circuited by ``_checked``.
 
         ``memory/module.py::MemoryModule.check_embedding_space`` calls this for the import
-        canary (Task 26): every ``MORGAN_IMPORT_CANARY_EVERY`` memories an import stores, and
+        canary: every ``MORGAN_IMPORT_CANARY_EVERY`` memories an import stores, and
         once more at the end, so a model that is *still* wrong when a check runs is caught
         within one stretch rather than only once every memory since is a suspect. It does not
         catch a vector that was wrong only in between checks and has since recovered --

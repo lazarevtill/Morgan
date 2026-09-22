@@ -160,7 +160,7 @@ def test_a_new_database_has_exactly_the_columns_step_four_adds(tmp_path):
 def test_a_database_from_before_step_one_goes_through_every_step(tmp_path):
     """Every step runs on the schema its own version had. Step 1 was written for a database
     without the provenance columns, and runs on one: it must not write through SQL that names
-    them, or no database from before phase 0 could reach step 4 at all."""
+    them, or no database an older Morgan wrote could reach step 4 at all."""
     conn = _a_database_from_before_phase_zero(
         tmp_path, projects=["archive/chatgpt", "Morgan"], version=0
     )
@@ -241,7 +241,7 @@ async def test_reads_answer_on_a_database_still_waiting_for_step_four(tmp_path):
     _a_version_three_database_with(tmp_path, projects=["Morgan"]).close()
     module = build_memory_module(str(tmp_path / "old.db"))
     assert [s.number for s in migrations.pending(module._conn)][:1] == [4]
-    # The keyword index a database from before phase 0 already holds for its memory.
+    # The keyword index a database an older Morgan wrote already holds for its memory.
     FtsIndex(module._conn).add(_memory_id("Morgan"), _CONTENT, user_id="u", project="Morgan")
     gate = MemoryGate(module, read_only_reason="1 step pending")
 
@@ -263,7 +263,7 @@ async def test_reads_answer_on_a_database_still_waiting_for_step_four(tmp_path):
     assert (fact.object, fact.author_id, fact.scope) == ("k8s", "", Scope.PRIVATE)
 
 
-#: ``memories`` and ``facts`` exactly as every Morgan before phase 0 created them (commit
+#: ``memories`` and ``facts`` exactly as every older Morgan created them (commit
 #: 3b2b386). A database built from these is one step 4 was written for -- one this code
 #: created would already carry the columns, and step 4 would fail on the first of them.
 _PRE_PHASE_ZERO_DDL = {
@@ -316,8 +316,8 @@ def _a_database_from_before_phase_zero(
     version: int,
     tables: tuple[str, ...] = ("memories", "facts"),
 ) -> sqlite3.Connection:
-    """One memory and one current fact per project, in ``memories`` and ``facts`` as a Morgan
-    before phase 0 wrote them, at ``user_version`` *version*. Only *tables* are created.
+    """One memory and one current fact per project, in ``memories`` and ``facts`` as an older
+    Morgan wrote them, at ``user_version`` *version*. Only *tables* are created.
 
     Before step 1 the stored entities are the old rule's; from step 1 on, the current rule's.
     """
@@ -349,7 +349,7 @@ def _a_database_from_before_phase_zero(
 
 
 def _a_version_three_database_with(tmp_path: Path, *, projects: list[str]) -> sqlite3.Connection:
-    """What every Morgan before phase 0 left -- ``user_version`` 2 -- once this code has
+    """What every older Morgan left -- ``user_version`` 2 -- once this code has
     opened it: the light step 3 has run, and the heavy step 4 waits for ``morgan migrate``."""
     conn = _a_database_from_before_phase_zero(tmp_path, projects=projects, version=2)
     migrations.upgrade(conn, _stores(conn))

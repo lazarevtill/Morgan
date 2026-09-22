@@ -261,7 +261,7 @@ def restore(
 ) -> RestoreResult:
     """Replace *db_path* with a copy of *source*, behind a safety snapshot of *db_path*
     taken first. *source* is only ever read -- a restore does not delete the snapshot it
-    restores from (SPEC-phase0 SS3.2: Morgan never deletes a snapshot).
+    restores from: Morgan never deletes a snapshot.
 
     In order: ``quick_check`` *source* itself, raising ``SnapshotCorrupt`` on anything but
     ``"ok"`` -- a restore never reads from a copy that failed its own check; refuse with

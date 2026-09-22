@@ -93,7 +93,7 @@ class ImportStopped(Exception):
     before. Storage is idempotent by id, so once ``morgan doctor --vectors`` confirms the
     model is sound again, re-running the same import skips every id already stored, suspects
     included, rather than re-embedding them. Real remediation -- re-embedding the suspects,
-    or holding a stretch back until its own canary passes -- is out of phase-0 scope.
+    or holding a stretch back until its own canary passes -- is not built.
     """
 
     def __init__(

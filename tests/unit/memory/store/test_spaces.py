@@ -149,8 +149,8 @@ def test_a_later_failing_step_rolls_step_threes_ddl_back_too(tmp_path):
     implicit ``COMMIT`` before it runs anything -- inside ``write_transaction``'s ``BEGIN
     IMMEDIATE`` that ends the whole wave's transaction early, so a later step's failure rolls
     back everything from that point on but leaves step 3's tables and ``user_version``
-    committed regardless. ``morgan migrate`` runs steps 3 to 7 in exactly one transaction
-    (SPEC-phase0 §4), so a failure in a later step must undo step 3 as cleanly as any other.
+    committed regardless. ``morgan migrate`` runs steps 3 to 7 in exactly one transaction,
+    so a failure in a later step must undo step 3 as cleanly as any other.
     """
     old_path = _old_database_missing_both_tables(tmp_path, "old.db")
     conn = open_db(old_path)

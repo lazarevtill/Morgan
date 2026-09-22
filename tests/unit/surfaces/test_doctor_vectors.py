@@ -99,7 +99,7 @@ async def test_a_clean_sample_reports_its_minimum(tmp_path):
 async def test_one_wrong_row_is_named(tmp_path):
     audit = await _audit(tmp_path, rows=10, serve={"id-7": "wrong"})
     assert audit["below_tolerance"] == ["id-7"]
-    # I1: a client's own min must be the worst comparable cosine it saw, not the best -- the
+    # A client's own min must be the worst comparable cosine it saw, not the best -- the
     # exact negation the fake server answers for "wrong" puts it at -1.0 exactly.
     assert audit["min"] == pytest.approx(-1.0)
     assert audit["per_client"]["client-1"]["min"] == pytest.approx(-1.0)
@@ -109,7 +109,7 @@ async def test_two_clients_name_the_one_that_disagreed(tmp_path):
     audit = await _audit(tmp_path, rows=10, clients=2, serve={"client-2": {"id-3": "wrong"}})
     assert audit["disagreements"] == ["id-3"]
     assert audit["per_client"]["client-2"]["below_tolerance"] == ["id-3"]
-    # I1: client-2's own min shows the failing row; client-1, which answered everything
+    # client-2's own min shows the failing row; client-1, which answered everything
     # normally, has nothing below tolerance and so nothing to lower its own min.
     assert audit["per_client"]["client-2"]["min"] == pytest.approx(-1.0)
     assert audit["per_client"]["client-1"]["min"] == pytest.approx(1.0)
@@ -123,7 +123,7 @@ async def test_a_zero_or_non_finite_vector_is_reported_failing_not_raised(tmp_pa
 
 
 async def test_a_nan_comparison_between_clients_counts_as_a_disagreement(tmp_path):
-    """M4: huge (but individually finite) components overflow inside ``fingerprint.cosine``'s
+    """Huge (but individually finite) components overflow inside ``fingerprint.cosine``'s
     own arithmetic -- both norms and the dot product become infinite, and ``inf / inf`` is
     ``nan``. A NaN cosine compares ``False`` against both ``<`` and ``>=``, so the old
     ``cosine < tolerance`` check silently called this a pass; ``not (cosine >= tolerance)``
@@ -157,7 +157,7 @@ async def test_vectors_writes_nothing(tmp_path):
 
 
 async def test_a_failed_sample_read_is_reported_as_what_it_was(tmp_path, monkeypatch):
-    """M5: ``audit_sample`` raising is a read failure, not an empty archive -- the two must
+    """``audit_sample`` raising is a read failure, not an empty archive -- the two must
     not collapse into the same reason."""
     await _seed(tmp_path, 5)
 
@@ -176,7 +176,7 @@ async def test_a_failed_sample_read_is_reported_as_what_it_was(tmp_path, monkeyp
 
 
 async def test_the_audit_is_skipped_when_the_embedding_host_refused(tmp_path):
-    """M6: the plain embedding probe already answered this run's question -- a client sent to
+    """The plain embedding probe already answered this run's question -- a client sent to
     re-embed 180 rows against a host that just refused would each wait out the full import
     budget (600 s by default) to report the same thing."""
     await _seed(tmp_path, 5)
@@ -206,7 +206,7 @@ async def test_the_audit_is_skipped_when_the_embedding_host_is_unreachable(tmp_p
 
 
 async def test_vector_audit_keys_are_always_present_even_without_vectors(tmp_path):
-    """M7: a ``--json`` consumer reading ``vector_audit_reason`` beside ``vector_audit`` must
+    """A ``--json`` consumer reading ``vector_audit_reason`` beside ``vector_audit`` must
     never get a ``KeyError`` depending on whether ``--vectors`` happened to be passed."""
     await _seed(tmp_path, 5)
     with vector_audit_server(embedding_dim=_DIM) as url:

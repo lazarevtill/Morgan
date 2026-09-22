@@ -1,8 +1,8 @@
 """The query's language is decided by script, not by a model.
 
-The owner writes most queries in Russian, and phase 1a's keyword-only degrade runs over
-unicode61 with no stemming, so it is weakest exactly there. The log records which language each
-degraded call was in.
+The owner writes most queries in Russian, and a keyword-only recall while embeddings are down
+-- not built -- would run over unicode61 with no stemming, so it is weakest exactly there. The
+log records which language each call was in.
 """
 
 from __future__ import annotations

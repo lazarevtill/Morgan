@@ -209,14 +209,14 @@ come in" are answered by the directory names.
   file is not seen at all, leaving the project `unclassified`.
 - `projects` is keyed by the project's name, and a project is named after its folder, so two
   checkouts called the same thing share one row: each CLI write from either rewrites the
-  other's classification, remote and root. Nothing acts on the label in phase 0, and recall
+  other's classification, remote and root. Nothing acts on the label yet, and recall
   and consolidation are unaffected -- they are keyed by that same name, so the two checkouts
   share their memories as well.
 - A project written to only through `morgan-mcp` has a row and stays `unclassified`. The
   server may run on another machine than the client, so it never sees the repository a call
   came from, and its `project` argument is a name, not a checkout. The classification, remote
   and root are recorded by a CLI write from inside the repository; the walk over
-  `MORGAN_CODE_ROOTS` that would classify the rest is phase 1a and is not built.
+  `MORGAN_CODE_ROOTS` that would classify the rest is not built.
 - `morgan-mcp` builds a FastMCP server, and FastMCP's own settings read a `./.env` in the
   folder the client starts the server in. FastMCP passes every one of its settings
   explicitly, so the `FASTMCP_*` values in that file change nothing, and Morgan's settings

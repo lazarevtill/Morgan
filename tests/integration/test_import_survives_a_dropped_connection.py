@@ -39,7 +39,7 @@ async def test_an_import_survives_a_dropped_connection(tmp_path):
 
     assert result["memories"] == _TURNS
     # _TURNS memories is under MORGAN_IMPORT_CANARY_EVERY's default of 50, so no canary runs
-    # mid-import, but the tail canary still runs once after the last memory (Task 26). The
+    # mid-import, but the tail canary still runs once after the last memory. The
     # canary's request carries exactly the five fingerprint strings and nothing else, which
     # no ordinary memory-store request does here (the first carries 1 + 5, later ones 1 each),
     # so `calls.inputs` tells the two kinds of request apart instead of folding them into one

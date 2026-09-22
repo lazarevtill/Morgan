@@ -96,7 +96,7 @@ async def test_a_same_second_collision_gets_a_free_name_and_never_overwrites(tmp
 
 
 async def test_the_old_databases_wal_is_unlinked_before_the_swap_not_after(tmp_path, monkeypatch):
-    """Review finding (IMPORTANT): removing ``db_path``'s own ``-wal``/``-shm`` *after*
+    """Removing ``db_path``'s own ``-wal``/``-shm`` *after*
     ``os.replace`` left a window where a crash could pair the just-restored file with the
     *old* database's WAL on a later open. Proven by recording call order directly -- a plain
     "does the file still exist at replace time" check is not reliable here, because
@@ -134,7 +134,7 @@ async def test_the_old_databases_wal_is_unlinked_before_the_swap_not_after(tmp_p
 
 
 async def test_a_failure_mid_restore_leaves_no_restoring_temp_file(tmp_path, monkeypatch):
-    """Review finding (MINOR, folded into the same fix): ``restore`` copies *source* to a
+    """``restore`` copies *source* to a
     scratch file (``f"{db_path}.restoring"``) next to ``db_path`` before swapping it in.
     Any failure between that copy and the swap -- simulated here at ``os.replace`` itself --
     must not leave that scratch file behind."""

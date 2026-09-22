@@ -135,11 +135,11 @@ _PROVENANCE_CHECKS: tuple[tuple[str, str], ...] = (
 
 
 def _missing_provenance(conn: sqlite3.Connection, *, user_id: str) -> tuple[int | None, str | None]:
-    """Rows carrying the signature of a pre-phase-0 process still writing into a migrated
+    """Rows carrying the signature of an older Morgan's process still writing into a migrated
     database: an empty ``author_id`` on ``memories`` or ``facts`` (step 4 backfilled every
-    existing row) or a NULL ``vec_items.status`` (step 6 backfilled it) -- every phase-0
-    writer sets both, so a row missing either after ``migrate`` did not come from this code.
-    Subsumes the spec's "unknown origin written after the migration" case: an old writer also
+    existing row) or a NULL ``vec_items.status`` (step 6 backfilled it) -- every writer in this
+    code sets both, so a row missing either after ``migrate`` did not come from this code.
+    That covers a row of unknown origin written after the migration too: an old writer also
     leaves ``author_id`` empty, and nothing records when the migration ran.
 
     Returns ``(None, reason)`` when a checked table has not been through the step that added
@@ -298,7 +298,7 @@ def _collect_local_probes(
         "rows_missing_provenance_reason": None,
         "projects": None,
         "projects_reason": None,
-        # Named, not walked: the walk over them is phase 1a.
+        # Named, not walked: nothing walks them yet.
         "code_roots": [
             {"path": root, "is_directory": Path(root).is_dir()} for root in settings.code_roots
         ],

@@ -354,7 +354,7 @@ def _repository_to_record(
 ) -> Repository | None:
     """The repository this invocation records against its project, or ``None``.
 
-    Three conditions, all of them the ruling's: the command writes and is one of
+    Three conditions: the command writes and is one of
     ``_RECORDS_THE_REPOSITORY``; the project was named by the enclosing repository, so
     ``--project`` (a name that may belong anywhere) and the ``personal`` default outside a
     repository both record nothing; and the write is that one project's, so ``--all-projects``

@@ -46,7 +46,7 @@ def test_no_globs_means_everything_is_personal():
     assert classify("https://gitlab.work.example/a.git", ()) == "personal"
 
 
-#: The brief's remote cases are built with real ``git``, the way ``test_project_detection.py``
+#: The remote cases are built with real ``git``, the way ``test_project_detection.py``
 #: builds its checkouts -- a hand-written ``.git`` is only used where the point is a config git
 #: itself would never write.
 _needs_git = pytest.mark.skipif(shutil.which("git") is None, reason="git is not on PATH")

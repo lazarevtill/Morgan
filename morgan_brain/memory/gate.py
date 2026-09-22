@@ -39,8 +39,8 @@ class ForgetReport:
 #: (abstained). ``declined``: the relevance floor judged that nothing stood out above the
 #: background (abstained). ``too_few_to_judge``: fewer than ``floor.MIN_RESULTS_TO_JUDGE``
 #: vector hits, returned unjudged. ``no_floor``: returned, and no floor is configured.
-#: ``keyword_only``: reserved for phase 1a's fallback when embeddings are down; nothing emits
-#: it yet. ``None`` on the outcome: the floor judged the query and it answered.
+#: ``keyword_only``: reserved for a fallback when embeddings are down, which is not built;
+#: nothing emits it. ``None`` on the outcome: the floor judged the query and it answered.
 RecallReason = Literal["empty", "declined", "too_few_to_judge", "no_floor", "keyword_only"]
 
 
@@ -97,7 +97,7 @@ class MemoryGate:
         """Re-check the active embedding space now, rather than trusting the check a process
         made on its first embedding call.
 
-        The import canary (Task 26) calls this every ``MORGAN_IMPORT_CANARY_EVERY`` memories
+        The import canary calls this every ``MORGAN_IMPORT_CANARY_EVERY`` memories
         and once more at the end, so a model that starts answering wrong mid-import is caught
         within one stretch instead of at the end. Not user- or project-scoped -- the embedding
         space is a property of the database, not of any one owner's data -- and not a write:

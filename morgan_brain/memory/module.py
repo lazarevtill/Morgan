@@ -259,7 +259,7 @@ class MemoryModule:
         return memory if memory is not None and memory.user_id == user_id else None
 
     async def check_embedding_space(self) -> None:
-        """Re-check the active embedding space right now, for an import's canary (Task 26).
+        """Re-check the active embedding space right now, for an import's canary.
 
         Delegates to the embedder's own ``check()`` when it is a ``CheckedEmbedder`` --
         ``FakeEmbedder``, the hash stub, answers no model and checks nothing, the same as

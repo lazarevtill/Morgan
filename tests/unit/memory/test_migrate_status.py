@@ -250,9 +250,9 @@ def test_a_version_zero_database_that_holds_tables_still_gets_its_steps(tmp_path
 
 
 def _existing() -> tuple[migrations.Step, ...]:
-    """The steps every database written before phase 0 has been through: ``user_version`` 2.
+    """The steps every database an older Morgan wrote has been through: ``user_version`` 2.
 
-    A slice, not the whole of ``_STEPS``: the steps later tasks append must not collide with
+    A slice, not the whole of ``_STEPS``: the steps appended later must not collide with
     the numbers these tests give the steps they inject after these two."""
     return migrations._STEPS[:2]
 

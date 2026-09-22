@@ -22,8 +22,8 @@ partitioned against about 61 ms metadata-scoped; each project gets vector chunks
 1,024 vectors wide whatever it holds, so twenty projects of one memory each fill 336.4 MB
 partitioned against 16.9 MB metadata-scoped; and sqlite-vec 0.1.9
 refuses an ``UPDATE`` of a partition key, the statement migration step 5 renames a
-project with. ``status`` is stored and not yet filtered on: recall does not filter on it in
-phase 0, and a vec0 table cannot be altered to add it later.
+project with. ``status`` is stored though recall does not filter on it yet: a vec0 table
+cannot be altered to add it later.
 """
 
 from __future__ import annotations
@@ -115,7 +115,7 @@ class SqliteVectorIndex:
         reinserted with ``PERSONAL_PROJECT`` backfilled.
 
         The table is recreated as it stood when ``project`` was added, without the columns
-        migration step 6 adds: a database this old was written before phase 0, opens
+        migration step 6 adds: a database this old predates them, opens
         read-only until ``morgan migrate`` runs, and gets them from step 6 then. A table that
         has ``project`` -- every one this code or step 6 created -- is left alone.
         """

@@ -1,6 +1,6 @@
 """`morgan migrate` runs what an open may not, behind a snapshot; a dry run changes nothing.
 
-The fixture is what every Morgan before phase 0 wrote -- a database at ``user_version`` 2 --
+The fixture is what every older Morgan wrote -- a database at ``user_version`` 2 --
 opened by code whose third step is heavy. Until ``migrate`` runs that step the database is
 read-only on both surfaces, and every write says why.
 """
@@ -247,7 +247,7 @@ def _a_version_two_database(
     """One memory in a database at ``user_version`` 2, under code whose step 3 runs *heavy*.
 
     Returns ``(db_path, snapshot_dir)``. The code's own steps are sliced to the first two, so
-    the steps later tasks append leave this fixture where it is.
+    the steps appended later leave this fixture where it is.
     """
     data_dir = tmp_path / "data"
     snapshots = tmp_path / "snapshots"

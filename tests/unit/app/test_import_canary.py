@@ -226,13 +226,13 @@ async def test_a_drift_after_the_last_full_interval_is_still_caught_at_the_end(t
 
 
 def test_settings_refuses_a_canary_interval_below_one(tmp_path):
-    """M6: the settings validation, for a caller that goes through ``Settings`` at all."""
+    """The settings validation, for a caller that goes through ``Settings`` at all."""
     with pytest.raises(ValidationError, match="import_canary_every"):
         Settings(data_dir=str(tmp_path), import_canary_every=0)
 
 
 async def test_import_chatgpt_refuses_a_canary_interval_below_one(tmp_path):
-    """M6: ``import_chatgpt`` guards its own parameter too, by name, for a caller that builds
+    """``import_chatgpt`` guards its own parameter too, by name, for a caller that builds
     no ``Settings`` and would otherwise divide by zero on the very first store."""
     export = _turns_export(tmp_path / "export.json", conversations=1, turns_each=1)
     gate, _inner, _conn = _build_gate(tmp_path, drift_after=10_000)

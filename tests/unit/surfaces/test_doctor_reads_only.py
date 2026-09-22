@@ -26,7 +26,7 @@ from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.render import _render_doctor
 from tests.fakes import model_server
 
-#: ``memories`` and ``facts`` as every Morgan before phase 0 created them, and ``vec_items`` and
+#: ``memories`` and ``facts`` as every older Morgan created them, and ``vec_items`` and
 #: ``fts_memories`` without the columns migration step 6 adds.
 _VERSION_TWO_DDL = (
     """

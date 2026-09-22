@@ -300,7 +300,7 @@ async def test_verify_with_no_active_space_sends_nothing(conn, settings):
 
 
 async def test_check_sends_only_the_five_strings_and_never_records(conn, settings):
-    """Task 26's import canary. Unlike ``verify()``, ``check()`` is never short-circuited by
+    """The import canary. Unlike ``verify()``, ``check()`` is never short-circuited by
     ``_checked`` and never records -- a full round trip against a space that already has a
     fingerprint, called twice, sends the five strings both times."""
     _a_space_with_a_recorded_fingerprint(conn, dims=4)
@@ -316,7 +316,7 @@ async def test_check_sends_only_the_five_strings_and_never_records(conn, setting
 
 
 async def test_check_refuses_a_wrong_answer_count(conn, settings):
-    """I1: a canary answer that cannot even be lined up against the fingerprint string by
+    """A canary answer that cannot even be lined up against the fingerprint string by
     string must not reach ``fingerprint.compare``'s bare ``ValueError`` -- the import that
     sent it only catches ``EmbeddingSpaceMismatch``, so a short answer must be one."""
     _a_space_with_a_recorded_fingerprint(conn, dims=4)
@@ -335,7 +335,7 @@ async def test_check_refuses_a_wrong_answer_count(conn, settings):
 
 
 async def test_check_refuses_a_non_finite_answer(conn, settings):
-    """I1's "at least one non-cosine path": ``_require_answers`` reused through ``check()``,
+    """A path other than the cosine one: ``_require_answers`` reused through ``check()``,
     not only through ``embed()``/``_first_call``."""
     _a_space_with_a_recorded_fingerprint(conn, dims=4)
     embedder = CheckedEmbedder(
@@ -347,7 +347,7 @@ async def test_check_refuses_a_non_finite_answer(conn, settings):
 
 
 async def test_check_refuses_when_no_fingerprint_is_recorded_yet(conn, settings):
-    """M2: a real, registered space with nothing recorded gets its own honest detail, naming
+    """A real, registered space with nothing recorded gets its own honest detail, naming
     the space that is really there."""
     space = spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
     embedder = CheckedEmbedder(
@@ -362,7 +362,7 @@ async def test_check_refuses_when_no_fingerprint_is_recorded_yet(conn, settings)
 
 
 async def test_check_refuses_when_no_space_is_active(conn, settings):
-    """M2: no space at all must get its own detail too, and must not claim a fake one --
+    """No space at all must get its own detail too, and must not claim a fake one --
     "embedding space 0 (..., 0 dims)" would name a space that does not exist."""
     embedder = CheckedEmbedder(
         _recording_embedder(dims=4), conn=conn, settings=settings, endpoint=_URL, setting=_SETTING

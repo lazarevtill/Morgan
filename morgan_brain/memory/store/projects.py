@@ -13,7 +13,7 @@ Three functions write to it, and they divide the work:
   what gets classified, so no remote or root is left behind for a project ``forget`` emptied.
 
 The disk walk over ``MORGAN_CODE_ROOTS`` that would fill ``remote`` and ``root`` for a project
-no CLI write ever reached is phase 1a.
+no CLI write ever reached is not built.
 """
 
 from __future__ import annotations
@@ -151,7 +151,7 @@ def record(
     return cursor.rowcount > 0
 
 
-#: The tables ``seed`` reads distinct projects from, per SPEC-phase0 §3.7. A table absent on
+#: The tables ``seed`` reads distinct projects from. A table absent on
 #: an old or freshly-created database -- the version-0 migration test runs every step on one
 #: that lacks ``facts`` and ``session_history``, and a fresh database has no ``session_history``
 #: until ``build_memory_context`` opens one -- is skipped, not an error.

@@ -47,7 +47,7 @@ def test_a_snapshot_from_a_newer_morgan_is_refused(tmp_path, monkeypatch, capsys
 def test_restore_without_yes_previews_and_does_not_touch_the_database(
     tmp_path, monkeypatch, capsys
 ):
-    """Step 3 of the brief: without ``--yes`` the CLI prints what it would replace and
+    """Without ``--yes`` the CLI prints what it would replace and
     returns 2 -- nothing is read from the snapshot and nothing changes."""
     db, snap = _database_then_snapshot_then_more_rows(tmp_path, monkeypatch, capsys)
 
@@ -64,8 +64,8 @@ def test_restore_without_yes_previews_and_does_not_touch_the_database(
 def test_the_snapshot_survives_a_restore_byte_identical_and_still_listed(
     tmp_path, monkeypatch, capsys
 ):
-    """Review finding (CRITICAL): ``restore`` must never delete the snapshot it restores
-    from (SPEC-phase0 SS3.2). It only ever reads *source* -- ``morgan snapshot --list`` must
+    """``restore`` must never delete the snapshot it restores from: Morgan never deletes a
+    snapshot. It only ever reads *source* -- ``morgan snapshot --list`` must
     still show it afterwards, unchanged."""
     _db, snap = _database_then_snapshot_then_more_rows(tmp_path, monkeypatch, capsys)
     original_bytes = snap.read_bytes()
@@ -84,11 +84,11 @@ def test_the_snapshot_survives_a_restore_byte_identical_and_still_listed(
 def test_a_live_wal_from_the_pre_restore_database_does_not_leak_into_the_restore(
     tmp_path, monkeypatch, capsys
 ):
-    """Review finding (IMPORTANT, plan-mandated): a *genuinely valid* WAL left behind by the
+    """A *genuinely valid* WAL left behind by the
     pre-restore database -- not merely stray/garbage bytes, which SQLite already ignores on
     its own -- must not be consultable once ``db_path`` holds the restored content. This is
     only true if ``db_path``'s own ``-wal``/``-shm`` are dropped *before* the swap, not after:
-    proves the fixed ordering closes the crash window the review flagged.
+    proves that ordering closes the window a crash could otherwise land in.
 
     A closed SQLite connection auto-checkpoints and deletes its own WAL when it is the last
     one open, so a genuine (non-empty, valid-header) WAL is captured here via a bystander
