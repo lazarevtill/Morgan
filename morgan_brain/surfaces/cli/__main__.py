@@ -74,10 +74,11 @@ HANDLERS = {
 _SINGLE_PROJECT_ONLY = {"remember", "ask"}
 
 #: The write commands that record what repository their project is (`_repository_to_record`).
-#: `forget` is a write and is deliberately absent: it deletes the project's `projects` row, and
-#: recording would write the owner's remote and root straight back into the database their
-#: erasure just took them out of. `import` is absent too -- it writes to the archive and
-#: holdout projects, never to the one the working directory names.
+#: `forget` is a write and is deliberately absent: it erases a project rather than writing to
+#: one, so there is nothing for a classification to describe -- and the row it just deleted is
+#: not one to write a remote and a root back into. (It could not: `record` only ever updates a
+#: row that exists.) `import` is absent too -- it writes to the archive and holdout projects,
+#: never to the one the working directory names.
 _RECORDS_THE_REPOSITORY = {"remember", "ask", "consolidate"}
 
 

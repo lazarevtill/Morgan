@@ -16,6 +16,8 @@ from morgan_brain.composition import build_memory_module as _build
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.module import MemoryModule
 from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store.history import SessionHistoryStore
+from morgan_brain.memory.store.projects import ProjectStore
 from morgan_brain.models import Memory
 
 
@@ -30,6 +32,21 @@ def build_memory_module(
         clock=lambda: datetime.now(UTC),
         floor_margin=floor_margin,
     )
+
+
+def a_history_store(
+    conn: sqlite3.Connection | None = None, *, clock: Callable[[], datetime]
+) -> SessionHistoryStore:
+    """A session history store over a connection that carries ``projects`` as well.
+
+    A turn registers its project, and ``projects`` is ``ProjectStore``'s table, not the
+    history store's. The composition root opens both on the one connection; a test that builds
+    a history store on a connection of its own needs the same pair, and this is where that
+    pairing lives rather than in the history store's own ``__init__``.
+    """
+    conn = conn if conn is not None else open_db(":memory:")
+    ProjectStore(conn)
+    return SessionHistoryStore(conn, clock=clock)
 
 
 #: ``vec_items`` and ``fts_memories`` as every Morgan up to ``user_version`` 5 created them:

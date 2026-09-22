@@ -11,6 +11,7 @@ import pytest
 
 from morgan_brain.memory.store.history import SessionHistoryStore
 from morgan_brain.models import Message, Role
+from tests.unit.memory.conftest import a_history_store
 
 CLOCK = lambda: datetime(2026, 1, 1, tzinfo=UTC)  # noqa: E731
 USER_ID = "u1"
@@ -18,7 +19,7 @@ USER_ID = "u1"
 
 @pytest.fixture
 def store() -> SessionHistoryStore:
-    return SessionHistoryStore(clock=CLOCK)
+    return a_history_store(clock=CLOCK)
 
 
 def _user_msg(content: str) -> Message:

@@ -61,7 +61,10 @@ class SessionHistoryStore:
         A shared :class:`sqlite3.Connection`, e.g. from
         :func:`morgan_brain.modules.memory.stores.db.open_db`, so history lives in the
         same database file as every other store (required for a single-transaction
-        ``forget()``). Defaults to a private ``:memory:`` connection for tests.
+        ``forget()``). Defaults to a private ``:memory:`` connection for tests. A turn
+        registers its project, so the connection needs ``projects`` on it -- the composition
+        root opens ``ProjectStore`` before this store, and ``projects`` is that store's table,
+        not this one's.
     clock:
         Injected callable returning the current :class:`datetime`, required because a turn's
         project is registered in ``projects``, whose ``created_at`` is ``NOT NULL``. It is
@@ -80,10 +83,6 @@ class SessionHistoryStore:
         )
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
-        # A turn registers its project, so this store needs the table it registers into: the
-        # composition root opens `ProjectStore` first, and this makes a history store built on
-        # its own connection -- as the tests do -- write into the same schema.
-        projects.create_schema(self._conn)
         self._conn.commit()
         self._migrate_project_column()
 

@@ -336,11 +336,13 @@ async def test_recording_a_project_that_has_no_row_creates_none(tmp_path):
 
 
 async def test_recording_is_refused_on_a_database_waiting_for_migrate(tmp_path):
+    """The second stack is what ``build_memory_context`` builds while a heavy step waits: the
+    same database, opened again, with the gate refusing every write by name."""
     reason = "writes are blocked until `morgan migrate` runs: 1 step pending (8 a heavy step)"
     gate, _history, conn = _writing_stack(tmp_path, _Clock())
     await gate.store(Memory(user_id="u", project="alpha", content="first"))
     before = projects_store.get(conn, "alpha")
-    read_only = MemoryGate(gate._store, read_only_reason=reason)
+    read_only, _h, _c = _writing_stack(tmp_path, _Clock(), read_only_reason=reason)
 
     with pytest.raises(migrations.DatabaseNeedsMigration) as exc:
         await read_only.record_project(

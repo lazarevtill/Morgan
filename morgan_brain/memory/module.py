@@ -419,7 +419,9 @@ class MemoryModule:
         The registration is here rather than in the temporal store because ``projects`` is not
         that store's table: ``SqliteTemporalStore`` is built over connections that have no
         such table at all. The store's own ``write_transaction`` joins this one as a savepoint,
-        so the fact and the row still commit or roll back together.
+        so the fact and the row still commit or roll back together. The upsert is awaited but
+        never suspends: it is SQL on this connection, nothing else, so nothing awaits real I/O
+        while the write lock is held.
         """
         now = self._clock()
         with write_transaction(self._conn):

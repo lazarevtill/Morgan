@@ -14,10 +14,11 @@ from datetime import UTC, datetime
 
 from morgan_brain.memory.store.history import SessionHistoryStore, session_key
 from morgan_brain.models import Message, Role
+from tests.unit.memory.conftest import a_history_store
 
 
 def _store() -> SessionHistoryStore:
-    return SessionHistoryStore(clock=lambda: datetime.now(UTC))
+    return a_history_store(clock=lambda: datetime.now(UTC))
 
 
 def _msg(text: str) -> Message:
