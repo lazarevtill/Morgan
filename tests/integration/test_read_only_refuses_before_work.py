@@ -29,9 +29,10 @@ from morgan_brain.surfaces.cli.commands import cmd_ask, cmd_consolidate, cmd_imp
 
 _REASON = "writes are blocked until `morgan migrate` runs: 1 step pending (3 a heavy step)"
 
-#: One literal count per table ``store/tables.py`` registers -- every table a write lands in,
-#: the session history ``ask`` writes outside the gate included. Literal, because a table name
-#: cannot be a bound parameter.
+#: One literal count per table ``store/tables.py`` registers -- every table a write lands in:
+#: the session history ``ask`` writes outside the gate, and ``projects``, which every
+#: project-keyed write registers its project in. Literal, because a table name cannot be a
+#: bound parameter.
 _COUNT_SQL = {
     "memories": "SELECT count(*) FROM memories",
     "facts": "SELECT count(*) FROM facts",
@@ -40,6 +41,7 @@ _COUNT_SQL = {
     "vec_items": "SELECT count(*) FROM vec_items",
     "fts_memories": "SELECT count(*) FROM fts_memories",
     "session_history": "SELECT count(*) FROM session_history",
+    "projects": "SELECT count(*) FROM projects",
 }
 
 

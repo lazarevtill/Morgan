@@ -38,7 +38,12 @@ def _files_holding(path: Path, needle: bytes) -> list[str]:
 
 
 async def _remember(tmp_path: Path):
-    """Memories, a fact and a history turn carrying the marker in ``p``, and some in ``q``."""
+    """Memories, a fact, a history turn and the recorded repository carrying the marker in
+    ``p``, and some memories in ``q``.
+
+    The ``projects`` row is in this too because its ``remote`` and ``root`` are the owner's
+    data as much as a memory's words are: a remote URL names the host they push to, and may
+    carry a token."""
     path = tmp_path / "m.db"
     module = build_memory_module(str(path))
     conn = module._conn
@@ -52,6 +57,13 @@ async def _remember(tmp_path: Path):
         TemporalFact(user_id="u", project="p", subject="user", predicate="keeps", object=_MARKER)
     )
     history.append("u:s", Message(user_id="u", role=Role.USER, content=_MARKER), project="p")
+    recorded = await module.record_project(
+        "p",
+        classification="work",
+        remote=f"https://{_MARKER}.work.example/team/p.git",
+        root=f"/src/{_MARKER}",
+    )
+    assert recorded, "the marker never reached the projects row"
     assert _files_holding(path, _MARKER.encode()), "the marker never reached the files"
     return path, module
 
