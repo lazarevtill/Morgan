@@ -473,6 +473,12 @@ class MemoryModule:
         """Return the distinct project names *user_id* has stored memories under."""
         return self._episodics.distinct_projects(user_id)
 
+    async def consolidate_enabled(self, project: str) -> bool:
+        """``False`` only when *project*'s ``projects`` row says ``consolidate_enabled = 0``;
+        a project with no row (``store/projects.py::get``) is consolidated."""
+        row = projects.get(self._conn, project)
+        return row is None or row.consolidate_enabled
+
     async def forget(self, *, user_id: str, project: str) -> ForgetReport:
         """Erase everything *user_id* stored under *project*, in one transaction.
 

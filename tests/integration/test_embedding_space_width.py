@@ -154,6 +154,22 @@ async def test_a_model_of_another_width_is_refused_at_its_first_answer_by_its_ow
     assert "MORGAN_LLM_ENDPOINT" not in str(info.value)
 
 
+def test_the_width_refusal_names_a_new_database_for_a_model_changed_on_purpose(tmp_path):
+    """The setting says 1024 and the database was written at 4096: either the setting is wrong,
+    or the model was changed on purpose, and this database keeps the model it was written with."""
+    _a_database_with_no_space(tmp_path, dims=4096)
+    conn = open_db(_db(tmp_path))
+    spaces.register(conn, model="a-wide-model", dims=4096, table_name="vec_items", clock=utcnow)
+    conn.close()
+
+    with pytest.raises(RuntimeError) as info:
+        build_memory_context(_settings(tmp_path, "http://embed.invalid/v1", embedding_dim=1024))
+
+    message = str(info.value)
+    assert "set MORGAN_EMBEDDING_DIM=4096, the width this database was written at" in message
+    assert "point MORGAN_DATA_DIR at a new database if the model was changed on purpose" in message
+
+
 # --- helpers ---------------------------------------------------------------------------------
 
 

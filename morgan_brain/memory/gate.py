@@ -169,6 +169,17 @@ class MemoryGate:
         self._require_scope(user_id)
         return await self._store.distinct_projects(user_id)
 
+    async def consolidate_enabled(self, *, user_id: str, project: str) -> bool:
+        """Whether ``consolidate --all-projects`` reaches *project*: ``False`` only when its
+        ``projects`` row turns consolidation off.
+
+        A read like any other, so it comes through the gate rather than into the store. A
+        project with no row -- the seed never reached it, or the database predates the switch
+        -- is consolidated. Like ``record_project``, *user_id* scopes the caller, not the row.
+        """
+        self._require_scope(user_id, project)
+        return await self._store.consolidate_enabled(project)
+
     def write_transaction(self) -> AbstractContextManager[None]:
         """Make every gate call inside the block one atomic write, under the write lock.
 

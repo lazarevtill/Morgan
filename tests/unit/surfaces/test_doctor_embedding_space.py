@@ -144,3 +144,39 @@ async def test_no_answer_leaves_the_fingerprint_unchecked_with_the_reason(tmp_pa
 
     assert report["embedding_provider"] == "unreachable"
     assert report["embedding_space"]["fingerprint"].startswith("not checked")
+
+
+async def test_a_width_setting_the_space_disagrees_with_is_named_with_both_widths_and_the_fix(
+    tmp_path, servers
+):
+    """Every memory command refuses a ``MORGAN_EMBEDDING_DIM`` other than the active space's
+    width. doctor says so on the ``embedding_dim`` line and under ``embedding_dim_error``,
+    in the words the refusal uses, rather than printing the two widths lines apart."""
+    settings = _settings(tmp_path, servers)
+    build_memory_context(settings).conn.close()  # registers space 1, 8 wide
+
+    report = await _report(settings.model_copy(update={"embedding_dim": 4}))
+
+    error = report["embedding_dim_error"]
+    assert "holds 8-dimensional vectors but MORGAN_EMBEDDING_DIM is 4" in error
+    assert "set MORGAN_EMBEDDING_DIM=8" in error
+    lines = [line for line in _render_doctor(report).splitlines() if "embedding_dim" in line]
+    assert lines == [f"embedding_dim: 4 ({error})"]
+
+
+async def test_a_width_setting_the_space_agrees_with_prints_the_line_as_before(tmp_path, servers):
+    settings = _settings(tmp_path, servers)
+    build_memory_context(settings).conn.close()
+
+    report = await _report(settings)
+
+    assert report["embedding_dim_error"] is None
+    lines = [line for line in _render_doctor(report).splitlines() if "embedding_dim" in line]
+    assert lines == ["embedding_dim: 8"]
+
+
+async def test_with_no_space_to_compare_the_width_error_is_there_and_empty(tmp_path, servers):
+    report = await _report(_settings(tmp_path, servers))  # no database yet
+
+    assert report["embedding_space"] is None
+    assert report["embedding_dim_error"] is None

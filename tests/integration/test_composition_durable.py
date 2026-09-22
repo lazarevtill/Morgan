@@ -36,3 +36,15 @@ def test_app_context_needs_no_model_to_build(tmp_path, monkeypatch):
     ctx = build_app_context(Settings())
     assert ctx.chat is not None and ctx.consolidator is not None
     ctx.conn.close()
+
+
+def test_the_memory_context_waits_on_a_lock_as_long_as_the_settings_say(tmp_path):
+    """Every memory command and every MCP tool call opens this connection. While `morgan
+    migrate` holds the write lock for its whole run, a call waits this long before it gives up
+    with "database is locked"."""
+    settings = Settings(data_dir=str(tmp_path), embedding_backend="hash", db_busy_timeout_ms=12345)
+    ctx = build_memory_context(settings)
+    try:
+        assert ctx.conn.execute("PRAGMA busy_timeout").fetchone()[0] == 12345
+    finally:
+        ctx.conn.close()

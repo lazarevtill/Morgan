@@ -156,11 +156,11 @@ class Settings(BaseSettings):
     #: Where ``morgan snapshot`` writes its VACUUM INTO copies. "" → derived from data_dir
     #: ({data_dir}/snapshots), the same way temporal_db_url derives its path.
     snapshot_dir: str = ""
-    #: PRAGMA busy_timeout (milliseconds) for a connection this process opens: how long a
-    #: writer waits on another process's lock before giving up. store/db.py::open_db's own
-    #: default is the same number; this is the setting a caller threads through when it wants
-    #: that wait configurable -- ``morgan snapshot``'s VACUUM INTO against the live database
-    #: is the first one that does.
+    #: PRAGMA busy_timeout (milliseconds): how long a connection waits on another process's
+    #: lock before giving up with "database is locked". Every connection Morgan writes through
+    #: waits this long -- each memory command's and each morgan-mcp tool call's, and those of
+    #: ``morgan snapshot``, ``restore``, ``migrate`` and the snapshot ``forget`` takes -- and
+    #: so does ``doctor``'s read-only one.
     db_busy_timeout_ms: int = Field(default=5000, gt=0)
     #: Must match the embedding model's output dimension (mxbai-embed-large → 1024,
     #: nomic-embed-text → 768). Probed against a live embed() call at startup.

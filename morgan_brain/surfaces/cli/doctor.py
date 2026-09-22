@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from morgan_brain.composition import sqlite_path
+from morgan_brain.composition import space_width_mismatch, sqlite_path
 from morgan_brain.config import Settings
 from morgan_brain.memory import fingerprint, migrations, snapshot
 from morgan_brain.memory.store import projects, spaces
@@ -273,6 +273,9 @@ def _collect_local_probes(
         "all_projects": all_projects,
         "embedding_backend": settings.embedding_backend,
         "embedding_dim": settings.embedding_dim,
+        # What every memory command refuses on when the active space is another width; None
+        # when the two agree or there is no space to compare with.
+        "embedding_dim_error": None,
         "embedding_endpoint": None if hash_backend else embedding_endpoint_of(settings).url,
         "llm_endpoint": settings.llm_endpoint,
         "llm_model": settings.llm_model,
@@ -831,6 +834,7 @@ async def build_doctor_report(
             fingerprint=_fingerprint_verdict(local.space, embeddings, settings),
             strings_digest=fingerprint.DIGEST,
         )
+        report["embedding_dim_error"] = space_width_mismatch(local.space, settings)
     # vector_audit/vector_audit_reason are always present, like embedding_space and its own
     # reason -- a --json consumer that reads one without checking for the other first must
     # never get a KeyError depending on whether --vectors happened to be passed.

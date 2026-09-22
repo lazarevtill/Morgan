@@ -168,20 +168,30 @@ def register_the_settings_space(conn: sqlite3.Connection, settings: Settings) ->
     log.info("embedding-space.registered", space_id=space.id, model=space.model, dims=space.dims)
 
 
-def _require_the_space_width(conn: sqlite3.Connection, settings: Settings) -> None:
-    """Refuse a database whose active space is not ``MORGAN_EMBEDDING_DIM`` wide.
+def space_width_mismatch(space: spaces.EmbeddingSpace | None, settings: Settings) -> str | None:
+    """Why a database whose active space is *space* is refused at ``MORGAN_EMBEDDING_DIM``, or
+    ``None`` when there is no space or the two widths agree.
 
     Read from the database, never asked of the model: every vector the space holds is that
-    wide, and a query or a write at the settings' width would fail against them.
+    wide, and a query or a write at the settings' width would fail against them. Every memory
+    command refuses with these words (``_require_the_space_width``), and ``doctor`` prints them.
     """
-    space = spaces.active(conn)
-    if space is not None and space.dims != settings.embedding_dim:
-        raise RuntimeError(
-            f"embedding space {space.id} ({space.model}) holds {space.dims}-dimensional "
-            f"vectors but MORGAN_EMBEDDING_DIM is {settings.embedding_dim}; the two must "
-            f"agree (set MORGAN_EMBEDDING_DIM={space.dims}, the width this database was "
-            "written at)"
-        )
+    if space is None or space.dims == settings.embedding_dim:
+        return None
+    return (
+        f"embedding space {space.id} ({space.model}) holds {space.dims}-dimensional "
+        f"vectors but MORGAN_EMBEDDING_DIM is {settings.embedding_dim}; the two must "
+        f"agree (set MORGAN_EMBEDDING_DIM={space.dims}, the width this database was "
+        "written at, or point MORGAN_DATA_DIR at a new database if the model was changed on "
+        "purpose)"
+    )
+
+
+def _require_the_space_width(conn: sqlite3.Connection, settings: Settings) -> None:
+    """Refuse a database whose active space is not ``MORGAN_EMBEDDING_DIM`` wide."""
+    mismatch = space_width_mismatch(spaces.active(conn), settings)
+    if mismatch is not None:
+        raise RuntimeError(mismatch)
 
 
 def build_memory_context(settings: Settings, *, budget: Budget = "interactive") -> MemoryContext:
@@ -198,7 +208,7 @@ def build_memory_context(settings: Settings, *, budget: Budget = "interactive") 
     path = sqlite_path(settings.temporal_db_url)
     if path != ":memory:":
         pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = open_db(path)
+    conn = open_db(path, busy_timeout_ms=settings.db_busy_timeout_ms)
     try:
         embedder = build_embedder(settings, conn=conn, budget=budget)
         module = build_memory_module(

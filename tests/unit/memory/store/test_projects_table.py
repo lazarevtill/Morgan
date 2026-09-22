@@ -168,6 +168,21 @@ async def test_consolidate_all_projects_skips_a_project_with_consolidate_disable
     assert sorted(seen) == ["on", "unseeded"]
 
 
+async def test_the_gate_consolidates_a_project_unless_its_row_turns_consolidation_off(tmp_path):
+    """The switch ``consolidate --all-projects`` reads, through the gate like every other read:
+    a row with ``consolidate_enabled = 1`` or no row at all is consolidated, and only a row that
+    says ``0`` is not."""
+    gate, _history, conn = _writing_stack(tmp_path, _Clock())
+    await gate.store(Memory(user_id="u", project="on", content="a"))
+    await gate.store(Memory(user_id="u", project="off", content="b"))
+    conn.execute("UPDATE projects SET consolidate_enabled = 0 WHERE name = 'off'")
+    conn.commit()
+
+    assert await gate.consolidate_enabled(user_id="u", project="on") is True
+    assert await gate.consolidate_enabled(user_id="u", project="off") is False
+    assert await gate.consolidate_enabled(user_id="u", project="never-written") is True
+
+
 class _Clock:
     """A clock the test moves, so a second write is seen to happen later than the first."""
 

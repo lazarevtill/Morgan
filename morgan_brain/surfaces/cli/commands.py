@@ -28,7 +28,6 @@ from morgan_brain.composition import (
 )
 from morgan_brain.config import Settings
 from morgan_brain.memory import snapshot
-from morgan_brain.memory.store import projects as projects_store
 from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, MemorySource, OriginKind
 from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.payloads import (
@@ -248,13 +247,12 @@ async def cmd_consolidate(
         ctx.gate.require_writable()
         if args.all_projects:
             projects = await ctx.gate.distinct_projects(settings.owner_user_id) or [project]
-            # A project with no `projects` row -- the seed never reached it, or a database
-            # from before this switch existed -- is consolidated as it always was; only a row
-            # that says `consolidate_enabled = 0` skips.
+            # The owner's per-project switch: only a project whose row turns consolidation
+            # off is skipped.
             projects = [
                 p
                 for p in projects
-                if (row := projects_store.get(ctx.conn, p)) is None or row.consolidate_enabled
+                if await ctx.gate.consolidate_enabled(user_id=settings.owner_user_id, project=p)
             ]
         else:
             projects = [project]

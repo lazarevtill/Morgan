@@ -174,6 +174,7 @@ def _render_doctor_line(key: str, value: Any, data: dict[str, Any]) -> list[str]
     already carries prints none."""
     if key in (
         "database_error",
+        "embedding_dim_error",
         "rows_all_projects",
         "provider_probe",
         "embedding_probe",
@@ -189,6 +190,9 @@ def _render_doctor_line(key: str, value: Any, data: dict[str, Any]) -> list[str]
             return [f"database: {value}"]
         missing = error.startswith("no database yet")
         return [f"database: {value} ({'no database yet' if missing else error})"]
+    if key == "embedding_dim":
+        error = data.get("embedding_dim_error")
+        return [f"embedding_dim: {value}" if error is None else f"embedding_dim: {value} ({error})"]
     if key == "env_files":
         return [f"env_file: {f['path']} ({'present' if f['present'] else 'absent'})" for f in value]
     if key == "data_flow":

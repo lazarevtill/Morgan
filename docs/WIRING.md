@@ -143,7 +143,10 @@ setting to check. `--json` gives each probe's `seconds`, `timeout_seconds`,
 recorded for its active space: `matches`, `MISMATCH` (a different model is answering: stored
 vectors would be searched with the wrong one), or `unrecorded` (a process's first embedding
 call records it, once a sample of stored memories shows the model answering wrote them).
-`doctor` never records one. `migration` lists the steps `morgan migrate`
+`doctor` never records one. A `MORGAN_EMBEDDING_DIM` other than the space's width, which every
+memory command refuses, is named on the `embedding_dim` line with both widths and the fix, in
+the refusal's own words; `--json` carries them under `embedding_dim_error`, `null` when the two
+agree. `migration` lists the steps `morgan migrate`
 would run, heavy or light; `doctor` runs none. `snapshots` counts the files in
 `MORGAN_SNAPSHOT_DIR` that `snapshot`, `migrate`, `forget` and `restore` left there, which
 Morgan never deletes.

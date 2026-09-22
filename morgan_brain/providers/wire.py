@@ -202,7 +202,11 @@ class EmbeddingSpaceMismatch(Exception):
     component, or cannot be checked at all -- no fingerprint recorded yet, or no active space
     (``established`` is then false).
     The message names the space, the setting that addresses the model, what went wrong, what
-    it means and what to check.
+    it means and what to check -- and, where a different model is the cause, what to do when
+    the model was changed on purpose (*on_purpose*): a database keeps the model its vectors
+    were written with, and nothing re-embeds them, so that takes a new database. The failures
+    that are not a model change carry none of it, because leaving the database would not mend
+    them.
     """
 
     def __init__(
@@ -214,6 +218,7 @@ class EmbeddingSpaceMismatch(Exception):
         setting: str,
         detail: str,
         established: bool = True,
+        on_purpose: str | None = None,
     ) -> None:
         self.space_id = space_id
         self.model = model
@@ -223,10 +228,16 @@ class EmbeddingSpaceMismatch(Exception):
         self.established = established
         verdict = "does not match" if established else "cannot be verified against"
         risk = "would" if established else "might"
+        remedy = (
+            ""
+            if on_purpose is None
+            else f", or {on_purpose} if the model was changed on purpose: a database keeps "
+            "the model its vectors were written with"
+        )
         super().__init__(
             f"embedding space {space_id} ({model}, {dims} dims) {verdict} the model at "
             f"{setting}: {detail}; stored vectors {risk} be searched with the wrong model; "
-            "check MORGAN_EMBEDDING_MODEL or run `morgan doctor --vectors`"
+            f"check MORGAN_EMBEDDING_MODEL or run `morgan doctor --vectors`{remedy}"
         )
 
     @classmethod
@@ -247,15 +258,32 @@ class EmbeddingSpaceMismatch(Exception):
         fixed strings) or ``"stored-row"`` (memories whose vectors are already stored)."""
         what = "strings" if against == "fingerprint" else "stored rows"
         detail = f"{against} cosine {min_cosine:.4f} < {tolerance} on {failed} of {compared} {what}"
-        return cls(space_id=space_id, model=model, dims=dims, setting=setting, detail=detail)
+        return cls(
+            space_id=space_id,
+            model=model,
+            dims=dims,
+            setting=setting,
+            detail=detail,
+            on_purpose="point MORGAN_DATA_DIR at a new database",
+        )
 
     @classmethod
     def width(
         cls, *, space_id: int, model: str, dims: int, setting: str, got: int
     ) -> EmbeddingSpaceMismatch:
-        """The model answered at a width other than the space's."""
+        """The model answered at a width other than the space's. A new database is created
+        at ``MORGAN_EMBEDDING_DIM``, so a model changed on purpose needs that set to its width."""
         detail = f"it returned a {got}-dimensional vector but the active space is {dims} wide"
-        return cls(space_id=space_id, model=model, dims=dims, setting=setting, detail=detail)
+        return cls(
+            space_id=space_id,
+            model=model,
+            dims=dims,
+            setting=setting,
+            detail=detail,
+            on_purpose=(
+                f"set MORGAN_EMBEDDING_DIM={got} and point MORGAN_DATA_DIR at a new database"
+            ),
+        )
 
     @classmethod
     def non_finite(
