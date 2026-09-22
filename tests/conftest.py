@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -21,7 +22,8 @@ def _empty_config_home(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def _no_env_files(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, _empty_config_home: Path
 ) -> None:
-    """Keep the suite independent of the developer's own configuration.
+    """Keep the suite independent of the developer's own configuration: its files and its
+    exported ``MORGAN_*`` variables.
 
     ``settings_for`` reads the files ``env_files_for`` names -- the user's config file, and
     for the CLI the working directory's ``.env`` -- exactly what a surface needs, and exactly
@@ -31,8 +33,18 @@ def _no_env_files(
     which tests that list itself. A ``Settings`` built directly reads none in any case. A CLI
     or MCP server the suite starts as a subprocess builds its own settings, so the
     configuration directory it inherits is an empty one.
+
+    A ``MORGAN_*`` variable exported in the shell is that configuration too: every
+    ``Settings`` reads it, whatever the files say, and every subprocess inherits it. So each
+    test runs with none of them in its environment -- matched without regard to case, as the
+    settings match them -- except a test marked ``live``, which reads its endpoint and width
+    from the variables the owner exports for it.
     """
     monkeypatch.setenv("XDG_CONFIG_HOME", str(_empty_config_home))
+    if request.node.get_closest_marker("live") is None:
+        for name in list(os.environ):
+            if name.upper().startswith("MORGAN_"):
+                monkeypatch.delenv(name)
     if request.node.get_closest_marker("reads_env_files") is None:
         monkeypatch.setattr("morgan_brain.config.env_files_for", lambda surface: ())
 
