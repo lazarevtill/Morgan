@@ -82,8 +82,9 @@ no `user_id` and `project` columns. A table in `project_tables(conn)` that the d
 have is named in `ForgetReport.tables_skipped`. The ids and rowids are selected, and every
 table is erased, in one write transaction. Once it commits, the database is vacuumed and the
 write-ahead log truncated (`PRAGMA wal_checkpoint(TRUNCATE)`). A connection in the middle of a
-read keeps the log from being truncated; `forget()` then logs the warning
-`forget.wal-not-truncated`, naming the log, and still succeeds.
+read blocks that checkpoint; the forgotten words then stay in the database file and its log
+until a later checkpoint completes, and `forget()` logs the warning `forget.wal-not-truncated`,
+naming the log, and still succeeds.
 
 A store that adds a table therefore registers it in `tables.py` and maps its deleter in
 `_DELETERS`. The tests in `tests/unit/memory/test_forget_reaches_every_project_keyed_table.py`

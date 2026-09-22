@@ -138,7 +138,8 @@ def _truncate_wal(conn: sqlite3.Connection) -> None:
             "forget.wal-not-truncated",
             wal=f"{main}-wal",
             reason="another connection is reading the database",
-            hint="the erased rows stay in the log until a later checkpoint truncates it",
+            hint="the erased rows stay in the database file and its log until a later checkpoint "
+            "completes, once no connection is reading",
         )
 
 

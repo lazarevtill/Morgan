@@ -151,8 +151,8 @@ storing is one transaction too. Tables that were never created on this database 
 
 After the commit, it runs `VACUUM`, then `PRAGMA wal_checkpoint(TRUNCATE)`, so the forgotten
 words are in neither the database file nor its write-ahead log. A connection in the middle of a
-read keeps the log from being truncated; that is logged as `forget.wal-not-truncated`, never
-raised.
+read blocks that checkpoint: the forgotten words then stay in the database file and its log
+until a later checkpoint completes, and `forget` logs `forget.wal-not-truncated`, never raises.
 
 [`decisions/0001`](decisions/0001-fact-key-and-forget-reach.md) says what it guarantees.
 

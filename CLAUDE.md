@@ -103,9 +103,10 @@ come in" are answered by the directory names.
   the deleter its store owns, by the memory ids and by the owner's `user_id` and `project`
   columns wherever a table has both; a space's vec0 table other than `vec_items` is erased by
   those columns alone. A registered table it cannot erase that way stops it by name before
-  anything is erased. The forgotten words leave the files: FTS5 is optimized, the database
-  vacuumed and the write-ahead log truncated, or named in a warning when another connection's
-  read holds it.
+  anything is erased. The forgotten words leave the database files: FTS5 is optimized, the
+  database vacuumed and the write-ahead log truncated; while another connection's read blocks
+  that checkpoint they stay until a later one, and a warning says so. The snapshot `morgan
+  forget` takes first is the undo and keeps them until the owner deletes it.
 - **Every write holds the lock from its first statement.** Other processes share the database
   file, so a write that reads before acting takes the lock before the read:
   `store/db.py::write_transaction` opens `BEGIN IMMEDIATE`, and a write inside another one
