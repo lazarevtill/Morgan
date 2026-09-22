@@ -170,10 +170,24 @@ hearing about it. The remote and the root are stored beside it and never printed
 URL can carry a token, and this report is the kind of thing that gets pasted into an issue.
 `forget` deletes the whole row with the project's data.
 
-`morgan-mcp` records nothing: the server may run on another machine than the client, so it
+Nothing is recorded in three cases, and none of them changes what is already there. A config
+Morgan cannot read, decode or parse is not the same fact as a repository with no remote, so the
+row is left alone rather than relabelled `unclassified`. `consolidate` records only where the
+project already has a row, which means it has been written to: run as the first command ever in
+a repository it proposes no facts, registers nothing and so records nothing. And a recording
+that fails -- a lost race for the write lock, say -- warns on stderr naming the project, and
+leaves the command it followed successful: the write is the command's contract, the recording
+is bookkeeping about a repository.
+
+The remote is read from the repository's own config file: `url.<base>.insteadOf` rewriting is
+not applied and `include`/`includeIf` files are not followed, so a remote reached through a
+rewrite is classified by the URL as written, and one declared in an included file is not seen at
+all. `morgan-mcp` records nothing: the server may run on another machine than the client, so it
 never sees the repository a call came from. A project written only through MCP has a row and
-stays `unclassified` until a CLI write from inside its checkout. A `MORGAN_CODE_ROOTS` entry
-that is not a directory is marked so; nothing walks the roots yet.
+stays `unclassified` until a CLI write from inside its checkout. Because `projects` is keyed by
+the project's name, two checkouts with the same folder name share one row and each write
+rewrites the other's classification, remote and root. A `MORGAN_CODE_ROOTS` entry that is not a
+directory is marked so; nothing walks the roots yet.
 
 The plain embedding probe above already sends the five fingerprint strings to the embedding
 host on every `doctor` run, to say whether it answers at all. `morgan doctor --vectors` sends

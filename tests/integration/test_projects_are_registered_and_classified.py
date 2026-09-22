@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -28,6 +29,7 @@ import morgan_brain.composition as composition
 from morgan_brain.composition import build_memory_context, sqlite_path
 from morgan_brain.config import Settings
 from morgan_brain.memory import migrations
+from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
 from morgan_brain.memory.store import projects as projects_store
 from morgan_brain.memory.store.db import open_db
@@ -132,17 +134,26 @@ def test_a_project_named_by_the_flag_is_registered_but_not_classified(tmp_path):
 
 @pytest.mark.parametrize("command", [["recall", "anything"], ["facts"]])
 def test_a_read_inside_a_repository_records_nothing(tmp_path, command):
+    """The project has its row *before* the read, and the read must leave it untouched.
+
+    Against a project with no row this would prove only half its name: ``record`` is an
+    ``UPDATE``, so a read that wrongly recorded would match nothing and an absent row would
+    still look like success. The row is registered from outside the repository, by a
+    ``--project`` write, which registers without classifying.
+    """
     data_dir = tmp_path / "data"
     repo = _repository(tmp_path / "harbor", remote=_WORK_REMOTE)
     env = _env(data_dir)
-    # A database with a project of its own, so the read runs against one that exists.
-    assert _run(["remember", "x", "--project", "elsewhere"], env, tmp_path).returncode == 0
+    assert _run(["remember", "x", "--project", "harbor"], env, tmp_path).returncode == 0
+    before = _row(data_dir, "harbor")
+    assert before is not None
+    assert (before.classification, before.remote, before.root) == ("unclassified", None, None)
 
     out = _run([*command, "--json"], env, repo)
 
     assert out.returncode == 0, out.stderr
     assert json.loads(out.stdout)["project"] == "harbor"
-    assert _row(data_dir, "harbor") is None
+    assert _row(data_dir, "harbor") == before
 
 
 @pytest.mark.parametrize("command", [["ask", "what blocked the deploy?"], ["consolidate"]])
@@ -207,6 +218,64 @@ def test_a_database_waiting_for_migrate_refuses_the_write_and_records_nothing(
         assert conn.execute("SELECT count(*) FROM memories").fetchone()[0] == 0
     finally:
         conn.close()
+
+
+def test_a_recording_that_fails_leaves_the_command_successful(tmp_path, monkeypatch, capsys):
+    """The command's contract is its write; the recording is bookkeeping about a repository.
+
+    A second `BEGIN IMMEDIATE` can lose the write lock to a `morgan-mcp` connection for longer
+    than the busy timeout, and that must not turn a stored memory -- or a model answer already
+    paid for -- into `error: database is locked` and exit 1. The warning names the project and
+    neither the remote nor the root, which are the owner's data.
+    """
+    data_dir = tmp_path / "data"
+    repo = _repository(tmp_path / "harbor", remote=_WORK_REMOTE)
+    monkeypatch.setenv("MORGAN_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("MORGAN_WORK_REMOTE_GLOBS", _GLOBS)
+
+    async def locked(self, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(MemoryGate, "record_project", locked)
+    monkeypatch.chdir(repo)
+
+    code = main(["remember", "the mirror blocked the deploy", "--json"])
+
+    out, err = capsys.readouterr()
+    assert code == 0
+    assert json.loads(out)["stored"] is True
+    assert "harbor" in err and "database is locked" in err
+    assert _WORK_REMOTE not in err and str(repo.resolve()) not in err
+    conn = open_db(str(data_dir / "morgan.db"))
+    try:
+        assert conn.execute("SELECT count(*) FROM memories").fetchone()[0] == 1
+    finally:
+        conn.close()
+
+
+def test_a_config_that_cannot_be_read_leaves_the_recorded_row_alone(tmp_path, monkeypatch):
+    """A config Morgan could not read is not a repository without a remote.
+
+    Git reads its config as bytes and is unaffected by one in a legacy code page; Morgan
+    cannot parse it. Recording `unclassified` then would erase a correct label on every write
+    until the file happens to parse again, so an unreadable config records nothing at all.
+    """
+    data_dir = tmp_path / "data"
+    repo = _repository(tmp_path / "harbor", remote=_WORK_REMOTE)
+    monkeypatch.setenv("MORGAN_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("MORGAN_WORK_REMOTE_GLOBS", _GLOBS)
+    monkeypatch.chdir(repo)
+    assert main(["remember", "the mirror blocked the deploy"]) == 0
+    recorded = _row(data_dir, "harbor")
+
+    config = repo / ".git" / "config"
+    config.write_bytes(config.read_bytes() + b"[user]\n\tname = caf\xe9\n")
+
+    assert main(["remember", "and again"]) == 0
+
+    assert _row(data_dir, "harbor") == recorded
 
 
 async def test_a_write_through_the_mcp_server_registers_but_never_classifies(tmp_path, monkeypatch):

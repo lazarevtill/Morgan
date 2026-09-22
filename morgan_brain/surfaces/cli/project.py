@@ -18,10 +18,22 @@ from urllib.parse import urlsplit
 @dataclass(frozen=True)
 class Repository:
     """The enclosing repository as ``morgan`` sees it: where it is on disk, and the remote its
-    classification is derived from (``None`` when it has none Morgan can single out)."""
+    classification is derived from.
+
+    Three answers, not two, because "this repository has no remote" and "Morgan could not read
+    its config" are different facts and only the first is a classification:
+
+    - ``remote`` a URL, ``remote_readable`` true -- the label follows from it;
+    - ``remote`` ``None``, ``remote_readable`` true -- the config was read and names no remote
+      to single out, which is ``unclassified``;
+    - ``remote`` ``None``, ``remote_readable`` false -- the config could not be read or parsed.
+      A caller records nothing then: the label would be a fact about the read, not about the
+      repository, and it would overwrite what an earlier readable config recorded.
+    """
 
     root: Path
     remote: str | None
+    remote_readable: bool
 
 
 @dataclass(frozen=True)
@@ -70,9 +82,14 @@ def read_repository(cwd: Path | None = None) -> Repository | None:
     none: with two remotes and no ``origin`` there is nothing to prefer, and a guess would
     label the project from the wrong one. No remote at all classifies as ``unclassified``.
 
-    It never raises into the command that called it. A config file that cannot be read or
-    parsed -- and a ``.git`` pointer that cannot be followed -- gives a repository with no
-    remote, because the project's directory is still worth recording.
+    It never raises into the command that called it, and it distinguishes the two ways it can
+    come back empty (see ``Repository``):
+
+    - a config file that cannot be read, decoded or parsed, and a ``.git`` pointer that leads
+      somewhere this code does not recognise, answer a repository whose ``remote_readable`` is
+      false -- where it is on disk is known, what it is is not;
+    - a ``.git`` pointer that cannot be read at all answers ``None``, the same as standing
+      outside a repository, because nothing about the checkout could be established.
     """
     try:
         found = _repository_at(cwd)
@@ -80,7 +97,8 @@ def read_repository(cwd: Path | None = None) -> Repository | None:
         return None
     if found is None:
         return None
-    return Repository(root=found.root, remote=_remote_of(found.config))
+    remote, readable = _remote_of(found.config)
+    return Repository(root=found.root, remote=remote, remote_readable=readable)
 
 
 def _repository_at(cwd: Path | None) -> _Checkout | None:
@@ -144,19 +162,26 @@ _NAME = re.compile(r"[A-Za-z][A-Za-z0-9-]*")
 _ESCAPES = {"\\": "\\", '"': '"', "n": "\n", "t": "\t", "b": "\b"}
 
 
-def _remote_of(config: Path | None) -> str | None:
-    """``origin``'s URL, else the sole remote's, else ``None`` -- from *config* alone."""
+def _remote_of(config: Path | None) -> tuple[str | None, bool]:
+    """``origin``'s URL, else the sole remote's, else ``None`` -- from *config* alone -- and
+    whether that answer came from a config this code could read at all.
+
+    A false second value is not "no remote": git reads its config as bytes and is unaffected
+    by a name or an editor path written in a legacy code page, while this decodes text, and a
+    line this parser will not guess at fails the whole file. The caller must not turn either
+    into a classification -- see ``Repository``.
+    """
     if config is None:
-        return None
+        return None, False
     try:
         # utf-8-sig: git accepts a byte-order mark at the top of a config file.
         urls = _remote_urls(config.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         # ValueError covers both a file that is not UTF-8 and one this code will not guess at.
-        return None
+        return None, False
     if "origin" in urls:
-        return urls["origin"]
-    return next(iter(urls.values())) if len(urls) == 1 else None
+        return urls["origin"], True
+    return (next(iter(urls.values())) if len(urls) == 1 else None), True
 
 
 def _remote_urls(text: str) -> dict[str, str]:
@@ -169,7 +194,8 @@ def _remote_urls(text: str) -> dict[str, str]:
     counting it would turn a one-remote repository into an ambiguous one.
     """
     urls: dict[str, str] = {}
-    section, subsection = "", None
+    section: str | None = None
+    subsection: str | None = None
     lines = iter(text.splitlines())
     for raw in lines:
         line = raw.strip()
@@ -178,6 +204,10 @@ def _remote_urls(text: str) -> dict[str, str]:
             line = line.strip()
         if not line or line[0] in "#;":
             continue
+        if section is None:
+            # Git refuses a variable before any section header; so does this, rather than
+            # reading the rest of a file it has already misunderstood.
+            raise _Unparseable(f"a variable outside any section: {line!r}")
         name, value = _variable(line, lines)
         if section == "remote" and subsection and name == "url" and value:
             urls.setdefault(subsection, value)

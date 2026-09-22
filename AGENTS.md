@@ -176,8 +176,11 @@ come in" are answered by the directory names.
   (not `--project`, not the `personal` default, not `--all-projects`), recomputed every time,
   and refused like any other write while a migration step waits. A read records nothing. Only
   those three columns are written: the owner's capture, retention and consolidate switches are
-  theirs. The remote and the root are the owner's data -- never logged, and `doctor` prints
-  neither.
+  theirs. A config Morgan cannot read is not a repository without a remote: the reader says
+  which of the two it found, and only the second is recorded -- the first leaves the row as it
+  is. A recording that fails never fails the command whose write already committed; it warns
+  on stderr, naming the project. The remote and the root are the owner's data -- never logged,
+  and `doctor` prints neither.
 - **No listener beyond loopback without a key.** `network.assert_safe_bind` refuses to start
   `morgan-mcp --transport http` on a non-loopback host while `MORGAN_API_KEY` is unset or the
   placeholder.
@@ -200,6 +203,15 @@ come in" are answered by the directory names.
   transient wrong vector between two checks passes it. Suspect memories stay stored, a re-run
   of the import skips them, and `doctor --vectors` samples rather than checks every row.
   Nothing re-embeds named memory ids.
+- The remote is read from the repository's own config file: `url.<base>.insteadOf` rewriting
+  is not applied, and `include`/`includeIf` files are not followed. A work host reached only
+  through a rewrite is classified by the URL as written, and a remote declared in an included
+  file is not seen at all, leaving the project `unclassified`.
+- `projects` is keyed by the project's name, and a project is named after its folder, so two
+  checkouts called the same thing share one row: each CLI write from either rewrites the
+  other's classification, remote and root. Nothing acts on the label in phase 0, and recall
+  and consolidation are unaffected -- they are keyed by that same name, so the two checkouts
+  share their memories as well.
 - A project written to only through `morgan-mcp` has a row and stays `unclassified`. The
   server may run on another machine than the client, so it never sees the repository a call
   came from, and its `project` argument is a name, not a checkout. The classification, remote
@@ -228,7 +240,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 671 passed, 4 skipped (the live ones)
+pytest -q                     # 675 passed, 4 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

@@ -7,6 +7,11 @@ and does not exempt it from consolidation.
 The remote itself is read from the repository's own config file, never by spawning git: the
 same resolution that names the project (a linked worktree belongs to the repository it came
 from, a submodule is its own), then ``origin``, else the sole remote, else none.
+
+The answer is three-valued, because "no remote" and "the config could not be read" are
+different facts about a repository and only the first is a classification: a config Morgan
+cannot read leaves ``remote_readable`` false, and the caller records nothing rather than
+relabelling the project from a failure to read.
 """
 
 from __future__ import annotations
@@ -83,7 +88,10 @@ def test_origin_is_the_remote_even_beside_another(tmp_path):
     found = read_repository(repo)
 
     assert found is not None
-    assert found.remote == "https://gitlab.work.example/team/harbor.git"
+    assert (found.remote, found.remote_readable) == (
+        "https://gitlab.work.example/team/harbor.git",
+        True,
+    )
     assert found.root == repo.resolve()
 
 
@@ -109,18 +117,20 @@ def test_two_remotes_and_no_origin_name_no_remote(tmp_path):
     found = read_repository(repo)
 
     assert found is not None
-    assert found.remote is None
+    assert (found.remote, found.remote_readable) == (None, True)
     assert classify(found.remote, GLOBS) == "unclassified"
 
 
 @_needs_git
 def test_a_repository_with_no_remote_has_none(tmp_path):
+    """The config was read and names no remote: that is a fact about the repository, and it
+    classifies as ``unclassified`` -- unlike a config that could not be read at all."""
     repo = _repository(tmp_path / "harbor")
 
     found = read_repository(repo)
 
     assert found is not None
-    assert (found.root, found.remote) == (repo.resolve(), None)
+    assert (found.root, found.remote, found.remote_readable) == (repo.resolve(), None, True)
     assert classify(found.remote, GLOBS) == "unclassified"
 
 
@@ -177,25 +187,56 @@ def test_a_checkout_outside_any_repository_is_none(tmp_path):
         pytest.param('[remote "origin"]\n\turl = "https://example.com/a.git\n', id="open-quote"),
     ],
 )
-def test_a_config_that_cannot_be_parsed_names_no_remote(tmp_path, config):
+def test_a_config_that_cannot_be_parsed_says_so(tmp_path, config):
     """A config Morgan cannot read is a project it cannot classify -- never an error thrown
-    into a command the owner ran to remember something."""
+    into a command the owner ran to remember something, and never a label of its own: the
+    caller is told the remote is unknown, not that there is none."""
     repo = _a_git_dir(tmp_path / "harbor", config)
 
     found = read_repository(repo)
 
     assert found is not None
-    assert (found.root, found.remote) == (repo.resolve(), None)
+    assert (found.root, found.remote, found.remote_readable) == (repo.resolve(), None, False)
 
 
-def test_a_config_that_cannot_be_read_names_no_remote(tmp_path):
+def test_a_config_that_cannot_be_read_says_so(tmp_path):
     repo = _a_git_dir(tmp_path / "harbor", None)
     (repo / ".git" / "config").mkdir()
 
     found = read_repository(repo)
 
     assert found is not None
-    assert found.remote is None
+    assert (found.remote, found.remote_readable) == (None, False)
+
+
+def test_a_config_that_is_not_utf_8_says_so(tmp_path):
+    """Git reads its config as bytes and works; Morgan reads text. One byte of a legacy code
+    page -- a name, an editor path -- is a config it cannot decode, and that is "unknown",
+    not "no remote"."""
+    repo = _a_git_dir(tmp_path / "harbor", None)
+    (repo / ".git" / "config").write_bytes(
+        b'[remote "origin"]\n\turl = https://gitlab.work.example/team/harbor.git\n'
+        b"[user]\n\tname = caf\xe9\n"
+    )
+
+    found = read_repository(repo)
+
+    assert found is not None
+    assert (found.remote, found.remote_readable) == (None, False)
+
+
+def test_a_git_pointer_that_leads_nowhere_known_says_the_remote_is_unknown(tmp_path):
+    """A ``.git`` file that is not a ``gitdir:`` pointer names no config to read, so the
+    remote is unknown rather than absent -- the checkout is still a repository, named by its
+    own folder."""
+    repo = tmp_path / "harbor"
+    repo.mkdir()
+    (repo / ".git").write_text("something no git wrote\n", encoding="utf-8")
+
+    found = read_repository(repo)
+
+    assert found is not None
+    assert (found.root, found.remote, found.remote_readable) == (repo.resolve(), None, False)
 
 
 @pytest.mark.parametrize(
@@ -243,4 +284,4 @@ def test_the_config_is_read_the_way_git_reads_it(tmp_path, config, expected):
     found = read_repository(repo)
 
     assert found is not None
-    assert found.remote == expected
+    assert (found.remote, found.remote_readable) == (expected, True)

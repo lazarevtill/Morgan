@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import structlog
+
 from morgan_brain.app.chatgpt_import import (
     ARCHIVE_PROJECT,
     HOLDOUT_PROJECT,
@@ -37,6 +39,10 @@ from morgan_brain.surfaces.cli.payloads import (
 )
 from morgan_brain.surfaces.cli.project import Repository, classify
 
+#: Warnings the owner should see beside a command that otherwise succeeded. stderr, through
+#: the one logging configuration, because stdout carries ``--json``.
+log = structlog.get_logger("cli")
+
 
 async def _record_the_repository(
     ctx: MemoryContext, settings: Settings, project: str, repository: Repository | None
@@ -53,16 +59,27 @@ async def _record_the_repository(
     It runs after the command's own write, so a command that failed -- an unreachable model,
     a refused embedding -- records nothing, and on a database waiting for ``morgan migrate``
     the write is refused before this is reached.
+
+    Two things it will not do. A repository whose config could not be read is left alone
+    rather than relabelled: `classify(None, ...)` is `unclassified`, and writing that would
+    erase a correct label on every write until the file happens to parse again. And a failure
+    here never fails the command: the command's contract is its write, which has already
+    committed -- a lost race for the write lock must not report a stored memory, or a model
+    answer already paid for, as an error. It says so on stderr instead, naming the project and
+    never the remote or the root, which are the owner's data.
     """
-    if repository is None:
+    if repository is None or not repository.remote_readable:
         return
-    await ctx.gate.record_project(
-        user_id=settings.owner_user_id,
-        project=project,
-        classification=classify(repository.remote, settings.work_remote_globs),
-        remote=repository.remote,
-        root=str(repository.root),
-    )
+    try:
+        await ctx.gate.record_project(
+            user_id=settings.owner_user_id,
+            project=project,
+            classification=classify(repository.remote, settings.work_remote_globs),
+            remote=repository.remote,
+            root=str(repository.root),
+        )
+    except Exception as exc:  # noqa: BLE001 -- bookkeeping never fails the write it follows
+        log.warning("project.not-recorded", project=project, error=str(exc))
 
 
 async def cmd_remember(
