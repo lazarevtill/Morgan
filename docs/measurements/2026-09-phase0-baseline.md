@@ -13,7 +13,7 @@ repository, under `~/Documents/GitHub/morgan-research-2026-09-19/measurements/`.
 
 ### The four gates
 
-```
+```text
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider
 309 passed, 4 skipped, 1 warning in 132.29s (0:02:12)
 ```
@@ -21,22 +21,22 @@ repository, under `~/Documents/GitHub/morgan-research-2026-09-19/measurements/`.
 The one warning is `starlette.testclient`'s `BlockingPortal` deprecation -- pre-existing,
 third-party, not from this repository's code.
 
-```
+```text
 .venv/Scripts/python.exe -m ruff check .
 All checks passed!
 ```
 
-```
+```text
 .venv/Scripts/python.exe -m ruff format --check .
 130 files already formatted
 ```
 
-```
+```text
 .venv/Scripts/python.exe -m mypy morgan_brain
 Success: no issues found in 48 source files
 ```
 
-```
+```text
 .venv/Scripts/python.exe -m bandit -q -c pyproject.toml -r morgan_brain
 (no output -- zero findings)
 ```
@@ -97,7 +97,7 @@ Save as e.g. `hash_scorecard.py` in the worktree root and run
 `.venv/Scripts/python.exe hash_scorecard.py` (not committed -- it duplicates no production
 logic, only composes the same public API the live test below already imports). Output:
 
-```
+```text
 run: embedding=hash stub (dim 64)  k=8  floor=off  probes=probes.json@510b5f20fe94 (86 memories, 60 probes)  db-upgrade=2  commit=24f1566
 n=60  recall@8=0.28  mrr=0.09  stale1st=0.60  abstain=0.00
   knowledge_update  n=10   recall@8=0.30  mrr=0.09  stale1st=0.60  abstain=0.00
@@ -175,7 +175,7 @@ path):
 Per table:
 
 | table | rows |
-|---|---:|
+| --- | ---: |
 | memories | 3010 |
 | vec_meta | 3010 |
 | vec_items | 3010 |
@@ -187,7 +187,7 @@ Per table:
 Per project (`facts` and `session_history` are empty, so nothing to split):
 
 | table | archive/chatgpt | archive/chatgpt-holdout |
-|---|---:|---:|
+| --- | ---: | ---: |
 | memories | 1966 | 1044 |
 | vec_meta | 1966 | 1044 |
 | vec_items | 1966 | 1044 |
@@ -201,7 +201,7 @@ Live install on PATH, default (stdio) transport. Each run spawns a fresh `morgan
 process and times from spawn through `ClientSession.initialize()` + `list_tools()` to the
 response, using the `mcp` SDK's own stdio client.
 
-```
+```text
 run 1: 1.468s   run 2: 1.541s   run 3: 1.405s   run 4: 1.468s   run 5: 1.635s
 run 6: 1.548s   run 7: 1.328s   run 8: 1.419s   run 9: 1.499s   run 10: 1.507s
 
@@ -212,7 +212,7 @@ min=1.328s  median=1.483s  max=1.635s
 
 ### Live eval scorecard (bundled 60-probe set, `tests/memory_quality/probes.json`)
 
-```
+```text
 export $(grep -E '^MORGAN_EMBEDDING_(ENDPOINT|MODEL|DIM)=' ~/.config/morgan/.env | xargs)
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider \
   tests/memory_quality/test_retrieval_quality.py -k shares_no_words --live -s -v
@@ -220,7 +220,7 @@ export $(grep -E '^MORGAN_EMBEDDING_(ENDPOINT|MODEL|DIM)=' ~/.config/morgan/.env
 
 Only the three embedding settings were exported -- never the chat key.
 
-```
+```text
 run: embedding=qwen3-embedding:8b (dim 4096)  k=8  floor=off  probes=probes.json@510b5f20fe94 (86 memories, 60 probes)  db-upgrade=2  commit=24f1566
 n=60  recall@8=0.89  mrr=0.51  stale1st=0.70  abstain=0.00
   knowledge_update  n=10   recall@8=1.00  mrr=0.50  stale1st=0.70  abstain=0.00
@@ -238,7 +238,7 @@ Not re-run here; recorded in Task 2 and read from
 Snapshot: qwen3-embedding:8b, 4096 dims, `user_version` 2, 3010 memories; scored with
 `all_projects=True` over the 128-label holdout set (fit=90, sealed=38).
 
-```
+```text
 margin=0.00    fit  n=90   recall@8=0.89  mrr=0.73  abstain=0.00
 margin=0.00 sealed  n=38   recall@8=0.88  mrr=0.71  abstain=0.00
 margin=0.04    fit  n=90   recall@8=0.89  mrr=0.73  abstain=0.44
@@ -257,11 +257,12 @@ margin=0.22 sealed  n=38   recall@8=0.64  mrr=0.57  abstain=0.85
 
 ### Cold-start seconds
 
-From `2026-09-21-repeat-distribution.json`: the three cold starts measured 7.4, 8.0, and 8.4 seconds
-respectively. Each was measured with the model unloaded per the native `/api/ps` process list, after
-30 idle minutes since the script's own last request. These are substantially faster than the 43 seconds
-measured once on 2026-09-19 (a first load from disk); these three reloaded a model file the host still
-had cached in filesystem buffers.
+From `2026-09-21-repeat-distribution.json`: the three cold starts measured 7.4, 8.0 and
+8.4 seconds respectively. Each was measured with the model unloaded per the native
+`/api/ps` process list, after 30 idle minutes since the script's own last request. These
+are substantially faster than the 43 seconds measured once on 2026-09-19 (a first load
+from disk); these three reloaded a model file the host still had cached in filesystem
+buffers.
 
 ## 3. The repeat-distribution script, and the fingerprint tolerance
 
@@ -281,7 +282,7 @@ without ever writing memory content or ids to disk.
 
 ### Smoke check -- `--quick --rows 5` (proves the script runs; not the tolerance verdict)
 
-```
+```text
 export $(grep -E '^MORGAN_EMBEDDING_(ENDPOINT|MODEL|DIM)=' ~/.config/morgan/.env | xargs)
 .venv/Scripts/python.exe scripts/measure_repeat_distribution.py \
   --db ~/Documents/GitHub/morgan-eval-brain-2026-09-19-qwen3-8b/morgan.db \
@@ -290,7 +291,7 @@ export $(grep -E '^MORGAN_EMBEDDING_(ENDPOINT|MODEL|DIM)=' ~/.config/morgan/.env
   --results-md ~/Documents/GitHub/morgan-research-2026-09-19/measurements/2026-09-21-repeat-distribution-quick-smoke.md
 ```
 
-```
+```text
 sampled 5 rows (dim=4096) from <snapshot>/morgan.db
 batch1_warm_c1: min=1.00000 p1=1.00000 median=1.00000 (2.9s)
 batch1_warm_c2: min=1.00000 p1=1.00000 median=1.00000 (3.1s)
@@ -322,7 +323,7 @@ worst condition among *those*, not from the full 12-condition grid. `--cold-cond
 implements this restriction (added to the script for this ruling; the warm half is never
 restricted by this option). Exact invocation (env export first, chat key never exported):
 
-```
+```text
 export $(grep -E '^MORGAN_EMBEDDING_(ENDPOINT|MODEL|DIM)=' ~/.config/morgan/.env | xargs)
 .venv/Scripts/python.exe scripts/measure_repeat_distribution.py \
   --db ~/Documents/GitHub/morgan-eval-brain-2026-09-19-qwen3-8b/morgan.db \
@@ -338,7 +339,7 @@ single cold-start timings -- read the numbers when they land as measuring 7 cond
 Results from `2026-09-21-repeat-distribution.md`:
 
 | condition | batch | warmth | clients | n | min | p1 | median | wall seconds |
-|---|---:|---|---:|---:|---:|---:|---:|---:|
+| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | batch1_warm_c1 | 1 | warm | 1 | 500 | 0.99837 | 0.99866 | 1.00000 | 273.3 |
 | batch1_warm_c2 | 1 | warm | 2 | 500 | 0.99820 | 0.99878 | 1.00000 | 252.4 |
 | batch32_warm_c1 | 32 | warm | 1 | 500 | 0.99820 | 0.99866 | 1.00000 | 261.2 |
@@ -381,7 +382,7 @@ or path is hardcoded; every value above comes from the command below.
 Raw output (unredacted path):
 `~/Documents/GitHub/morgan-research-2026-09-19/measurements/2026-09-21-partition-key.json`.
 
-```
+```text
 run 1: metadata median=58.63ms mean=58.88ms (min=47.23ms max=73.09ms) | partition median=41.94ms mean=42.13ms (min=32.45ms max=53.97ms) | mismatches=0/200
 run 2: metadata median=58.71ms mean=59.15ms (min=47.24ms max=72.04ms) | partition median=41.96ms mean=42.12ms (min=32.93ms max=52.55ms) | mismatches=0/200
 ```
@@ -403,7 +404,7 @@ output (unredacted path):
 (console output) and the `.json` beside it (per-query-run stats and the storage bytes), from a
 copy of the same 3,010-memory, 4,096-dim archive `k=8` above used.
 
-```
+```text
 run 1 [per-project]: metadata median=56.123ms mean=56.586ms | partition median=40.012ms mean=40.066ms | order mismatches=0/200 | set mismatches=0/200
 run 1 [all-projects]: metadata median=60.898ms mean=61.490ms | partition median=75.990ms mean=76.519ms | order mismatches=1/200 | set mismatches=0/200
 run 2 [per-project]: metadata median=56.913ms mean=56.870ms | partition median=40.341ms mean=40.568ms | order mismatches=0/200 | set mismatches=0/200
@@ -413,7 +414,7 @@ storage, 20 one-memory projects: metadata=16,900,096B partition=336,449,536B
 ```
 
 | scope | k | partitioned median | metadata median | id order differs | id set differs |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | per-project | 16 | 40.0 / 40.3 ms | 56.1 / 56.9 ms | 0/200 | 0/200 |
 | all-projects | 16 | 76.0 / 75.0 ms | 60.9 / 61.1 ms | 1/200 | 0/200 |
 
@@ -424,7 +425,7 @@ order, not a wrong answer -- but it fails the "same ids, in the same order" gate
 On-disk size, same isolated single-table file per layout:
 
 | what | metadata columns | `PARTITION KEY` |
-|---|---|---|
+| --- | --- | --- |
 | the archive's 3,010 rows | 50.7 MB | 67.4 MB |
 | 20 one-memory projects | 16.9 MB | 336.4 MB |
 

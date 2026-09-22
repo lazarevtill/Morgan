@@ -2,7 +2,7 @@
 
 One package, `morgan_brain`, one process, one SQLite file. Two surfaces over one gate.
 
-```
+```text
 morgan CLI ──┐                          ┌─ episodic rows
              ├─▶ MemoryGate ─▶ MemoryModule ─┼─ sqlite-vec vectors
 morgan-mcp ──┘        │                 ├─ FTS5 keyword index      one morgan.db
@@ -16,7 +16,7 @@ morgan-mcp ──┘        │                 ├─ FTS5 keyword index      o
 ## The package (`morgan_brain/`)
 
 | Module | Responsibility |
-|---|---|
+| --- | --- |
 | `config.py` | The single `MORGAN_`-prefixed settings source, `settings_for(surface)`. The CLI reads `~/.config/morgan/.env`, then `./.env`, then the environment; `morgan-mcp` reads the user file and the environment only, because its working directory is the client's. `doctor` lists the files read. The database defaults to `~/.local/share/morgan/`, its snapshots to `snapshots/` beside it. Chat and embeddings are addressed separately when one server does not serve both. |
 | `models.py` | `Memory`, `TemporalFact`, `MemoryQuery`, `Message`. Everything that persists is `user_id`- and `project`-keyed; a write that names no project lands in `personal`. A `Memory` carries its provenance: origin, client, session, working directory, author and scope. |
 | `logging_setup.py` | Process output: stdout is UTF-8 because the protocols on it are; every log line goes to stderr. |
@@ -61,8 +61,8 @@ Recall returns a `RecallOutcome`: the memories, `abstained`, and a `reason`, whi
 abstained, as `empty` (nothing in scope, not even a fact) or `declined` (the floor). Results
 come back with `too_few_to_judge`, `no_floor`, or `null` when the floor judged them and they
 answered. `keyword_only` is reserved for a keyword-only fallback when embeddings are down,
-which does not exist yet; nothing emits it. The `recall.done` line also carries the embedding's latency and outcome and the
-query's language.
+which does not exist yet; nothing emits it. The `recall.done` line also carries the
+embedding's latency and outcome and the query's language.
 
 Facts never suppress episodics: prepended in full and then truncated, a project holding
 `top_k` facts could return no memory however exactly it matched, and the fact count only
@@ -91,7 +91,7 @@ committed.
 A database written by an older Morgan is upgraded by numbered steps:
 
 | Step | Kind | What |
-|---|---|---|
+| --- | --- | --- |
 | 1 | light | re-extract every memory's entities |
 | 2 | light | drop the semantic index's tables |
 | 3 | light | create `embedding_spaces` and `projects` |

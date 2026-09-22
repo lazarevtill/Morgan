@@ -375,6 +375,37 @@ def silent_model_server(*, trickle_every: float | None = None) -> Iterator[str]:
         listener.close()
 
 
+def _content_length(head: bytes) -> int:
+    """What the request head declares it will send, or 0 when it declares nothing."""
+    for line in head.split(b"\r\n"):
+        name, _, value = line.partition(b":")
+        if name.strip().lower() == b"content-length":
+            return int(value)
+    return 0
+
+
+def _whole_request(conn: socket.socket) -> bytes | None:
+    """Every byte of one HTTP request -- the head, then the body its ``Content-Length``
+    declares -- or None when the client closed before the request was complete.
+
+    Read whole before anything is answered: closing a socket with unread input resets the
+    connection, and the client would see that instead of the answer.
+    """
+    data = b""
+    while b"\r\n\r\n" not in data:
+        chunk = conn.recv(65536)
+        if not chunk:
+            return None
+        data += chunk
+    head, _, body = data.partition(b"\r\n\r\n")
+    while len(body) < _content_length(head):
+        chunk = conn.recv(65536)
+        if not chunk:
+            return None
+        body += chunk
+    return head + b"\r\n\r\n" + body
+
+
 @contextmanager
 def raw_model_server(reply: Callable[[bytes], bytes]) -> Iterator[str]:
     """A server that reads each request whole and answers with exactly the bytes *reply* makes
@@ -387,27 +418,11 @@ def raw_model_server(reply: Callable[[bytes], bytes]) -> Iterator[str]:
     def answer(conn: socket.socket) -> None:
         with conn:
             conn.settimeout(5.0)
-            data = b""
             try:
-                while b"\r\n\r\n" not in data:
-                    chunk = conn.recv(65536)
-                    if not chunk:
-                        return
-                    data += chunk
-                head, _, body = data.partition(b"\r\n\r\n")
-                length = 0
-                for line in head.split(b"\r\n"):
-                    name, _, value = line.partition(b":")
-                    if name.strip().lower() == b"content-length":
-                        length = int(value)
-                while len(body) < length:
-                    chunk = conn.recv(65536)
-                    if not chunk:
-                        return
-                    body += chunk
-                # Every byte of the request is read first: closing a socket with unread input
-                # resets the connection, and the client would see that instead of this answer.
-                conn.sendall(reply(head + b"\r\n\r\n" + body))
+                request = _whole_request(conn)
+                if request is None:
+                    return
+                conn.sendall(reply(request))
                 conn.shutdown(socket.SHUT_WR)
             except OSError:
                 return

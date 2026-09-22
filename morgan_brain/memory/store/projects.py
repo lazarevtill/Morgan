@@ -99,7 +99,7 @@ def get(conn: sqlite3.Connection, name: str) -> Project | None:
     return None if row is None else _row_to_project(row)
 
 
-def all(conn: sqlite3.Connection) -> list[Project]:
+def list_all(conn: sqlite3.Connection) -> list[Project]:
     """Every project Morgan has a row for, by name."""
     return [_row_to_project(r) for r in conn.execute("SELECT * FROM projects ORDER BY name")]
 

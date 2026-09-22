@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -95,7 +95,14 @@ async def _stdio_mcp(tmp_path: Path, *, embedding_endpoint: str) -> AsyncIterato
         env=env,
         cwd=str(tmp_path),
     )
-    async with stdio_client(server) as (read, write), ClientSession(read, write) as session:
+    # One statement per context manager, entered through a stack: the client's streams are
+    # bound by a statement of their own before the session that reads them is built. Both in
+    # one ``async with`` is valid Python -- its targets bind left to right -- but pylint reads
+    # the second manager as using a name the statement has not finished binding, and ruff
+    # (SIM117) refuses the nested form that would satisfy it.
+    async with AsyncExitStack() as stack:
+        read_stream, write_stream = await stack.enter_async_context(stdio_client(server))
+        session = await stack.enter_async_context(ClientSession(read_stream, write_stream))
         await session.initialize()
         yield session
 

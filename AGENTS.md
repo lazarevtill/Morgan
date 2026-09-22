@@ -52,7 +52,7 @@ come in" are answered by the directory names.
   - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
     `history`, `spaces` (the `embedding_spaces` table and its one-active partial index),
     `projects` (the `projects` table, keyed by name: classification, remote, root and the
-    per-project capture/consolidate switches; `get` and `all`, `seed` for migration step 7's
+    per-project capture/consolidate switches; `get` and `list_all`, `seed` for migration step 7's
     one row per project already named in `memories`, `facts` or `session_history`, `register`
     for every project-keyed write after it, and `record` for the classification, remote and
     root a CLI write from inside a repository fills in),

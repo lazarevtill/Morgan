@@ -90,7 +90,7 @@ def test_step_seven_seeds_one_row_per_distinct_project_and_skips_absent_tables(t
     migrations.upgrade(conn, stores)
 
     assert migrations.pending(conn) == ()
-    rows = {p.name: p for p in projects_store.all(conn)}
+    rows = {p.name: p for p in projects_store.list_all(conn)}
     assert sorted(rows) == ["Morgan", "other", "personal"]
     assert all(p.classification == "unclassified" for p in rows.values())
 
@@ -102,7 +102,7 @@ def test_seeding_twice_inserts_nothing_the_second_time(tmp_path):
     second = projects_store.seed(conn, clock=_clock)
 
     assert (first, second) == (1, 0)
-    assert [p.name for p in projects_store.all(conn)] == ["Morgan"]
+    assert [p.name for p in projects_store.list_all(conn)] == ["Morgan"]
 
 
 def test_seed_returns_zero_on_a_database_with_none_of_the_source_tables(tmp_path):
@@ -111,7 +111,7 @@ def test_seed_returns_zero_on_a_database_with_none_of_the_source_tables(tmp_path
     conn.commit()
 
     assert projects_store.seed(conn, clock=_clock) == 0
-    assert projects_store.all(conn) == []
+    assert projects_store.list_all(conn) == []
 
 
 def test_capture_enabled_and_retention_days_round_trip(tmp_path):
@@ -193,7 +193,7 @@ async def test_a_memory_a_fact_and_a_history_row_each_register_their_project(tmp
     because nothing below the gate knows where a repository is."""
     clock = _Clock()
     gate, history, conn = _writing_stack(tmp_path, clock)
-    assert projects_store.all(conn) == []
+    assert projects_store.list_all(conn) == []
 
     await gate.store(Memory(user_id="u", project="alpha", content="The Harbor mirror is slow."))
     await gate.upsert_fact(
@@ -201,7 +201,7 @@ async def test_a_memory_a_fact_and_a_history_row_each_register_their_project(tmp
     )
     history.append("u:default", Message(user_id="u", role=Role.USER, content="hi"), project="gamma")
 
-    rows = {p.name: p for p in projects_store.all(conn)}
+    rows = {p.name: p for p in projects_store.list_all(conn)}
     assert sorted(rows) == ["alpha", "beta", "gamma"]
     for row in rows.values():
         assert (row.classification, row.remote, row.root) == ("unclassified", None, None)
@@ -232,7 +232,7 @@ async def test_writing_to_a_registered_project_again_changes_nothing_in_its_row(
     history.append("u:default", Message(user_id="u", role=Role.USER, content="hi"), project="alpha")
 
     assert projects_store.get(conn, "alpha") == before
-    assert [p.name for p in projects_store.all(conn)] == ["alpha"]
+    assert [p.name for p in projects_store.list_all(conn)] == ["alpha"]
 
 
 async def test_a_write_that_fails_leaves_no_row_behind(tmp_path, monkeypatch):

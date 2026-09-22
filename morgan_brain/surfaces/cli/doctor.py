@@ -30,6 +30,7 @@ vectors with the fingerprint the database recorded -- compares only: recording o
 from __future__ import annotations
 
 import asyncio
+import itertools
 import sqlite3
 import statistics
 import sys
@@ -336,8 +337,27 @@ def _read_database(
     all_projects: bool,
     vectors: bool,
 ) -> _Local:
-    """Every probe of the database itself: SELECTs and PRAGMA reads, nothing else."""
+    """Every probe of the database itself: SELECTs and PRAGMA reads, nothing else.
+
+    One probe per helper below, in the order the report names them. Each catches its own
+    failure, so a table that is missing or unreadable costs its own line and not the rest of
+    the report: `doctor` is the command you run *because* something is broken.
+    """
     local = _Local(report)
+    _probe_migration(conn, report)
+    _probe_embedding_space(conn, report, local)
+    if vectors and local.space is not None and settings.embedding_backend != "hash":
+        local.vector_sample = _vector_sample(
+            conn, report, settings, space=local.space, project=project, all_projects=all_projects
+        )
+    _probe_projects(conn, report)
+    _probe_row_counts(conn, report, settings, project=project, all_projects=all_projects)
+    return local
+
+
+def _probe_migration(conn: sqlite3.Connection, report: dict[str, Any]) -> None:
+    """The database's ``user_version`` against the steps this build knows -- or, on a file that
+    holds no Morgan table yet, why there is no migration state to read."""
     try:
         if migrations._holds_morgan_tables(conn):
             report["migration"] = migration_status_to_dict(
@@ -353,6 +373,10 @@ def _read_database(
     except sqlite3.Error as exc:
         report.setdefault("probe_errors", {})["migration"] = str(exc)
 
+
+def _probe_embedding_space(conn: sqlite3.Connection, report: dict[str, Any], local: _Local) -> None:
+    """The active embedding space, kept on *local* for the comparison made after the connection
+    is closed -- or why there is no space to compare the model against."""
     try:
         if not _table_exists(conn, "embedding_spaces"):
             report["embedding_space_reason"] = (
@@ -366,99 +390,138 @@ def _read_database(
     except sqlite3.Error as exc:
         report.setdefault("probe_errors", {})["embedding_space"] = str(exc)
 
-    if vectors and local.space is not None and settings.embedding_backend != "hash":
-        try:
-            local.vector_sample = vectors_store.audit_sample(
-                conn,
-                table_name=local.space.table_name,
-                n=settings.vector_audit_sample_rows,
-                user_id=settings.owner_user_id,
-                project=project,
-                all_projects=all_projects,
-            )
-        except sqlite3.Error as exc:
-            report.setdefault("probe_errors", {})["vector_sample"] = str(exc)
 
+def _vector_sample(
+    conn: sqlite3.Connection,
+    report: dict[str, Any],
+    settings: Settings,
+    *,
+    space: spaces.EmbeddingSpace,
+    project: str,
+    all_projects: bool,
+) -> list[tuple[str, str, list[float]]]:
+    """``doctor --vectors``'s sample of *space*'s table, drawn while the connection is open;
+    empty when that table cannot be read."""
+    try:
+        return vectors_store.audit_sample(
+            conn,
+            table_name=space.table_name,
+            n=settings.vector_audit_sample_rows,
+            user_id=settings.owner_user_id,
+            project=project,
+            all_projects=all_projects,
+        )
+    except sqlite3.Error as exc:
+        report.setdefault("probe_errors", {})["vector_sample"] = str(exc)
+        return []
+
+
+def _probe_projects(conn: sqlite3.Connection, report: dict[str, Any]) -> None:
+    """One line per row of ``projects``, or why the table has none to read."""
     try:
         if _table_exists(conn, "projects"):
-            report["projects"] = [_project_line(p) for p in projects.all(conn)]
+            report["projects"] = [_project_line(p) for p in projects.list_all(conn)]
         else:
             report["projects_reason"] = "no projects table in this database yet"
     except sqlite3.Error as exc:
         report.setdefault("probe_errors", {})["projects"] = str(exc)
 
-    # A table name cannot be a bound parameter, so each count is a literal statement chosen
-    # by key. The project filter is a bound flag for the same reason: "every project" and
-    # "this one" are one statement, not two, so the two scopes can never drift apart.
-    count_sql = {
-        "memories": "SELECT COUNT(*) FROM memories WHERE user_id = ? AND (? OR project = ?)",
-        "fts_memories": (
-            "SELECT COUNT(*) FROM fts_memories WHERE user_id = ? AND (? OR project = ?)"
-        ),
-        "vec_meta": "SELECT COUNT(*) FROM vec_meta WHERE user_id = ? AND (? OR project = ?)",
-        "facts": "SELECT COUNT(*) FROM facts WHERE user_id = ? AND (? OR project = ?)",
-        "session_history": (
-            "SELECT COUNT(*) FROM session_history WHERE user_id = ? AND (? OR project = ?)"
-        ),
-        "memory_entities": (
-            "SELECT COUNT(*) FROM memory_entities WHERE user_id = ? AND (? OR project = ?)"
-        ),
-    }
 
-    def _count(table: str, *, scope_all: bool) -> int | None:
-        """The row count, or None when the table is absent or unreadable -- independently
-        caught, like every other probe: `doctor` is the command you run *because*
-        something is broken."""
-        if not _table_exists(conn, table):
-            return None
-        try:
-            row = conn.execute(
-                count_sql[table], (settings.owner_user_id, scope_all, project)
-            ).fetchone()
-        except sqlite3.Error as exc:
-            report.setdefault("count_errors", {})[table] = str(exc)
-            return None
-        return int(row[0])
+# A table name cannot be a bound parameter, so each count is a literal statement chosen
+# by key. The project filter is a bound flag for the same reason: "every project" and
+# "this one" are one statement, not two, so the two scopes can never drift apart.
+_COUNT_SQL = {
+    "memories": "SELECT COUNT(*) FROM memories WHERE user_id = ? AND (? OR project = ?)",
+    "fts_memories": "SELECT COUNT(*) FROM fts_memories WHERE user_id = ? AND (? OR project = ?)",
+    "vec_meta": "SELECT COUNT(*) FROM vec_meta WHERE user_id = ? AND (? OR project = ?)",
+    "facts": "SELECT COUNT(*) FROM facts WHERE user_id = ? AND (? OR project = ?)",
+    "session_history": (
+        "SELECT COUNT(*) FROM session_history WHERE user_id = ? AND (? OR project = ?)"
+    ),
+    "memory_entities": (
+        "SELECT COUNT(*) FROM memory_entities WHERE user_id = ? AND (? OR project = ?)"
+    ),
+}
 
-    def _by_project() -> dict[str, int] | None:
-        """Every project this user has a memory in, and how many -- what told the owner on
-        2026-09-21 that a scoped zero was not the whole database: `doctor` from the wrong
-        directory prints one project's count next to every project's, in one report."""
-        if not _table_exists(conn, "memories"):
-            return None
-        try:
-            rows = conn.execute(
-                "SELECT project, COUNT(*) FROM memories WHERE user_id = ? GROUP BY project",
-                (settings.owner_user_id,),
-            ).fetchall()
-        except sqlite3.Error as exc:
-            report.setdefault("count_errors", {})["memories_by_project"] = str(exc)
-            return None
-        return {str(r[0]): int(r[1]) for r in rows}
+
+def _count(
+    conn: sqlite3.Connection,
+    report: dict[str, Any],
+    table: str,
+    *,
+    user_id: str,
+    project: str,
+    scope_all: bool,
+) -> int | None:
+    """The row count, or None when the table is absent or unreadable -- independently
+    caught, like every other probe: `doctor` is the command you run *because*
+    something is broken."""
+    if not _table_exists(conn, table):
+        return None
+    try:
+        row = conn.execute(_COUNT_SQL[table], (user_id, scope_all, project)).fetchone()
+    except sqlite3.Error as exc:
+        report.setdefault("count_errors", {})[table] = str(exc)
+        return None
+    return int(row[0])
+
+
+def _memories_by_project(
+    conn: sqlite3.Connection, report: dict[str, Any], *, user_id: str
+) -> dict[str, int] | None:
+    """Every project this user has a memory in, and how many -- what told the owner on
+    2026-09-21 that a scoped zero was not the whole database: `doctor` from the wrong
+    directory prints one project's count next to every project's, in one report."""
+    if not _table_exists(conn, "memories"):
+        return None
+    try:
+        rows = conn.execute(
+            "SELECT project, COUNT(*) FROM memories WHERE user_id = ? GROUP BY project",
+            (user_id,),
+        ).fetchall()
+    except sqlite3.Error as exc:
+        report.setdefault("count_errors", {})["memories_by_project"] = str(exc)
+        return None
+    return {str(r[0]): int(r[1]) for r in rows}
+
+
+def _probe_row_counts(
+    conn: sqlite3.Connection,
+    report: dict[str, Any],
+    settings: Settings,
+    *,
+    project: str,
+    all_projects: bool,
+) -> None:
+    """What is stored: this scope's rows, every project's, the per-project breakdown, and how
+    many rows predate provenance."""
+    user_id = settings.owner_user_id
+
+    def count(table: str, *, scope_all: bool) -> int | None:
+        return _count(conn, report, table, user_id=user_id, project=project, scope_all=scope_all)
 
     report["rows"] = {
         "scope": "all projects" if all_projects else f"project {project!r}",
-        "memories": _count("memories", scope_all=all_projects),
-        "fts": _count("fts_memories", scope_all=all_projects),
-        "vectors": _count("vec_meta", scope_all=all_projects),
+        "memories": count("memories", scope_all=all_projects),
+        "fts": count("fts_memories", scope_all=all_projects),
+        "vectors": count("vec_meta", scope_all=all_projects),
     }
     report["rows_all_projects"] = {
-        "memories": _count("memories", scope_all=True),
-        "fts": _count("fts_memories", scope_all=True),
-        "vectors": _count("vec_meta", scope_all=True),
-        "facts": _count("facts", scope_all=True),
-        "history": _count("session_history", scope_all=True),
-        "entities": _count("memory_entities", scope_all=True),
+        "memories": count("memories", scope_all=True),
+        "fts": count("fts_memories", scope_all=True),
+        "vectors": count("vec_meta", scope_all=True),
+        "facts": count("facts", scope_all=True),
+        "history": count("session_history", scope_all=True),
+        "entities": count("memory_entities", scope_all=True),
     }
-    report["rows_by_project"] = _by_project()
+    report["rows_by_project"] = _memories_by_project(conn, report, user_id=user_id)
     try:
-        missing, reason = _missing_provenance(conn, user_id=settings.owner_user_id)
+        missing, reason = _missing_provenance(conn, user_id=user_id)
     except sqlite3.Error as exc:
         report.setdefault("count_errors", {})["rows_missing_provenance"] = str(exc)
         missing, reason = None, None
     report["rows_missing_provenance"] = missing
     report["rows_missing_provenance_reason"] = reason
-    return local
 
 
 def _verdict(probe: Probe, settings: Settings) -> str:
@@ -573,10 +636,9 @@ def _fails(cosine: float | None, tolerance: float) -> bool:
 def _any_pair_disagrees(fresh: list[list[float]], tolerance: float) -> bool:
     """Whether any two of *fresh* -- one row's vector, fresh from each client -- fall below
     *tolerance* against each other, or cannot be compared at all."""
-    for i in range(len(fresh)):
-        for j in range(i + 1, len(fresh)):
-            if _fails(_safe_cosine(fresh[i], fresh[j]), tolerance):
-                return True
+    for one, other in itertools.combinations(fresh, 2):
+        if _fails(_safe_cosine(one, other), tolerance):
+            return True
     return False
 
 

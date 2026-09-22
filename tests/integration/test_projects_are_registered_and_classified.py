@@ -203,7 +203,7 @@ def test_a_database_waiting_for_migrate_refuses_the_write_and_records_nothing(
     assert "morgan migrate" in json.loads(capsys.readouterr().out)["error"]
     conn = open_db(sqlite_path(Settings().temporal_db_url))
     try:
-        assert projects_store.all(conn) == []
+        assert projects_store.list_all(conn) == []
         assert conn.execute("SELECT count(*) FROM memories").fetchone()[0] == 0
     finally:
         conn.close()
