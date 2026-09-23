@@ -6,6 +6,8 @@ and the anchored assignment rule reads six secret forms and none of fourteen non
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from morgan_brain.config import Settings
@@ -41,7 +43,29 @@ def test_there_are_thirty_one_rules_in_scan_order():
     assert len(RULES) == 31
     assert tuple(RULES) == RULE_NAMES
     assert RULE_NAMES.index("anthropic_key") < RULE_NAMES.index("openai_key")
-    assert RULE_NAMES[:21] == tuple(sorted(RULE_NAMES[:21], key=RULE_NAMES.index))
+    assert RULE_NAMES[:21] == (
+        "aws_access_key",
+        "github_token",
+        "gitlab_token",
+        "slack_token",
+        "slack_webhook",
+        "anthropic_key",
+        "openai_key",
+        "google_key",
+        "stripe_key",
+        "telegram_bot",
+        "jwt",
+        "private_key",
+        "huggingface_token",
+        "vault_token",
+        "tailscale_key",
+        "npm_token",
+        "sendgrid_key",
+        "docker_pat",
+        "azure_storage_key",
+        "grafana_token",
+        "yandex_token",
+    )  # SPEC-phase1a.md §3.1's provider list, left to right; matches the brief's table too.
     assert frozenset(RULE_NAMES[:21]) == PROVIDER_RULE_NAMES
     assert RULE_NAMES[21:25] == ("assignment", "bearer", "url_userinfo", "entropy")
     assert RULE_NAMES[25:] == ("inn", "snils", "ogrn", "bank_card", "passport_rf", "phone_rf")
@@ -85,7 +109,8 @@ def test_the_effects_by_class():
 # Every expected check digit below is computed here, by small helpers that write out the
 # published weights themselves. None of them calls the rule module's own checksum functions, so
 # a test failure here cannot be masked by a bug shared between the check and its test. Every base
-# is synthetic (sequential digits); no real-format identifier literal appears in this file.
+# below, and every base the rule module's own fixtures use, is synthetic: none reproduces a real
+# entity's number.
 
 
 def _inn10_control_digit(nine: str) -> int:
@@ -233,13 +258,24 @@ def test_a_card_is_redacted_by_keyword_or_by_bin_but_not_as_a_timestamp():
     assert _value(RULES["bank_card"], f"card {spaced}") == spaced
     assert bin_matches(card, LIMITS.card_bins)
     assert not bin_matches("3700000000000002", LIMITS.card_bins)
-    # A Luhn-valid, BIN-2200 number that is also epoch milliseconds (~2039) stays a number: the
-    # JSON-number shape excludes it, not its checksum.
+    # A Luhn-valid, BIN-2200 number that is also epoch milliseconds (~2039) stays a number,
+    # whether it is written bare (the epoch branch) or as a JSON value (the JSON-number branch).
+    # Narrowing the epoch window to 2000-2001 turns the epoch branch off without touching the
+    # JSON one, which isolates which branch excludes which text.
     epoch_ms = "220000000000" + str(_luhn_control_digit("220000000000"))
     assert luhn_ok(epoch_ms)
     assert is_epoch_like(epoch_ms, LIMITS)
     assert bin_matches(epoch_ms, LIMITS.card_bins)
     assert _value(RULES["bank_card"], f'{{"ts": {epoch_ms}}}') is None
+    assert _value(RULES["bank_card"], f"logged at {epoch_ms}") is None
+
+    narrow = dataclasses.replace(LIMITS, epoch_years=(2000, 2001))
+    narrow_card = {rule.name: rule for rule in rules(narrow)}["bank_card"]
+    assert not is_epoch_like(epoch_ms, narrow)
+    # Epoch branch off: the bare value is no longer excluded, so it is now redacted.
+    assert matches(narrow_card, f"logged at {epoch_ms}", narrow)
+    # The JSON branch alone still excludes it, unaffected by the epoch window.
+    assert not matches(narrow_card, f'{{"ts": {epoch_ms}}}', narrow)
 
 
 def test_passport_and_phone_need_their_keyword_and_only_flag():
@@ -277,13 +313,16 @@ def test_a_random_base64_token_is_an_entropy_hit():
 
 # --- the anchored assignment rule (D27, N15, S3) -----------------------------------------------
 
+#: A synthetic value, assembled from parts: not AWS's documented example key.
+_AWS_EXAMPLE_VALUE = "fake" + "Synthetic" + "Secret99"
+
 SECRET_FORMS = [
     ("DB_PASSWORD=s3cr3tValue9", "s3cr3tValue9"),
     ("export OPENAI_API_KEY=abcdefghijklmnop", "abcdefghijklmnop"),
     ('"password": "hunter2hunter2"', "hunter2hunter2"),
     ("api_key: q1w2e3r4t5y6", "q1w2e3r4t5y6"),
     ("ACCESS_TOKEN2=abcdefgh12345", "abcdefgh12345"),
-    ("aws_secret_access_key = wJalrXUtnFEMI", "wJalrXUtnFEMI"),
+    (f"aws_secret_access_key = {_AWS_EXAMPLE_VALUE}", _AWS_EXAMPLE_VALUE),
 ]
 
 NON_SECRET_FORMS = [

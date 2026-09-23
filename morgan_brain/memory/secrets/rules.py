@@ -459,10 +459,9 @@ def rules(limits: GateLimits) -> tuple[Rule, ...]:
             pattern=ASSIGNMENT_RE,
             effect="redact",
             value_span=_assignment_span,
-            # A colon separator, not "=": with "=" the whole "DB_PASSWORD=...value" run sits in
-            # the entropy character class (which includes "="), so the fixture would also catch
-            # the entropy rule's eye at 24 characters above its threshold. ":" is not in that
-            # class, so it splits the run the same way an assignment's key and value are read.
+            # "=" sits in the entropy token class, so a "KEY=value" fixture is one 24-char
+            # token at ~4.33 bits/char -- above the 4.2 threshold; ":" does not. The "=" form
+            # stays covered by SECRET_FORMS' DB_PASSWORD= entry in the test.
             fixture=lambda: "DB_PASSWORD: " + "s3cr" + "3tValue9",
         ),
         Rule(
@@ -503,7 +502,7 @@ def rules(limits: GateLimits) -> tuple[Rule, ...]:
             r"(?<!\d)(?:\d{12}|\d{10})(?!\d)",
             check=inn_ok,
             effect="redact",
-            fixture=lambda: f"{inn_keyword} " + _with_inn_control("770" + "123456"),
+            fixture=lambda: f"{inn_keyword} " + _with_inn_control("00" + "00" + "12345"),
             limits=limits,
         ),
         _identifier(
@@ -519,7 +518,9 @@ def rules(limits: GateLimits) -> tuple[Rule, ...]:
             r"(?<!\d)(?:\d{15}|\d{13})(?!\d)",
             check=ogrn_ok,
             effect="redact",
-            fixture=lambda: f"{ogrn_keyword} " + _with_ogrn_control("1027" + "70013219"),
+            fixture=lambda: (
+                f"{ogrn_keyword} " + _with_ogrn_control("1" + "15" + "00" + "00" + "00001")
+            ),
             limits=limits,
         ),
         _identifier(
@@ -527,7 +528,7 @@ def rules(limits: GateLimits) -> tuple[Rule, ...]:
             r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)",
             check=luhn_ok,
             effect="redact",
-            fixture=lambda: "card " + _with_luhn_control("4111" + "11111111111"),
+            fixture=lambda: "card " + _with_luhn_control("4123" + "45678901234"),
             limits=limits,
             bin_gate=True,
         ),
