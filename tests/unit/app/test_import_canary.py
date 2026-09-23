@@ -185,7 +185,7 @@ async def test_a_rerun_after_the_model_is_fixed_stores_the_rest_and_rewrites_not
 
 
 async def test_a_resumed_run_that_itself_stops_names_only_its_own_suspects(tmp_path):
-    """Ruling 4: a piece skipped because it is already stored costs no embedding and must not
+    """A piece skipped because it is already stored costs no embedding and must not
     count toward the interval. Prime 60 memories with a model that never drifts, then resume
     over the full 200-memory export with a model that starts drifting globally after memory
     110 -- the first 60 are skipped (not embedded), so this run's own canary at its 50th store

@@ -293,8 +293,9 @@ steps. `morgan migrate` takes a `migrate` snapshot, runs every pending step in o
 transaction, checks the result, prints the row counts before and after, and then checks the
 embedding space against the embedding server. A step that fails rolls the whole run back, and
 the error names the snapshot. Close every running `morgan-mcp` before you migrate: a tool call
-made while the run holds the lock waits up to `MORGAN_DB_BUSY_TIMEOUT_MS` for it and then
-fails with "database is locked", and an older `morgan-mcp` writing afterwards is what
+made while the run holds the lock waits up to `MORGAN_DB_BUSY_TIMEOUT_MS` for it (an older
+`morgan-mcp`, which does not read that setting, waits 5 seconds) and then fails with
+"database is locked", and an older `morgan-mcp` writing afterwards is what
 `rows_missing_provenance` counts.
 
 `import` seeds memory from a ChatGPT export so a fresh brain is not an empty box. It writes

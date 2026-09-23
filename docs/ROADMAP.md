@@ -4,7 +4,7 @@
 
 Morgan is a project-scoped memory for the owner's AI tools: one SQLite database, a CLI and an
 MCP server over one gate, recall that fuses vector and keyword search, and on-demand
-consolidation of memories into valid-time facts by a local model. About 10,300 lines, one
+consolidation of memories into valid-time facts by a local model. About 11,200 lines, one
 process, no services beyond a model server.
 
 Its core:

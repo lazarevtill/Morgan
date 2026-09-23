@@ -18,10 +18,10 @@ import sqlite_vec  # type: ignore[import-untyped]
 def open_db(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connection:
     """Open (or create) the Morgan database with WAL, a busy timeout, and sqlite-vec loaded.
 
-    *busy_timeout_ms* defaults to today's hardcoded value so every existing caller keeps
-    working untouched; a caller that wants it configurable threads through
-    ``Settings.db_busy_timeout_ms`` instead (``morgan snapshot``'s VACUUM INTO against the
-    live database is the first one that does).
+    *busy_timeout_ms* is how long a statement waits on another process's lock before it fails
+    with "database is locked". Every caller in Morgan that opens the database file passes
+    ``Settings.db_busy_timeout_ms``; the default, that setting's own, serves an in-memory
+    database and the tests.
     """
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
