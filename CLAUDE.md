@@ -48,7 +48,10 @@ come in" are answered by the directory names.
   older version, its light steps when it is opened and its heavy ones under `morgan migrate`;
   `snapshot.py` writes and lists verified `VACUUM INTO` copies of the whole database, and
   restores one behind a safety
-  snapshot of its own. Below them:
+  snapshot of its own.
+  `secrets/` is the secret gate: `rules.py`, the 31 rules (21 provider, 4 generic, 6 Russian
+  identifiers) with their checksums, keyword gates and runtime-assembled fixtures, every
+  threshold a setting; CPU only, no model, no network. Below them:
   - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
     `history`, `spaces` (the `embedding_spaces` table and its one-active partial index),
     `projects` (the `projects` table, keyed by name: classification, remote, root and the

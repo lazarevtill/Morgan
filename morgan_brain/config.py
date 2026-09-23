@@ -223,6 +223,56 @@ class Settings(BaseSettings):
     #: ``classify`` to call the project ``work`` rather than ``personal``.
     work_remote_globs: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
+    # --- The secret gate (memory/secrets). Every threshold, keyword list, BIN range, epoch window
+    # and placeholder the rules use is here; nothing is fixed in code. The Cyrillic keywords are
+    # the words a Russian identifier is written beside. ---
+    #: A token this long or longer is measured for entropy.
+    gate_entropy_min_length: int = Field(default=20, ge=1)
+    #: Shannon bits per character at or above which such a token is redacted. Uniform hex tops
+    #: out at 4.0, so a hex secret is caught only through an assignment's context.
+    gate_entropy_threshold: float = Field(default=4.2, gt=0.0)
+    #: How far (characters, on the same line) a Russian identifier's keyword may sit from it.
+    gate_context_chars: int = Field(default=40, ge=0)
+    #: Card BIN prefixes and prefix ranges (``4``, ``51-55``): a Luhn-valid number under one is
+    #: redacted without a keyword.
+    gate_card_bins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["4", "51-55", "2200-2204", "2221-2720"]
+    )
+    #: ``start-end``: a number with no keyword near it that parses as epoch seconds or
+    #: milliseconds inside these years is a timestamp, not an identifier.
+    gate_epoch_years: str = "2000-2100"
+    gate_keywords_inn: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["ИНН", "INN"]
+    )
+    gate_keywords_snils: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["СНИЛС", "SNILS"]
+    )
+    gate_keywords_ogrn: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["ОГРН", "OGRN"]
+    )
+    gate_keywords_card: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["карт", "card", "PAN", "Mir", "Visa", "Master"]
+    )
+    gate_keywords_passport: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["паспорт", "passport"]
+    )
+    gate_keywords_phone: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["тел", "phone", "телефон", "моб"]
+    )
+    #: Assignment values that are placeholders, matched whole without regard to case.
+    gate_placeholder_values: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["change-me", "changeme", "xxx"]
+    )
+    #: Placeholder shapes, as ``fnmatch`` patterns matched without regard to case:
+    #: ``your-*-here`` is ``your-token-here`` and its kin.
+    gate_placeholder_shapes: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["your-*-here"]
+    )
+    #: An assignment whose value starts with one of these is a template, not a secret.
+    gate_placeholder_prefixes: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["${", "<", "$(", "%(", "{{"]
+    )
+
     #: Filled by settings_for(); private, so no MORGAN_ variable can set what doctor reports.
     _env_files_read: list[EnvFileRead] = PrivateAttr(default_factory=list)
 
@@ -243,7 +293,21 @@ class Settings(BaseSettings):
         """
         return None if isinstance(value, str) and not value.strip() else value
 
-    @field_validator("code_roots", "work_remote_globs", mode="before")
+    @field_validator(
+        "code_roots",
+        "work_remote_globs",
+        "gate_card_bins",
+        "gate_keywords_inn",
+        "gate_keywords_snils",
+        "gate_keywords_ogrn",
+        "gate_keywords_card",
+        "gate_keywords_passport",
+        "gate_keywords_phone",
+        "gate_placeholder_values",
+        "gate_placeholder_shapes",
+        "gate_placeholder_prefixes",
+        mode="before",
+    )
     @classmethod
     def _split_comma_separated(cls, value: object) -> object:
         """``MORGAN_CODE_ROOTS=~/code,~/work`` -> ``["~/code", "~/work"]``.
