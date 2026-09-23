@@ -204,8 +204,8 @@ def test_a_match_longer_than_the_overlap_straddling_a_boundary_is_seen_whole():
 
 
 def test_a_token_at_the_truncation_boundary_is_whole_because_the_scan_precedes_the_cap():
-    """The write path caps a turn at 6,000 + 2,000 characters after the scan (Task 18); the
-    scanner sees the whole text, so a token at the boundary is found."""
+    """The write path caps a turn at 6,000 + 2,000 characters after it is scanned; the scanner
+    itself sees the whole text, so a token at the boundary is found before any truncation."""
     scanner = _scanner()
     token = _github_token()
     text = "t" * 5_990 + " " + token + " " + "u" * 3_000
@@ -217,9 +217,11 @@ def test_a_token_at_the_truncation_boundary_is_whole_because_the_scan_precedes_t
 
 
 def test_scanning_a_redacted_text_again_leaves_it_unchanged_and_finds_nothing():
+    """The redacted text is ``DB_PASSWORD=[redacted:assignment]``: without the guard, the
+    ``assignment`` rule reads ``[redacted:assignment`` (no closing bracket) as a new value on a
+    second pass, corrupting the text and losing the record of the first redaction."""
     scanner = _scanner()
-    token = _github_token()
-    first = scanner.scan(f"key {token} end", verdict="redact")
+    first = scanner.scan(f"DB_PASSWORD={MARKER}99", verdict="redact")
     second = scanner.scan(first.text, verdict="redact")
     assert second.text == first.text
     assert second.redactions == () and second.flags == ()
@@ -228,18 +230,23 @@ def test_scanning_a_redacted_text_again_leaves_it_unchanged_and_finds_nothing():
 
 def test_a_bracketed_span_that_is_not_a_real_rule_name_is_not_a_guard_and_is_still_redacted():
     """The guard is the exact alternation of the gate's own rule names, not any ``[a-z_]+``
-    span: a provider token happening to sit inside brackets that are not one of its own
-    placeholders is still found."""
+    span: an all-lowercase token wrapped in brackets would fully match a loose ``[a-z_]+``
+    guard and be skipped by mistake; the exact-name guard does not mistake it for one of its
+    own placeholders, and the provider token inside is still found."""
     scanner = _scanner()
-    token = _github_token()
+    token = "gh" + "p_" + MARKER + "a" * (36 - len(MARKER))
     result = scanner.scan(f"[redacted:{token}]", verdict="redact")
     assert result.redacted_rules() == ["github_token"]
     assert result.text == "[redacted:[redacted:github_token]]"
 
 
 def test_a_tool_calls_provider_token_beside_a_key_that_also_reads_as_an_assignment():
-    """``GITLAB_TOKEN=<token>`` also matches the ``assignment`` rule; the provider rule, run
-    first, wins the overlap, so the redaction names only the provider."""
+    """After the decoded pass redacts the token, the stored text reads
+    ``GITLAB_TOKEN=[redacted:gitlab_token]``, which itself looks like ``KEY=value`` to the
+    ``assignment`` rule. Without the placeholder guard, the whole-text pass reads
+    ``[redacted:gitlab_token`` (no closing bracket) as a new assignment value and renames the
+    hit, corrupting the text with a stray ``]``; guarded, the placeholder is left alone and the
+    redaction still names only the provider rule that made it."""
     scanner = _scanner()
     token = RULES["gitlab_token"].fixture()
     text = tool_call_text("Bash", {"command": f"export GITLAB_TOKEN={token} && make"})
@@ -265,19 +272,36 @@ def test_a_placeholder_already_in_a_tool_calls_argument_is_neither_rescanned_nor
 
 
 def test_a_tool_calls_argument_already_holding_a_redaction_sentinel_is_scanned_as_plain_text():
-    """A decoded value holding what looks like the scanner's own redaction marker (never
-    written by anything but this pass) falls back to a plain-text scan, so a marker found in
-    the stored text is always one the decoded pass wrote."""
+    """A decoded value already holding what looks like the scanner's own redaction marker
+    falls back to a plain-text scan of the whole turn: without the fallback, the pre-existing
+    marker is itself read back as a second, spurious hit at the reconciliation step (its index
+    coincides with the real hit's), doubling the redaction count and consuming the raw marker
+    text; with it, the raw marker characters are untouched, ordinary text and only the token
+    is redacted."""
     scanner = _scanner()
     token = _github_token()
     text = tool_call_text("Bash", {"command": "0 " + token})
     result = scanner.scan_turn(text, role="tool_call", verdict="redact")
     assert result.redacted_rules() == ["github_token"]
+    assert len(result.redactions) == 1
+    assert result.provider_hits == 1
     assert MARKER not in result.text
+    assert "" in result.text  # the pre-existing marker survives, untouched, as plain text
 
 
-@pytest.mark.parametrize("marker", ["", "", ""])
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "7",  # a complete fake flag-open/close pair, index unrelated to any hit
+        "",  # a bare flag-close marker with nothing open
+    ],
+    ids=["fake-open-close-pair", "bare-close-marker"],
+)
 def test_a_tool_calls_argument_already_holding_a_flag_marker_is_scanned_as_plain_text(marker):
+    """Without the fallback, the outer parser reads the pre-existing marker as if the decoded
+    pass had written it: a fake open/close pair looks up an out-of-range index in ``written``,
+    and a bare close marker pops from an empty ``opened`` list -- both raise. The fallback
+    avoids both by never running the marker-writing pass at all."""
     scanner = _scanner()
     token = _github_token()
     text = tool_call_text("Bash", {"command": f"weird{marker}data {token}"})
@@ -321,9 +345,12 @@ def test_the_same_for_a_phone_number_after_an_escaped_newline():
 
 
 def test_the_fixture_appearing_twice_in_one_decoded_value_gives_two_flags():
+    """Each occurrence sits right after its own escaped newline, so the whole-text pass finds
+    neither on its own (the keyword follows the ``n`` of ``\\n``); only the decoded pass, and
+    only with both hits carried, finds both."""
     scanner = _scanner()
     passport = RULES["passport_rf"].fixture()
-    text = tool_call_text("Bash", {"command": f"{passport}\n{passport}"})
+    text = tool_call_text("Bash", {"command": f"echo a\n{passport}\n" + "x" * 50 + f"\n{passport}"})
     result = scanner.scan_turn(text, role="tool_call", verdict="redact")
     assert len(result.flags) == 2
     assert result.flagged_rules() == ["passport_rf"]
@@ -341,11 +368,13 @@ def test_the_fixture_after_a_space_gives_exactly_one_flag_not_two():
 
 
 def test_a_decoded_value_with_both_a_flag_and_a_redaction_records_both_correctly():
+    """The passport sits right after an escaped newline, so only the decoded pass finds it; the
+    token follows on the same line, in reach of the whole-text pass either way."""
     scanner = _scanner()
     passport = RULES["passport_rf"].fixture()
     digits = passport.split(" ", 1)[1]
     token = _github_token()
-    text = tool_call_text("Bash", {"command": f"{passport} and {token}"})
+    text = tool_call_text("Bash", {"command": f"{token}\n{passport}"})
     result = scanner.scan_turn(text, role="tool_call", verdict="redact")
     assert result.flagged_rules() == ["passport_rf"]
     assert result.redacted_rules() == ["github_token"]

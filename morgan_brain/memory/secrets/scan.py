@@ -24,7 +24,9 @@ position on the stored text, and the whole text scanned once more with every pla
 and every placed span excluded so nothing counts twice. A decoded value that already holds one of
 the scanner's own marker characters is scanned as plain text instead, the same fallback a
 document that does not decode gets, so a marker found in the stored text is always one this pass
-wrote. Every recorded position is on the stored text. Nothing here carries a value out: not the
+wrote. Capture scans turns under ``redact``, where every recorded position is on the stored text;
+under ``refuse`` a hit inside a decoded value is reported at its offset within that value, since
+the caller rephrases before anything is stored. Nothing here carries a value out: not the
 exception, not a log line, not a result.
 """
 
@@ -76,16 +78,16 @@ def _guards(text: str) -> list[tuple[int, int]]:
     return [(m.start(), m.end()) for m in _PLACEHOLDER_RE.finditer(text)]
 
 
-def _holds_marker_chars(value: object) -> bool:
+def _holds_sentinel_chars(value: object) -> bool:
     """Whether any string in the decoded document already holds one of the scanner's own marker
     characters, key or value: if so, the document is scanned as plain text instead, so that
     nothing but this pass ever writes one."""
     if isinstance(value, str):
         return any(char in value for char in _MARK_CHARS)
     if isinstance(value, dict):
-        return any(_holds_marker_chars(k) or _holds_marker_chars(v) for k, v in value.items())
+        return any(_holds_sentinel_chars(k) or _holds_sentinel_chars(v) for k, v in value.items())
     if isinstance(value, list):
-        return any(_holds_marker_chars(item) for item in value)
+        return any(_holds_sentinel_chars(item) for item in value)
     return False
 
 
@@ -180,7 +182,9 @@ class Scanner:
         its position on the stored text, and the whole scanned once more with every placeholder
         guarded and every placed span excluded so nothing is counted twice. A decoded value that
         already holds one of the scanner's own marker characters is scanned as plain text, and so
-        is a text that does not decode to a tool-call document."""
+        is a text that does not decode to a tool-call document. Capture scans turns under
+        ``redact``; under ``refuse`` a hit inside a decoded value is reported at its offset
+        within that value."""
         if role != "tool_call":
             return self.scan(text, verdict=verdict)
         try:
@@ -189,7 +193,7 @@ class Scanner:
             return self.scan(text, verdict=verdict)
         if not isinstance(document, dict) or "tool" not in document or "input" not in document:
             return self.scan(text, verdict=verdict)
-        if _holds_marker_chars(document):
+        if _holds_sentinel_chars(document):
             return self.scan(text, verdict=verdict)
         written: list[str] = []
         marked = tool_call_text(
