@@ -531,8 +531,11 @@ def test_a_card_beside_its_keyword_is_never_left_partly_in_clear_before_a_follow
 
 
 def test_two_cards_in_one_gated_run_are_both_fully_covered():
-    """Two distinct cards, each in 4-digit groups, in the same digit run are each found, whole
-    -- the union-of-candidates fix does not fuse unrelated cards together or drop either one."""
+    """Two distinct cards, each in 4-digit groups, in the same digit run: every digit of both
+    is covered by some returned span. A sub-span straddling the two can itself pass Luhn and
+    the gate, in which case it merges with each card's own span into one larger span covering
+    both cards -- by design, since a merged span still counts as full coverage of every digit
+    inside it."""
     spaced1 = _spaced(_generated_card(2000))
     spaced2 = _spaced(_generated_card(2001))
     text = f"card {spaced1} {spaced2}"
