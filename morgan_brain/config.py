@@ -163,13 +163,16 @@ class Settings(BaseSettings):
     #: so does ``doctor``'s read-only one.
     db_busy_timeout_ms: int = Field(default=5000, gt=0)
     #: Must match the embedding model's output dimension (mxbai-embed-large → 1024,
-    #: nomic-embed-text → 768). Probed against a live embed() call at startup.
+    #: nomic-embed-text → 768). Checked against the active embedding space's width, from the
+    #: database alone, when it is opened; nothing is embedded to check it.
     embedding_dim: int = 1024
     #: The lowest cosine a fresh embedding may have against the active space's fingerprint,
     #: string by string, or against a stored row's vector, before the model answering is
-    #: called a different one. Measured, not chosen: re-embedding 500 stored rows under seven
+    #: called a different one. The value belongs to the embedding model, like the relevance
+    #: floor's: for qwen3-embedding:8b (4,096 wide), re-embedding 500 stored rows under seven
     #: batch, concurrency and cold-start conditions never went below 0.99820, and the worst
-    #: first percentile was 0.99860 (docs/measurements/2026-09-phase0-baseline.md).
+    #: first percentile was 0.99860 (docs/measurements/2026-09-phase0-baseline.md). Other
+    #: models are unmeasured.
     embedding_fingerprint_tolerance: float = Field(default=0.995, gt=0.0, le=1.0)
     #: How many stored memories ride along on the first embedding request when the active space
     #: has no fingerprint yet: it is recorded only if their fresh vectors match the stored ones.

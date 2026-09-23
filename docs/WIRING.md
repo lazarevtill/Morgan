@@ -151,6 +151,14 @@ would run, heavy or light; `doctor` runs none. `snapshots` counts the files in
 `MORGAN_SNAPSHOT_DIR` that `snapshot`, `migrate`, `forget` and `restore` left there, which
 Morgan never deletes.
 
+A database keeps the embedding model its vectors were written with. Once its space is
+fingerprinted -- a process's first embedding call records it -- a different model, of the same
+width or not, is refused on every path that stores or searches, and nothing retires a space or
+re-embeds what it holds. To change the model on purpose, point `MORGAN_DATA_DIR` at a new
+database, with `MORGAN_EMBEDDING_DIM` set to the new model's width; the old database keeps
+working with its own model. Restoring a snapshot does not change this: a snapshot holds the
+same model's vectors as the database it was taken from.
+
 The `memories`/`fts`/`vectors` lines are scoped to `project`, with the total across every
 project beside them, so a zero from the wrong directory does not read as an empty database.
 `rows_by_project` gives every project's own count, and `rows_missing_provenance` counts rows
@@ -284,8 +292,10 @@ pending steps; `recall` and `facts` still answer. `morgan migrate --dry-run` lis
 steps. `morgan migrate` takes a `migrate` snapshot, runs every pending step in one
 transaction, checks the result, prints the row counts before and after, and then checks the
 embedding space against the embedding server. A step that fails rolls the whole run back, and
-the error names the snapshot. Close sessions still running an older `morgan-mcp` before you
-migrate: an older process writing afterwards is what `rows_missing_provenance` counts.
+the error names the snapshot. Close every running `morgan-mcp` before you migrate: a tool call
+made while the run holds the lock waits up to `MORGAN_DB_BUSY_TIMEOUT_MS` for it and then
+fails with "database is locked", and an older `morgan-mcp` writing afterwards is what
+`rows_missing_provenance` counts.
 
 `import` seeds memory from a ChatGPT export so a fresh brain is not an empty box. It writes
 to `archive/chatgpt`, not to your working project, and takes no `--project`: a fifth of the

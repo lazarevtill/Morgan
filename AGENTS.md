@@ -15,7 +15,7 @@ Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
 `docs/decisions/` (decisions, and what the code does about each). The archived agent kernel is
 at the tag `legacy-v0.1.0-kernel`, its designs under `docs/archive/`.
 
-## Package map (`morgan_brain/`, ~10,300 lines)
+## Package map (`morgan_brain/`, ~11,200 lines)
 
 The tree is grouped by what a file does, so "where does a write go" and "where does a request
 come in" are answered by the directory names.
@@ -203,6 +203,11 @@ come in" are answered by the directory names.
   transient wrong vector between two checks passes it. Suspect memories stay stored, a re-run
   of the import skips them, and `doctor --vectors` samples rather than checks every row.
   Nothing re-embeds named memory ids.
+- A database keeps the embedding model its vectors were written with. Once its space is
+  fingerprinted, a different model -- same width or not -- is refused on every path that
+  stores or searches; nothing retires a space or re-embeds, and a snapshot holds the same
+  model's vectors. To change the model on purpose, point `MORGAN_DATA_DIR` at a new database, with
+  `MORGAN_EMBEDDING_DIM` at the new model's width; the old one keeps working with its own.
 - The remote is read from the repository's own config file: `url.<base>.insteadOf` rewriting
   is not applied, and `include`/`includeIf` files are not followed. A work host reached only
   through a rewrite is classified by the URL as written, and a remote declared in an included
@@ -240,7 +245,7 @@ come in" are answered by the directory names.
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 675 passed, 4 skipped (the live ones)
+pytest -q                     # 690 passed, 4 skipped (the live ones)
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 
