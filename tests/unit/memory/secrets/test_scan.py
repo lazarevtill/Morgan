@@ -1,21 +1,30 @@
 """The scanner applies the rules under a verdict. Decoded JSON values are scanned so a token after
-a newline is found; every position lands on the stored text; a long text is scanned in overlapping
-windows, a match longer than the overlap still whole; a token at the write path's truncation
-boundary is whole because the scan runs on the whole text; a placeholder already in a text --
-including the scanner's own, from a tool call's decoded pass -- is guarded rather than re-scanned;
-a flag-only hit found in a tool call's decoded pass is still carried to the stored text; nothing
-the scanner produces -- an exception, a result, a log line -- carries a value.
+a newline is found, for a document that is exactly a tool call's canonical text, through marker
+characters that document does not already hold; every position lands on the stored text; a long
+text is scanned in overlapping windows, a match longer than the overlap still whole and one longer
+than a window continued into one span; a token at the write path's truncation boundary is whole
+because the scan runs on the whole text; a placeholder already in a text -- including the
+scanner's own, from a tool call's decoded pass -- is guarded rather than re-scanned; a flag-only
+hit found in a tool call's decoded pass is still carried to the stored text; nothing the scanner
+produces -- an exception, a result, a log line -- carries a value; neither the scanner nor these
+tests hold a raw private-use character.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
+import string
+import time
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 from structlog.testing import capture_logs
 
+import morgan_brain.memory.secrets.scan as scan_module
 from morgan_brain.config import Settings
 from morgan_brain.memory.secrets import (
     Scanner,
@@ -31,6 +40,9 @@ LIMITS = GateLimits.defaults()
 RULES = {rule.name: rule for rule in rules(LIMITS)}
 #: A token in no fixture and no dictionary: the value that must appear nowhere.
 MARKER = "zq" + "xj" + "vgatemarker"
+#: The first five private-use code points, U+E000 to U+E004: the marker characters the decoded
+#: pass takes from a document that holds none of them.
+FIRST_FIVE = "\ue000\ue001\ue002\ue003\ue004"
 
 
 def _scanner(**overrides: int) -> Scanner:
@@ -43,6 +55,27 @@ def _github_token() -> str:
 
 def _placeholders(result: ScanResult) -> list[str]:
     return [result.text[h.start : h.start + h.length] for h in result.redactions]
+
+
+def _seeded_run(length: int, seed: str) -> str:
+    """A reproducible run of letters and digits, high in entropy: SHA-256 over the seed and a
+    counter, each byte taken onto the 62 characters."""
+    alphabet = string.ascii_letters + string.digits
+    chars: list[str] = []
+    counter = 0
+    while len(chars) < length:
+        digest = hashlib.sha256(f"{seed}-{counter}".encode()).digest()
+        chars.extend(alphabet[byte % len(alphabet)] for byte in digest)
+        counter += 1
+    return "".join(chars[:length])
+
+
+def _long_private_key(body_chars: int) -> str:
+    """The private-key rule's own fixture with its body line repeated until the body holds at
+    least *body_chars* characters."""
+    head, body, foot = RULES["private_key"].fixture().split("\n")
+    lines = -(-body_chars // (len(body) + 1))
+    return "\n".join([head, *[body] * lines, foot])
 
 
 # --- the two verdicts --------------------------------------------------------------------------
@@ -203,6 +236,78 @@ def test_a_match_longer_than_the_overlap_straddling_a_boundary_is_seen_whole():
     assert result.provider_hits == 1
 
 
+def test_an_entropy_run_longer_than_a_window_is_redacted_whole_as_one_span():
+    """A match that fills its window while the text goes on is continued: its rule is matched
+    again from the span's start over the text that follows until the match ends, and the whole
+    run is one redaction, with no character of it left in the stored text -- the result an
+    unwindowed scan gives."""
+    scanner = _scanner()
+    size = LIMITS.window_chars
+    run = _seeded_run(size + size // 10, "entropy")
+    text = "before " + run + " after"
+    result = scanner.scan(text, verdict="redact")
+    assert result.text == "before [redacted:entropy] after"
+    assert [(h.rule, h.start) for h in result.redactions] == [("entropy", len("before "))]
+    assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
+
+
+def test_a_private_key_block_longer_than_a_window_is_redacted_whole():
+    """The block's pattern ends at its END line, or at the end of the text it is given: cut at a
+    window's end, it would match up to that edge and leave the rest of the body and the END line
+    in clear. Continued, the whole block is one redaction."""
+    scanner = _scanner(window_chars=1024, window_overlap_chars=64)
+    key = _long_private_key(1_500)
+    assert len(key) > 1024
+    text = "key file:\n" + key + "\nend of file " + "z " * 400
+    result = scanner.scan(text, verdict="redact")
+    assert result.text == text.replace(key, "[redacted:private_key]")
+    assert [(h.rule, h.start) for h in result.redactions] == [("private_key", text.index(key))]
+    assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
+
+
+def test_a_long_match_its_rule_rejects_when_seen_whole_gives_way_to_the_span_it_displaced():
+    """Cut at a window's edge, the provider-prefixed run below ends on a word boundary and the
+    provider rule takes the whole window, displacing the entropy span over the same run. Seen
+    whole, the run ends in ``_x`` and has no word boundary to end on, so the provider rule makes
+    no match there: the window is resolved again without it, the entropy span it displaced comes
+    back and is continued, and the run is redacted whole -- the result an unwindowed scan
+    gives."""
+    scanner = _scanner()
+    size = LIMITS.window_chars
+    run = "gh" + "p_" + _seeded_run(size + size // 10, "rejected") + "_x"
+    text = "before " + run + " after"
+    result = scanner.scan(text, verdict="redact")
+    assert result.text == "before [redacted:entropy] after"
+    assert result.provider_hits == 0
+    assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
+
+
+def test_the_refusal_of_a_private_key_longer_than_a_window_names_its_start_and_whole_length():
+    scanner = _scanner(window_chars=1024, window_overlap_chars=64)
+    key = _long_private_key(1_500)
+    text = "key file:\n" + key + "\nend of file " + "z " * 400
+    with pytest.raises(SecretRefused) as raised:
+        scanner.scan(text, verdict="refuse")
+    exc = raised.value
+    assert (exc.rule, exc.start, exc.length) == ("private_key", text.index(key), len(key))
+
+
+def test_ten_windows_of_runs_each_longer_than_a_window_are_all_redacted_in_bounded_time():
+    """A generous bound, not a benchmark: a continuation re-matches only the rule that reached
+    the window's edge, over a reach that doubles, so the work stays linear in the text."""
+    scanner = _scanner()
+    size = LIMITS.window_chars
+    runs: list[str] = []
+    while sum(len(run) + 1 for run in runs) < 10 * size:
+        runs.append(_seeded_run(size + size // 10, f"run-{len(runs)}"))
+    text = " ".join(runs)
+    started = time.perf_counter()
+    result = scanner.scan(text, verdict="redact")
+    elapsed = time.perf_counter() - started
+    assert result.text == " ".join(["[redacted:entropy]"] * len(runs))
+    assert elapsed < 10
+
+
 def test_a_token_at_the_truncation_boundary_is_whole_because_the_scan_precedes_the_cap():
     """The write path caps a turn at 6,000 + 2,000 characters after it is scanned; the scanner
     itself sees the whole text, so a token at the boundary is found before any truncation."""
@@ -271,43 +376,134 @@ def test_a_placeholder_already_in_a_tool_calls_argument_is_neither_rescanned_nor
     }
 
 
-def test_a_tool_calls_argument_already_holding_a_redaction_sentinel_is_scanned_as_plain_text():
-    """A decoded value already holding what looks like the scanner's own redaction marker
-    falls back to a plain-text scan of the whole turn: without the fallback, the pre-existing
-    marker is itself read back as a second, spurious hit at the reconciliation step (its index
-    coincides with the real hit's), doubling the redaction count and consuming the raw marker
-    text; with it, the raw marker characters are untouched, ordinary text and only the token
-    is redacted."""
+def test_a_tool_calls_argument_holding_a_redaction_shaped_marker_is_kept_and_never_read_as_one():
+    """A value holding U+E000, a digit and U+E001 -- the shape of a redaction marker whose index
+    is the real hit's -- is text, not a marker: the decoded pass writes markers the document does
+    not hold, so the value is stored as it was, and the token beside it is redacted once."""
     scanner = _scanner()
     token = _github_token()
-    text = tool_call_text("Bash", {"command": "0 " + token})
+    text = tool_call_text("Bash", {"command": FIRST_FIVE[0] + "0" + FIRST_FIVE[1] + " " + token})
     result = scanner.scan_turn(text, role="tool_call", verdict="redact")
     assert result.redacted_rules() == ["github_token"]
     assert len(result.redactions) == 1
     assert result.provider_hits == 1
     assert MARKER not in result.text
-    assert "" in result.text  # the pre-existing marker survives, untouched, as plain text
+    assert result.text == text.replace(token, "[redacted:github_token]")
 
 
 @pytest.mark.parametrize(
-    "marker",
-    [
-        "7",  # a complete fake flag-open/close pair, index unrelated to any hit
-        "",  # a bare flag-close marker with nothing open
-    ],
-    ids=["fake-open-close-pair", "bare-close-marker"],
+    "shape",
+    [FIRST_FIVE[2] + "7" + FIRST_FIVE[3], FIRST_FIVE[4]],
+    ids=["flag-open-and-close-with-an-unwritten-index", "flag-end-with-nothing-open"],
 )
-def test_a_tool_calls_argument_already_holding_a_flag_marker_is_scanned_as_plain_text(marker):
-    """Without the fallback, the outer parser reads the pre-existing marker as if the decoded
-    pass had written it: a fake open/close pair looks up an out-of-range index in ``written``,
-    and a bare close marker pops from an empty ``opened`` list -- both raise. The fallback
-    avoids both by never running the marker-writing pass at all."""
+def test_a_tool_calls_argument_holding_flag_shaped_markers_is_kept_and_never_read_as_one(shape):
+    """Read as markers, an open/close pair would look up an index the pass never wrote, and a
+    bare flag end would close a flag never opened. The decoded pass writes markers the document
+    does not hold, so neither is read as one: the value is stored as it was and the token beside
+    it is redacted."""
     scanner = _scanner()
     token = _github_token()
-    text = tool_call_text("Bash", {"command": f"weird{marker}data {token}"})
+    text = tool_call_text("Bash", {"command": f"weird{shape}data {token}"})
     result = scanner.scan_turn(text, role="tool_call", verdict="redact")
     assert result.redacted_rules() == ["github_token"]
     assert MARKER not in result.text
+    assert result.text == text.replace(token, "[redacted:github_token]")
+
+
+#: A tool call holding U+E000 to U+E004 in each place a document's text can hold them, with a
+#: token right after an escaped newline in a value.
+_HOLDING_THE_FIRST_FIVE = {
+    "in-a-value": lambda token: tool_call_text("Bash", {"command": FIRST_FIVE + "\n" + token}),
+    "in-a-key": lambda token: tool_call_text(
+        "Bash", {"command": "echo start\n" + token, FIRST_FIVE: "x"}
+    ),
+    "in-the-tool-name": lambda token: tool_call_text(
+        "Bash" + FIRST_FIVE, {"command": "echo start\n" + token}
+    ),
+}
+
+
+@pytest.mark.parametrize("where", list(_HOLDING_THE_FIRST_FIVE), ids=list(_HOLDING_THE_FIRST_FIVE))
+def test_a_tool_call_already_holding_the_first_five_markers_still_takes_the_decoded_pass(where):
+    """The decoded pass's five marker characters are chosen per document: the first five
+    private-use code points it does not hold. A document already holding U+E000 to U+E004 -- in
+    a value, a key or the tool's name -- gets the next five, so a token right after an escaped
+    newline is still found on the decoded value, and the document's own characters are stored
+    as they were."""
+    scanner = _scanner()
+    token = RULES["github_token"].fixture()
+    text = _HOLDING_THE_FIRST_FIVE[where](token)
+    result = scanner.scan_turn(text, role="tool_call", verdict="redact")
+    assert result.text == text.replace(token, "[redacted:github_token]")
+    assert [(h.rule, result.text[h.start : h.start + h.length]) for h in result.redactions] == [
+        ("github_token", "[redacted:github_token]")
+    ]
+    assert result.provider_hits == 1
+
+
+def test_a_flag_only_hit_is_carried_when_the_document_already_holds_the_first_five_markers():
+    scanner = _scanner()
+    passport = RULES["passport_rf"].fixture()
+    digits = passport.split(" ", 1)[1]
+    text = tool_call_text("Bash", {"command": FIRST_FIVE + "\n" + passport})
+    result = scanner.scan_turn(text, role="tool_call", verdict="redact")
+    assert result.text == text
+    assert result.redactions == ()
+    assert [(h.rule, result.text[h.start : h.start + h.length]) for h in result.flags] == [
+        ("passport_rf", digits)
+    ]
+
+
+def test_a_document_leaving_exactly_five_private_use_code_points_free_takes_the_decoded_pass():
+    """U+E000 to U+F8FF holds 6,400 code points: a document holding 6,395 of them leaves five,
+    and the decoded pass writes those."""
+    scanner = _scanner()
+    held = "".join(map(chr, range(0xE000, 0xF8FB)))
+    assert len(held) == 6_395
+    token = RULES["github_token"].fixture()
+    text = tool_call_text("Write", {"content": held + "\n" + token})
+    result = scanner.scan_turn(text, role="tool_call", verdict="redact")
+    assert result.text == text.replace(token, "[redacted:github_token]")
+    assert result.provider_hits == 1
+
+
+def test_a_document_leaving_fewer_than_five_private_use_code_points_free_is_scanned_as_text():
+    """With four code points free there is no set of five markers: the turn is scanned as plain
+    text, without error, and a token after a space is still redacted."""
+    scanner = _scanner()
+    held = "".join(map(chr, range(0xE000, 0xF8FC)))
+    token = RULES["github_token"].fixture()
+    text = tool_call_text("Write", {"content": held + " " + token})
+    result = scanner.scan_turn(text, role="tool_call", verdict="redact")
+    assert result.text == text.replace(token, "[redacted:github_token]")
+    assert result.provider_hits == 1
+
+
+# --- only a canonical tool call takes the decoded path -----------------------------------------
+
+
+def test_a_tool_call_document_with_another_key_is_stored_with_that_key_intact():
+    """Only the exact text ``tool_call_text`` writes takes the decoded path, which re-serialises
+    the document: a document with a key beside ``input`` and ``tool`` is scanned as plain text,
+    so nothing of it is dropped -- and a token in it is still redacted."""
+    scanner = _scanner()
+    token = RULES["github_token"].fixture()
+    text = json.dumps(
+        {"extra": "keep me", "input": {"command": "echo " + token}, "tool": "Bash"},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    result = scanner.scan_turn(text, role="tool_call", verdict="redact")
+    assert result.text == text.replace(token, "[redacted:github_token]")
+    assert json.loads(result.text)["extra"] == "keep me"
+
+
+def test_a_tool_call_document_whose_tool_is_not_a_string_is_stored_as_given():
+    scanner = _scanner()
+    text = json.dumps({"input": {"a": 1}, "tool": 5}, sort_keys=True, separators=(",", ":"))
+    result = scanner.scan_turn(text, role="tool_call", verdict="redact")
+    assert result.text == text
 
 
 # --- a flag-only hit in a tool call's decoded pass is carried to the stored text --------------
@@ -322,13 +518,11 @@ def test_a_flag_only_hit_after_an_escaped_newline_in_a_tool_call_is_carried_to_t
     digits = passport.split(" ", 1)[1]
     text = tool_call_text("Bash", {"command": "echo start\n" + passport})
     result = scanner.scan_turn(text, role="tool_call", verdict="redact")
+    assert result.text == text
     assert result.redactions == ()
-    assert result.flagged_rules() == ["passport_rf"]
-    assert json.loads(result.text) == {
-        "input": {"command": "echo start\n" + passport},
-        "tool": "Bash",
-    }
+    assert len(result.flags) == 1
     flag = result.flags[0]
+    assert flag.rule == "passport_rf"
     assert result.text[flag.start : flag.start + flag.length] == digits
 
 
@@ -338,9 +532,11 @@ def test_the_same_for_a_phone_number_after_an_escaped_newline():
     value = phone.split(". ", 1)[1]
     text = tool_call_text("Bash", {"command": "echo start\n" + phone})
     result = scanner.scan_turn(text, role="tool_call", verdict="redact")
+    assert result.text == text
     assert result.redactions == ()
-    assert result.flagged_rules() == ["phone_rf"]
+    assert len(result.flags) == 1
     flag = result.flags[0]
+    assert flag.rule == "phone_rf"
     assert result.text[flag.start : flag.start + flag.length] == value
 
 
@@ -350,10 +546,16 @@ def test_the_fixture_appearing_twice_in_one_decoded_value_gives_two_flags():
     only with both hits carried, finds both."""
     scanner = _scanner()
     passport = RULES["passport_rf"].fixture()
+    digits = passport.split(" ", 1)[1]
     text = tool_call_text("Bash", {"command": f"echo a\n{passport}\n" + "x" * 50 + f"\n{passport}"})
     result = scanner.scan_turn(text, role="tool_call", verdict="redact")
-    assert len(result.flags) == 2
-    assert result.flagged_rules() == ["passport_rf"]
+    assert result.text == text
+    assert [(h.rule, result.text[h.start : h.start + h.length]) for h in result.flags] == [
+        ("passport_rf", digits),
+        ("passport_rf", digits),
+    ]
+    first = text.index(digits)
+    assert [h.start for h in result.flags] == [first, text.index(digits, first + 1)]
 
 
 def test_the_fixture_after_a_space_gives_exactly_one_flag_not_two():
@@ -361,10 +563,13 @@ def test_the_fixture_after_a_space_gives_exactly_one_flag_not_two():
     flag and the whole-text pass's must not both be counted."""
     scanner = _scanner()
     passport = RULES["passport_rf"].fixture()
+    digits = passport.split(" ", 1)[1]
     text = tool_call_text("Bash", {"command": f"note {passport} end"})
     result = scanner.scan_turn(text, role="tool_call", verdict="redact")
-    assert len(result.flags) == 1
-    assert result.flagged_rules() == ["passport_rf"]
+    assert result.text == text
+    assert [(h.rule, result.text[h.start : h.start + h.length]) for h in result.flags] == [
+        ("passport_rf", digits)
+    ]
 
 
 def test_a_decoded_value_with_both_a_flag_and_a_redaction_records_both_correctly():
@@ -379,6 +584,7 @@ def test_a_decoded_value_with_both_a_flag_and_a_redaction_records_both_correctly
     assert result.flagged_rules() == ["passport_rf"]
     assert result.redacted_rules() == ["github_token"]
     assert result.provider_hits == 1
+    assert len(result.flags) == 1 and len(result.redactions) == 1
     flag = result.flags[0]
     assert result.text[flag.start : flag.start + flag.length] == digits
     redaction = result.redactions[0]
@@ -400,6 +606,16 @@ def test_no_value_reaches_a_result_or_a_log_line():
     for piece in (result.text, result.redactions_json(), result.flags_json(), str(raised.value)):
         assert MARKER not in piece
     assert all(MARKER not in json.dumps(entry, default=str) for entry in logs)
+
+
+def test_the_scanner_and_these_tests_hold_no_raw_private_use_character():
+    """A private-use character is invisible in a diff or an editor: written raw, a marker reads
+    as an empty string and the marker protocol cannot be reviewed. Every one is an escape or is
+    computed from its code point."""
+    private_use = re.compile("[" + chr(0xE000) + "-" + chr(0xF8FF) + "]")
+    for path in (Path(scan_module.__file__), Path(__file__)):
+        found = private_use.search(path.read_bytes().decode("utf-8"))
+        assert found is None, f"{path.name} holds U+{ord(found.group()):04X}" if found else ""
 
 
 # --- helpers and the settings ----------------------------------------------------------------

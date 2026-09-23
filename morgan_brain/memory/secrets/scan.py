@@ -12,22 +12,29 @@ one, which is how a provider token is never also an entropy hit -- and a placeho
 the text, a replayed row or a quoted redaction among them, is guarded the same way, so a text
 scanned twice keeps its redaction and its record rather than being corrupted by a second pass.
 A text longer than ``window_chars`` is scanned in windows overlapping by
-``window_overlap_chars``; a span that touches the end of a window that is not the last is
+``window_overlap_chars``. A span that touches the end of a window that is not the last is
 carried into the next one, which starts at that span's own start (or the usual overlap,
-whichever is earlier), so a match longer than the overlap is still seen whole.
+whichever is earlier), so a match longer than the overlap is still seen whole. A match that
+fills a whole window from its start while the text goes on is continued: its rule alone is
+matched again from that start over a reach that doubles, until the match ends inside the reach
+or the text ends, and the whole match is one span, nothing of it left in clear and nothing
+dropped. Scanning resumes the overlap before that span's end.
 
-A ``tool_call`` turn's text is one JSON document (``models.tool_call_text``): its string values
-are scanned decoded first -- so a word boundary holds after a newline that JSON spells as two
+A ``tool_call`` turn's text is one JSON document (``models.tool_call_text``). When the text is
+exactly what ``tool_call_text`` writes for the document it decodes to, its string values are
+scanned decoded first -- so a word boundary holds after a newline that JSON spells as two
 characters -- each hit written as a marker (a redaction as one, a flag-only hit as its kept text
 between two others), the document re-serialised, every marker replaced or removed at its
 position on the stored text, and the whole text scanned once more with every placeholder guarded
-and every placed span excluded so nothing counts twice. A decoded value that already holds one of
-the scanner's own marker characters is scanned as plain text instead, the same fallback a
-document that does not decode gets, so a marker found in the stored text is always one this pass
-wrote. Capture scans turns under ``redact``, where every recorded position is on the stored text;
-under ``refuse`` a hit inside a decoded value is reported at its offset within that value, since
-the caller rephrases before anything is stored. Nothing here carries a value out: not the
-exception, not a log line, not a result.
+and every placed span excluded so nothing counts twice. The five marker characters are chosen
+per document, the first five private-use code points it does not hold, so a marker found in the
+stored text is always one this pass wrote. Any other text -- one that does not decode, a
+document with another key or a tool that is not a string, one serialised another way -- is
+scanned as plain text and keeps its shape, and so is a document that leaves fewer than five
+private-use code points free. Capture scans turns under ``redact``, where every recorded
+position is on the stored text; under ``refuse`` a hit inside a decoded value is reported at its
+offset within that value, since the caller rephrases before anything is stored. Nothing here
+carries a value out: not the exception, not a log line, not a result.
 """
 
 from __future__ import annotations
@@ -37,6 +44,7 @@ import json
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from itertools import islice
 from typing import Any, Literal
 
 from morgan_brain.config import Settings
@@ -62,14 +70,12 @@ REDACTION = "[redacted:{rule}]"
 _PLACEHOLDER_RE = re.compile(
     r"\[redacted:(?:" + "|".join(re.escape(name) for name in RULE_NAMES) + r")\]"
 )
-#: What the decoded pass of a tool call writes before the document is serialised: a redaction as
-#: one marker pair holding the hit's index, a flag-only hit opened and closed around its kept
-#: text by two more. Every one is a private-use character JSON leaves as it is, so each is found
-#: again, at its own position, in the re-serialised text.
-_SENTINEL_RE = re.compile("(\\d+)|(\\d+)|")
-#: Every marker character the decoded pass writes. A document that already holds one is scanned
-#: as plain text instead, so a marker found in the stored text is always one this pass wrote.
-_MARK_CHARS = ("", "", "", "", "")
+#: The Private Use Area of the Basic Multilingual Plane, where a tool call's decoded pass takes
+#: its five marker characters from: the first five code points, walking up from the first, that
+#: the document does not hold -- U+E000 to U+E004 for a document that holds none. JSON leaves
+#: every one as it is, so each is found again, at its own position, in the re-serialised text.
+_PRIVATE_USE_FIRST = 0xE000
+_PRIVATE_USE_LAST = 0xF8FF
 
 
 def _guards(text: str) -> list[tuple[int, int]]:
@@ -78,17 +84,40 @@ def _guards(text: str) -> list[tuple[int, int]]:
     return [(m.start(), m.end()) for m in _PLACEHOLDER_RE.finditer(text)]
 
 
-def _holds_sentinel_chars(value: object) -> bool:
-    """Whether any string in the decoded document already holds one of the scanner's own marker
-    characters, key or value: if so, the document is scanned as plain text instead, so that
-    nothing but this pass ever writes one."""
-    if isinstance(value, str):
-        return any(char in value for char in _MARK_CHARS)
-    if isinstance(value, dict):
-        return any(_holds_sentinel_chars(k) or _holds_sentinel_chars(v) for k, v in value.items())
-    if isinstance(value, list):
-        return any(_holds_sentinel_chars(item) for item in value)
-    return False
+@dataclass(frozen=True)
+class _Markers:
+    """The five characters one tool call's decoded pass writes, none of which its document
+    holds: a redaction is ``redaction_open``, the hit's index, ``redaction_close``; a flag-only
+    hit is ``flag_open``, its index, ``flag_close``, the kept text, ``flag_end``."""
+
+    redaction_open: str
+    redaction_close: str
+    flag_open: str
+    flag_close: str
+    flag_end: str
+
+    @classmethod
+    def free_in(cls, text: str) -> _Markers | None:
+        """The first five private-use code points *text* does not hold, or ``None`` when fewer
+        than five are free. *text* is a canonical tool call, written with ``ensure_ascii`` off:
+        JSON escapes only a quote, a backslash and a control character, so every private-use
+        character of every decoded string -- a value, a key, the tool's name -- stands in it as
+        itself, and a code point the text does not hold is in no decoded string either."""
+        held = set(text)
+        candidates = map(chr, range(_PRIVATE_USE_FIRST, _PRIVATE_USE_LAST + 1))
+        free = list(islice((char for char in candidates if char not in held), 5))
+        if len(free) < 5:
+            return None
+        return cls(*free)
+
+    def pattern(self) -> re.Pattern[str]:
+        """What finds a marker again in the re-serialised text: group 1 is a redaction's index,
+        group 2 a flag's, and a bare ``flag_end`` closes the flag last opened."""
+        e = re.escape
+        return re.compile(
+            f"{e(self.redaction_open)}(\\d+){e(self.redaction_close)}"
+            f"|{e(self.flag_open)}(\\d+){e(self.flag_close)}|{e(self.flag_end)}"
+        )
 
 
 @dataclass(frozen=True)
@@ -176,35 +205,44 @@ class Scanner:
         return _apply(text, self._spans(text), verdict)
 
     def scan_turn(self, text: str, *, role: str, verdict: Verdict) -> ScanResult:
-        """``scan``, JSON-aware for a ``tool_call`` turn: its string values are scanned decoded,
-        each hit written as a marker -- a redaction as one, a flag-only hit as its kept text
-        between two others -- the document re-serialised, every marker replaced or removed at
-        its position on the stored text, and the whole scanned once more with every placeholder
-        guarded and every placed span excluded so nothing is counted twice. A decoded value that
-        already holds one of the scanner's own marker characters is scanned as plain text, and so
-        is a text that does not decode to a tool-call document. Capture scans turns under
-        ``redact``; under ``refuse`` a hit inside a decoded value is reported at its offset
-        within that value."""
+        """``scan``, JSON-aware for a ``tool_call`` turn whose text is exactly what
+        ``tool_call_text`` writes for the document it decodes to: its string values are scanned
+        decoded, each hit written as a marker -- a redaction as one, a flag-only hit as its kept
+        text between two others, in characters the document does not hold -- the document
+        re-serialised, every marker replaced or removed at its position on the stored text, and
+        the whole scanned once more with every placeholder guarded and every placed span
+        excluded so nothing is counted twice. Any other text, and a document that leaves fewer
+        than five private-use code points free, is scanned as plain text, so the stored text
+        keeps its shape. Capture scans turns under ``redact``; under ``refuse`` a hit inside a
+        decoded value is reported at its offset within that value."""
         if role != "tool_call":
             return self.scan(text, verdict=verdict)
         try:
             document = json.loads(text)
         except ValueError:
             return self.scan(text, verdict=verdict)
-        if not isinstance(document, dict) or "tool" not in document or "input" not in document:
+        # Only the canonical text is decoded: re-serialising any other would drop a key the
+        # document carries, coerce a value or change its spacing.
+        tool = document.get("tool") if isinstance(document, dict) else None
+        if (
+            not isinstance(tool, str)
+            or "input" not in document
+            or tool_call_text(tool, document["input"]) != text
+        ):
             return self.scan(text, verdict=verdict)
-        if _holds_sentinel_chars(document):
+        markers = _Markers.free_in(text)
+        if markers is None:
             return self.scan(text, verdict=verdict)
         written: list[str] = []
         marked = tool_call_text(
-            str(document["tool"]), self._scan_values(document["input"], verdict, written)
+            tool, self._scan_values(document["input"], verdict, written, markers)
         )
         pieces: list[str] = []
         placed: list[_Span] = []
         flagged: list[_Span] = []
         opened: list[tuple[Rule, int]] = []
         cursor = length = 0
-        for found in _SENTINEL_RE.finditer(marked):
+        for found in markers.pattern().finditer(marked):
             before = marked[cursor : found.start()]
             pieces.append(before)
             length += len(before)
@@ -233,7 +271,9 @@ class Scanner:
         spans = sorted([*whole, *placed, *flagged], key=lambda s: s.start)
         return _apply(stored, spans, verdict)
 
-    def _scan_values(self, value: object, verdict: Verdict, written: list[str]) -> object:
+    def _scan_values(
+        self, value: object, verdict: Verdict, written: list[str], markers: _Markers
+    ) -> object:
         """*value* with every string in it scanned under *verdict*; each redaction becomes one
         marker and a flag-only hit keeps its text between two others, each hit's rule appended to
         *written* in the order its marker carries. Keys are not scanned: a key is a name."""
@@ -251,30 +291,33 @@ class Scanner:
             cursor = 0
             for start, length, rule_name, redacted in marks:
                 pieces.append(result.text[cursor:start])
+                index = str(len(written))
                 if redacted:
-                    pieces.append(f"{len(written)}")
+                    pieces += [markers.redaction_open, index, markers.redaction_close]
                 else:
-                    pieces += [
-                        f"{len(written)}",
-                        result.text[start : start + length],
-                        "",
-                    ]
+                    kept = result.text[start : start + length]
+                    pieces += [markers.flag_open, index, markers.flag_close, kept, markers.flag_end]
                 written.append(rule_name)
                 cursor = start + length
             pieces.append(result.text[cursor:])
             return "".join(pieces)
         if isinstance(value, dict):
-            return {key: self._scan_values(item, verdict, written) for key, item in value.items()}
+            return {
+                key: self._scan_values(item, verdict, written, markers)
+                for key, item in value.items()
+            }
         if isinstance(value, list):
-            return [self._scan_values(item, verdict, written) for item in value]
+            return [self._scan_values(item, verdict, written, markers) for item in value]
         return value
 
     def _spans(self, text: str) -> list[_Span]:
         """Every span a rule takes in *text*, in text order, an earlier rule winning an overlap
-        and no span overlapping a placeholder already there. A long text is scanned in windows;
-        a span that touches the end of a window that is not the last is carried: the next window
+        and no span overlapping a placeholder already there. A long text is scanned in windows.
+        A span that touches the end of a window that is not the last is carried: the next window
         starts at that span's start (or ``window_overlap_chars`` before the end, whichever is
-        earlier), so a match longer than the overlap -- a PEM key -- is still seen whole."""
+        earlier), so a match longer than the overlap -- a PEM key -- is still seen whole. A span
+        that fills its window from the start is continued into the whole match, one span
+        (``_continued``), and the next window starts ``window_overlap_chars`` before its end."""
         limits = self.limits
         guards = _guards(text)
         if len(text) <= limits.window_chars:
@@ -284,17 +327,60 @@ class Scanner:
         while True:
             end = offset + limits.window_chars
             last = end >= len(text)
-            carried: list[int] = []
-            for span in self._without_overlaps(self._matches_in(text[offset:end], offset), guards):
-                if span.end >= end and not last and span.start > offset:
-                    carried.append(span.start)
-                    continue
+            resume = end - limits.window_overlap_chars
+            for span in self._window(text, offset, end, guards, last=last):
+                if span.end >= end and not last:
+                    if span.start > offset:
+                        resume = min(resume, span.start)
+                        continue
+                    resume = span.end - limits.window_overlap_chars
                 found.setdefault((span.start, span.rule.name), span)
             if last:
                 break
             # The settings refuse an overlap at or above the window, so this always advances.
-            offset = max(offset + 1, min([end - limits.window_overlap_chars, *carried]))
+            offset = max(offset + 1, resume)
         return self._without_overlaps(found.values(), guards)
+
+    def _window(
+        self, text: str, offset: int, end: int, guards: Sequence[tuple[int, int]], *, last: bool
+    ) -> list[_Span]:
+        """The spans of the window ``text[offset:end]``, overlaps resolved. A span that fills
+        the window from its start while the text goes on is replaced by its continuation; when
+        its rule, seeing further, makes no match at that start, the span is dropped and the
+        window resolved again without it, so the spans it had displaced are found."""
+        candidates = self._matches_in(text[offset:end], offset)
+        while True:
+            kept = self._without_overlaps(candidates, guards)
+            if last or not kept or kept[0].start != offset or kept[0].end < end:
+                return kept
+            # A span covering the whole window overlaps every other, so it is the only one kept.
+            filled = kept[0]
+            whole = self._continued(text, filled)
+            if whole is not None:
+                return [whole]
+            candidates = [span for span in candidates if span is not filled]
+
+    def _continued(self, text: str, span: _Span) -> _Span | None:
+        """The whole match of *span*'s rule at *span*'s start, for a span that filled its window
+        while the text goes on. The rule alone is matched again from that start over a reach
+        that doubles each time -- at least a window further on every pass, and under four times
+        the match's length in all, so the work stays linear -- until the match ends inside the
+        reach or the reach is the end of the text. ``None`` when the rule, seeing further, makes
+        no match at that start."""
+        reach = span.end - span.start
+        while True:
+            reach *= 2
+            stop = min(span.start + reach, len(text))
+            ends = [
+                end
+                for start, end in matches(span.rule, text[span.start : stop], self.limits)
+                if start == 0
+            ]
+            if not ends:
+                return None
+            whole = _Span(span.rule, span.start, span.start + ends[0])
+            if whole.end < stop or stop == len(text):
+                return whole
 
     def _matches_in(self, window: str, offset: int) -> list[_Span]:
         return [
