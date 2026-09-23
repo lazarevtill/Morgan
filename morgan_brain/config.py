@@ -8,6 +8,7 @@ files that reads belongs to the surface (``env_files_for``), and the environment
 from __future__ import annotations
 
 import os
+from datetime import MAXYEAR, MINYEAR
 from pathlib import Path
 from typing import Annotated, Literal, TypedDict
 
@@ -241,9 +242,9 @@ class Settings(BaseSettings):
     #: ``start-end``: a number with no keyword near it that parses as epoch seconds or
     #: milliseconds inside these years is a timestamp, not an identifier.
     gate_epoch_years: str = "2000-2100"
-    #: Every keyword list refuses empty (Important 2): "no keyword" would silently switch an
-    #: identifier rule off, or turn the card gate into BIN-only, and the gate report could not
-    #: tell that apart from a rule that simply finds nothing.
+    #: Every keyword list refuses empty: "no keyword" would silently switch an identifier rule
+    #: off, or turn the card gate into BIN-only, and the gate report could not tell that apart
+    #: from a rule that simply finds nothing.
     gate_keywords_inn: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["ИНН", "INN"], min_length=1
     )
@@ -332,8 +333,11 @@ class Settings(BaseSettings):
     @classmethod
     def _validate_epoch_years(cls, value: str) -> str:
         """``start-end``, or a single year meaning both: named at load, not left to raise a
-        bare ``ValueError`` from inside a scan (Minor 7). Mirrors ``limits_of``'s own parsing
-        exactly, so a value accepted here parses there without surprise.
+        bare ``ValueError`` from inside a scan. Mirrors ``limits_of``'s own parsing exactly, so
+        a value accepted here parses there without surprise. ``is_epoch_like`` builds its
+        exclusive upper bound from ``datetime(high + 1, 1, 1)``, so ``high`` must leave room
+        for that: both years must fall within ``datetime.MINYEAR`` and one less than
+        ``datetime.MAXYEAR``.
         """
         low, _, high = value.partition("-")
         low, high = low.strip(), (high.strip() or low.strip())
@@ -341,8 +345,14 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"gate_epoch_years must be 'start-end' or a single year, e.g. 2000-2100: {value!r}"
             )
-        if int(low) > int(high):
+        low_year, high_year = int(low), int(high)
+        if low_year > high_year:
             raise ValueError(f"gate_epoch_years' start must not be after its end: {value!r}")
+        if low_year < MINYEAR or high_year > MAXYEAR - 1:
+            raise ValueError(
+                f"gate_epoch_years must be within {MINYEAR}-{MAXYEAR - 1} "
+                f"(is_epoch_like builds high + 1): {value!r}"
+            )
         return value
 
     @field_validator("gate_card_bins", mode="after")
@@ -350,8 +360,8 @@ class Settings(BaseSettings):
     def _validate_card_bins(cls, value: list[str]) -> list[str]:
         """Each entry a bare digit prefix, or an ``a-b`` range of matching width with ``a`` no
         greater than ``b``: named at load, not left to raise a bare ``ValueError`` from inside
-        a scan, or to be silently skipped as a match (Minor 7). Empty is not rejected here: it
-        means bank_card redacts by keyword alone, never by BIN (Important 2).
+        a scan, or to be silently skipped as a match. Empty is not rejected here: it means
+        bank_card redacts by keyword alone, never by BIN.
         """
         for entry in value:
             low, _, high = entry.partition("-")

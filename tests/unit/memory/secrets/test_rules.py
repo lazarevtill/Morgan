@@ -11,6 +11,7 @@ import hashlib
 import time
 import types
 import uuid
+from datetime import MAXYEAR
 
 import pytest
 from pydantic import ValidationError
@@ -76,7 +77,7 @@ def test_there_are_thirty_one_rules_in_scan_order():
         "azure_storage_key",
         "grafana_token",
         "yandex_token",
-    )  # SPEC-phase1a.md §3.1's provider list, left to right; matches the brief's table too.
+    )  # The 21 provider names, left to right in scan order.
     assert frozenset(RULE_NAMES[:21]) == PROVIDER_RULE_NAMES
     assert RULE_NAMES[21:25] == ("assignment", "bearer", "url_userinfo", "entropy")
     assert RULE_NAMES[25:] == ("inn", "snils", "ogrn", "bank_card", "passport_rf", "phone_rf")
@@ -106,8 +107,8 @@ def test_a_fixture_matches_no_other_rule_of_its_family(name):
 
 def test_private_key_catches_pgp_armor_and_an_encrypted_key():
     """Real PGP armor ends "PRIVATE KEY BLOCK-----", not "PRIVATE KEY-----" like every other
-    variant (Minor 10a); "ENCRYPTED PRIVATE KEY" was also not matched. Each fixture is
-    assembled from parts."""
+    variant, and an "ENCRYPTED PRIVATE KEY" header is also caught. Each fixture is assembled
+    from parts."""
     pgp = (
         "-----BEGIN "
         + "PGP PRIVATE KEY BLOCK-----\n"
@@ -208,11 +209,37 @@ def _luhn_control_digit(body: str) -> int:
 
 
 def _non_bin_card() -> str:
-    """A Luhn-valid card whose issuer (900000) no network assigns, outside every default BIN
-    (Minor 5, M4's card case) -- so a test using it is decided by the keyword alone, never by
-    the BIN gate the default (Visa-range) fixture would also satisfy."""
+    """A Luhn-valid card whose issuer (900000) no network assigns, outside every default BIN --
+    so a test using it is decided by the keyword alone, never by the BIN gate the default
+    (Visa-range) fixture would also satisfy."""
     base = "9" + "0" * 7 + "1234567"
     return base + str(_luhn_control_digit(base))
+
+
+def _generated_card(index: int) -> str:
+    """A deterministic Luhn-valid card number in the same 900000 issuer range as
+    ``_non_bin_card``, varied by *index* rather than drawn at random, so a set of many cases
+    covers many digit combinations without being random."""
+    body = "9" + "0" * 5 + f"{index:09d}"
+    return body + str(_luhn_control_digit(body))
+
+
+def _spaced(card: str) -> str:
+    return " ".join(card[i : i + 4] for i in range(0, len(card), 4))
+
+
+def _digits_covered(text: str, value: str, value_start: int) -> bool:
+    """Whether every digit of *value* (found at *value_start* in *text*) lies inside some span
+    ``matches`` returns for the ``bank_card`` rule -- not necessarily the same span, since a
+    card's digits can be split across a merged span and an adjoining one."""
+    spans = matches(RULES["bank_card"], text, LIMITS)
+    for offset, char in enumerate(value):
+        if not char.isdigit():
+            continue
+        pos = value_start + offset
+        if not any(start <= pos < end for start, end in spans):
+            return False
+    return True
 
 
 # --- checksums ---------------------------------------------------------------------------------
@@ -259,11 +286,11 @@ def test_luhn_accepts_a_valid_synthetic_card_and_rejects_one_digit_off():
     assert int(card[-1]) == _luhn_control_digit(card[:-1])
 
 
-# --- the keyword comes first (N2) ---------------------------------------------------------------
+# --- the keyword comes first --------------------------------------------------------------------
 
 
 def test_a_region_16_inn_beside_its_keyword_is_an_identifier_and_alone_is_a_timestamp():
-    """A region-00 INN (tax office 00 is a regional directorate, never an inspection that
+    """A region-16 INN (tax office 00 is a regional directorate, never an inspection that
     assigns numbers; serial 00000) parses as epoch seconds within the gate's epoch window --
     September 2020 -- and passes the INN-10 check: the keyword decides. The rule's own
     region-00 OGRN fixture is already epoch milliseconds. The INN's control digit is computed
@@ -282,7 +309,7 @@ def test_a_region_16_inn_beside_its_keyword_is_an_identifier_and_alone_is_a_time
 
 
 def test_an_identifier_stored_as_a_json_number_is_redacted_beside_its_keyword():
-    inn_base = "16" + "00" + "00000"  # region 00: see the region-16 test above
+    inn_base = "16" + "00" + "00000"  # region 16, tax office 00: see the test above
     inn = inn_base + str(_inn10_control_digit(inn_base))
     assert _value(RULES["inn"], f'{{"inn": {inn}, "name": "x"}}') == inn
     assert _value(RULES["inn"], f'{{"count": {inn}}}') is None
@@ -298,10 +325,10 @@ def test_the_keyword_must_sit_on_the_same_line_within_the_context():
 
 def test_a_keyword_glued_to_a_preceding_letter_does_not_gate_a_number():
     """ "INN" inside "dinner", "card" inside "discard" and "тел" inside "пользователь" (user)
-    must not gate a nearby number: a keyword matches only where no letter precedes it (Minor 1,
-    refining M4). ``bank_card`` also has the BIN gate, which redacts its default (BIN-4)
-    fixture whether or not a keyword is nearby -- that would mask a keyword-regex bug, so its
-    case here uses a card outside every default BIN (Minor 5), decided by the keyword alone."""
+    must not gate a nearby number: a keyword matches only where no letter precedes it.
+    ``bank_card`` also has the BIN gate, which redacts its default (BIN-4) fixture whether or
+    not a keyword is nearby -- that would mask a keyword-regex bug, so its case here uses a
+    card outside every default BIN, decided by the keyword alone."""
     inn = RULES["inn"].fixture().split()[-1]
     assert _value(RULES["inn"], f"dinner {inn}") is None
 
@@ -315,9 +342,16 @@ def test_a_keyword_glued_to_a_preceding_letter_does_not_gate_a_number():
     assert _value(RULES["phone_rf"], phone_fixture) == phone
 
 
+def test_master_alone_does_not_gate_a_card():
+    """ "Master" is not a card keyword: "Mastercard" is what is actually written beside a card
+    number, and "master" alone is also a common git branch name."""
+    card = _non_bin_card()
+    assert _value(RULES["bank_card"], f"master {card}") is None
+
+
 def test_a_digit_or_underscore_is_not_a_letter_so_the_keyword_still_gates():
-    """A keyword preceded by a digit or an underscore still gates: neither is a letter
-    (Minor 1). "user_phone" and "customer_inn" are the ruling's own examples."""
+    """A keyword preceded by a digit or an underscore still gates: neither is a letter --
+    "user_phone" and "customer_inn" both still gate their number."""
     inn = RULES["inn"].fixture().split()[-1]
     assert _value(RULES["inn"], f"customer_inn {inn}") == inn
     assert _value(RULES["inn"], f"5inn {inn}") == inn
@@ -329,9 +363,9 @@ def test_a_digit_or_underscore_is_not_a_letter_so_the_keyword_still_gates():
 
 def test_an_ascii_keyword_ends_at_a_words_end_with_an_optional_plural():
     """An ASCII keyword also ends at a word's end, with an optional plural "s": "inner",
-    "innodb", "panel", "pandas", "mirror" and "cardinal" no longer gate, "cards", "phones",
-    "phone_number" and "Mastercard" do (Minor 1). Each card case uses a card outside every
-    default BIN, so only the keyword decides (Minor 5)."""
+    "innodb", "panel", "pandas", "mirror" and "cardinal" do not gate; "cards", "phones",
+    "phone_number" and "Mastercard" do. Each card case uses a card outside every default BIN,
+    so only the keyword decides."""
     inn = RULES["inn"].fixture().split()[-1]
     assert _value(RULES["inn"], f"inner {inn}") is None
     assert _value(RULES["inn"], f"innodb {inn}") is None
@@ -350,7 +384,7 @@ def test_an_ascii_keyword_ends_at_a_words_end_with_an_optional_plural():
 
 def test_a_cyrillic_keyword_stays_open_on_the_right_for_inflection():
     """Russian inflects a stem's ending, so a Cyrillic keyword is not right-anchored: "карт"
-    also matches "карта" and "карты" (Minor 1)."""
+    also matches "карта" and "карты"."""
     card = _non_bin_card()
     assert _value(RULES["bank_card"], f"карта {card}") == card
     assert _value(RULES["bank_card"], f"карты {card}") == card
@@ -363,12 +397,24 @@ def test_a_cyrillic_keyword_stays_open_on_the_right_for_inflection():
 def test_the_keyword_window_sees_the_real_text_past_either_edge():
     """A slice at the window's edge leaves a lookaround blind to the real neighbouring
     character on the far side of the cut -- both edges must be searched as bounded positions
-    in the real text, never a copy (Minor 1). At the left edge, "Finn" would read as "inn" at
-    the start of a slice; at the right, "inn" ending exactly at the window's edge would read as
+    in the real text, never a copy. At the left edge, "Finn" would read as "inn" at the start
+    of a slice; at the right, "inn" ending exactly at the window's edge would read as
     standalone if a naive ``endpos`` cut off its own lookahead."""
     inn = RULES["inn"].fixture().split()[-1]
     assert _value(RULES["inn"], "Finn" + " " * 37 + inn) is None
     assert _value(RULES["inn"], inn + " " * 37 + "inner") is None
+
+
+@pytest.mark.parametrize(("gap", "hit"), [(37, True), (38, False), (39, False)])
+def test_the_window_after_the_value_hits_at_the_same_gaps_as_the_window_before_it(gap, hit):
+    """The keyword's whole match must lie inside the window on either side of the value, not
+    merely start inside it: a keyword just past ``context_chars`` still gates if only its start
+    is checked, which widens the window on that side by up to the keyword's own length."""
+    inn = RULES["inn"].fixture().split()[-1]
+    before = _value(RULES["inn"], "INN" + " " * gap + inn) is not None
+    after = _value(RULES["inn"], inn + " " * gap + "INN") is not None
+    assert before == hit
+    assert after == hit
 
 
 def test_a_card_is_redacted_by_keyword_or_by_bin_but_not_as_a_timestamp():
@@ -399,17 +445,16 @@ def test_a_card_is_redacted_by_keyword_or_by_bin_but_not_as_a_timestamp():
 
 
 def test_the_json_number_exclusion_does_not_cross_a_line():
-    """Only spaces and tabs are trimmed on either side of the value; a line end terminates the
-    search rather than being crossed (Minor 2). A bare newline is itself one of the allowed
-    terminators (``",}]\\n"``), so a number followed by one is excluded the same way whether
-    the next line holds "}" or unrelated content -- before this fix, an unbounded ``lstrip()``
-    silently skipped past the newline, so only the first of these worked. Uses the plain card
-    fixture (Luhn-valid, BIN-4, sixteen digits) rather than an epoch-shaped value, so only the
-    JSON-number logic decides, never the epoch branch."""
+    """Only spaces and tabs are trimmed on either side of the value; a line end -- LF, CRLF or
+    a bare CR -- terminates the search rather than being crossed, so a number followed by one
+    is excluded the same way whether the next line holds "}" or unrelated content. Uses the
+    plain card fixture (Luhn-valid, BIN-4, sixteen digits) rather than an epoch-shaped value,
+    so only the JSON-number logic decides, never the epoch branch."""
     card = RULES["bank_card"].fixture().split()[-1]
     assert not is_epoch_like(card, LIMITS)
     assert _value(RULES["bank_card"], f'{{"ts": {card}}}') is None
     assert _value(RULES["bank_card"], f'{{"ts": {card}\n}}') is None
+    assert _value(RULES["bank_card"], f'{{"ts": {card}\r\n}}') is None
     assert _value(RULES["bank_card"], f'{{"ts": {card}') is None
     assert _value(RULES["bank_card"], f'{{"ts": {card}\nnext line') is None
     # Same-line-only cuts both ways: a colon several lines above is not this value's own key.
@@ -418,9 +463,9 @@ def test_the_json_number_exclusion_does_not_cross_a_line():
 
 def test_bank_card_lets_the_checksum_choose_the_span():
     """The pattern alone takes the longest digit run and Luhn rejects it afterwards; the
-    checksum must choose among group-bounded sub-spans instead (Important 1). Each combined
-    span here is checked to fail Luhn -- "longest first" would otherwise, one time in ten,
-    legitimately accept the longer combination instead of the card alone."""
+    checksum must choose among group-bounded sub-spans instead. Each combined span here is
+    checked to fail Luhn -- "longest first" would otherwise, one time in ten, legitimately
+    accept the longer combination instead of the card alone."""
     card = RULES["bank_card"].fixture().split()[-1]  # a Visa-range number: BIN 4
     groups = [card[i : i + 4] for i in range(0, len(card), 4)]
     spaced = " ".join(groups)
@@ -433,10 +478,61 @@ def test_bank_card_lets_the_checksum_choose_the_span():
     assert _value_all(RULES["bank_card"], spaced + " 1") == [spaced]
     assert _value_all(RULES["bank_card"], "2024-01-15 " + spaced) == [spaced]
     assert _value_all(RULES["bank_card"], f"{card} {card}") == [card, card]
-    # One unbroken run has only itself as a group -- no shorter, differently-bounded sub-span
-    # to try -- so it matches nothing unless its own length is 13 to 19. True before this fix
-    # too (the old pattern also found nothing here): a regression guard, not a new behaviour.
-    assert _value_all(RULES["bank_card"], "1" * 25) == []
+    # A single unbroken run has only itself as a group -- no shorter, differently-bounded
+    # sub-span to try -- so it matches nothing unless its own length is 13 to 19.
+    assert _value_all(RULES["bank_card"], "card 000" + card + "000000") == []
+
+
+def test_a_card_beside_its_keyword_is_never_left_partly_in_clear_after_a_preceding_date():
+    """A digit-group run that starts with a date and ends with a card, all beside one "card"
+    keyword, gates every group in the run: a Luhn-valid sub-span that starts inside the date
+    can be accepted on its own, but the card's own group-bounded span is a separate, also
+    accepted candidate, and the two merge -- so the union always covers every card digit, even
+    when a spurious sub-span from the date is accepted too."""
+    failures = []
+    for i in range(200):
+        card = _generated_card(i)
+        spaced = _spaced(card)
+        date = f"2024-{(i % 12) + 1:02d}-{(i % 28) + 1:02d}"
+        text = f"card {date} {spaced}"
+        value_start = text.rindex(spaced)
+        if not _digits_covered(text, spaced, value_start):
+            failures.append(i)
+    assert not failures, f"{len(failures)} of 200 cases left a card digit in clear: {failures}"
+
+
+def test_a_card_beside_its_keyword_is_never_left_partly_in_clear_after_a_single_digit():
+    """The same guarantee holds for the smallest possible preceding group: a single digit."""
+    failures = []
+    for i in range(200):
+        card = _generated_card(i)
+        text = f"card 7 {card}"
+        value_start = text.rindex(card)
+        if not _digits_covered(text, card, value_start):
+            failures.append(i)
+    assert not failures, f"{len(failures)} of 200 cases left a card digit in clear: {failures}"
+
+
+def test_a_card_beside_its_keyword_is_never_left_partly_in_clear_before_a_following_date():
+    """Groups that follow the card in the same run leak nothing either: the card is tried at
+    its own start regardless of what comes after it."""
+    for i in range(50):
+        card = _generated_card(i + 1000)
+        spaced = _spaced(card)
+        date = f"2024-{(i % 12) + 1:02d}-{(i % 28) + 1:02d}"
+        text = f"card {spaced} {date}"
+        assert _digits_covered(text, spaced, text.index(spaced))
+
+
+def test_two_cards_in_one_gated_run_are_both_fully_covered():
+    """Two distinct cards in the same digit run are each found, whole, as their own span (or
+    spans merged with an overlapping candidate) -- the union-of-candidates fix does not fuse
+    unrelated cards together or drop either one."""
+    card1 = _generated_card(2000)
+    card2 = _generated_card(2001)
+    text = f"card {card1} {card2}"
+    assert _digits_covered(text, card1, text.index(card1))
+    assert _digits_covered(text, card2, text.rindex(card2))
 
 
 def test_passport_and_phone_need_their_keyword_and_only_flag():
@@ -450,10 +546,10 @@ def test_passport_and_phone_need_their_keyword_and_only_flag():
 
 
 #: The UUID, 40-hex, 64-hex and ``sha256:`` cases measure below the *default* threshold
-#: (3.92, 2.73, 4.00 and 4.00 bits -- verified below) and would pass with no exemption at all,
-#: so the default threshold does not pin the exemption for them (Minor 4). Every case here
-#: is run against a threshold below all six measured values, so only the exemption -- never
-#: entropy alone -- can explain a miss.
+#: (3.92, 2.73, 4.00 and 4.14 bits -- verified below) and would pass with no exemption at all,
+#: so the default threshold does not pin the exemption for them. Every case here is run
+#: against a threshold below all six measured values, so only the exemption -- never entropy
+#: alone -- can explain a miss.
 _DIGEST_TOKENS = (
     "6f1a2b3c-4d5e-4f60-8a9b-0c1d2e3f4a5b",  # a UUID
     "a" * 20 + "0123456789abcdef" + "f" * 4,  # 40 hex
@@ -489,11 +585,10 @@ def test_a_random_base64_token_is_an_entropy_hit():
 def test_an_interior_equals_splits_the_entropy_token_from_its_key():
     """ "=" is trailing base64 padding only (0-2 of them), never part of the repeated class, so
     an interior "=" is a key/value seam: "request_id=<uuid>" scores the UUID alone, and its
-    exemption applies to the UUID alone, not to the glued "request_id=<uuid>" the spec's older
-    token class would have scored as one (Important 4). 200 deterministic values each, not
-    one -- each derived from its own index, not a pseudo-random generator, so the run is
-    reproducible without inviting a "not for cryptographic use" finding for a value that
-    secures nothing."""
+    exemption applies to the UUID alone, never to the glued "request_id=<uuid>" as one token.
+    200 deterministic values each, not one -- each derived from its own index, not a
+    pseudo-random generator, so the run is reproducible without inviting a "not for
+    cryptographic use" finding for a value that secures nothing."""
     for i in range(200):
         token = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"request-id-{i}"))
         assert _value(RULES["entropy"], f"request_id={token}") is None
@@ -503,8 +598,8 @@ def test_an_interior_equals_splits_the_entropy_token_from_its_key():
 
 
 def test_trailing_base64_padding_stays_part_of_the_token():
-    """Up to two trailing "=" are padding, not a seam: a padded token is still one entropy hit
-    (Important 4)."""
+    """Up to two trailing "=" are padding, not a seam: a padded token is still one entropy
+    hit."""
     token = "abcdefghijkl" + "mnopqrstuvwx" + "yz0123456789" + "AB=="
     assert entropy_bits(token) > LIMITS.entropy_threshold
     assert _value(RULES["entropy"], f"token {token} here") == token
@@ -513,7 +608,7 @@ def test_trailing_base64_padding_stays_part_of_the_token():
 def test_the_digest_prefix_exemption_needs_a_non_word_character_before_it():
     """ "sha256:" and "h1:" count only after a non-word character or the start of the text: a
     bare suffix test would let "oauth1:" and "depth1:", which merely end in "h1:", exempt a
-    token beside them too (Minor 3)."""
+    token beside them too."""
     token = "abcdefghijkl" + "mnopqrstuvwx" + "yz0123456789" + "+/ABCDEF"  # the base64 hit
     assert _value(RULES["entropy"], f"sha256:{token}") is None  # start of text
     assert _value(RULES["entropy"], f"digest sha256:{token}") is None  # after a space
@@ -522,7 +617,7 @@ def test_the_digest_prefix_exemption_needs_a_non_word_character_before_it():
     assert _value(RULES["entropy"], f"x:{token}") == token  # not a recognised prefix at all
 
 
-# --- the anchored assignment rule (D27, N15, S3) -----------------------------------------------
+# --- the anchored assignment rule -----------------------------------------------------------
 
 #: A synthetic value, assembled from parts: not AWS's documented example key.
 _AWS_EXAMPLE_VALUE = "fake" + "Synthetic" + "Secret99"
@@ -536,12 +631,12 @@ SECRET_FORMS = [
     (f"aws_secret_access_key = {_AWS_EXAMPLE_VALUE}", _AWS_EXAMPLE_VALUE),
 ]
 
-#: None of these keys ends in a secret word -- SPEC §3.1's own eight examples
+#: None of these keys ends in a secret word -- eight keys that trail off in a lookalike word
 #: (``secretsmanager``, ``total_tokens``, ``token_type``, ``token_count``, ``api_key_env``,
 #: ``secret_name``, ``password_min_length``, ``access_token_id``) plus eight more of the same
-#: shape -- so the assignment rule matches none of them at all (Minor 4). Every value is long
-#: and non-numeric: a shorter or numeric value would also be excluded on its own and no longer
-#: pin the anchoring specifically; the numeric and placeholder exclusions are pinned separately
+#: shape -- so the assignment rule matches none of them at all. Every value is long and
+#: non-numeric: a shorter or numeric value would also be excluded on its own and would not pin
+#: the anchoring specifically; the numeric and placeholder exclusions are pinned separately
 #: below, each on a key that *is* anchored.
 NON_SECRET_FORMS = [
     '"total_tokens": "hunter2hunter2"',
@@ -571,14 +666,14 @@ def test_the_assignment_rule_reads_the_six_secret_forms(text, value):
 @pytest.mark.parametrize("text", NON_SECRET_FORMS)
 def test_the_assignment_rule_pins_its_anchoring_on_sixteen_non_secret_forms(text):
     """There is no suffix list: the key must end in a secret word, and none of these sixteen
-    does, so none matches at all (Minor 4)."""
+    does, so none matches at all."""
     assert _value(RULES["assignment"], f"config: {text}") is None
 
 
 def test_the_assignment_rule_excludes_a_numeric_value_up_front():
-    """D27: a value that is only digits and dots is never a secret -- a port, a version, a
-    count. The key here is anchored (ends in "password"), so only the numeric exclusion
-    explains the miss (Minor 4)."""
+    """A value that is only digits and dots is never a secret -- a port, a version, a count.
+    The key here is anchored (ends in "password"), so only the numeric exclusion explains the
+    miss."""
     assert _value(RULES["assignment"], "config: PASSWORD=12345678") is None
 
 
@@ -589,12 +684,15 @@ def test_the_assignment_rule_excludes_a_numeric_value_up_front():
         "SECRET=your-secret-here",  # a placeholder shape ("your-*-here")
         "TOKEN=${SOME_LONG_VARIABLE_NAME}",  # a placeholder prefix ("${")
         "API_KEY=<your-token>",  # a placeholder prefix ("<")
+        "PASSWORD={{vault_password_long_name}}",  # a placeholder prefix ("{{")
     ],
 )
 def test_the_assignment_rule_excludes_each_placeholder_kind_up_front(text):
-    """D27: an anchored key beside a templated value is never a secret. Each key here is
+    """An anchored key beside a templated value is never a secret. Each key here is
     anchored and each value is long enough to clear the assignment value regex on its own, so
-    only its placeholder kind explains the miss (Minor 4)."""
+    only its placeholder kind explains the miss. The "{{" case has no space after the braces:
+    with one, the value regex stops there and the length exclusion masks the placeholder check
+    instead."""
     assert _value(RULES["assignment"], f"config: {text}") is None
 
 
@@ -606,9 +704,9 @@ def test_the_assignment_rule_reads_a_line_start_and_a_json_key():
 def test_the_assignment_rule_finds_every_value_on_a_line():
     """``rest``'s up-to-64-character reach swallows the rest of the line, so a plain
     ``finditer`` resumes past a second assignment before it is ever tried; a short or
-    placeholder first value swallows a real one that follows it on the same line (Important
-    1). Resuming at an accepted value's end, or at a rejected one's own ``rest``, finds every
-    value the brief's four probed shapes actually carry."""
+    placeholder first value swallows a real one that follows it on the same line. Resuming at
+    an accepted value's end, or at a rejected one's own ``rest``, finds every value each of
+    these shapes actually carries."""
     assert _value_all(
         RULES["assignment"], "DB_PASSWORD=s3cr3tValue9 REDIS_PASSWORD=an0therValue1"
     ) == ["s3cr3tValue9", "an0therValue1"]
@@ -624,14 +722,14 @@ def test_the_assignment_rule_finds_every_value_on_a_line():
 
 
 def test_assignment_re_does_not_backtrack_quadratically_on_trailing_whitespace():
-    """``\\s*(?:["']\\s*)?[:=]`` accepts the same language as the spec's own
-    ``\\s*["']?\\s*[:=]``, with one ``\\s*`` run instead of two -- the two-run form backtracks
-    quadratically when no "=" or ":" ever follows (Minor 6). A generous bound, not a
-    benchmark: ~0.007s measured at this length, ~10s extrapolated for the old pattern."""
+    """``\\s*(?:["']\\s*)?[:=]`` accepts a separator with an optional quote and any amount of
+    surrounding whitespace, using one ``\\s*`` run rather than two -- a two-run form backtracks
+    quadratically when no "=" or ":" ever follows. A generous bound, not a benchmark: measured
+    at ~0.007s for this length."""
     text = "token" + " " * 65536  # no separator ever follows
     started = time.monotonic()
     ASSIGNMENT_RE.search(text)
-    assert time.monotonic() - started < 5.0
+    assert time.monotonic() - started < 1.0
 
 
 # --- the settings ------------------------------------------------------------------------------
@@ -657,8 +755,8 @@ def test_a_lowered_threshold_reaches_the_rules(monkeypatch):
     assert limits.entropy_threshold == 0.5
     assert limits.keywords["inn"] == ("tax-id",)
     lowered = {rule.name: rule for rule in rules(limits)}
-    # matches() takes the same *limits* the rules were built from (Minor 8): _value's global
-    # LIMITS would silently carry the default entropy_threshold and keywords instead.
+    # matches() takes the same *limits* the rules were built from: _value's global LIMITS
+    # would silently carry the default entropy_threshold and keywords instead.
     assert matches(lowered["entropy"], "ab" * 12, limits)
     inn = lowered["inn"].fixture().split()[-1]
     assert matches(lowered["inn"], f"tax-id {inn}", limits)
@@ -666,16 +764,16 @@ def test_a_lowered_threshold_reaches_the_rules(monkeypatch):
 
 
 def test_gate_limits_keywords_cannot_be_mutated():
-    """``keywords`` is a read-only mapping (Minor 8): a caller cannot quietly change what a
-    rule set was built from after the fact."""
+    """``keywords`` is a read-only mapping: a caller cannot quietly change what a rule set was
+    built from after the fact."""
     assert isinstance(LIMITS.keywords, types.MappingProxyType)
     with pytest.raises(TypeError):
         LIMITS.keywords["inn"] = ("changed",)  # type: ignore[index]
 
 
 def test_the_card_fixture_uses_the_configured_first_keyword():
-    """The other five identifier fixtures already do (Minor 8); the card fixture hardcoded
-    "card " instead of reading it from the settings like they do."""
+    """All six identifier fixtures read their keyword from the settings, the same way; none is
+    a literal string."""
     assert RULES["bank_card"].fixture().startswith(LIMITS.keywords["bank_card"][0] + " ")
 
 
@@ -693,7 +791,7 @@ def test_the_card_fixture_uses_the_configured_first_keyword():
 def test_an_empty_keyword_setting_refuses_at_load_naming_the_field(field, monkeypatch):
     """ "No keyword" would silently switch an identifier rule off, or turn the card gate into
     BIN-only, and the gate report could not tell that apart from a rule that simply finds
-    nothing (Important 2)."""
+    nothing."""
     monkeypatch.setenv(f"MORGAN_{field.upper()}", "")
     with pytest.raises(ValidationError) as excinfo:
         Settings()
@@ -702,7 +800,7 @@ def test_an_empty_keyword_setting_refuses_at_load_naming_the_field(field, monkey
 
 def test_an_empty_card_bins_setting_means_bank_card_redacts_by_keyword_only():
     """Unlike the keyword lists, an empty ``gate_card_bins`` is not refused: it means bank_card
-    has no BIN gate to fall back on, ever (Important 2)."""
+    has no BIN gate to fall back on, ever."""
     limits = dataclasses.replace(LIMITS, card_bins=())
     card_rule = {rule.name: rule for rule in rules(limits)}["bank_card"]
     card = card_rule.fixture().split()[-1]
@@ -712,7 +810,7 @@ def test_an_empty_card_bins_setting_means_bank_card_redacts_by_keyword_only():
 
 def test_empty_placeholder_settings_mean_no_placeholder_exclusion():
     """An anchored key beside a value that is normally excluded as a placeholder is redacted
-    once the placeholder lists are empty (Important 2)."""
+    once the placeholder lists are empty."""
     limits = dataclasses.replace(
         LIMITS, placeholder_values=(), placeholder_shapes=(), placeholder_prefixes=()
     )
@@ -723,18 +821,38 @@ def test_empty_placeholder_settings_mean_no_placeholder_exclusion():
     assert matches(assignment_rule, "config: SECRET=your-api-here", limits)
     assert matches(RULES["assignment"], "config: API_KEY=<a-generated-token>", LIMITS) == []
     assert matches(assignment_rule, "config: API_KEY=<a-generated-token>", limits)
+    placeholder_braces = "config: PASSWORD={{vault_password_long_name}}"
+    assert matches(RULES["assignment"], placeholder_braces, LIMITS) == []
+    assert matches(assignment_rule, placeholder_braces, limits)
 
 
 @pytest.mark.parametrize(
     "value",
-    ["2000–2100", "abcd-2100", "2100-2000"],  # en dash; non-digit; reversed
+    [
+        "2000–2100",  # an en dash, not a hyphen
+        "abcd-2100",  # non-digit
+        "2100-2000",  # reversed
+        "0-2100",  # below datetime.MINYEAR
+        "2000-9999",  # is_epoch_like builds high + 1, one more than datetime.MAXYEAR allows
+        "2000-99999",  # far above datetime.MAXYEAR
+    ],
 )
 def test_a_malformed_epoch_years_setting_refuses_at_load(value, monkeypatch):
-    """Named at load, not left to raise a bare ``ValueError`` from inside a scan (Minor 7)."""
+    """Named at load, not left to raise a bare ``ValueError`` from inside a scan."""
     monkeypatch.setenv("MORGAN_GATE_EPOCH_YEARS", value)
     with pytest.raises(ValidationError) as excinfo:
         Settings()
     assert "gate_epoch_years" in str(excinfo.value)
+
+
+def test_the_largest_epoch_year_leaves_room_for_is_epoch_likes_high_plus_one(monkeypatch):
+    """``is_epoch_like`` builds its exclusive upper bound from ``datetime(high + 1, 1, 1)``, so
+    the largest year the setting accepts is one less than ``datetime.MAXYEAR`` -- the largest
+    year ``high + 1`` can still represent."""
+    monkeypatch.setenv("MORGAN_GATE_EPOCH_YEARS", f"2000-{MAXYEAR - 1}")
+    limits = limits_of(Settings())
+    assert limits.epoch_years == (2000, MAXYEAR - 1)
+    assert is_epoch_like("1700000000", limits)  # 2023, well inside the window
 
 
 @pytest.mark.parametrize(
@@ -742,7 +860,7 @@ def test_a_malformed_epoch_years_setting_refuses_at_load(value, monkeypatch):
 )  # non-digit; mismatched width; reversed
 def test_a_malformed_card_bins_entry_refuses_at_load(value, monkeypatch):
     """Named at load, not left to raise a bare ``ValueError`` or be silently skipped from
-    inside a scan (Minor 7)."""
+    inside a scan."""
     monkeypatch.setenv("MORGAN_GATE_CARD_BINS", value)
     with pytest.raises(ValidationError) as excinfo:
         Settings()
