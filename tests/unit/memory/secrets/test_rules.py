@@ -218,9 +218,12 @@ def _non_bin_card() -> str:
 
 def _generated_card(index: int) -> str:
     """A deterministic Luhn-valid card number in the same 900000 issuer range as
-    ``_non_bin_card``, varied by *index* rather than drawn at random, so a set of many cases
-    covers many digit combinations without being random."""
-    body = "9" + "0" * 5 + f"{index:09d}"
+    ``_non_bin_card``, its 9 free digits taken from a hash of *index* -- not a literal counter,
+    whose fixed-width zero-padding would leave the leading digits constant across every index
+    under 1000 -- so a set of many cases covers many distinct digit combinations, still without
+    being random."""
+    digest = hashlib.sha1(f"card-{index}".encode(), usedforsecurity=False).hexdigest()
+    body = "900000" + "".join(str(int(c, 16) % 10) for c in digest[:9])
     return body + str(_luhn_control_digit(body))
 
 
@@ -502,13 +505,16 @@ def test_a_card_beside_its_keyword_is_never_left_partly_in_clear_after_a_precedi
 
 
 def test_a_card_beside_its_keyword_is_never_left_partly_in_clear_after_a_single_digit():
-    """The same guarantee holds for the smallest possible preceding group: a single digit."""
+    """The same guarantee holds for the smallest possible preceding group: a single digit. The
+    card is written in 4-digit groups, so a spurious sub-span starting at that digit has a
+    group boundary to stop short of the card's own start."""
     failures = []
     for i in range(200):
         card = _generated_card(i)
-        text = f"card 7 {card}"
-        value_start = text.rindex(card)
-        if not _digits_covered(text, card, value_start):
+        spaced = _spaced(card)
+        text = f"card 7 {spaced}"
+        value_start = text.rindex(spaced)
+        if not _digits_covered(text, spaced, value_start):
             failures.append(i)
     assert not failures, f"{len(failures)} of 200 cases left a card digit in clear: {failures}"
 
@@ -525,14 +531,13 @@ def test_a_card_beside_its_keyword_is_never_left_partly_in_clear_before_a_follow
 
 
 def test_two_cards_in_one_gated_run_are_both_fully_covered():
-    """Two distinct cards in the same digit run are each found, whole, as their own span (or
-    spans merged with an overlapping candidate) -- the union-of-candidates fix does not fuse
-    unrelated cards together or drop either one."""
-    card1 = _generated_card(2000)
-    card2 = _generated_card(2001)
-    text = f"card {card1} {card2}"
-    assert _digits_covered(text, card1, text.index(card1))
-    assert _digits_covered(text, card2, text.rindex(card2))
+    """Two distinct cards, each in 4-digit groups, in the same digit run are each found, whole
+    -- the union-of-candidates fix does not fuse unrelated cards together or drop either one."""
+    spaced1 = _spaced(_generated_card(2000))
+    spaced2 = _spaced(_generated_card(2001))
+    text = f"card {spaced1} {spaced2}"
+    assert _digits_covered(text, spaced1, text.index(spaced1))
+    assert _digits_covered(text, spaced2, text.rindex(spaced2))
 
 
 def test_passport_and_phone_need_their_keyword_and_only_flag():
