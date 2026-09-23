@@ -251,6 +251,32 @@ def test_the_keyword_must_sit_on_the_same_line_within_the_context():
     assert _value(RULES["inn"], f"{inn} — это ИНН") == inn
 
 
+def test_a_keyword_glued_to_a_preceding_word_does_not_gate_a_number():
+    """ "INN" inside "dinner", "card" inside "discard" and "тел" inside "пользователь" (user)
+    must not gate a nearby number -- the match is anchored to a word's start, not any
+    substring. A keyword that IS a word's start (``ИНН``, ``card``, ``тел.``) still gates, and
+    a stem like ``карт`` still matches at the start of a longer word (a card is ``карта``):
+    only the left side is anchored, never the right.
+
+    ``bank_card`` also has the BIN gate, which redacts its own (BIN-4) fixture whether or not
+    any keyword is nearby -- that path would mask a keyword-regex bug, so its cases below
+    check the compiled keyword pattern directly, the same object ``matches`` consults."""
+    glued = {"inn": "dinner", "bank_card": "discard", "phone_rf": "пользователь"}
+    for name, word in glued.items():
+        keywords = RULES[name].keywords
+        assert keywords is not None
+        assert keywords.search(word) is None, f"{name}'s keyword matches inside {word!r}"
+
+    inn = RULES["inn"].fixture().split()[-1]
+    assert _value(RULES["inn"], f"dinner {inn}") is None
+    assert _value(RULES["inn"], RULES["inn"].fixture()) == inn
+
+    phone_fixture = RULES["phone_rf"].fixture()
+    phone = _value(RULES["phone_rf"], phone_fixture)
+    assert _value(RULES["phone_rf"], f"пользователь {phone}") is None
+    assert _value(RULES["phone_rf"], phone_fixture) == phone
+
+
 def test_a_card_is_redacted_by_keyword_or_by_bin_but_not_as_a_timestamp():
     card = RULES["bank_card"].fixture().split()[-1]  # a Visa-range number: BIN 4
     assert _value(RULES["bank_card"], f"pay with {card}") == card
@@ -279,10 +305,10 @@ def test_a_card_is_redacted_by_keyword_or_by_bin_but_not_as_a_timestamp():
 
 
 def test_passport_and_phone_need_their_keyword_and_only_flag():
-    assert _value(RULES["passport_rf"], "паспорт 45 07 123456") == "45 07 123456"
-    assert _value(RULES["passport_rf"], "order 45 07 123456") is None
-    assert _value(RULES["phone_rf"], "тел. +7 916 123-45-67") == "+7 916 123-45-67"
-    assert _value(RULES["phone_rf"], "+7 916 123-45-67") is None
+    assert _value(RULES["passport_rf"], "паспорт 00 00 123456") == "00 00 123456"
+    assert _value(RULES["passport_rf"], "order 00 00 123456") is None
+    assert _value(RULES["phone_rf"], "тел. +7 000 123-45-67") == "+7 000 123-45-67"
+    assert _value(RULES["phone_rf"], "+7 000 123-45-67") is None
 
 
 # --- entropy -----------------------------------------------------------------------------------

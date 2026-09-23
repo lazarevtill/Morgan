@@ -352,7 +352,12 @@ def _with_luhn_control(body: str) -> str:
 
 
 def _keywords(names: Sequence[str]) -> re.Pattern[str]:
-    return re.compile("|".join(re.escape(name) for name in names), re.IGNORECASE)
+    """Anchored to a word's start only (``(?<!\\w)``): "INN" inside "dinner" or "card" inside
+    "discard" must not gate a number. Not anchored on the right, so a stem like "карт" still
+    matches the start of a longer word ("карта")."""
+    return re.compile(
+        "(?<!\\w)(?:" + "|".join(re.escape(name) for name in names) + ")", re.IGNORECASE
+    )
 
 
 _PROVIDER_PATTERNS: tuple[tuple[str, str, Callable[[], str]], ...] = (
@@ -537,7 +542,7 @@ def rules(limits: GateLimits) -> tuple[Rule, ...]:
             r"\b\d{2} ?\d{2} ?\d{6}\b",
             check=lambda digits: len(digits) == 10,
             effect="flag",
-            fixture=lambda: f"{passport_keyword} " + "45 07 " + "123456",
+            fixture=lambda: f"{passport_keyword} " + "00 00 " + "123456",
             limits=limits,
         ),
         _identifier(
@@ -545,7 +550,7 @@ def rules(limits: GateLimits) -> tuple[Rule, ...]:
             r"(?:\+7|8)[\s(-]*\d{3}[\s)-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}",
             check=lambda digits: len(digits) == 11,
             effect="flag",
-            fixture=lambda: f"{phone_keyword}. " + "+7 916 " + "123-45-67",
+            fixture=lambda: f"{phone_keyword}. " + "+7 000 " + "123-45-67",
             limits=limits,
         ),
     )
