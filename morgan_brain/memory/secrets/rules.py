@@ -22,6 +22,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from fnmatch import fnmatch
+from types import MappingProxyType
 from typing import Literal
 
 from morgan_brain.config import Settings
@@ -68,14 +69,16 @@ def limits_of(settings: Settings) -> GateLimits:
         context_chars=settings.gate_context_chars,
         card_bins=tuple(settings.gate_card_bins),
         epoch_years=(int(low.strip()), int((high or low).strip())),
-        keywords={
-            "inn": tuple(settings.gate_keywords_inn),
-            "snils": tuple(settings.gate_keywords_snils),
-            "ogrn": tuple(settings.gate_keywords_ogrn),
-            "bank_card": tuple(settings.gate_keywords_card),
-            "passport_rf": tuple(settings.gate_keywords_passport),
-            "phone_rf": tuple(settings.gate_keywords_phone),
-        },
+        keywords=MappingProxyType(
+            {
+                "inn": tuple(settings.gate_keywords_inn),
+                "snils": tuple(settings.gate_keywords_snils),
+                "ogrn": tuple(settings.gate_keywords_ogrn),
+                "bank_card": tuple(settings.gate_keywords_card),
+                "passport_rf": tuple(settings.gate_keywords_passport),
+                "phone_rf": tuple(settings.gate_keywords_phone),
+            }
+        ),
         placeholder_values=tuple(settings.gate_placeholder_values),
         placeholder_shapes=tuple(settings.gate_placeholder_shapes),
         placeholder_prefixes=tuple(settings.gate_placeholder_prefixes),
@@ -85,15 +88,23 @@ def limits_of(settings: Settings) -> GateLimits:
 #: Where a match's value sits inside it: (start, end) in the text, or ``None`` to pass it over.
 ValueSpan = Callable[[re.Match[str], GateLimits], "tuple[int, int] | None"]
 
+#: A rule's own span finder, replacing the generic pattern-then-filter scan: ``assignment``'s
+#: resume logic and ``bank_card``'s checksum-chosen span (Important 1). Returns already-gated
+#: spans -- ``matches`` returns them as they come, applying no further check.
+SpanFinder = Callable[["Rule", str, "GateLimits"], "list[tuple[int, int]]"]
+
 
 @dataclass(frozen=True)
 class Rule:
     """One rule. *pattern* finds candidates; *value_span* says which part of a candidate is the
     value (and may reject it); *check* is a checksum or the entropy test over that value;
-    *exempt* are the shapes the value must not have; *keywords* is the context gate an
-    identifier needs within ``context_chars`` on its line, and *bin_gate* whether a card BIN
-    passes it instead; *effect* is what a hit does to the text; *fixture* builds a value the
-    rule catches, from parts, on each call."""
+    *exempt* are the shapes the value must not have; *exempt_prefixes* are text the value may
+    not be preceded by, itself after a non-word character or the start of the text; *keywords*
+    is the context gate an identifier needs within ``context_chars`` on its line,
+    *keyword_span* the longest keyword's length plus the slack a boundary search past the
+    window's edge needs, and *bin_gate* whether a card BIN passes it instead; *effect* is what
+    a hit does to the text; *fixture* builds a value the rule catches, from parts, on each
+    call; *find_spans*, when set, replaces the generic scan (``matches``) entirely."""
 
     name: str
     kind: RuleKind
@@ -102,9 +113,12 @@ class Rule:
     value_span: ValueSpan
     fixture: Callable[[], str]
     keywords: re.Pattern[str] | None = None
+    keyword_span: int = 0
     check: Callable[[str], bool] | None = None
     exempt: tuple[re.Pattern[str], ...] = ()
+    exempt_prefixes: tuple[str, ...] = ()
     bin_gate: bool = False
+    find_spans: SpanFinder | None = None
 
 
 def _whole(match: re.Match[str], limits: GateLimits) -> tuple[int, int]:
@@ -121,10 +135,34 @@ ASSIGNMENT_RE = re.compile(
     r"""(?i)(?:^|[\s"'{,(\[])(?:export\s+)?"""
     r"""(?P<key>[A-Za-z0-9_.-]*?(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key"""
     r"""|secret[_-]?key|client[_-]?secret|private[_-]?key)\d*)"""
-    r"""\s*["']?\s*[:=]\s*(?P<rest>.{0,64})""",
+    # \s*(?:["']\s*)?[:=]: the equivalent of \s*["']?\s*[:=] with one \s* run, not two -- the
+    # spec's original backtracks quadratically on whitespace with no separator after it
+    # (Minor 6); this accepts the same language.
+    r"""\s*(?:["']\s*)?[:=]\s*(?P<rest>.{0,64})""",
     re.MULTILINE,
 )
 ASSIGNMENT_VALUE_RE = re.compile(r"""^["']?([^\s"',;)}\]]{8,})""")
+
+
+def _assignment_spans(rule: Rule, text: str, limits: GateLimits) -> list[tuple[int, int]]:
+    """``rest`` swallows up to 64 characters, so a plain ``finditer`` resumes past a second
+    assignment on the same line before it is ever tried (Important 1). Resume at an accepted
+    value's end, or at ``rest``'s own start when this candidate is rejected -- the text ``rest``
+    swallowed is searched again, so a real assignment inside it is still found."""
+    found: list[tuple[int, int]] = []
+    pos = 0
+    while True:
+        match = rule.pattern.search(text, pos)
+        if match is None:
+            break
+        span = rule.value_span(match, limits)
+        if span is None:
+            pos = match.start("rest")
+            continue
+        start, end = span
+        found.append((start, end))
+        pos = end
+    return found
 
 
 def is_numeric_value(value: str) -> bool:
@@ -277,28 +315,46 @@ def bin_matches(digits: str, bins: Sequence[str]) -> bool:
 
 
 def _is_json_number(text: str, start: int, end: int) -> bool:
-    """A bare number in the value position of a JSON member."""
+    """A bare number in the value position of a JSON member. Only spaces and tabs are trimmed
+    on each side -- a line end terminates the search rather than being crossed (Minor 2), so a
+    colon several lines above, or content on the following line, is never read as this
+    member's own key or continuation."""
     if start > 0 and text[start - 1] == '"':
         return False
-    before = text[:start].rstrip()
-    after = text[end:].lstrip()
+    before = text[:start].rstrip(" \t")
+    after = text[end:].lstrip(" \t")
     return before.endswith(":") and (after == "" or after[0] in ",}]\n")
 
 
-def _same_line_context(text: str, start: int, end: int, chars: int) -> tuple[str, str]:
+def _line_bounds(text: str, start: int, end: int) -> tuple[int, int]:
+    """The (line_start, line_end) bounds of the line ``text[start:end]`` sits on."""
     line_start = text.rfind("\n", 0, start) + 1
     line_end = text.find("\n", end)
-    line_end = len(text) if line_end == -1 else line_end
-    return text[max(line_start, start - chars) : start], text[end : min(line_end, end + chars)]
+    return line_start, (len(text) if line_end == -1 else line_end)
 
 
 def _gated_in(rule: Rule, text: str, start: int, end: int, limits: GateLimits) -> bool:
     """The keyword comes first (D27, N2): a number beside its keyword is an identifier whatever
     its shape; only a keyword-less card reaching the BIN gate is dropped when it is a JSON
-    number or an epoch timestamp; any other keyword-less number matches nothing."""
-    before, after = _same_line_context(text, start, end, limits.context_chars)
-    if rule.keywords is not None and (rule.keywords.search(before) or rule.keywords.search(after)):
-        return True
+    number or an epoch timestamp; any other keyword-less number matches nothing.
+
+    The keyword search reads bounded *positions* in ``text``, never a slice (Minor 1): a slice
+    starts a lookbehind blind to the real character before it, and ends a lookahead blind to
+    the real character after -- both would let a keyword glued inside a longer word gate a
+    number near the window's edge. Before the value, the bound is exact: every identifier span
+    starts with a digit (or a phone's ``+``), never a letter, so a lookahead blind at that edge
+    gives the same answer sighted would. After the value, the bound is padded by the rule's
+    longest keyword plus slack, so a keyword starting near the window's edge still has real
+    text for its own lookahead -- then re-checked against the true, unpadded window.
+    """
+    if rule.keywords is not None:
+        line_start, line_end = _line_bounds(text, start, end)
+        lo = max(line_start, start - limits.context_chars)
+        hi = min(line_end, end + limits.context_chars)
+        before = rule.keywords.search(text, lo, start)
+        after = rule.keywords.search(text, end, min(line_end, hi + rule.keyword_span))
+        if before is not None or (after is not None and after.start() < hi):
+            return True
     if not rule.bin_gate:
         return False
     digits = _digits(text[start:end])
@@ -307,8 +363,26 @@ def _gated_in(rule: Rule, text: str, start: int, end: int, limits: GateLimits) -
     return not (_is_json_number(text, start, end) or is_epoch_like(digits, limits))
 
 
+def _exempt_prefix_matches(text: str, start: int, prefixes: tuple[str, ...]) -> bool:
+    """Whether *text* just before *start* ends in one of *prefixes*, itself preceded by a
+    non-word character or the start of the text (Minor 3): "oauth1:" and "depth1:" end in
+    "h1:" too, but "t" precedes it there, so neither exempts anything."""
+    for prefix in prefixes:
+        prefix_start = start - len(prefix)
+        if prefix_start < 0 or text[prefix_start:start] != prefix:
+            continue
+        before = text[prefix_start - 1] if prefix_start > 0 else ""
+        if not before or not (before.isalnum() or before == "_"):
+            return True
+    return False
+
+
 def matches(rule: Rule, text: str, limits: GateLimits) -> list[tuple[int, int]]:
-    """The (start, end) spans *rule* applies to in *text*, after its own checks."""
+    """The (start, end) spans *rule* applies to in *text*, after its own checks. A rule that
+    carries its own ``find_spans`` (Important 1) is scanned that way instead; every other rule
+    keeps this generic pattern-then-filter scan."""
+    if rule.find_spans is not None:
+        return rule.find_spans(rule, text, limits)
     found: list[tuple[int, int]] = []
     for match in rule.pattern.finditer(text):
         span = rule.value_span(match, limits)
@@ -321,11 +395,67 @@ def matches(rule: Rule, text: str, limits: GateLimits) -> list[tuple[int, int]]:
             continue
         if any(pattern.fullmatch(value) for pattern in rule.exempt):
             continue
-        if rule.name == "entropy" and text[:start].endswith(ENTROPY_EXEMPT_PREFIXES):
+        if rule.exempt_prefixes and _exempt_prefix_matches(text, start, rule.exempt_prefixes):
             continue
         if rule.kind == "identifier" and not _gated_in(rule, text, start, end, limits):
             continue
         found.append((start, end))
+    return found
+
+
+# --- bank_card: the checksum chooses the span, not the pattern (Important 1) -------------------
+
+#: A maximal run of digits, optionally single-space-or-hyphen separated, with no digit on
+#: either side -- the same shape the old pattern matched whole, now just the search space
+#: within which the checksum picks a sub-span.
+_CARD_RUN_RE = re.compile(r"(?<!\d)\d(?:[ -]?\d)*(?!\d)")
+_DIGIT_GROUP_RE = re.compile(r"\d+")
+
+#: A sub-span holds 13 to 19 digits, and every digit belongs to some group, so at most this
+#: many groups can ever fit in one -- trying further ones is never useful and would make the
+#: scan quadratic in a run with many one-digit groups.
+_CARD_MAX_GROUPS = 19
+
+
+def _card_spans(rule: Rule, text: str, limits: GateLimits) -> list[tuple[int, int]]:
+    """The spans of *rule* (``bank_card``) in *text*: inside each maximal digit run, the
+    sub-spans that start and end on a digit-group boundary and hold 13 to 19 digits, tried
+    leftmost start first and longest first at each start; the first to fullmatch the card
+    shape, pass Luhn and pass the gate is taken, and the scan continues after it, inside the
+    same run (Important 1). A run of one unbroken long number has only itself as a
+    group -- never a shorter, differently-bounded sub-span -- so it matches nothing unless its
+    own length is 13 to 19."""
+    found: list[tuple[int, int]] = []
+    for run in _CARD_RUN_RE.finditer(text):
+        groups = [
+            (m.start() + run.start(), m.end() + run.start())
+            for m in _DIGIT_GROUP_RE.finditer(text[run.start() : run.end()])
+        ]
+        cursor = 0
+        while cursor < len(groups):
+            farthest = min(cursor + _CARD_MAX_GROUPS, len(groups))
+            accepted: tuple[int, int, int] | None = None
+            for last in range(farthest - 1, cursor - 1, -1):
+                start, end = groups[cursor][0], groups[last][1]
+                digit_count = sum(g[1] - g[0] for g in groups[cursor : last + 1])
+                if not (13 <= digit_count <= 19):
+                    continue
+                candidate = text[start:end]
+                if not rule.pattern.fullmatch(candidate):
+                    continue
+                digits = _digits(candidate)
+                if rule.check is not None and not rule.check(digits):
+                    continue
+                if not _gated_in(rule, text, start, end, limits):
+                    continue
+                accepted = (start, end, last)
+                break
+            if accepted is None:
+                cursor += 1
+                continue
+            start, end, last = accepted
+            found.append((start, end))
+            cursor = last + 1
     return found
 
 
@@ -351,13 +481,25 @@ def _with_luhn_control(body: str) -> str:
     raise AssertionError("unreachable: one of ten digits completes a Luhn number")
 
 
-def _keywords(names: Sequence[str]) -> re.Pattern[str]:
-    """Anchored to a word's start only (``(?<!\\w)``): "INN" inside "dinner" or "card" inside
-    "discard" must not gate a number. Not anchored on the right, so a stem like "карт" still
-    matches the start of a longer word ("карта")."""
-    return re.compile(
-        "(?<!\\w)(?:" + "|".join(re.escape(name) for name in names) + ")", re.IGNORECASE
-    )
+def _keywords(names: Sequence[str]) -> tuple[re.Pattern[str], int]:
+    """A keyword matches only where no letter precedes it (``(?<![^\\W\\d_])``): "INN" inside
+    "dinner" does not gate, but a digit or underscore is not a letter, so "user_phone" and
+    "customer_inn" still do. An ASCII keyword also ends at a word's end, with an optional
+    plural "s" (``(?:s)?(?![^\\W\\d_])``): "inner", "innodb", "panel", "pandas", "mirror" and
+    "cardinal" no longer gate, while "cards", "phones" and "phone_number" do. A Cyrillic
+    keyword stays open on the right, because Russian inflects an ending onto its stem: "карт"
+    matches "карта" and "карты" too.
+
+    Returns the compiled pattern and the longest keyword's length plus slack (the optional "s"
+    and the lookahead's one-character peek) -- how far past the context window's edge a bounded
+    search needs to reach for a keyword starting near that edge to see its own real neighbour
+    (``_gated_in``)."""
+    parts = []
+    for name in names:
+        escaped = re.escape(name)
+        parts.append(f"{escaped}(?:s)?(?![^\\W\\d_])" if name.isascii() else escaped)
+    pattern = re.compile("(?<![^\\W\\d_])(?:" + "|".join(parts) + ")", re.IGNORECASE)
+    return pattern, max(len(name) for name in names) + 2
 
 
 _PROVIDER_PATTERNS: tuple[tuple[str, str, Callable[[], str]], ...] = (
@@ -394,8 +536,12 @@ _PROVIDER_PATTERNS: tuple[tuple[str, str, Callable[[], str]], ...] = (
     ),
     (
         "private_key",
-        r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"
-        r"(?:.|\n)*?(?:-----END (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----|\Z)",
+        # Real PGP armor ends "PRIVATE KEY BLOCK-----", not "PRIVATE KEY-----" like every other
+        # variant, so it is its own alternative rather than one more optional word (Minor 10a).
+        r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----"
+        r"(?:.|\n)*?(?:-----END (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----|\Z)"
+        r"|-----BEGIN PGP PRIVATE KEY BLOCK-----"
+        r"(?:.|\n)*?(?:-----END PGP PRIVATE KEY BLOCK-----|\Z)",
         lambda: (
             "-----BEGIN " + "PRIVATE KEY-----\n" + "A" * 40 + "\n-----END " + "PRIVATE KEY-----"
         ),
@@ -428,7 +574,9 @@ def _identifier(
     fixture: Callable[[], str],
     limits: GateLimits,
     bin_gate: bool = False,
+    find_spans: SpanFinder | None = None,
 ) -> Rule:
+    keywords, keyword_span = _keywords(limits.keywords[name])
     return Rule(
         name=name,
         kind="identifier",
@@ -436,9 +584,11 @@ def _identifier(
         effect=effect,
         value_span=_whole,
         fixture=fixture,
-        keywords=_keywords(limits.keywords[name]),
+        keywords=keywords,
+        keyword_span=keyword_span,
         check=check,
         bin_gate=bin_gate,
+        find_spans=find_spans,
     )
 
 
@@ -456,7 +606,10 @@ def rules(limits: GateLimits) -> tuple[Rule, ...]:
         )
         for name, pattern, fixture in _PROVIDER_PATTERNS
     )
-    entropy_pattern = re.compile(rf"[A-Za-z0-9+/=_\-]{{{limits.entropy_min_length},}}")
+    # "=" is trailing base64 padding only (0-2 of them), never part of the repeated class, so an
+    # interior "=" splits the token instead of joining a key to its value (Important 4):
+    # "request_id=<uuid>" scores the UUID alone, and its exemption applies to it alone.
+    entropy_pattern = re.compile(rf"[A-Za-z0-9+/_\-]{{{limits.entropy_min_length},}}={{0,2}}")
     generic = (
         Rule(
             name="assignment",
@@ -464,9 +617,11 @@ def rules(limits: GateLimits) -> tuple[Rule, ...]:
             pattern=ASSIGNMENT_RE,
             effect="redact",
             value_span=_assignment_span,
-            # "=" sits in the entropy token class, so a "KEY=value" fixture is one 24-char
-            # token at ~4.33 bits/char -- above the 4.2 threshold; ":" does not. The "=" form
-            # stays covered by SECRET_FORMS' DB_PASSWORD= entry in the test.
+            find_spans=_assignment_spans,
+            # A colon separator, not "=": now that entropy stops at an interior "=" (Important
+            # 4) an "=" form would work too, but ":" was chosen under the older entropy class
+            # and is kept rather than changed without a ruling. The "=" form stays covered by
+            # SECRET_FORMS' DB_PASSWORD= entry in the test.
             fixture=lambda: "DB_PASSWORD: " + "s3cr" + "3tValue9",
         ),
         Rule(
@@ -493,12 +648,14 @@ def rules(limits: GateLimits) -> tuple[Rule, ...]:
             value_span=_whole,
             check=lambda token: entropy_bits(token) >= limits.entropy_threshold,
             exempt=_ENTROPY_EXEMPT,
+            exempt_prefixes=ENTROPY_EXEMPT_PREFIXES,
             fixture=lambda: "abcdefghijkl" + "mnopqrstuvwx" + "yz0123456789" + "+/ABCDEF",
         ),
     )
     inn_keyword = limits.keywords["inn"][0]
     snils_keyword = limits.keywords["snils"][0]
     ogrn_keyword = limits.keywords["ogrn"][0]
+    card_keyword = limits.keywords["bank_card"][0]
     passport_keyword = limits.keywords["passport_rf"][0]
     phone_keyword = limits.keywords["phone_rf"][0]
     identifiers = (
@@ -533,9 +690,10 @@ def rules(limits: GateLimits) -> tuple[Rule, ...]:
             r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)",
             check=luhn_ok,
             effect="redact",
-            fixture=lambda: "card " + _with_luhn_control("4123" + "45678901234"),
+            fixture=lambda: f"{card_keyword} " + _with_luhn_control("4123" + "45678901234"),
             limits=limits,
             bin_gate=True,
+            find_spans=_card_spans,
         ),
         _identifier(
             "passport_rf",

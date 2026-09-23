@@ -241,23 +241,29 @@ class Settings(BaseSettings):
     #: ``start-end``: a number with no keyword near it that parses as epoch seconds or
     #: milliseconds inside these years is a timestamp, not an identifier.
     gate_epoch_years: str = "2000-2100"
+    #: Every keyword list refuses empty (Important 2): "no keyword" would silently switch an
+    #: identifier rule off, or turn the card gate into BIN-only, and the gate report could not
+    #: tell that apart from a rule that simply finds nothing.
     gate_keywords_inn: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["ИНН", "INN"]
+        default_factory=lambda: ["ИНН", "INN"], min_length=1
     )
     gate_keywords_snils: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["СНИЛС", "SNILS"]
+        default_factory=lambda: ["СНИЛС", "SNILS"], min_length=1
     )
     gate_keywords_ogrn: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["ОГРН", "OGRN"]
+        default_factory=lambda: ["ОГРН", "OGRN"], min_length=1
     )
+    #: "Master" is a git branch name in every repository; "Mastercard" is the word actually
+    #: written beside a card number.
     gate_keywords_card: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["карт", "card", "PAN", "Mir", "Visa", "Master"]
+        default_factory=lambda: ["карт", "card", "PAN", "Mir", "Visa", "Mastercard"],
+        min_length=1,
     )
     gate_keywords_passport: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["паспорт", "passport"]
+        default_factory=lambda: ["паспорт", "passport"], min_length=1
     )
     gate_keywords_phone: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["тел", "phone", "телефон", "моб"]
+        default_factory=lambda: ["тел", "phone", "телефон", "моб"], min_length=1
     )
     #: Assignment values that are placeholders, matched whole without regard to case.
     gate_placeholder_values: Annotated[list[str], NoDecode] = Field(
@@ -312,14 +318,51 @@ class Settings(BaseSettings):
     def _split_comma_separated(cls, value: object) -> object:
         """``MORGAN_CODE_ROOTS=~/code,~/work`` -> ``["~/code", "~/work"]``.
 
-        Both fields carry ``NoDecode`` (see the import above): a plain ``list[str]`` field
-        would otherwise have its raw env string handed to ``json.loads`` before any validator
-        runs, and a comma-separated value is not JSON -- every non-empty setting would fail to
-        parse before this function ever saw it. A value that is already a list (constructing
-        ``Settings`` directly, as the tests do) passes through unchanged.
+        Every field named above carries ``NoDecode`` (see the import above): a plain
+        ``list[str]`` field would otherwise have its raw env string handed to ``json.loads``
+        before any validator runs, and a comma-separated value is not JSON -- every non-empty
+        setting would fail to parse before this function ever saw it. A value that is already a
+        list (constructing ``Settings`` directly, as the tests do) passes through unchanged.
         """
         if isinstance(value, str):
             return [p.strip() for p in value.split(",") if p.strip()]
+        return value
+
+    @field_validator("gate_epoch_years", mode="after")
+    @classmethod
+    def _validate_epoch_years(cls, value: str) -> str:
+        """``start-end``, or a single year meaning both: named at load, not left to raise a
+        bare ``ValueError`` from inside a scan (Minor 7). Mirrors ``limits_of``'s own parsing
+        exactly, so a value accepted here parses there without surprise.
+        """
+        low, _, high = value.partition("-")
+        low, high = low.strip(), (high.strip() or low.strip())
+        if not low.isdigit() or not high.isdigit():
+            raise ValueError(
+                f"gate_epoch_years must be 'start-end' or a single year, e.g. 2000-2100: {value!r}"
+            )
+        if int(low) > int(high):
+            raise ValueError(f"gate_epoch_years' start must not be after its end: {value!r}")
+        return value
+
+    @field_validator("gate_card_bins", mode="after")
+    @classmethod
+    def _validate_card_bins(cls, value: list[str]) -> list[str]:
+        """Each entry a bare digit prefix, or an ``a-b`` range of matching width with ``a`` no
+        greater than ``b``: named at load, not left to raise a bare ``ValueError`` from inside
+        a scan, or to be silently skipped as a match (Minor 7). Empty is not rejected here: it
+        means bank_card redacts by keyword alone, never by BIN (Important 2).
+        """
+        for entry in value:
+            low, _, high = entry.partition("-")
+            low, high = low.strip(), (high.strip() or low.strip())
+            if not low.isdigit() or not high.isdigit() or len(low) != len(high):
+                raise ValueError(
+                    "gate_card_bins entries must be digits, or a range of matching width "
+                    f"(e.g. 51-55): {entry!r}"
+                )
+            if int(low) > int(high):
+                raise ValueError(f"gate_card_bins range must not be reversed: {entry!r}")
         return value
 
     @model_validator(mode="after")
