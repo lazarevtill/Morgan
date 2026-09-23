@@ -52,6 +52,10 @@ class GateLimits:
     placeholder_values: tuple[str, ...]
     placeholder_shapes: tuple[str, ...]
     placeholder_prefixes: tuple[str, ...]
+    #: Read by the scanner: a text longer than ``window_chars`` is scanned in windows that
+    #: overlap by ``window_overlap_chars``.
+    window_chars: int
+    window_overlap_chars: int
 
     @classmethod
     def defaults(cls) -> GateLimits:
@@ -82,6 +86,8 @@ def limits_of(settings: Settings) -> GateLimits:
         placeholder_values=tuple(settings.gate_placeholder_values),
         placeholder_shapes=tuple(settings.gate_placeholder_shapes),
         placeholder_prefixes=tuple(settings.gate_placeholder_prefixes),
+        window_chars=settings.gate_window_chars,
+        window_overlap_chars=settings.gate_window_overlap_chars,
     )
 
 

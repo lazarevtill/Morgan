@@ -13,6 +13,7 @@ Timestamps are passed in, never generated implicitly, so the system stays determ
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from enum import Enum
 from uuid import uuid4
@@ -23,6 +24,20 @@ from pydantic import BaseModel, Field
 #: or an MCP call with no ``project`` argument. There is no silent default -- both surfaces
 #: report when they used it.
 PERSONAL_PROJECT = "personal"
+
+
+def tool_call_text(tool_name: str, arguments: object) -> str:
+    """The text a ``tool_call`` turn stores: one JSON document, ``{"input": …, "tool": …}``, keys
+    sorted, compact, ``ensure_ascii=False`` so Cyrillic stays Cyrillic for the gate's rules and
+    for FTS5. One document, so the scanner can decode the whole text back and scan its string
+    values before the serialisation hides a word boundary behind ``\\n``.
+    """
+    return json.dumps(
+        {"input": arguments, "tool": tool_name},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
 
 
 class Identified(BaseModel):

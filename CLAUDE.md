@@ -51,7 +51,9 @@ come in" are answered by the directory names.
   snapshot of its own.
   `secrets/` is the secret gate: `rules.py`, the 31 rules (21 provider, 4 generic, 6 Russian
   identifiers) with their checksums, keyword gates and runtime-assembled fixtures, every
-  threshold a setting; CPU only, no model, no network. Below them:
+  threshold a setting; `scan.py`, the scanner -- two verdicts, windows with overlap, a tool
+  call's decoded JSON values, positions on the stored text, `[redacted:<rule>]` and
+  `SecretRefused` by rule and offset, never a value; CPU only, no model, no network. Below them:
   - `store/` — persistence only: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`,
     `history`, `spaces` (the `embedding_spaces` table and its one-active partial index),
     `projects` (the `projects` table, keyed by name: classification, remote, root and the
@@ -241,6 +243,13 @@ come in" are answered by the directory names.
 - Multi-hop questions are not answered. Recall ranks memories and has no mechanism to
   compose two of them; measured recall@8 is 0.62 against 0.90 for single-hop
   (`qwen3-embedding:8b`).
+- A hex secret is caught only through an assignment's context: uniform hex tops out at 4.0
+  bits per character, below the entropy rule's threshold, so a hex key in free text with no
+  `password=` or `token:` beside it is not redacted.
+- A Russian identifier without its keyword is not redacted: an INN, SNILS, OGRN, card number,
+  passport or phone number is read only beside its keyword (`ИНН`, `СНИЛС`, `ОГРН`, `карт`,
+  `паспорт`, `тел`, or their Latin forms) on the same line, because a tenth of epoch timestamps
+  pass the checksums.
 
 ## Build, test, run
 

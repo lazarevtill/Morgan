@@ -234,6 +234,10 @@ class Settings(BaseSettings):
     gate_entropy_threshold: float = Field(default=4.2, gt=0.0)
     #: How far (characters, on the same line) a Russian identifier's keyword may sit from it.
     gate_context_chars: int = Field(default=40, ge=0)
+    #: A text longer than this is scanned in windows, overlapping by the second value, so a
+    #: token that straddles a window boundary is whole in one of them.
+    gate_window_chars: int = Field(default=65536, ge=1024)
+    gate_window_overlap_chars: int = Field(default=256, ge=64)
     #: Card BIN prefixes and prefix ranges (``4``, ``51-55``): a Luhn-valid number under one is
     #: redacted without a keyword.
     gate_card_bins: Annotated[list[str], NoDecode] = Field(
@@ -374,6 +378,17 @@ class Settings(BaseSettings):
             if int(low) > int(high):
                 raise ValueError(f"gate_card_bins range must not be reversed: {entry!r}")
         return value
+
+    @model_validator(mode="after")
+    def _window_overlap_below_the_window(self) -> Settings:
+        """A window must advance: an overlap at or above its width would scan nothing past the
+        first window, silently."""
+        if self.gate_window_overlap_chars >= self.gate_window_chars:
+            raise ValueError(
+                "gate_window_overlap_chars must be below gate_window_chars: "
+                f"{self.gate_window_overlap_chars} >= {self.gate_window_chars}"
+            )
+        return self
 
     @model_validator(mode="after")
     def _fill_data_dir_defaults(self) -> Settings:
