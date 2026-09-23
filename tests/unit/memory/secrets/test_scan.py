@@ -217,11 +217,11 @@ def test_a_token_at_the_truncation_boundary_is_whole_because_the_scan_precedes_t
 
 
 def test_scanning_a_redacted_text_again_leaves_it_unchanged_and_finds_nothing():
-    """The redacted text is ``DB_PASSWORD=[redacted:assignment]``: without the guard, the
+    """The redacted text is ``DB_PASSWORD: [redacted:assignment]``: without the guard, the
     ``assignment`` rule reads ``[redacted:assignment`` (no closing bracket) as a new value on a
     second pass, corrupting the text and losing the record of the first redaction."""
     scanner = _scanner()
-    first = scanner.scan(f"DB_PASSWORD={MARKER}99", verdict="redact")
+    first = scanner.scan(RULES["assignment"].fixture(), verdict="redact")
     second = scanner.scan(first.text, verdict="redact")
     assert second.text == first.text
     assert second.redactions == () and second.flags == ()
@@ -234,7 +234,7 @@ def test_a_bracketed_span_that_is_not_a_real_rule_name_is_not_a_guard_and_is_sti
     guard and be skipped by mistake; the exact-name guard does not mistake it for one of its
     own placeholders, and the provider token inside is still found."""
     scanner = _scanner()
-    token = "gh" + "p_" + MARKER + "a" * (36 - len(MARKER))
+    token = RULES["github_token"].fixture().lower()
     result = scanner.scan(f"[redacted:{token}]", verdict="redact")
     assert result.redacted_rules() == ["github_token"]
     assert result.text == "[redacted:[redacted:github_token]]"
