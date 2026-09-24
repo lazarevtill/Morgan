@@ -61,8 +61,14 @@ come in" are answered by the directory names.
     `add_session_counts`, `insert_turns`, `get_session`, `find_session`, `turns_of`,
     `list_sessions` and `search_turns`; `corrections_fts`, the keyword index over corrections'
     normalised text, and `turn_links`, a turn's links to earlier similar turns by its columns,
-    are also created here, with no writer or reader of either yet), `spaces` (the
-    `embedding_spaces` table and its one-active partial index), `projects` (the `projects`
+    are also created here, with no writer or reader of either yet), `calls` (the `call_log`
+    table and its `ts` index, and its writer and readers: `insert_call`, `calls_between` and
+    `call_counts_since`), `digests` (`digests`, `digest_refs`, `digest_ratings` and
+    `link_ratings` and their indexes, and their writers and readers: `insert_digest`,
+    `has_first_for_session`, `get_digest`, `last_digest`, `newest_unrated_first`,
+    `digests_between`, `ratings_of`, `rate_line`, `rate_link`, `link_ratings_between`,
+    `digests_quoting` and `backfill_entrypoint`), `spaces` (the `embedding_spaces`
+    table and its one-active partial index), `projects` (the `projects`
     table, keyed by name: classification, remote, root and the per-project capture/consolidate
     switches; `get` and `list_all`, `seed` for migration step 7's one row per project already
     named in `memories`, `facts` or `session_history`, `register` for every project-keyed write
