@@ -2,7 +2,9 @@
 a newline is found, for a document that is exactly a tool call's canonical text, through marker
 characters that document does not already hold; every position lands on the stored text; a long
 text is scanned in overlapping windows, a match longer than the overlap still whole and one longer
-than a window continued into one span; a token at the write path's truncation boundary is whole
+than a window continued into one span, a run reaching a window's edge judged whole from its own
+start and never on a cut, and a run a rule rejects offered to that rule no more; a token at the
+write path's truncation boundary is whole
 because the scan runs on the whole text; a placeholder already in a text -- including the
 scanner's own, from a tool call's decoded pass -- is guarded rather than re-scanned; a flag-only
 hit found in a tool call's decoded pass is still carried to the stored text; nothing the scanner
@@ -33,7 +35,7 @@ from morgan_brain.memory.secrets import (
     build_scanner,
     strip_userinfo,
 )
-from morgan_brain.memory.secrets.rules import GateLimits, rules
+from morgan_brain.memory.secrets.rules import GateLimits, entropy_bits, rules
 from morgan_brain.models import tool_call_text
 
 LIMITS = GateLimits.defaults()
@@ -279,6 +281,93 @@ def test_a_long_match_its_rule_rejects_when_seen_whole_gives_way_to_the_span_it_
     result = scanner.scan(text, verdict="redact")
     assert result.text == "before [redacted:entropy] after"
     assert result.provider_hits == 0
+    assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
+
+
+def test_a_run_is_judged_whole_even_where_a_longer_cut_of_it_fails_the_check():
+    """The run's first window passes the entropy check, its first two windows together do not,
+    and the whole run does. A check is judged on the whole run, never on a reach that cuts it,
+    so the continuation reads on to the run's end: one redaction, no character of the run's
+    head stored -- the result an unwindowed scan gives."""
+    scanner = _scanner()
+    size = LIMITS.window_chars
+    head = _seeded_run(size, "head")
+    text = "x " + head + "A" * size + _seeded_run(4 * size, "tail") + " end"
+    result = scanner.scan(text, verdict="redact")
+    assert result.text == "x [redacted:entropy] end"
+    assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
+
+
+def test_a_run_whose_cut_at_the_windows_edge_fails_the_check_is_carried_and_judged_whole():
+    """The first window's edge cuts the run where all it holds is ``A``, which fails the
+    entropy check; the whole run passes. The cut run is carried to the next window, which
+    starts at the run and is filled by it, and continued there: one redaction."""
+    scanner = _scanner()
+    size = LIMITS.window_chars
+    text = "x " + "A" * size + _seeded_run(5 * size, "tail") + " end"
+    result = scanner.scan(text, verdict="redact")
+    assert result.text == "x [redacted:entropy] end"
+    assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
+
+
+def test_a_run_shorter_than_a_window_whose_cut_fails_the_check_is_carried_and_seen_whole():
+    """A run of 1,000 characters starts 400 before the first window's end, where all it holds
+    is ``A``. Carried to the next window, which starts at the run, it is seen whole and
+    redacted whole, with none of its head stored."""
+    scanner = _scanner(window_chars=1024, window_overlap_chars=64)
+    run = "A" * 400 + _seeded_run(600, "short")
+    text = "z " * 312 + run + " " + "y " * 600
+    assert text.index(run) == 1024 - 400
+    result = scanner.scan(text, verdict="redact")
+    assert result.text == text.replace(run, "[redacted:entropy]")
+    assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
+
+
+def test_a_run_whose_first_cut_fails_the_check_is_judged_from_its_own_start_not_a_later_one():
+    """The run opens with runs of four symbols its seeded part never uses. The first window's
+    cut of it fails the entropy check, and so does the run read from the second window's
+    start, which has lost most of that head; the whole run passes. The run is carried from the
+    first window to its own start and judged whole there, so none of its seeded part is stored
+    -- the result an unwindowed scan gives."""
+    scanner = _scanner(window_chars=1024, window_overlap_chars=64)
+    seeded = _seeded_run(2_048, "left-cut")
+    run = "".join(symbol * 250 for symbol in "-_+/") + seeded + "a" * 2_000
+    text = "x " + run + " end"
+    threshold = LIMITS.entropy_threshold
+    assert entropy_bits(text[2:1024]) < threshold
+    assert entropy_bits(text[1024 - 64 : 2 + len(run)]) < threshold
+    assert entropy_bits(run) >= threshold
+    result = scanner.scan(text, verdict="redact")
+    assert result.text == "x [redacted:entropy] end"
+    assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
+
+
+def test_the_windows_inside_a_run_its_rule_rejected_whole_do_not_read_it_again():
+    """The run's first windows pass the entropy check and fill their window; the whole run,
+    half of it ``a``, does not. Once the run is judged whole and rejected, no later window
+    offers that rule a span inside it, so the windows over the run do not each read on to its
+    end and the work stays linear. A generous bound, not a benchmark."""
+    scanner = _scanner(window_chars=1024, window_overlap_chars=64)
+    size = 800 * 1024
+    text = "start " + _seeded_run(size, "rejected-run") + "a" * size + " end"
+    started = time.perf_counter()
+    result = scanner.scan(text, verdict="redact")
+    elapsed = time.perf_counter() - started
+    assert result.text == text and result.redactions == ()
+    assert elapsed < 5
+
+
+def test_inside_a_run_its_rule_rejected_whole_every_other_rule_still_matches():
+    """Only the rule that rejected the run is offered nothing more inside it: a provider token
+    several windows deep in a run the entropy rule rejected whole is still redacted -- the
+    result an unwindowed scan gives."""
+    scanner = _scanner(window_chars=1024, window_overlap_chars=64)
+    token = RULES["github_token"].fixture()
+    run = _seeded_run(4 * 1024, "head") + "a" * 3_000 + "-" + token + "-" + "a" * 3_000
+    text = "start " + run + " end"
+    result = scanner.scan(text, verdict="redact")
+    assert result.text == text.replace(token, "[redacted:github_token]")
+    assert result.provider_hits == 1
     assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
 
 
