@@ -79,8 +79,10 @@ come in" are answered by the directory names.
     `forget` reaches). Each owns its schema and its queries; none of them ranks anything. Every
     write goes through `db.write_transaction`.
   - `recall/` — `fusion` (reciprocal rank over vector and keyword search, rank-only),
-    `floor` (the relevance floor, judged on vector scores) and `language` (a query's language
-    by script alone, no model call, logged on every recall).
+    `floor` (the relevance floor, judged on vector scores), `language` (a query's language
+    by script alone, no model call, logged on every recall) and `render` (`delimit`, the
+    `<<<morgan-<kind> <token>>>>` block a model reads stored text inside, every line marked;
+    `neutralise_links`; pure).
   - `knowledge/` — `extract`, `surprise`, `fact_ops`, `consolidation`.
     The work that costs a model call or a full pass, and never runs inside a recall.
 - `eval/` — measuring what recall returns: labelled probes, recall@k, MRR and leak rate,
