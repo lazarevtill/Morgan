@@ -398,7 +398,7 @@ def backfill_entrypoint(
     return updated.rowcount
 
 
-def _delete_by_ids(conn: sqlite3.Connection, ids: str) -> int:
+def delete_digest_ids(conn: sqlite3.Connection, ids: str) -> int:
     """The digests in the JSON array *ids*, with their refs and ratings, each table by an
     explicit ``DELETE``: a deleter never relies on the foreign-key pragma another connection
     may lack."""
@@ -414,21 +414,32 @@ def _delete_by_ids(conn: sqlite3.Connection, ids: str) -> int:
 
 
 def delete_digests(conn: sqlite3.Connection, erasure: Erasure) -> int:
-    """The owner's digests of the erased project, or those rendered for the erased sessions. A
-    later cascade to every digest that quoted an erased row, wherever it was rendered, is not
-    built here."""
+    """The owner's digests of the erased project (project grain) or those rendered for the
+    erased sessions (session grain), and, at both grains, every digest anywhere whose refs
+    name an erased turn, memory or fact: a ``corrected before``, ``memory`` or ``fact``
+    line quotes another row's words, and a forget that left them in a digest of another
+    session or project would keep the forgotten words on disk. Returns the digests erased
+    in all; their refs and ratings go with them."""
     if erasure.grain == "sessions":
-        rows = conn.execute(
+        own = conn.execute(
             "SELECT id FROM digests WHERE user_id = ? "
             "AND native_session_id IN (SELECT value FROM json_each(?))",
             (erasure.user_id, erasure.native_ids),
         )
     else:
-        rows = conn.execute(
+        own = conn.execute(
             "SELECT id FROM digests WHERE user_id = ? AND project = ?",
             (erasure.user_id, erasure.project),
         )
-    return _delete_by_ids(conn, json.dumps([str(r["id"]) for r in rows]))
+    ids = {str(r["id"]) for r in own}
+    quoted: tuple[tuple[RefKind, str], ...] = (
+        ("turn", erasure.turn_ids),
+        ("memory", erasure.memory_ids),
+        ("fact", erasure.fact_ids),
+    )
+    for kind, ref_ids in quoted:
+        ids.update(digests_quoting(conn, kind=kind, ref_ids=ref_ids))
+    return delete_digest_ids(conn, json.dumps(sorted(ids)))
 
 
 def delete_link_ratings(conn: sqlite3.Connection, erasure: Erasure) -> int:

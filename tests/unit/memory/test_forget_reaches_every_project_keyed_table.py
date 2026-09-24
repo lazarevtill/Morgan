@@ -36,6 +36,7 @@ from morgan_brain.models import (
     utc_iso,
 )
 from tests.unit.memory.conftest import build_memory_module
+from tests.unit.memory.test_forget_leaves_no_trace import _files_holding
 
 
 def _project_keyed(conn) -> set[str]:
@@ -863,3 +864,142 @@ def test_the_reads_that_walk_the_registry_never_touch_an_fts_table(tmp_path):
     touched = [s for s in statements if "turns_fts" in s or "corrections_fts" in s]
     assert touched == []
     assert any("FROM turns " in s or "FROM turns\n" in s for s in statements)
+
+
+#: Tokens in no other fixture: what the byte search looks for after the erasure.
+_TURN_MARKER = "zqxjvturnmarker"
+_MEMORY_MARKER = "zqxjvmemorymarker"
+_FACT_MARKER = "zqxjvfactmarker"
+
+
+def _quoting_digest(
+    conn, *, digest_id: str, project: str, native_id: str, kind: str, ref: str, text: str
+) -> None:
+    """A rated ``first_for_session`` digest of *project* with one content line quoting *ref*."""
+    line_kind = "corrected" if kind == "turn" else kind
+    with write_transaction(conn):
+        digests.insert_digest(
+            conn,
+            DigestRow(
+                id=digest_id,
+                ts=NOW,
+                user_id="u",
+                project=project,
+                harness="claude-code",
+                native_session_id=native_id,
+                source="startup",
+                entrypoint="cli",
+                entrypoint_source="env",
+                first_for_session=True,
+                text=text,
+                lines=(DigestLineRef(1, line_kind, ref),),
+                refs=(DigestRef(kind, ref),),
+                chars=len(text),
+                ms=1,
+            ),
+        )
+        digests.rate_line(conn, digest_id=digest_id, line_no=1, rating="right", now=NOW)
+
+
+async def _two_projects_with_quoting_digests(tmp_path):
+    """``p`` and ``q`` with every table written; then four digests of ``q``: three quoting
+    ``p``'s turn, memory and fact by a ``digest_refs`` row, one quoting ``q``'s own turn."""
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "p")
+    await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "q")
+    memory_id = str(conn.execute("SELECT id FROM memories WHERE project = 'p'").fetchone()[0])
+    fact_id = str(conn.execute("SELECT id FROM facts WHERE project = 'p'").fetchone()[0])
+    p_turn = sessions_store.turns_of(conn, session_id_of("claude-code", "s-p"))[0].id
+    q_turn = sessions_store.turns_of(conn, session_id_of("claude-code", "s-q"))[0].id
+    _quoting_digest(
+        conn,
+        digest_id="q-quotes-turn",
+        project="q",
+        native_id="s-q",
+        kind="turn",
+        ref=str(p_turn),
+        text=f"| corrected before (2026-09-21): {_TURN_MARKER}\n",
+    )
+    _quoting_digest(
+        conn,
+        digest_id="q-quotes-memory",
+        project="q",
+        native_id="s-q",
+        kind="memory",
+        ref=memory_id,
+        text=f"| memory: 2026-09-21 {_MEMORY_MARKER}\n",
+    )
+    _quoting_digest(
+        conn,
+        digest_id="q-quotes-fact",
+        project="q",
+        native_id="s-q",
+        kind="fact",
+        ref=fact_id,
+        text=f"| fact: user likes {_FACT_MARKER}\n",
+    )
+    _quoting_digest(
+        conn,
+        digest_id="q-own",
+        project="q",
+        native_id="s-q",
+        kind="turn",
+        ref=str(q_turn),
+        text="| corrected before (2026-09-21): q's own\n",
+    )
+    path = tmp_path / "m.db"
+    for marker in (_TURN_MARKER, _MEMORY_MARKER, _FACT_MARKER):
+        assert _files_holding(path, marker.encode()), "the marker never reached the files"
+    return module, conn, path
+
+
+def _digest_ids(conn) -> set[str]:
+    return {str(r[0]) for r in conn.execute("SELECT id FROM digests")}
+
+
+def _companion_rows(conn, digest_id: str) -> tuple[int, int]:
+    refs = conn.execute(
+        "SELECT COUNT(*) FROM digest_refs WHERE digest_id = ?", (digest_id,)
+    ).fetchone()[0]
+    ratings = conn.execute(
+        "SELECT COUNT(*) FROM digest_ratings WHERE digest_id = ?", (digest_id,)
+    ).fetchone()[0]
+    return int(refs), int(ratings)
+
+
+async def test_a_digest_quoting_an_erased_row_goes_at_the_project_grain_wherever_rendered(
+    tmp_path,
+):
+    module, conn, path = await _two_projects_with_quoting_digests(tmp_path)
+
+    report = await module.forget(user_id="u", project="p")
+
+    assert _digest_ids(conn) == {"d-q-s-q", "q-own"}  # a render is named d-<project>-<native id>
+    assert report.digests == 4  # p's own render, and the three digests of q that quoted p
+    for digest_id in ("q-quotes-turn", "q-quotes-memory", "q-quotes-fact", "d-p-s-p"):
+        assert _companion_rows(conn, digest_id) == (0, 0), digest_id
+    assert _companion_rows(conn, "q-own") == (1, 1)
+    for marker in (_TURN_MARKER, _MEMORY_MARKER, _FACT_MARKER):
+        assert _files_holding(path, marker.encode()) == [], marker
+
+
+async def test_the_session_grain_erases_a_digest_quoting_its_turn_not_one_quoting_a_memory(
+    tmp_path,
+):
+    """The session grain erases turns, not memories or facts: the digest that quoted the
+    erased turn goes, wherever it was rendered; the ones quoting p's memory and fact stay,
+    because those rows stay."""
+    module, conn, path = await _two_projects_with_quoting_digests(tmp_path)
+
+    report = await module.forget_sessions(
+        user_id="u", project="p", session_ids=[session_id_of("claude-code", "s-p")], reason="forget"
+    )
+
+    assert _digest_ids(conn) == {"d-q-s-q", "q-own", "q-quotes-memory", "q-quotes-fact"}
+    assert report.digests == 2  # d-p-s-p, rendered for the erased session, and q-quotes-turn
+    assert _companion_rows(conn, "q-quotes-turn") == (0, 0)
+    assert _companion_rows(conn, "q-quotes-memory") == (1, 1)
+    assert _files_holding(path, _TURN_MARKER.encode()) == []
+    assert _files_holding(path, _MEMORY_MARKER.encode())
+    assert report.memories_reached is False

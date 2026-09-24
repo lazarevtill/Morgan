@@ -651,7 +651,8 @@ class MemoryModule:
         registered table absent from the database is named in ``report.tables_skipped`` rather
         than counted as zero. Every index lives in the same SQLite database, so the whole
         erasure is one write transaction; once it has committed, the database is vacuumed and
-        its write-ahead log truncated (`_truncate_wal`).
+        its write-ahead log truncated (`_truncate_wal`). A digest that quoted an erased turn,
+        memory or fact goes with it, wherever it was rendered.
         """
         conn = self._conn
         if conn.in_transaction:
@@ -730,7 +731,8 @@ class MemoryModule:
         optimized inside the transaction; afterwards the write-ahead log is truncated
         (``_truncate_wal``, which only logs if a concurrent reader keeps it from completing).
         No snapshot and no ``VACUUM``: the archive is a derived copy of files the harnesses
-        keep. Memories and facts are not reached, and the report says so.
+        keep. Memories and facts are not reached, and the report says so. A digest that quoted
+        an erased turn, memory or fact goes with it, wherever it was rendered.
         """
         conn = self._conn
         if conn.in_transaction:
