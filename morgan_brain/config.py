@@ -235,7 +235,8 @@ class Settings(BaseSettings):
     #: How far (characters, on the same line) a Russian identifier's keyword may sit from it.
     gate_context_chars: int = Field(default=40, ge=0)
     #: A text longer than this is scanned in windows, overlapping by the second value, so a
-    #: token that straddles a window boundary is whole in one of them.
+    #: token that straddles a window boundary is whole in one of them; each window also reads
+    #: that many characters before its start, so the keyword before a token is read with it.
     gate_window_chars: int = Field(default=65536, ge=1024)
     gate_window_overlap_chars: int = Field(default=256, ge=64)
     #: Card BIN prefixes and prefix ranges (``4``, ``51-55``): a Luhn-valid number under one is

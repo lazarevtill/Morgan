@@ -12,17 +12,21 @@ one, which is how a provider token is never also an entropy hit -- and a placeho
 the text, a replayed row or a quoted redaction among them, is guarded the same way, so a text
 scanned twice keeps its redaction and its record rather than being corrupted by a second pass.
 A text longer than ``window_chars`` is scanned in windows overlapping by
-``window_overlap_chars``, and a rule's check is judged on a whole run, never on one a window's
-edge cuts. A run a rule's pattern matches up to the end of a window that is not the last -- a
-hit, or a run whose cut fails its rule's check -- is carried into the next window, which starts
-at the run's own start (or the usual overlap, whichever is earlier), so a match longer than the
-overlap is still seen whole. A run that fills a whole window from its start while the text goes
-on is continued: its rule's pattern alone is matched again from that start over a reach that
-doubles, until the run ends inside the reach or the text ends, and only then is the rule's
-check judged. A run the rule accepts is one span, nothing of it left in clear, and scanning
-resumes the overlap before its end. A run the rule rejects seen whole is dropped, as an
-unwindowed scan drops it, and that rule is offered nothing more inside it, so no later window
-reads it again.
+``window_overlap_chars``. Each window also reads that much of the text before its start, so the
+keyword or prefix before a span -- ``Bearer``, an identifier's keyword, a digest's ``sha256:``
+-- is read with it, and takes only the spans that start inside it. A hit that ends inside its
+window is recorded, and the overlaps between recorded spans are resolved once, over the whole
+text, as an unwindowed scan resolves them. A rule's check is judged on a whole run, never on one
+a window's edge cuts: a span that edge cuts -- a hit, or a run its rule's pattern matches to the
+edge whatever its cut's check says -- is undecided, takes no hit's place, and is carried into
+the next window, which starts at the span's own start (or the usual overlap, whichever is
+earlier), so a match longer than the overlap is still seen whole. A span that fills a whole
+window from its start while the text goes on is continued: its rule's pattern alone is matched
+again from that start over a reach that doubles, until the run ends inside the reach or the text
+ends, and only then is the rule's check judged. A run the rule accepts is one span, nothing of
+it left in clear, and scanning resumes the overlap before its end, or earlier, at a cut span of
+an earlier rule inside it. A run the rule rejects seen whole is dropped, as an unwindowed scan
+drops it, and that rule is offered nothing more inside it, so no later window reads it again.
 
 A ``tool_call`` turn's text is one JSON document (``models.tool_call_text``). When the text is
 exactly what ``tool_call_text`` writes for the document it decodes to, its string values are
@@ -338,20 +342,13 @@ class Scanner:
 
     def _spans(self, text: str) -> list[_Span]:
         """Every span a rule takes in *text*, in text order, an earlier rule winning an overlap
-        and no span overlapping a placeholder already there. A long text is scanned in windows,
-        and a rule's check is never judged on a run a window's edge cuts. A span that touches
-        the end of a window that is not the last -- a hit, or a run its rule's pattern matches
-        to that end, whatever its cut's check says (``_open_runs``) -- is carried: the next
-        window starts at that span's start (or ``window_overlap_chars`` before the end,
-        whichever is earlier), so a match longer than the overlap -- a PEM key -- is still seen
-        whole. A span that fills its window from the start is continued to the end of its run
-        and judged on the whole run (``_continued``): accepted, it is one span and the next
-        window starts ``window_overlap_chars`` before its end; rejected, its rule is offered
-        nothing more inside that run, so no later window reads the run again."""
+        and no span overlapping a placeholder already there. A long text is scanned in windows
+        (``_window``); each records the spans it decides, and the overlaps between them are
+        resolved once, over the whole text, as an unwindowed scan resolves them."""
         limits = self.limits
         guards = _guards(text)
         if len(text) <= limits.window_chars:
-            return self._without_overlaps(self._matches_in(text, 0), guards)
+            return self._without_overlaps(self._matches_in(text, 0, 0), guards)
         found: dict[tuple[int, str], _Span] = {}
         # By rule name, the last run that rule rejected seen whole.
         rejected: dict[str, tuple[int, int]] = {}
@@ -359,17 +356,13 @@ class Scanner:
         while True:
             end = offset + limits.window_chars
             last = end >= len(text)
-            resume = end - limits.window_overlap_chars
-            for span in self._window(text, offset, end, guards, rejected, last=last):
-                if span.end >= end and not last:
-                    if span.start > offset:
-                        resume = min(resume, span.start)
-                        continue
-                    resume = span.end - limits.window_overlap_chars
+            decided, resume = self._window(text, offset, end, guards, rejected, last=last)
+            for span in decided:
                 found.setdefault((span.start, span.rule.name), span)
             if last:
                 break
-            # The settings refuse an overlap at or above the window, so this always advances.
+            # The settings refuse an overlap at or above the window, and every carried span
+            # starts after the window's start, so this always advances.
             offset = max(offset + 1, resume)
         return self._without_overlaps(found.values(), guards)
 
@@ -382,86 +375,129 @@ class Scanner:
         rejected: dict[str, tuple[int, int]],
         *,
         last: bool,
-    ) -> list[_Span]:
-        """The spans of the window ``text[offset:end]`` and the runs its end cuts
-        (``_open_runs``), overlaps resolved, none of them a rule's span starting inside a run
-        that rule rejected seen whole (*rejected*, by rule name): that run was judged once, and
-        a cut of it is not judged again. A span or run that fills the window from its start
-        while the text goes on is replaced by its continuation. When its rule rejects the run
-        seen whole, the run is added to *rejected*, the span is dropped and the window resolved
-        again without it, so the spans it had displaced are found."""
-        window = text[offset:end]
-        hits = self._matches_in(window, offset)
+    ) -> tuple[list[_Span], int]:
+        """The spans the window ``text[offset:end]`` decides, and where the next window starts.
+
+        The window reads ``window_overlap_chars`` of the text before its start as well, so a
+        keyword or a prefix before a span is seen with it, and takes only the spans that start
+        inside it: one that starts before was the previous window's. No span is taken that
+        starts inside a run its rule rejected seen whole (*rejected*, by rule name).
+
+        A hit that ends before the window's end is decided, whatever it overlaps: the overlaps
+        are resolved over the whole text. A span the window's end cuts -- a hit, or a run a
+        rule's pattern matches to that end whatever its cut's check says (``_open_runs``) -- is
+        undecided and takes no decided hit's place. One that starts after the window's start is
+        carried: the next window starts at its start, or ``window_overlap_chars`` before the
+        window's end, whichever is earlier, so a match longer than the overlap is seen whole.
+        One that fills the window from its start is continued, in rule order, unless a decided
+        hit of an earlier rule or a placeholder already there takes its place: accepted, it is
+        one span, the next window starts ``window_overlap_chars`` before its end, and every cut
+        span of an earlier rule inside it is carried, so the whole-text resolution chooses
+        between them; rejected, its run is added to *rejected* and the next is tried."""
+        limits = self.limits
+        seen_from = max(0, offset - limits.window_overlap_chars)
+        view = text[seen_from:end]
+        hits = [
+            span
+            for span in self._matches_in(view, seen_from, offset)
+            if not _starts_inside(span, rejected.get(span.rule.name))
+        ]
+        if last:
+            return hits, len(text)
         seen = {(span.rule.name, span.start, span.end) for span in hits}
         runs = [
             run
-            for run in self._open_runs(window, offset, last=last)
+            for run in self._open_runs(view, seen_from, offset)
             if (run.rule.name, run.start, run.end) not in seen
+            and not _starts_inside(run, rejected.get(run.rule.name))
         ]
-        candidates = [
-            span
-            for span in [*hits, *runs]
-            if not _starts_inside(span, rejected.get(span.rule.name))
-        ]
-        while True:
-            kept = self._without_overlaps(candidates, guards)
-            if last or not kept or kept[0].start != offset or kept[0].end < end:
-                return kept
-            # A span covering the whole window overlaps every other, so it is the only one kept.
-            filled = kept[0]
+        decided = [span for span in hits if span.end < end]
+        cut = [span for span in [*hits, *runs] if span.end >= end]
+        filling = sorted(
+            (span for span in cut if span.start == offset), key=lambda s: self._order[s.rule.name]
+        )
+        for filled in filling:
+            if filled not in self._without_overlaps([*decided, filled], guards):
+                continue
             whole, run_end = self._continued(text, filled)
             if whole is not None:
-                return [whole]
+                resume = whole.end - limits.window_overlap_chars
+                for span in cut:
+                    if (
+                        span.start > offset
+                        and self._order[span.rule.name] < self._order[whole.rule.name]
+                    ):
+                        resume = min(resume, span.start)
+                return [whole, *decided], resume
             if run_end is not None:
                 rejected[filled.rule.name] = (filled.start, run_end)
-            candidates = [span for span in candidates if span is not filled]
+        resume = end - limits.window_overlap_chars
+        for span in cut:
+            if span.start > offset:
+                resume = min(resume, span.start)
+        return decided, resume
 
     def _continued(self, text: str, span: _Span) -> tuple[_Span | None, int | None]:
         """For a span or cut run that filled its window while the text goes on: the whole match
-        of its rule at its start, and where the run its rule's pattern matches from that start
-        ends. The pattern alone is matched again from that start over a reach that doubles --
-        at least a window further on every pass, and under four times the run's length in all,
-        so the work stays linear -- until its match ends inside the reach or the reach is the
-        end of the text. Only then is the rule's check judged, once, on the whole run: never on
-        a reach that cuts it. The whole match is ``None`` when the rule rejects the run seen
-        whole; the run's end is ``None`` when the pattern makes no match at that start, and the
-        rule is judged on the reach read so far."""
+        of its rule at its start, and where the run its rule's pattern matches there ends. The
+        text is read from ``window_overlap_chars`` before the span, as its window read it, so a
+        value after a keyword -- a bearer token -- is matched with that keyword. The pattern
+        alone is matched again over a reach that doubles -- at least a window further on every
+        pass, and under four times the run's length in all, so the work stays linear -- until
+        its match ends inside the reach or the reach is the end of the text. Only then is the
+        rule's check judged, once, on the whole run: never on a reach that cuts it. The whole
+        match is ``None`` when the rule rejects the run seen whole; the run's end is ``None``
+        when the pattern makes no match there, and the rule is judged on the reach read so
+        far."""
         rule = span.rule
+        seen_from = max(0, span.start - self.limits.window_overlap_chars)
+        at = span.start - seen_from
         reach = span.end - span.start
         while True:
             reach *= 2
             stop = min(span.start + reach, len(text))
-            piece = text[span.start : stop]
-            # Only a rule whose span is its pattern's whole match fills a window from its start
-            # (a value inside a match starts after its keyword; a span finder's spans are
-            # short), and its pattern's match at the piece's start is the one its scan tries
-            # there first.
-            run = rule.pattern.match(piece)
-            if run is None or run.end() < len(piece) or stop == len(text):
+            view = text[seen_from:stop]
+            run = self._run_at(rule, view, at)
+            if run is None or run.end() < len(view) or stop == len(text):
                 break
-        ends = [end for start, end in matches(rule, piece, self.limits) if start == 0]
-        whole = _Span(rule, span.start, span.start + ends[0]) if ends else None
-        return whole, (None if run is None else span.start + run.end())
+        ends = [end for start, end in matches(rule, view, self.limits) if start == at]
+        whole = _Span(rule, span.start, seen_from + ends[0]) if ends else None
+        return whole, (None if run is None else seen_from + run.end())
 
-    def _open_runs(self, window: str, offset: int, *, last: bool) -> list[_Span]:
+    def _run_at(self, rule: Rule, view: str, at: int) -> re.Match[str] | None:
+        """The match of *rule*'s pattern in *view* whose value starts at *at*: the one its scan
+        of *view* makes there. Only a rule without a span finder fills a window -- a span
+        finder's spans are no longer than the smallest overlap the settings allow -- so the
+        pattern's match and its value are the rule's own."""
+        for match in rule.pattern.finditer(view):
+            if match.start() > at:
+                return None
+            value = rule.value_span(match, self.limits)
+            if value is not None and value[0] == at:
+                return match
+        return None
+
+    def _open_runs(self, view: str, seen_from: int, offset: int) -> list[_Span]:
         """For each rule whose scan can pass over what its pattern matches, the run its pattern
-        matches up to the window's end while the text goes on. That run is cut, and a check is
-        never judged on a cut: whatever its cut's check says, the run is carried into the next
-        window or, filling this one, continued, like a hit."""
-        if last:
-            return []
+        matches in *view* (the text from *seen_from* to the window's end) up to the window's
+        end, when that run starts inside the window, at or after *offset*. That run is cut, and
+        a check is never judged on a cut: whatever its cut's check says, the run is carried into
+        the next window or, filling this one, continued, like a hit."""
         runs: list[_Span] = []
         for rule in self._judging:
-            final = deque(rule.pattern.finditer(window), maxlen=1)
-            if final and final[0].end() == len(window):
-                runs.append(_Span(rule, offset + final[0].start(), offset + len(window)))
+            final = deque(rule.pattern.finditer(view), maxlen=1)
+            if final and final[0].end() == len(view) and seen_from + final[0].start() >= offset:
+                runs.append(_Span(rule, seen_from + final[0].start(), seen_from + len(view)))
         return runs
 
-    def _matches_in(self, window: str, offset: int) -> list[_Span]:
+    def _matches_in(self, view: str, seen_from: int, start: int) -> list[_Span]:
+        """Every rule's spans in *view*, the text from *seen_from* on, that start at or after
+        *start*, positioned on the text."""
         return [
-            _Span(rule, start + offset, end + offset)
+            _Span(rule, span_start + seen_from, span_end + seen_from)
             for rule in self._rules
-            for start, end in matches(rule, window, self.limits)
+            for span_start, span_end in matches(rule, view, self.limits)
+            if span_start + seen_from >= start
         ]
 
     def _without_overlaps(

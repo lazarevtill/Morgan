@@ -3,8 +3,9 @@ a newline is found, for a document that is exactly a tool call's canonical text,
 characters that document does not already hold; every position lands on the stored text; a long
 text is scanned in overlapping windows, a match longer than the overlap still whole and one longer
 than a window continued into one span, a run reaching a window's edge judged whole from its own
-start and never on a cut, and a run a rule rejects offered to that rule no more; a token at the
-write path's truncation boundary is whole
+start and never on a cut, a run a rule rejects offered to that rule no more, a hit a window sees
+whole kept whatever cut run overlaps it, and a value carried past a window's edge read with the
+keyword before it; a token at the write path's truncation boundary is whole
 because the scan runs on the whole text; a placeholder already in a text -- including the
 scanner's own, from a tool call's decoded pass -- is guarded rather than re-scanned; a flag-only
 hit found in a tool call's decoded pass is still carried to the stored text; nothing the scanner
@@ -368,6 +369,108 @@ def test_inside_a_run_its_rule_rejected_whole_every_other_rule_still_matches():
     result = scanner.scan(text, verdict="redact")
     assert result.text == text.replace(token, "[redacted:github_token]")
     assert result.provider_hits == 1
+    assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
+
+
+#: Window limits the identifier test runs under: a small window, and the defaults.
+_EDGE_LIMITS = {
+    "window-1024": {"window_chars": 1024, "window_overlap_chars": 64},
+    "defaults": {},
+}
+
+
+@pytest.mark.parametrize("limits", list(_EDGE_LIMITS), ids=list(_EDGE_LIMITS))
+@pytest.mark.parametrize(
+    "rule_name", ["inn", "snils", "ogrn", "passport_rf", "phone_rf", "bank_card"]
+)
+def test_an_identifier_glued_to_a_run_a_windows_edge_cuts_is_found_as_unwindowed(rule_name, limits):
+    """The identifier's value starts 400 characters before the first window's edge and runs on,
+    through a hyphen, into a run of ``a`` that the edge cuts: an entropy-class run, low in
+    entropy as a whole. The window sees the identifier whole beside its keyword; the cut run is
+    undecided there and takes no hit's place, so the value is redacted, or flagged with its text
+    kept, as an unwindowed scan does it. ``bank_card`` passes its BIN gate without a keyword and
+    is found either way."""
+    scanner = _scanner(**_EDGE_LIMITS[limits])
+    window = scanner.limits.window_chars
+    fixture = RULES[rule_name].fixture()
+    value = fixture.split(" ", 1)[1]
+    pairs = (window - 400 - (len(fixture) - len(value))) // 2
+    text = "z " * pairs + fixture + "-" + "a" * 456 + " " + "y " * 200
+    start = text.index(value)
+    assert window - 402 <= start <= window - 400
+    result = scanner.scan(text, verdict="redact")
+    assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
+    if RULES[rule_name].effect == "redact":
+        assert value not in result.text
+        assert result.text[start:].startswith(f"[redacted:{rule_name}]-")
+    else:
+        assert result.text == text
+        assert [(h.rule, h.start, h.length) for h in result.flags] == [
+            (rule_name, start, len(value))
+        ]
+
+
+def test_a_bearer_value_carried_past_a_windows_edge_is_read_with_its_keyword():
+    """The value, low in entropy, starts 417 characters before the first window's edge and runs
+    past it, so the next window starts at the value. That window also reads the text before its
+    start, where ``Bearer`` is: the value is redacted as a bearer token, as an unwindowed scan
+    does it."""
+    scanner = _scanner(window_chars=1024, window_overlap_chars=64)
+    text = "z " * 300 + "Bearer " + "a" * 600 + " " + "y " * 400
+    assert 1024 - text.index("a" * 600) == 417
+    result = scanner.scan(text, verdict="redact")
+    assert result.text == text.replace("a" * 600, "[redacted:bearer]")
+    assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
+
+
+def test_a_bearer_value_longer_than_a_window_is_redacted_whole_with_its_keyword():
+    """The value fills the second window from its start and is continued, its keyword read from
+    before that start: one bearer redaction over the whole value, though the value as a whole
+    is too low in entropy for the entropy rule."""
+    scanner = _scanner(window_chars=1024, window_overlap_chars=64)
+    value = _seeded_run(1_500, "bearer-head") + "a" * 5_000 + _seeded_run(3_000, "bearer-tail")
+    assert entropy_bits(value) < LIMITS.entropy_threshold
+    text = "x Bearer " + value + " end"
+    result = scanner.scan(text, verdict="redact")
+    assert result.text == "x Bearer [redacted:bearer] end"
+    assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
+
+
+def test_a_run_whose_edge_cuts_a_token_its_rule_rejects_whole_is_still_continued_whole():
+    """A provider token starts 50 characters before the first window's edge, inside a
+    high-entropy run, and runs on into ``_x`` and more of the run, so its rule makes no match
+    once it is seen whole. In the window that starts at the run, the cut token is undecided and
+    does not stop the run from being continued: the run is one entropy redaction, as an
+    unwindowed scan gives, with none of its head stored."""
+    scanner = _scanner(window_chars=1024, window_overlap_chars=64)
+    token = RULES["github_token"].fixture() + _seeded_run(60, "token-tail") + "_x"
+    run = _seeded_run(1024 - 50 - 3, "head") + "-" + token + _seeded_run(2_000, "tail")
+    text = "x " + run + " end"
+    assert text.index(token) == 1024 - 50
+    result = scanner.scan(text, verdict="redact")
+    assert result.text == "x [redacted:entropy] end"
+    assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
+
+
+def test_a_token_cut_by_the_edge_of_a_window_a_longer_run_fills_is_still_judged_and_named():
+    """A long high-entropy run fills the second window from its start, and a provider token
+    inside it runs past that window's edge. The run is continued and accepted, and the cut
+    token is still carried into the next window and judged whole there: it is refused at its
+    start, and under ``redact`` it is its own redaction, counted, as an unwindowed scan gives."""
+    scanner = _scanner(window_chars=1024, window_overlap_chars=64)
+    token = RULES["github_token"].fixture() + _seeded_run(100, "token-body")
+    text = "x " + _seeded_run(947, "head") + "-" + token + "-" + _seeded_run(3_000, "tail") + " end"
+    start = text.index(token)
+    assert start < 1026 < start + len(token)
+    with pytest.raises(SecretRefused) as raised:
+        scanner.scan(text, verdict="refuse")
+    assert (raised.value.rule, raised.value.start, raised.value.length) == (
+        "github_token",
+        start,
+        len(token),
+    )
+    result = scanner.scan(text, verdict="redact")
+    assert result.redacted_rules() == ["github_token"] and result.provider_hits == 1
     assert result == _scanner(window_chars=len(text) + 1).scan(text, verdict="redact")
 
 
