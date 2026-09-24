@@ -1,8 +1,9 @@
 """MemoryGate — the single choke point for all memory reads and writes.
 
 Every store/recall/forget passes through here. It enforces user- and project-scope (the
-basis of multi-tenant readiness) and is the one place to add redaction, consent, and audit
-later. No caller holds the ``MemoryModule`` directly.
+basis of multi-tenant readiness) and holds the secret gate: every write is scanned here
+(``memory/secrets``), consent and audit come later. No caller holds the ``MemoryModule``
+directly.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
 from morgan_brain.memory.migrations import DatabaseNeedsMigration
+from morgan_brain.memory.secrets import TextVerdict, Verdict
 from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, TemporalFact
 
 if TYPE_CHECKING:
@@ -93,10 +95,18 @@ class MemoryGate:
         """Why writes are refused, or ``None`` when they are not."""
         return self._read_only_reason
 
-    async def store(self, memory: Memory) -> str:
+    async def store(self, memory: Memory, *, verdict: Verdict = "refuse") -> str:
         self.require_writable()
         self._require_scope(memory.user_id)
-        return await self._store.store(memory)
+        return await self._store.store(memory, verdict=verdict)
+
+    def scan_text(self, text: str, *, verdict: Verdict = "refuse") -> tuple[TextVerdict, str]:
+        """Scan *text* as a write would, without writing: what the gate found, and the text as
+        it may go on. Synchronous and CPU only. Under ``refuse`` a provider hit raises
+        ``SecretRefused`` by rule, offset and length; ``ask`` calls this before its recall, so a
+        refused question is neither embedded nor sent, and a question with a generic hit goes
+        on redacted everywhere."""
+        return self._store.scan_text(text, verdict=verdict)
 
     async def get(self, memory_id: str, *, user_id: str) -> Memory | None:
         """One memory by id, or ``None`` if this owner has no such memory.
@@ -125,10 +135,10 @@ class MemoryGate:
         """
         await self._store.check_embedding_space()
 
-    async def upsert_fact(self, fact: TemporalFact) -> str:
+    async def upsert_fact(self, fact: TemporalFact, *, verdict: Verdict = "refuse") -> str:
         self.require_writable()
         self._require_scope(fact.user_id)
-        return await self._store.upsert_fact(fact)
+        return await self._store.upsert_fact(fact, verdict=verdict)
 
     async def record_project(
         self,

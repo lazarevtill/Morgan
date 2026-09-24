@@ -8,6 +8,7 @@ here rather than reimplementing a single memory operation between them.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -81,6 +82,12 @@ async def _record_the_repository(
         log.warning("project.not-recorded", project=project, error=str(exc))
 
 
+def _rule_names(hits: str) -> list[str]:
+    """The rule names in a ``redactions``/``flags`` JSON array, sorted and unique: what a
+    result may say about a scan. Never a position, never a value."""
+    return sorted({str(hit["rule"]) for hit in json.loads(hits)})
+
+
 async def cmd_remember(
     args: argparse.Namespace,
     settings: Settings,
@@ -99,6 +106,10 @@ async def cmd_remember(
     is the one place that resolves it to ``PERSONAL_PROJECT`` and the one place the result
     says so, in ``project_defaulted`` -- there is no other way a caller learns a write landed
     in the personal project by default rather than by name.
+
+    The result names the rules the gate redacted and flagged, never a value; a provider
+    token raises ``SecretRefused`` out of here, and each surface's own error handling shows
+    its message.
     """
     project_defaulted = project is None
     resolved_project = project if project is not None else PERSONAL_PROJECT
@@ -124,7 +135,9 @@ async def cmd_remember(
         "id": memory_id,
         "project": resolved_project,
         "project_defaulted": project_defaulted,
-        "content": args.text,
+        "content": memory.content,
+        "redacted": _rule_names(memory.redactions),
+        "flagged": _rule_names(memory.flags),
     }
 
 

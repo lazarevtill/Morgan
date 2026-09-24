@@ -148,6 +148,10 @@ class Memory(UserScoped):
     scope: Scope = Scope.PRIVATE
     instruction_like: bool = False
     status: MemoryStatus = MemoryStatus.STORED
+    #: The gate's hits, as it stores them: JSON arrays of ``{"rule", "start", "length"}`` with
+    #: positions in ``content`` as stored. Never a value.
+    redactions: str = "[]"
+    flags: str = "[]"
 
 
 class TemporalFact(UserScoped):
@@ -165,6 +169,9 @@ class TemporalFact(UserScoped):
     last_confirmed: datetime | None = None
     author_id: str = ""
     scope: Scope = Scope.PRIVATE
+    #: The gate's hits; the rule carries the field it hit, ``object:github_token``.
+    redactions: str = "[]"
+    flags: str = "[]"
 
 
 class MemoryQuery(BaseModel):

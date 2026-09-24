@@ -69,23 +69,34 @@ class Chat:
         model call and the two history rows below would otherwise happen, and only the
         memories after them would be refused.
 
+        A question holding a provider token is refused here, before the recall or any model
+        call. One with a generic hit is redacted everywhere it reaches from here -- the
+        recall, the prompt and the user's history row -- while ``store`` scans the raw
+        question again when it writes the memory, so the stored row ends up redacted too, and
+        each written row is scanned exactly once, by the writer that wrote it.
+
         *caller_client*/*caller_session_id* are provenance for the two memories this turn
         writes -- named apart from *session_id* (history bucketing) and ``Chat``'s own
         ``client`` (the ``ChatClient`` this instance calls the model through) on purpose, so
         neither collides with an existing parameter of a different kind.
         """
         self._gate.require_writable()
+        # The question is scanned before it is embedded, sent or stored: a provider token
+        # refuses the turn here, and a generic hit goes on as its redacted text.
+        _, redacted = self._gate.scan_text(text)
         hkey = session_key(user_id, session_id)
         history = self._history.recent(hkey, project=project)
-        recalled = await self._gate.recall(MemoryQuery(user_id=user_id, project=project, text=text))
+        recalled = await self._gate.recall(
+            MemoryQuery(user_id=user_id, project=project, text=redacted)
+        )
         result = await self._client.agenerate(
-            build_messages(memories=recalled.memories, history=history, text=text),
+            build_messages(memories=recalled.memories, history=history, text=redacted),
             model=self._model,
         )
         reply = result.text
 
         self._history.append(
-            hkey, Message(user_id=user_id, role=Role.USER, content=text), project=project
+            hkey, Message(user_id=user_id, role=Role.USER, content=redacted), project=project
         )
         self._history.append(
             hkey, Message(user_id=user_id, role=Role.ASSISTANT, content=reply), project=project
@@ -93,7 +104,7 @@ class Chat:
         # Both halves are remembered, attributed to who said them: the user's words are a
         # statement, the reply is an inference and must never be mistaken for one. Both rows
         # came from the same ask turn, so both carry origin_kind=ASK -- source is what tells
-        # them apart, not origin.
+        # them apart, not origin. Each is scanned once, by store, from its own raw text.
         for content, source in (
             (text, MemorySource.USER_STATED),
             (reply, MemorySource.AGENT_INFERRED),

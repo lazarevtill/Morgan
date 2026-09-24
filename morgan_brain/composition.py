@@ -24,6 +24,7 @@ from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
 from morgan_brain.memory.migrations import Step, Stores, pending, stamp_if_new, upgrade
 from morgan_brain.memory.module import MemoryModule
+from morgan_brain.memory.secrets import GateLimits, Scanner, build_scanner
 from morgan_brain.memory.store import spaces, vectors
 from morgan_brain.memory.store.calls import CallLogStore
 from morgan_brain.memory.store.db import open_db, write_transaction
@@ -91,6 +92,7 @@ def build_memory_module(
     dim: int,
     clock: Any = utcnow,
     floor_margin: float | None = None,
+    scanner: Scanner | None = None,
 ) -> MemoryModule:
     """Every store over one connection, with the pending light migration steps run.
 
@@ -98,7 +100,8 @@ def build_memory_module(
     any store creates one: this code writes it at the latest schema. A heavy step is left for
     ``morgan migrate``; ``build_memory_context`` then opens the gate read-only. Also the seam
     tests use with a small fake embedder. The archive's stores open here too, so a fresh file
-    carries every table before ``upgrade`` runs.
+    carries every table before ``upgrade`` runs. *scanner* defaults to one built from the
+    settings' defaults, for the seam tests use.
     """
     stamp_if_new(conn)
     stores = migration_stores(conn)
@@ -115,6 +118,7 @@ def build_memory_module(
         fts=FtsIndex(conn),
         entities=stores.entities,
         episodics=stores.episodics,
+        scanner=scanner if scanner is not None else Scanner(GateLimits.defaults()),
         floor_margin=floor_margin,
     )
     upgrade(conn, stores)
@@ -223,6 +227,7 @@ def build_memory_context(settings: Settings, *, budget: Budget = "interactive") 
             embedder=embedder,
             dim=settings.embedding_dim,
             floor_margin=settings.recall_floor_margin,
+            scanner=build_scanner(settings),
         )
         read_only_reason = _read_only_reason(pending(conn))
         if read_only_reason is None and settings.embedding_backend == "provider":

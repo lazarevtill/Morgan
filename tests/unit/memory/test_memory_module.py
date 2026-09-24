@@ -5,6 +5,7 @@ import pytest
 from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.module import MemoryModule
+from morgan_brain.memory.secrets import GateLimits, Scanner
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
@@ -131,4 +132,5 @@ def test_every_index_must_share_the_one_connection(stray):
             fts=FtsIndex(conn_for("fts")),
             entities=EntityIndex(conn_for("entities")),
             episodics=EpisodicStore(shared),
+            scanner=Scanner(GateLimits.defaults()),
         )

@@ -31,6 +31,9 @@ _PROVENANCE = (
     "status",
 )
 
+#: The columns migration step 8 added. ``Memory`` validates each from its stored text.
+_GATE = ("redactions", "flags")
+
 
 def _entities_json(entities: list[Entity]) -> str:
     return json.dumps([{"name": e.name, "type": e.type} for e in entities])
@@ -82,8 +85,8 @@ class EpisodicStore:
                 INSERT OR REPLACE INTO memories
                     (id, user_id, project, kind, source, content, importance, entities, created_at,
                      origin_kind, client, session_id, cwd, author_id, scope, instruction_like,
-                     status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     status, redactions, flags)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     memory.id,
@@ -103,6 +106,8 @@ class EpisodicStore:
                     memory.scope.value,
                     int(memory.instruction_like),
                     memory.status.value,
+                    memory.redactions,
+                    memory.flags,
                 ),
             )
 
@@ -125,14 +130,14 @@ class EpisodicStore:
         Reads whatever columns the row has. A database still waiting for migration step 4 has
         no provenance columns, and it opens read-only with its reads answering, so each of
         those fields is taken from the row when present and left to ``Memory``'s default when
-        not.
+        not, and the gate's two columns, absent until step 8 runs.
         """
         row = self._conn.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
         if row is None:
             return None
         # Membership in a Row tests its values, so the column names are taken out first.
         present = set(row.keys())
-        provenance: dict[str, Any] = {c: row[c] for c in _PROVENANCE if c in present}
+        provenance: dict[str, Any] = {c: row[c] for c in (*_PROVENANCE, *_GATE) if c in present}
         return Memory(
             id=row["id"],
             user_id=row["user_id"],

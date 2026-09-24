@@ -17,8 +17,9 @@ from morgan_brain.models import PERSONAL_PROJECT, MemorySource, TemporalFact
 #: Nothing here is keyed by a session; the session grain passes the table over.
 HOLDS_NOTHING_PER_SESSION: tuple[str, ...] = ("facts",)
 
-#: The columns migration step 4 added. ``TemporalFact`` validates each from its stored text.
-_PROVENANCE = ("author_id", "scope")
+#: The columns migration steps 4 and 8 added. ``TemporalFact`` validates each from its stored
+#: text.
+_PROVENANCE = ("author_id", "scope", "redactions", "flags")
 
 # The index is created separately, after the project-column migration below runs -- for a
 # pre-existing database the `facts` table exists without `project` at this point, and a
@@ -135,8 +136,9 @@ class SqliteTemporalStore:
 
     def _row_to_fact(self, row: sqlite3.Row) -> TemporalFact:
         """Read whatever columns the row has. A database still waiting for migration step 4
-        has no ``author_id`` or ``scope``, and recall reads current facts on it while it is
-        read-only; each is taken from the row when present and left to the default when not.
+        has no ``author_id`` or ``scope``, and step 8's ``redactions``/``flags`` are absent
+        until that step runs; recall reads current facts on it while it is read-only, and each
+        is taken from the row when present and left to the default when not.
         """
         # Membership in a Row tests its values, so the column names are taken out first.
         present = set(row.keys())
@@ -184,7 +186,7 @@ class SqliteTemporalStore:
             self._conn.execute(
                 "INSERT INTO facts (id, user_id, project, subject, predicate, object, source, "
                 "confidence, valid_from, valid_to, superseded_by, last_confirmed, author_id, "
-                "scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "scope, redactions, flags) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     fact.id,
                     fact.user_id,
@@ -200,6 +202,8 @@ class SqliteTemporalStore:
                     _iso(fact.last_confirmed),
                     fact.author_id,
                     fact.scope.value,
+                    fact.redactions,
+                    fact.flags,
                 ),
             )
         return fact.id

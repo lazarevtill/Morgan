@@ -11,7 +11,12 @@ from typing import Any
 
 
 def _render_remember(data: dict[str, Any]) -> str:
-    return f"Stored memory {data['id']} in project {data['project']!r}."
+    line = f"Stored memory {data['id']} in project {data['project']!r}."
+    if data.get("redacted"):
+        line += f" (redacted: {', '.join(data['redacted'])})"
+    if data.get("flagged"):
+        line += f" (flagged: {', '.join(data['flagged'])})"
+    return line
 
 
 #: Why an empty recall is empty, in words: the owner acts differently on each.

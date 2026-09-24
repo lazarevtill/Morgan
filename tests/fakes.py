@@ -33,19 +33,23 @@ class Calls:
     ``input`` carried, in arrival order, and is always the same length as ``times`` -- a
     non-embeddings request (a GET, say) records ``0`` -- so a test can tell an import's
     ordinary memory requests apart from an import canary's five-string one, or a retry from a
-    fresh request, without guessing from the count alone."""
+    fresh request, without guessing from the count alone. ``bodies`` holds every POST body as
+    parsed JSON, in arrival order, so a test can assert what text reached the server."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self.total = 0
         self.times: list[float] = []
         self.inputs: list[int] = []
+        self.bodies: list[dict[str, Any]] = []
 
-    def count(self, inputs: int = 0) -> None:
+    def count(self, inputs: int = 0, body: dict[str, Any] | None = None) -> None:
         with self._lock:
             self.total += 1
             self.times.append(time.monotonic())
             self.inputs.append(inputs)
+            if body is not None:
+                self.bodies.append(body)
 
 
 @contextmanager
@@ -523,9 +527,9 @@ def _model_server(
             if calls is not None:
                 raw_input = body.get("input")
                 if isinstance(raw_input, list):
-                    calls.count(len(raw_input))
+                    calls.count(len(raw_input), body=body)
                 else:
-                    calls.count(1 if raw_input is not None else 0)
+                    calls.count(1 if raw_input is not None else 0, body=body)
             if delay and stopping.wait(delay):
                 return
             if self.path != "/v1/embeddings":

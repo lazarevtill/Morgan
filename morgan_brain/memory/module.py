@@ -18,6 +18,7 @@ import sqlite3
 import time
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
+from dataclasses import replace
 from datetime import datetime
 
 import structlog
@@ -29,6 +30,7 @@ from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
+from morgan_brain.memory.secrets import Hit, Scanner, TextVerdict, Verdict
 from morgan_brain.memory.store import (
     calls,
     digests,
@@ -234,6 +236,7 @@ class MemoryModule:
         fts: FtsIndex,
         entities: EntityIndex,
         episodics: EpisodicStore,
+        scanner: Scanner,
         floor_margin: float | None = None,
     ) -> None:
         # store() and forget() are each one transaction on the episodic store's connection. An
@@ -258,6 +261,7 @@ class MemoryModule:
         self._fts = fts
         self._entities = entities
         self._episodics = episodics
+        self._scanner = scanner
         self._floor_margin = floor_margin
 
     @property
@@ -265,21 +269,40 @@ class MemoryModule:
         """The one connection every index shares, so a write across indexes is one transaction."""
         return self._episodics._conn
 
+    @property
+    def scanner(self) -> Scanner:
+        """The one scanner every write path of this module runs."""
+        return self._scanner
+
+    def scan_text(self, text: str, *, verdict: Verdict = "refuse") -> tuple[TextVerdict, str]:
+        """What the gate found in *text* and the text as it may go on. CPU only, no await;
+        raises ``SecretRefused`` under ``refuse`` for a provider hit."""
+        result = self._scanner.scan(text, verdict=verdict)
+        return result.text_verdict, result.text
+
     def write_transaction(self) -> AbstractContextManager[None]:
         """One atomic write across every call made inside the block. See ``store.db``."""
         return write_transaction(self._conn)
 
-    async def store(self, memory: Memory) -> str:
+    async def store(self, memory: Memory, *, verdict: Verdict = "refuse") -> str:
         """Write *memory* to every index at once, as one transaction.
 
-        Entities are extracted here when the caller supplied none. There is exactly one write
-        path on purpose: a memory indexed by one signal and invisible to another is found by a
-        search that should not find it, or missed by one that should.
+        The content is scanned under *verdict* before the embedding; the caller reads the
+        redacted content and the hits off the object it passed. Entities are extracted here
+        when the caller supplied none, from the text as it is stored. There is exactly one
+        write path on purpose: a memory indexed by one signal and invisible to another is
+        found by a search that should not find it, or missed by one that should.
 
         The project's ``projects`` row is registered in the same transaction
         (``store/projects.py::register``), so a project first written to after migration step 7
         seeded the table has a row as well -- and a store that fails leaves none.
         """
+        # The scan comes first: a refused memory is neither embedded nor written, and the
+        # entities are extracted from the text that is stored.
+        scanned = self._scanner.scan(memory.content, verdict=verdict)
+        memory.content = scanned.text
+        memory.redactions = scanned.redactions_json()
+        memory.flags = scanned.flags_json()
         if memory.created_at is None:
             memory.created_at = self._clock()
         if not memory.entities:
@@ -492,8 +515,12 @@ class MemoryModule:
         )
         return None if answered else "declined"
 
-    async def upsert_fact(self, fact: TemporalFact) -> str:
+    async def upsert_fact(self, fact: TemporalFact, *, verdict: Verdict = "refuse") -> str:
         """Assert *fact*, registering its project in the same transaction.
+
+        The subject, predicate and object are each scanned under *verdict* first; a hit's
+        rule carries the field it hit (``object:github_token``), and the caller reads the
+        redacted fields and the hits off the object it passed.
 
         The registration is here rather than in the temporal store because ``projects`` is not
         that store's table: ``SqliteTemporalStore`` is built over connections that have no
@@ -502,6 +529,25 @@ class MemoryModule:
         never suspends: it is SQL on this connection, nothing else, so nothing awaits real I/O
         while the write lock is held.
         """
+        subject_scan = self._scanner.scan(fact.subject, verdict=verdict)
+        predicate_scan = self._scanner.scan(fact.predicate, verdict=verdict)
+        object_scan = self._scanner.scan(fact.object, verdict=verdict)
+        fact.subject = subject_scan.text
+        fact.predicate = predicate_scan.text
+        fact.object = object_scan.text
+        redactions: list[Hit] = []
+        flags: list[Hit] = []
+        for field, scanned in (
+            ("subject", subject_scan),
+            ("predicate", predicate_scan),
+            ("object", object_scan),
+        ):
+            redactions.extend(
+                replace(hit, rule=f"{field}:{hit.rule}") for hit in scanned.redactions
+            )
+            flags.extend(replace(hit, rule=f"{field}:{hit.rule}") for hit in scanned.flags)
+        fact.redactions = json.dumps([hit.as_dict() for hit in redactions])
+        fact.flags = json.dumps([hit.as_dict() for hit in flags])
         now = self._clock()
         with write_transaction(self._conn):
             projects.register(self._conn, fact.project, now=now)

@@ -16,6 +16,7 @@ from pathlib import Path
 from morgan_brain.composition import build_memory_module as _build
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.module import MemoryModule
+from morgan_brain.memory.secrets import GateLimits, Scanner
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.memory.store.history import SessionHistoryStore
 from morgan_brain.memory.store.projects import ProjectStore
@@ -32,6 +33,7 @@ def build_memory_module(
         dim=dim,
         clock=lambda: datetime.now(UTC),
         floor_margin=floor_margin,
+        scanner=Scanner(GateLimits.defaults()),
     )
 
 
