@@ -5,6 +5,10 @@ own JSON shape -- a list of conversations, each a ``mapping`` of message nodes -
 every usable turn through the gate, so imported memories take the same one write path as
 anything typed at the terminal and land in every index together.
 
+**An export is history nobody can rephrase.** Each turn is scanned whole under ``redact``
+before it is split, so a secret a cut would halve is still seen whole: a provider token is
+redacted and counted, never refused, and every piece records the hits that fall inside it.
+
 **The holdout is a project, not a flag.** Conversations whose id hashes into the holdout go
 to a separate project. Golden items for the promotion gate are drawn from there, and
 consolidation is project-scoped, so nothing the optimizer can mine and nothing it is scored
@@ -19,15 +23,19 @@ id is derived from the message id, and the write path replaces by id.
 from __future__ import annotations
 
 import asyncio
+import bisect
 import hashlib
 import json
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from morgan_brain.config import DEFAULT_IMPORT_CANARY_EVERY
 from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.secrets import Hit, placeholder_spans
+from morgan_brain.memory.secrets.rules import PROVIDER_RULE_NAMES
 from morgan_brain.models import Memory, MemoryKind, MemorySource, OriginKind
 from morgan_brain.providers.wire import EmbeddingSpaceMismatch
 
@@ -73,6 +81,10 @@ class ImportReport:
     #: Turns not stored: tool output, empty content, and pieces an earlier run already
     #: imported unchanged.
     skipped_turns: int = 0
+    #: Pieces the gate redacted on the way in, and how many of the hits were provider tokens:
+    #: an export is history nobody can rephrase, so nothing in it is refused.
+    redacted_pieces: int = 0
+    provider_hits: int = 0
 
 
 class ImportStopped(Exception):
@@ -132,8 +144,10 @@ def is_held_out(conversation_id: str) -> bool:
     return int.from_bytes(digest[:8], "big") % HOLDOUT_EVERY == 0
 
 
-def split_for_embedding(text: str, budget: int = MAX_EMBED_CHARS) -> list[str]:
-    """Split *text* into pieces of at most *budget* characters, losing nothing.
+def split_for_embedding(text: str, budget: int = MAX_EMBED_CHARS) -> list[tuple[int, str]]:
+    """Split *text* into pieces of at most *budget* characters, losing nothing: each piece
+    with its offset, where it starts in *text* -- the whitespace a cut strips counted -- so
+    the hits of a scan of *text* shift onto the piece by it.
 
     A turn longer than the embedding server's context is refused outright, and truncating it
     instead would index the whole text for keyword search while the vector saw only its
@@ -143,22 +157,49 @@ def split_for_embedding(text: str, budget: int = MAX_EMBED_CHARS) -> list[str]:
     Cuts fall on the latest boundary in range, preferring a paragraph break to a line break
     to a space. An unbroken run longer than the budget -- a log dump, a base64 blob -- has no
     boundary to find, so it is cut at the budget rather than handed over intact and rejected.
+    A cut never falls inside a placeholder the gate wrote: cut in two, neither half is one,
+    and the piece records nothing where the gate redacted something. A placeholder holds no
+    whitespace, so only a cut at the budget can land in one; it moves to the placeholder's
+    start, or to its end when the placeholder opens the piece, which then runs past the
+    budget by less than a placeholder's length.
     """
-    remaining = text.strip()
-    if len(remaining) <= budget:
-        return [remaining] if remaining else []
-
-    chunks: list[str] = []
-    while len(remaining) > budget:
-        window = remaining[:budget]
+    guards = placeholder_spans(text)
+    guard_starts = [start for start, _ in guards]
+    start, end = _stripped(text, 0, len(text))
+    pieces: list[tuple[int, str]] = []
+    while end - start > budget:
+        window = text[start : start + budget]
         cut = next((c for c in (window.rfind(b) for b in _BOUNDARIES) if c > 0), -1)
         if cut <= 0:
             cut = budget
-        chunks.append(remaining[:cut].strip())
-        remaining = remaining[cut:].strip()
-    if remaining:
-        chunks.append(remaining)
-    return [c for c in chunks if c]
+            inside = bisect.bisect_left(guard_starts, start + cut) - 1
+            if inside >= 0 and guards[inside][1] > start + cut:
+                guard_start, guard_end = guards[inside]
+                cut = (guard_start if guard_start > start else guard_end) - start
+        piece_start, piece_end = _stripped(text, start, start + cut)
+        if piece_end > piece_start:
+            pieces.append((piece_start, text[piece_start:piece_end]))
+        start, end = _stripped(text, start + cut, end)
+    if end > start:
+        pieces.append((start, text[start:end]))
+    return pieces
+
+
+def _stripped(text: str, start: int, end: int) -> tuple[int, int]:
+    """The bounds of ``text[start:end].strip()`` in *text*."""
+    span = text[start:end]
+    lead = len(span) - len(span.lstrip())
+    return start + lead, start + lead + len(span.strip())
+
+
+def _hits_within(hits: Sequence[Hit], offset: int, length: int) -> list[Hit]:
+    """The hits that lie wholly inside the piece at *offset*, *length* characters long,
+    positioned on the piece."""
+    return [
+        replace(hit, start=hit.start - offset)
+        for hit in hits
+        if offset <= hit.start and hit.start + hit.length <= offset + length
+    ]
 
 
 def _memory_id(message_id: str, part: int) -> str:
@@ -232,6 +273,7 @@ async def import_chatgpt(
     raw = await asyncio.to_thread(path.read_text, encoding="utf-8")
     conversations = json.loads(raw)
     kept = held = stored = skipped = 0
+    redacted = provider = 0
     #: Memory ids stored since the last canary that still matched -- the suspects a failure
     #: names, and what a caller acts on directly without parsing the message.
     since_last_canary: list[str] = []
@@ -248,32 +290,42 @@ async def import_chatgpt(
                 skipped += 1
                 continue
             message_id = str(message.get("id") or f"{conversation_id}-{stored}")
-            for part, piece in enumerate(split_for_embedding(text)):
+            # The turn is scanned whole, once, before any cut: a secret a cut would halve is
+            # seen whole, and each piece is handed the hits that fall inside it.
+            scanned = gate.scan_result(text, verdict="redact")
+            hits = (*scanned.redactions, *scanned.flags)
+            for part, (offset, piece) in enumerate(split_for_embedding(scanned.text)):
                 memory_id = _memory_id(message_id, part)
                 # Already imported, unchanged: skip it. Every piece costs an embedding call
                 # and a real export is thousands of them, so an import that redoes finished
                 # work is one that never finishes on a machine that gets interrupted. The
-                # content check keeps a corrected turn from being frozen out by its own id.
+                # content check keeps a corrected turn from being frozen out by its own id;
+                # the piece is cut from the scanned text, so a piece stored redacted matches.
                 existing = await gate.get(memory_id, user_id=user_id)
                 if existing is not None and existing.content == piece:
                     skipped += 1
                     wrote_any = True
                     continue
-                await gate.store(
-                    Memory(
-                        id=memory_id,
-                        user_id=user_id,
-                        project=project,
-                        kind=MemoryKind.EPISODIC,
-                        content=piece,
-                        source=source,
-                        created_at=_created_at(message),
-                        origin_kind=OriginKind.IMPORT,
-                        client="cli",
-                        cwd=str(Path.cwd()),
-                        author_id=user_id,
-                    )
+                memory = Memory(
+                    id=memory_id,
+                    user_id=user_id,
+                    project=project,
+                    kind=MemoryKind.EPISODIC,
+                    content=piece,
+                    source=source,
+                    created_at=_created_at(message),
+                    origin_kind=OriginKind.IMPORT,
+                    client="cli",
+                    cwd=str(Path.cwd()),
+                    author_id=user_id,
                 )
+                await gate.store(
+                    memory, verdict="redact", hits=_hits_within(hits, offset, len(piece))
+                )
+                recorded = json.loads(memory.redactions)
+                if recorded:
+                    redacted += 1
+                    provider += sum(1 for hit in recorded if hit["rule"] in PROVIDER_RULE_NAMES)
                 stored += 1
                 since_last_canary.append(memory_id)
                 wrote_any = True
@@ -290,7 +342,14 @@ async def import_chatgpt(
     if since_last_canary:
         await _run_canary(gate, stored, since_last_canary)
 
-    return ImportReport(conversations=kept, held_out=held, memories=stored, skipped_turns=skipped)
+    return ImportReport(
+        conversations=kept,
+        held_out=held,
+        memories=stored,
+        skipped_turns=skipped,
+        redacted_pieces=redacted,
+        provider_hits=provider,
+    )
 
 
 async def _run_canary(gate: MemoryGate, stored: int, since_last_canary: list[str]) -> None:

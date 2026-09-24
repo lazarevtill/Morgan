@@ -336,4 +336,6 @@ async def cmd_import(args: argparse.Namespace, settings: Settings, project: str)
         "held_out": report.held_out,
         "memories": report.memories,
         "skipped_turns": report.skipped_turns,
+        "redacted_pieces": report.redacted_pieces,
+        "provider_hits": report.provider_hits,
     }

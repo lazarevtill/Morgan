@@ -165,9 +165,8 @@ def record(
 
 
 #: The tables ``seed`` reads distinct projects from. A table absent on
-#: an old or freshly-created database -- the version-0 migration test runs every step on one
-#: that lacks ``facts`` and ``session_history``, and a fresh database has no ``session_history``
-#: until ``build_memory_context`` opens one -- is skipped, not an error.
+#: an old database -- the version-0 migration test runs every step on one that lacks ``facts``
+#: and ``session_history`` -- is skipped, not an error.
 _SOURCE_TABLES: tuple[str, ...] = ("memories", "facts", "session_history")
 
 

@@ -128,9 +128,9 @@ class EpisodicStore:
         """The memory stored under *memory_id*, or ``None``.
 
         Reads whatever columns the row has. A database still waiting for migration step 4 has
-        no provenance columns, and it opens read-only with its reads answering, so each of
-        those fields is taken from the row when present and left to ``Memory``'s default when
-        not, and the gate's two columns, absent until step 8 runs.
+        no provenance columns, and one below step 8 lacks the gate's two, yet each opens
+        read-only with its reads answering, so every one of those fields is taken from the row
+        when present and left to ``Memory``'s default when not.
         """
         row = self._conn.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
         if row is None:

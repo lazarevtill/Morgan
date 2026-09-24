@@ -63,6 +63,7 @@ class MemoryContext:
 
     gate: MemoryGate
     conn: sqlite3.Connection
+    #: The module's own store, for the reads ``Chat`` makes; every write goes through the gate.
     history: SessionHistoryStore
     embedder: Embedder
     settings: Settings
@@ -99,14 +100,17 @@ def build_memory_module(
     A database with none of Morgan's tables is stamped at the code's version first, before
     any store creates one: this code writes it at the latest schema. A heavy step is left for
     ``morgan migrate``; ``build_memory_context`` then opens the gate read-only. Also the seam
-    tests use with a small fake embedder. The archive's stores open here too, so a fresh file
-    carries every table before ``upgrade`` runs. *scanner* defaults to one built from the
-    settings' defaults, for the seam tests use.
+    tests use with a small fake embedder. The session-history store and the archive's stores
+    open here too, so a fresh file carries every table before ``upgrade`` runs, and the module
+    writes history through the gate. *scanner* defaults to one built from the settings'
+    defaults, for the seam tests use.
     """
     stamp_if_new(conn)
     stores = migration_stores(conn)
     EmbeddingSpaceStore(conn)
     ProjectStore(conn)
+    # After ProjectStore: a history row registers its project, so ``projects`` must exist.
+    history = SessionHistoryStore(conn, clock=clock)
     SessionStore(conn)
     CallLogStore(conn)
     DigestStore(conn)
@@ -118,6 +122,7 @@ def build_memory_module(
         fts=FtsIndex(conn),
         entities=stores.entities,
         episodics=stores.episodics,
+        history=history,
         scanner=scanner if scanner is not None else Scanner(GateLimits.defaults()),
         floor_margin=floor_margin,
     )
@@ -240,7 +245,7 @@ def build_memory_context(settings: Settings, *, budget: Budget = "interactive") 
     return MemoryContext(
         gate=MemoryGate(module, read_only_reason=read_only_reason),
         conn=conn,
-        history=SessionHistoryStore(conn, clock=utcnow),
+        history=module.history,
         embedder=embedder,
         settings=settings,
     )

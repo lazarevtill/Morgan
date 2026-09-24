@@ -9,6 +9,9 @@ What it must keep doing:
 - The clock is injected. No ``datetime.now()`` call appears here, so a run is reproducible.
 - An ADD whose (subject, predicate, object) already matches a currently-valid fact is a
   NOOP, not a duplicate row.
+- A proposal is the model's words, produced and paid for, so nobody can rephrase it: a fact
+  holding a provider token is stored redacted, never refused, and the rest of the batch is
+  applied. A proposal is compared with the stored facts in their stored form, redacted.
 - It runs when asked. Nothing here is on the path of a recall.
 """
 
@@ -125,11 +128,12 @@ class MemoryConsolidator:
     async def apply(self, user_id: str, batch: FactOpBatch, *, project: str) -> list[FactOp]:
         """Apply a batch of fact operations, scoped to *project*.
 
-        Dedup pre-filter: an ADD whose (subject, predicate, object) exactly
-        matches a currently-valid fact is silently dropped (treated as NOOP).
+        Dedup pre-filter: an ADD whose (subject, predicate, object), redacted as the
+        gate stores it, exactly matches a currently-valid fact is silently dropped
+        (treated as NOOP). Every fact is stored under ``redact``.
 
         Returns the list of ops that were actually applied (excludes NOOPs and
-        deduped ADDs).
+        deduped ADDs), each with its fields as they were stored, redacted.
         """
         now = self._clock()
         # The current facts are read under the same lock the ops are applied with. Two runs
@@ -153,9 +157,20 @@ class MemoryConsolidator:
             if op.op is FactOpKind.NOOP:
                 continue
 
+            # The stored facts are redacted, so a proposal is compared with them redacted: a
+            # re-proposal of a stored fact is then the same triple, not a new one. The raw
+            # fields go to upsert_fact, whose one scan records what it redacted; what is
+            # returned is the op as it was stored, since `consolidate` prints it.
+            subject, predicate, object_ = (
+                self._gate.scan_text(field, verdict="redact")[1]
+                for field in (op.subject, op.predicate, op.object)
+            )
+            stored = op.model_copy(
+                update={"subject": subject, "predicate": predicate, "object": object_}
+            )
+
             if op.op is FactOpKind.ADD:
-                key = (op.subject, op.predicate, op.object)
-                if key in current_set:
+                if (subject, predicate, object_) in current_set:
                     # Dedup — already a current fact with the exact same triple.
                     continue
                 await self._gate.upsert_fact(
@@ -169,9 +184,10 @@ class MemoryConsolidator:
                         source=MemorySource.AGENT_INFERRED,
                         author_id=user_id,
                         scope=Scope.PRIVATE,
-                    )
+                    ),
+                    verdict="redact",
                 )
-                applied.append(op)
+                applied.append(stored)
 
             elif op.op is FactOpKind.UPDATE:
                 # upsert_fact closes any existing (subject, predicate) interval
@@ -187,9 +203,10 @@ class MemoryConsolidator:
                         source=MemorySource.AGENT_INFERRED,
                         author_id=user_id,
                         scope=Scope.PRIVATE,
-                    )
+                    ),
+                    verdict="redact",
                 )
-                applied.append(op)
+                applied.append(stored)
 
             elif op.op is FactOpKind.DELETE:
                 # Close the currently-valid fact's interval without hard-deleting it.
@@ -201,14 +218,14 @@ class MemoryConsolidator:
                 matching = [
                     f
                     for f in current
-                    if f.subject == op.subject
-                    and f.predicate == op.predicate
+                    if f.subject == subject
+                    and f.predicate == predicate
                     and f.source is not MemorySource.USER_STATED
                 ]
                 for fact in matching:
                     await self._gate.close_fact(fact.id, user_id=user_id, project=project, now=now)
                 if matching:
-                    applied.append(op)
+                    applied.append(stored)
 
         return applied
 

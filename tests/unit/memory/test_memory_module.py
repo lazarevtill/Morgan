@@ -10,6 +10,7 @@ from morgan_brain.memory.store.db import open_db
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
 from morgan_brain.memory.store.fts import FtsIndex
+from morgan_brain.memory.store.history import SessionHistoryStore
 from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.memory.store.vectors import SqliteVectorIndex
 from morgan_brain.models import Entity, Memory, MemoryKind, MemoryQuery, TemporalFact
@@ -113,7 +114,7 @@ async def test_a_store_that_fails_part_way_leaves_nothing_behind():
     assert not conn.in_transaction
 
 
-@pytest.mark.parametrize("stray", ["vectors", "temporal", "fts", "entities"])
+@pytest.mark.parametrize("stray", ["vectors", "temporal", "fts", "entities", "history"])
 def test_every_index_must_share_the_one_connection(stray):
     """store() and forget() each run as one transaction on one connection. An index built on
     another connection would commit on its own, outside that transaction, and forget() would
@@ -132,5 +133,8 @@ def test_every_index_must_share_the_one_connection(stray):
             fts=FtsIndex(conn_for("fts")),
             entities=EntityIndex(conn_for("entities")),
             episodics=EpisodicStore(shared),
+            history=SessionHistoryStore(
+                conn_for("history"), clock=lambda: datetime(2026, 1, 1, tzinfo=UTC)
+            ),
             scanner=Scanner(GateLimits.defaults()),
         )

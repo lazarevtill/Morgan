@@ -12,6 +12,7 @@ from morgan_brain.memory.secrets.scan import (
     TextVerdict,
     Verdict,
     build_scanner,
+    placeholder_spans,
     strip_userinfo,
 )
 
@@ -26,5 +27,6 @@ __all__ = [
     "TextVerdict",
     "Verdict",
     "build_scanner",
+    "placeholder_spans",
     "strip_userinfo",
 ]

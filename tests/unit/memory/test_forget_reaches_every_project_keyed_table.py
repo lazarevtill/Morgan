@@ -54,8 +54,8 @@ def _project_keyed(conn) -> set[str]:
 
 
 def _full_stack_conn(tmp_path):
-    """``build_memory_module`` alone never opens ``session_history`` -- only the composition
-    root's ``build_memory_context`` does, because ``MemoryModule`` itself has no use for it.
+    """``build_memory_module`` opens every store, the history store included; the explicit
+    ``SessionHistoryStore`` here is kept so the test reads as the composition root wires it.
     Both registry checks below care whether a *registered* table is ever gone from the schema,
     so the connection needs every store that owns a project-keyed table opened on it, the same
     way ``test_forget.py::test_forget_does_not_report_present_tables_as_skipped`` does."""

@@ -107,8 +107,9 @@ class SessionHistoryStore:
         runs after the reply is already sent to the caller.
 
         A turn is a project-keyed write like any other, so it registers *project* in
-        ``projects`` in this same transaction: ``ask`` writes history outside the gate, and a
-        project whose only Morgan data is a transcript still gets its row.
+        ``projects`` in this same transaction: a project whose only Morgan data is a
+        transcript still gets its row. The gate's ``append_history`` is the caller, with the
+        content already scanned.
         """
         now = self._clock()
         created_at = now.isoformat()

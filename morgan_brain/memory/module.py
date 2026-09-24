@@ -30,7 +30,7 @@ from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
-from morgan_brain.memory.secrets import Hit, Scanner, TextVerdict, Verdict
+from morgan_brain.memory.secrets import Hit, Scanner, ScanResult, TextVerdict, Verdict
 from morgan_brain.memory.store import (
     calls,
     digests,
@@ -48,7 +48,7 @@ from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex, delete_entities
 from morgan_brain.memory.store.episodic import EpisodicStore, delete_memories
 from morgan_brain.memory.store.fts import FtsIndex, delete_keywords
-from morgan_brain.memory.store.history import delete_history
+from morgan_brain.memory.store.history import SessionHistoryStore, delete_history
 from morgan_brain.memory.store.projects import delete_project
 from morgan_brain.memory.store.tables import Deleter, Erasure
 from morgan_brain.memory.store.temporal import SqliteTemporalStore, delete_facts
@@ -67,6 +67,7 @@ from morgan_brain.models import (
     Memory,
     MemoryKind,
     MemoryQuery,
+    Message,
     TemporalFact,
     utc_iso,
 )
@@ -236,17 +237,20 @@ class MemoryModule:
         fts: FtsIndex,
         entities: EntityIndex,
         episodics: EpisodicStore,
+        history: SessionHistoryStore,
         scanner: Scanner,
         floor_margin: float | None = None,
     ) -> None:
         # store() and forget() are each one transaction on the episodic store's connection. An
         # index on any other connection would commit on its own, outside that transaction, and
-        # forget() would never reach it -- so a module assembled that way is refused.
+        # forget() would never reach it -- so a module assembled that way is refused, and a
+        # history store on another connection with it.
         index_connections = {
             "vectors": vectors._conn,
             "temporal": temporal._conn,
             "fts": fts._conn,
             "entities": entities._conn,
+            "history": history._conn,
         }
         strays = sorted(name for name, c in index_connections.items() if c is not episodics._conn)
         if strays:
@@ -261,6 +265,7 @@ class MemoryModule:
         self._fts = fts
         self._entities = entities
         self._episodics = episodics
+        self._history = history
         self._scanner = scanner
         self._floor_margin = floor_margin
 
@@ -274,24 +279,41 @@ class MemoryModule:
         """The one scanner every write path of this module runs."""
         return self._scanner
 
+    @property
+    def history(self) -> SessionHistoryStore:
+        """The session-history store, for the reads ``Chat`` makes; every write to it comes
+        through ``append_history``."""
+        return self._history
+
+    def scan_result(self, text: str, *, verdict: Verdict) -> ScanResult:
+        """Everything the gate finds in *text* under *verdict*: the text as it may go on and
+        each hit by rule and position. CPU only, no await, nothing written; raises
+        ``SecretRefused`` under ``refuse`` for a provider hit."""
+        return self._scanner.scan(text, verdict=verdict)
+
     def scan_text(self, text: str, *, verdict: Verdict = "refuse") -> tuple[TextVerdict, str]:
         """What the gate found in *text* and the text as it may go on. CPU only, no await;
         raises ``SecretRefused`` under ``refuse`` for a provider hit."""
-        result = self._scanner.scan(text, verdict=verdict)
+        result = self.scan_result(text, verdict=verdict)
         return result.text_verdict, result.text
 
     def write_transaction(self) -> AbstractContextManager[None]:
         """One atomic write across every call made inside the block. See ``store.db``."""
         return write_transaction(self._conn)
 
-    async def store(self, memory: Memory, *, verdict: Verdict = "refuse") -> str:
+    async def store(
+        self, memory: Memory, *, verdict: Verdict = "refuse", hits: Sequence[Hit] = ()
+    ) -> str:
         """Write *memory* to every index at once, as one transaction.
 
         The content is scanned under *verdict* before the embedding; the caller reads the
-        redacted content and the hits off the object it passed. Entities are extracted here
-        when the caller supplied none, from the text as it is stored. There is exactly one
-        write path on purpose: a memory indexed by one signal and invisible to another is
-        found by a search that should not find it, or missed by one that should.
+        redacted content and the hits off the object it passed. *hits* are the ones a scan of
+        the longer text the content was cut from made inside it, positioned on the content: the
+        content is still scanned in full, and the row records both sets, each hit once, where
+        it stands in the stored text (``Scanner.scan``). Entities are extracted here when the
+        caller supplied none, from the text as it is stored. There is exactly one write path
+        on purpose: a memory indexed by one signal and invisible to another is found by a
+        search that should not find it, or missed by one that should.
 
         The project's ``projects`` row is registered in the same transaction
         (``store/projects.py::register``), so a project first written to after migration step 7
@@ -299,7 +321,7 @@ class MemoryModule:
         """
         # The scan comes first: a refused memory is neither embedded nor written, and the
         # entities are extracted from the text that is stored.
-        scanned = self._scanner.scan(memory.content, verdict=verdict)
+        scanned = self._scanner.scan(memory.content, verdict=verdict, known=hits)
         memory.content = scanned.text
         memory.redactions = scanned.redactions_json()
         memory.flags = scanned.flags_json()
@@ -350,6 +372,21 @@ class MemoryModule:
                 project=memory.project,
             )
         return memory.id
+
+    async def append_history(
+        self, *, user_id: str, project: str, session_key: str, message: Message
+    ) -> None:
+        """Store one history row, scanned under ``redact``: a turn already spoken is history
+        nobody can rephrase, so a provider token is replaced and never refused. The append is
+        SQL on this connection and suspends nothing."""
+        content = self.scan_result(message.content, verdict="redact").text
+        self._history.append(
+            session_key,
+            Message(
+                user_id=user_id, role=message.role, content=content, session_id=message.session_id
+            ),
+            project=project,
+        )
 
     async def get(self, memory_id: str, *, user_id: str) -> Memory | None:
         """One memory by id, scoped to its owner.
@@ -611,11 +648,10 @@ class MemoryModule:
         ``NAME_KEYED_PROJECT_TABLES`` names is erased by the deleter its store owns
         (``_erasure_plan``). Every table is resolved before any row is deleted, so a
         registered table with no deleter stops the erasure by name with nothing erased. A
-        registered table absent here -- ``session_history``, opened only by
-        ``build_memory_context`` -- is named in ``report.tables_skipped`` rather than counted
-        as zero. Every index lives in the same SQLite database, so the whole erasure is one
-        write transaction; once it has committed, the database is vacuumed and its write-ahead
-        log truncated (`_truncate_wal`).
+        registered table absent from the database is named in ``report.tables_skipped`` rather
+        than counted as zero. Every index lives in the same SQLite database, so the whole
+        erasure is one write transaction; once it has committed, the database is vacuumed and
+        its write-ahead log truncated (`_truncate_wal`).
         """
         conn = self._conn
         if conn.in_transaction:

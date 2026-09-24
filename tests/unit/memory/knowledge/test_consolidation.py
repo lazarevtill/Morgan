@@ -8,6 +8,7 @@ All tests are deterministic:
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 import pytest
@@ -376,3 +377,76 @@ async def test_decay_deterministic_given_same_clock() -> None:
     conf_b = (await temporal2.current_facts(user_id="u1"))[0].confidence
 
     assert conf_a == pytest.approx(conf_b)
+
+
+# ---------------------------------------------------------------------------
+# apply() — the secret gate: a proposal is the model's words, already paid for
+# ---------------------------------------------------------------------------
+
+
+def _token() -> str:
+    return "gh" + "p_" + "A" * 36
+
+
+@pytest.mark.asyncio
+async def test_a_provider_token_in_a_proposal_is_stored_redacted_and_the_rest_applied() -> None:
+    """Nobody can rephrase a proposal the model already made, so a provider token in one is
+    redacted rather than refused: that fact is stored with the placeholder and its rule, every
+    other op in the batch is applied, and each applied op comes back as it was stored, since
+    ``consolidate`` prints them."""
+    batch = FactOpBatch(
+        ops=[
+            FactOp(op=FactOpKind.ADD, subject="deploy", predicate="uses", object=_token()),
+            FactOp(op=FactOpKind.ADD, subject="user", predicate="lives_in", object="Berlin"),
+            FactOp(op=FactOpKind.UPDATE, subject="user", predicate="prefers", object="tea"),
+        ]
+    )
+    consolidator, temporal, gate = _build_stack([], clock=lambda: T0)
+
+    applied = await consolidator.apply("u1", batch, project="personal")
+
+    assert [(op.subject, op.predicate, op.object) for op in applied] == [
+        ("deploy", "uses", "[redacted:github_token]"),
+        ("user", "lives_in", "Berlin"),
+        ("user", "prefers", "tea"),
+    ]
+    current = {(f.subject, f.predicate): f for f in await temporal.current_facts(user_id="u1")}
+    assert set(current) == {("deploy", "uses"), ("user", "lives_in"), ("user", "prefers")}
+    redacted = current[("deploy", "uses")]
+    assert redacted.object == "[redacted:github_token]"
+    assert [hit["rule"] for hit in json.loads(redacted.redactions)] == ["object:github_token"]
+    stored = gate._store._conn.execute("SELECT subject, predicate, object FROM facts").fetchall()
+    assert all(_token() not in str(tuple(row)) for row in stored)
+
+
+@pytest.mark.asyncio
+async def test_a_reproposed_fact_is_compared_in_its_stored_form_and_left_as_it_is() -> None:
+    """The model proposes the raw token again; redacted, the proposal is the stored fact, so it
+    is not applied and the fact's interval is not closed and reopened."""
+    op = FactOp(op=FactOpKind.ADD, subject="deploy", predicate="uses", object=_token())
+    consolidator, temporal, _gate = _build_stack([], clock=lambda: T0)
+    await consolidator.apply("u1", FactOpBatch(ops=[op]), project="personal")
+    [stored] = await temporal.current_facts(user_id="u1")
+
+    applied = await consolidator.apply("u1", FactOpBatch(ops=[op]), project="personal")
+
+    assert applied == []
+    [still] = await temporal.current_facts(user_id="u1")
+    assert (still.id, still.valid_from, still.valid_to) == (stored.id, stored.valid_from, None)
+    assert len(await temporal.history(user_id="u1", subject="deploy", predicate="uses")) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_delete_names_the_fact_in_its_stored_form() -> None:
+    """A DELETE whose subject holds the raw token closes the fact stored with its placeholder."""
+    consolidator, temporal, _gate = _build_stack([], clock=lambda: T0)
+    add = FactOp(op=FactOpKind.ADD, subject=_token(), predicate="grants", object="deploy")
+    await consolidator.apply("u1", FactOpBatch(ops=[add]), project="personal")
+    delete = FactOp(op=FactOpKind.DELETE, subject=_token(), predicate="grants", object="")
+
+    applied = await consolidator.apply("u1", FactOpBatch(ops=[delete]), project="personal")
+
+    assert [(op.op, op.subject) for op in applied] == [
+        (FactOpKind.DELETE, "[redacted:github_token]")
+    ]
+    assert await temporal.current_facts(user_id="u1") == []

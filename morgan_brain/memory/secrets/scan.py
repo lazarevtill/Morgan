@@ -53,7 +53,7 @@ import re
 from collections import deque
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from itertools import islice
+from itertools import islice, pairwise
 from typing import Any, Literal
 
 from morgan_brain.config import Settings
@@ -87,9 +87,10 @@ _PRIVATE_USE_FIRST = 0xE000
 _PRIVATE_USE_LAST = 0xF8FF
 
 
-def _guards(text: str) -> list[tuple[int, int]]:
-    """The placeholders already in *text* -- a replayed row, a quoted redaction, the decoded
-    pass's own: no rule takes a span that overlaps one, and none is counted as a hit."""
+def placeholder_spans(text: str) -> list[tuple[int, int]]:
+    """Where each placeholder the gate writes stands in *text*, as ``(start, end)`` in text
+    order -- a replayed row's, a quoted redaction's, the decoded pass's own. The scanner guards
+    them: no rule takes a span that overlaps one, and none is counted as a hit."""
     return [(m.start(), m.end()) for m in _PLACEHOLDER_RE.finditer(text)]
 
 
@@ -229,10 +230,63 @@ class Scanner:
         self._order = {rule.name: index for index, rule in enumerate(self._rules)}
         self._judging = tuple(rule for rule in self._rules if _judges_its_matches(rule))
 
-    def scan(self, text: str, *, verdict: Verdict) -> ScanResult:
+    def scan(self, text: str, *, verdict: Verdict, known: Sequence[Hit] = ()) -> ScanResult:
         """Scan *text* under *verdict*: raise on a provider hit under ``refuse``, redact and
-        count it under ``redact``; redact and flag the rest as each rule says."""
-        return _apply(text, self._spans(text), verdict)
+        count it under ``redact``; redact and flag the rest as each rule says.
+
+        *known* are the hits a scan of a longer text made inside *text*, positioned on it: a
+        piece cut from a text scanned whole carries them. *text* is still scanned in full, and
+        each known hit is recorded beside this scan's own, once per rule and position, where it
+        stands in the result. A known redaction's placeholder is already in *text*, guarded, so
+        this scan never takes it again, and it holds no value to refuse. A known flag whose kept
+        text overlaps a span this scan takes gives way to it, so a hit passed in never keeps a
+        secret from being redacted. A known redaction whose position does not hold its
+        placeholder, a hit of no rule or outside *text*, and two known hits that overlap raise
+        ``ValueError``: a caller's error, named by rule and position."""
+        if not known:
+            return _apply(text, self._spans(text), verdict)
+        own = self._spans(text)
+        placed = [
+            span
+            for span in self._known_spans(text, known)
+            if span.rule.effect == "redact"
+            or not any(span.start < o.end and o.start < span.end for o in own)
+        ]
+        spans = sorted([*own, *placed], key=lambda s: s.start)
+        return _apply(text, spans, verdict, placed=placed)
+
+    def _known_spans(self, text: str, known: Sequence[Hit]) -> list[_Span]:
+        """*known* as spans on *text*, one per rule and position, in text order: a redaction as
+        its placeholder -- which a flag of the same rule shares -- and a flag-only hit as its
+        kept text. Raises ``ValueError`` for a hit of no rule, one outside *text*, a redaction
+        whose position does not hold its placeholder, and two spans that overlap."""
+        spans: dict[tuple[int, str], _Span] = {}
+        for hit in known:
+            rule = self._by_name.get(hit.rule)
+            if rule is None:
+                raise ValueError(f"a known hit names no rule of the gate's: {hit.rule!r}")
+            end = hit.start + hit.length
+            if hit.start < 0 or hit.length <= 0 or end > len(text):
+                raise ValueError(
+                    f"a known {rule.name} hit at offset {hit.start} ({hit.length} characters) "
+                    f"lies outside the text ({len(text)} characters)"
+                )
+            if rule.effect == "redact" and text[hit.start : end] != REDACTION.format(
+                rule=rule.name
+            ):
+                raise ValueError(
+                    f"a known {rule.name} redaction at offset {hit.start} does not stand on its "
+                    "placeholder"
+                )
+            spans.setdefault((hit.start, rule.name), _Span(rule, hit.start, end))
+        ordered = sorted(spans.values(), key=lambda s: s.start)
+        for before, after in pairwise(ordered):
+            if after.start < before.end:
+                raise ValueError(
+                    f"known hits overlap: {before.rule.name} at offset {before.start} and "
+                    f"{after.rule.name} at offset {after.start}"
+                )
+        return ordered
 
     def scan_turn(self, text: str, *, role: str, verdict: Verdict) -> ScanResult:
         """``scan``, JSON-aware for a ``tool_call`` turn whose text is exactly what
@@ -346,7 +400,7 @@ class Scanner:
         (``_window``); each records the spans it decides, and the overlaps between them are
         resolved once, over the whole text, as an unwindowed scan resolves them."""
         limits = self.limits
-        guards = _guards(text)
+        guards = placeholder_spans(text)
         if len(text) <= limits.window_chars:
             return self._without_overlaps(self._matches_in(text, 0, 0), guards)
         found: dict[tuple[int, str], _Span] = {}
@@ -525,11 +579,15 @@ class Scanner:
         return sorted(kept, key=lambda s: s.start)
 
 
-def _apply(text: str, spans: list[_Span], verdict: Verdict) -> ScanResult:
-    """*text* with the spans redacted or flagged as their rules say, positions on the result."""
+def _apply(
+    text: str, spans: list[_Span], verdict: Verdict, *, placed: Sequence[_Span] = ()
+) -> ScanResult:
+    """*text* with the spans redacted or flagged as their rules say, positions on the result.
+    A span in *placed* is a hit a scan of a longer text already made -- a placeholder in *text*
+    or a flag's kept text -- so it is recorded but holds no value to refuse."""
     if verdict == "refuse":
         for span in spans:
-            if span.rule.kind == "provider":
+            if span.rule.kind == "provider" and span not in placed:
                 raise SecretRefused(
                     rule=span.rule.name, start=span.start, length=span.end - span.start
                 )

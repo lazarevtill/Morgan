@@ -252,11 +252,16 @@ def _render_doctor(data: dict[str, Any]) -> str:
 #: The human-readable form of each verb's payload. Rendering only -- which handler
 #: produced the payload is the dispatcher's business, not this module's.
 def _render_import(data: dict[str, Any]) -> str:
-    return (
+    line = (
         f"Imported {data['memories']} memories from {data['conversations']} conversations "
         f"into {data['archive_project']!r}; {data['held_out']} conversations held out in "
         f"{data['holdout_project']!r}, {data['skipped_turns']} turns skipped."
     )
+    if data["redacted_pieces"]:
+        line += (
+            f" {data['redacted_pieces']} pieces redacted ({data['provider_hits']} provider tokens)."
+        )
+    return line
 
 
 def _render_snapshot(data: dict[str, Any]) -> str:

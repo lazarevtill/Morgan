@@ -49,12 +49,15 @@ async def test_forget_is_idempotent(tmp_path):
 
 
 async def test_forget_reports_an_absent_table_as_skipped_not_zero(tmp_path):
-    """No SessionHistoryStore has opened on this connection, so ``history`` stays 0
-    (honest: nothing was erased) AND the table is named in ``tables_skipped`` (honest:
-    there was nothing to erase FROM). The vector and index tables DO exist here, so they
-    must not be reported as skipped."""
+    """``session_history`` is dropped after the open, so ``history`` stays 0 (honest: nothing
+    was erased) AND the table is named in ``tables_skipped`` (honest: there was nothing to
+    erase FROM). The vector and index tables DO exist here, so they must not be reported as
+    skipped."""
     m = _module(str(tmp_path / "m.db"))
     await m.store(Memory(user_id="u", project="p", content="harbor"))
+    # Every module opens the history store, so the table is made absent by dropping it here.
+    m._episodics._conn.execute("DROP TABLE session_history")  # test-only introspection
+    m._episodics._conn.commit()
     report = await m.forget(user_id="u", project="p")
     assert report.history == 0
     assert report.tables_skipped == ["session_history"]

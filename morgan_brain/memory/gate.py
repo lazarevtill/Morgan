@@ -1,21 +1,24 @@
 """MemoryGate — the single choke point for all memory reads and writes.
 
 Every store/recall/forget passes through here. It enforces user- and project-scope (the
-basis of multi-tenant readiness) and holds the secret gate: every write is scanned here
-(``memory/secrets``), consent and audit come later. No caller holds the ``MemoryModule``
-directly.
+basis of multi-tenant readiness) and holds the secret gate (``memory/secrets``): every memory,
+fact, question and history row is scanned here -- refused where the caller can rephrase it,
+redacted where nobody can. A project's remote is recorded with its userinfo stripped; its
+root, a local path, is recorded as given. Consent and audit come later. No caller holds the
+``MemoryModule`` directly.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
 from morgan_brain.memory.migrations import DatabaseNeedsMigration
-from morgan_brain.memory.secrets import TextVerdict, Verdict
-from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, TemporalFact
+from morgan_brain.memory.secrets import Hit, ScanResult, TextVerdict, Verdict, strip_userinfo
+from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, Message, TemporalFact
 
 if TYPE_CHECKING:
     from morgan_brain.memory.module import MemoryModule
@@ -25,10 +28,10 @@ if TYPE_CHECKING:
 class ForgetReport:
     """What a single ``forget()`` call erased.
 
-    ``history`` is ``0`` for two different reasons that used to be indistinguishable: the
-    table exists and genuinely had nothing under this project, or it was never created on
-    this connection. ``tables_skipped`` names every table that was absent (and therefore not
-    touched) so a caller can print "not tracked here" instead of a false "0 erased".
+    ``history`` is ``0`` for two different reasons: the table exists and genuinely had nothing
+    under this project, or the table is absent from the database. ``tables_skipped`` names
+    every table that was absent (and therefore not touched) so a caller can print "not tracked
+    here" instead of a false "0 erased".
     ``sessions``, ``turns`` and ``digests`` count what the session archive's tables lost.
     """
 
@@ -80,10 +83,11 @@ class RecallOutcome:
 
 
 class MemoryGate:
-    """*read_only_reason*, when given, refuses every write -- ``store``, ``upsert_fact``,
-    ``close_fact``, ``set_confidence``, ``forget`` -- with ``DatabaseNeedsMigration`` carrying
-    it: the database behind the gate waits for a heavy migration step (``memory.migrations``).
-    Reads are unaffected, because they work on the schema the database already has.
+    """*read_only_reason*, when given, refuses every write -- ``store``, ``append_history``,
+    ``upsert_fact``, ``record_project``, ``close_fact``, ``set_confidence``, ``forget`` -- with
+    ``DatabaseNeedsMigration`` carrying it: the database behind the gate waits for a heavy
+    migration step (``memory.migrations``). Reads are unaffected, because they work on the
+    schema the database already has.
     """
 
     def __init__(self, store: MemoryModule, read_only_reason: str | None = None) -> None:
@@ -95,10 +99,27 @@ class MemoryGate:
         """Why writes are refused, or ``None`` when they are not."""
         return self._read_only_reason
 
-    async def store(self, memory: Memory, *, verdict: Verdict = "refuse") -> str:
+    async def store(
+        self, memory: Memory, *, verdict: Verdict = "refuse", hits: Sequence[Hit] = ()
+    ) -> str:
+        """Store *memory*, its content scanned under *verdict*. *hits* are the ones a scan of
+        the longer text the content was cut from made inside it, positioned on the content
+        (``scan_result``); the content is still scanned in full, and the row records both sets.
+        A given redaction whose position does not hold its placeholder raises ``ValueError``."""
         self.require_writable()
         self._require_scope(memory.user_id)
-        return await self._store.store(memory, verdict=verdict)
+        return await self._store.store(memory, verdict=verdict, hits=hits)
+
+    async def append_history(
+        self, *, user_id: str, project: str, session_key: str, message: Message
+    ) -> None:
+        """Store a history row under *session_key* in *project*, scanned under ``redact``.
+        Refused while a heavy migration step waits, like every write."""
+        self.require_writable()
+        self._require_scope(user_id, project)
+        await self._store.append_history(
+            user_id=user_id, project=project, session_key=session_key, message=message
+        )
 
     def scan_text(self, text: str, *, verdict: Verdict = "refuse") -> tuple[TextVerdict, str]:
         """Scan *text* as a write would, without writing: what the gate found, and the text as
@@ -107,6 +128,12 @@ class MemoryGate:
         refused question is neither embedded nor sent, and a question with a generic hit goes
         on redacted everywhere."""
         return self._store.scan_text(text, verdict=verdict)
+
+    def scan_result(self, text: str, *, verdict: Verdict) -> ScanResult:
+        """``scan_text``'s full result: the text as it may go on and every hit by rule and
+        position, for a caller that cuts the scanned text into pieces and hands each piece its
+        hits (``store``'s *hits*). Synchronous and CPU only; it writes nothing."""
+        return self._store.scan_result(text, verdict=verdict)
 
     async def get(self, memory_id: str, *, user_id: str) -> Memory | None:
         """One memory by id, or ``None`` if this owner has no such memory.
@@ -159,11 +186,17 @@ class MemoryGate:
 
         *user_id* scopes the caller, not the row: ``projects`` has no owner column, because a
         repository's classification is the same for everyone with data in it.
+
+        The remote's userinfo is stripped before it is stored: ``user:token@`` is not part of
+        what the repository is.
         """
         self.require_writable()
         self._require_scope(user_id, project)
         return await self._store.record_project(
-            project, classification=classification, remote=remote, root=root
+            project,
+            classification=classification,
+            remote=strip_userinfo(remote) if remote is not None else None,
+            root=root,
         )
 
     async def current_facts(
@@ -226,8 +259,8 @@ class MemoryGate:
     def require_writable(self) -> None:
         """Raise ``DatabaseNeedsMigration`` if writes are refused; every write method does.
 
-        Public for a command whose write comes after costly work -- a model call, an embedding,
-        a history row written outside the gate: it refuses first, and nothing else happens.
+        Public for a command whose write comes after costly work -- a model call, an embedding:
+        it refuses first, and nothing else happens.
         """
         if self._read_only_reason is not None:
             raise DatabaseNeedsMigration(self._read_only_reason)
