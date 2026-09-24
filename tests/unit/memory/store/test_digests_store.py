@@ -197,3 +197,87 @@ def test_every_writer_names_the_entrypoint_source(conn):
     assert tuple(stored) == ("", "none")
     with pytest.raises(TypeError):
         DigestRow(**{k: v for k, v in _row("d-2").__dict__.items() if k != "entrypoint_source"})
+
+
+def test_insert_digest_dedupes_a_repeated_ref_and_rejects_a_bad_kind(conn):
+    """A repeated ref still stores one row, but a ref outside the three known kinds raises and
+    leaves neither the digest nor any of its refs behind: an erasure must find every digest
+    that quoted what it erases, and a swallowed bad ref would hide one from it."""
+    dup = _row("d-dup", refs=(DigestRef("fact", "f-1"), DigestRef("fact", "f-1")))
+    _insert(conn, dup)
+    refs = conn.execute("SELECT kind, ref_id FROM digest_refs WHERE digest_id = 'd-dup'").fetchall()
+    assert [tuple(r) for r in refs] == [("fact", "f-1")]
+
+    bad = _row("d-bad", refs=(DigestRef("corrected", "c-1"),))
+    with pytest.raises(sqlite3.IntegrityError), write_transaction(conn):
+        digests.insert_digest(conn, bad)
+    assert digests.get_digest(conn, user_id="u", digest_id="d-bad") is None
+    assert (
+        conn.execute("SELECT COUNT(*) FROM digest_refs WHERE digest_id = 'd-bad'").fetchone()[0]
+        == 0
+    )
+
+
+def test_insert_digest_rejects_an_unknown_entrypoint_source(conn):
+    bad = _row("d-bad-source", entrypoint_source="typo")
+    with pytest.raises(ValueError, match="typo"), write_transaction(conn):
+        digests.insert_digest(conn, bad)
+    assert digests.get_digest(conn, user_id="u", digest_id="d-bad-source") is None
+
+
+def test_deleting_a_digest_cascades_to_its_refs_and_ratings(conn):
+    _insert(conn, _row("d-1"))
+    with write_transaction(conn):
+        digests.rate_line(conn, digest_id="d-1", line_no=1, rating="right", now=T)
+    with write_transaction(conn):
+        conn.execute("DELETE FROM digests WHERE id = ?", ("d-1",))
+    assert (
+        conn.execute("SELECT COUNT(*) FROM digest_refs WHERE digest_id = 'd-1'").fetchone()[0] == 0
+    )
+    assert (
+        conn.execute("SELECT COUNT(*) FROM digest_ratings WHERE digest_id = 'd-1'").fetchone()[0]
+        == 0
+    )
+
+
+def test_newest_unrated_first_offers_a_partially_rated_digest(conn):
+    _insert(conn, _row("partial"))
+    with write_transaction(conn):
+        digests.rate_line(conn, digest_id="partial", line_no=1, rating="right", now=T)
+    found = digests.newest_unrated_first(
+        conn, user_id="u", project=None, excluded_entrypoints=lambda entrypoint: False
+    )
+    assert found is not None and found.id == "partial"
+
+
+def test_backfill_entrypoint_of_empty_string_changes_nothing(conn):
+    _insert(conn, _row("d-1", entrypoint="", entrypoint_source="none"))
+    with write_transaction(conn):
+        assert (
+            digests.backfill_entrypoint(
+                conn, harness="claude-code", native_session_id="s-1", entrypoint=""
+            )
+            == 0
+        )
+    stored = conn.execute(
+        "SELECT entrypoint, entrypoint_source FROM digests WHERE id = 'd-1'"
+    ).fetchone()
+    assert tuple(stored) == ("", "none")
+
+
+def test_rate_link_check_refuses_an_out_of_range_rating(conn):
+    with pytest.raises(sqlite3.IntegrityError), write_transaction(conn):
+        digests.rate_link(
+            conn,
+            turn_id=1,
+            earlier_turn_id=2,
+            user_id="u",
+            project="p",
+            rating="maybe",
+            now=T,
+        )
+
+
+def test_has_first_for_session_is_false_for_a_later_render_only_session(conn):
+    _insert(conn, _row("later", native_session_id="s-2", first_for_session=False))
+    assert not digests.has_first_for_session(conn, harness="claude-code", native_session_id="s-2")

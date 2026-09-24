@@ -106,11 +106,13 @@ def insert_call(conn: sqlite3.Connection, record: CallRecord) -> int:
     """Insert *record* and return its rowid. Joins the caller's transaction."""
     values = {name: getattr(record, name) for name in _COLUMNS}
     values["all_projects"] = int(record.all_projects)
-    columns = ", ".join(_COLUMNS)
-    marks = ", ".join(f":{name}" for name in _COLUMNS)
-    # The column names are the module's constant, never caller input.
     cursor = conn.execute(
-        f"INSERT INTO call_log ({columns}) VALUES ({marks})",  # noqa: S608 # nosec B608
+        "INSERT INTO call_log (ts, surface, client, native_session_id, command, user_id, "
+        "project, all_projects, outcome, embed_outcome, degraded, degrade_reason, "
+        "embed_latency_ms, total_ms, query_language, reason) VALUES (:ts, :surface, :client, "
+        ":native_session_id, :command, :user_id, :project, :all_projects, :outcome, "
+        ":embed_outcome, :degraded, :degrade_reason, :embed_latency_ms, :total_ms, "
+        ":query_language, :reason)",
         values,
     )
     if cursor.lastrowid is None:

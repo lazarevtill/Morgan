@@ -17,10 +17,21 @@ import json
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast, get_args
 
 RefKind = Literal["turn", "memory", "fact"]
 EntrypointSource = Literal["env", "transcript", "backfill", "none"]
+
+_ENTRYPOINT_SOURCES: frozenset[str] = frozenset(get_args(EntrypointSource))
+
+
+def _checked_entrypoint_source(value: str) -> EntrypointSource:
+    """Validate *value* against ``EntrypointSource``'s four members, raising ``ValueError``
+    naming it otherwise."""
+    if value not in _ENTRYPOINT_SOURCES:
+        raise ValueError(f"unknown entrypoint_source: {value!r}")
+    return cast(EntrypointSource, value)
+
 
 _SCHEMA_STATEMENTS: tuple[str, ...] = (
     """
@@ -181,7 +192,15 @@ def _row_to_digest(conn: sqlite3.Connection, row: sqlite3.Row) -> DigestRow:
 
 
 def insert_digest(conn: sqlite3.Connection, row: DigestRow) -> None:
-    """The row, and one ``digest_refs`` row per ref. Joins the caller's transaction."""
+    """The row, and one ``digest_refs`` row per ref. Joins the caller's transaction.
+
+    Raises ``ValueError`` before writing anything if ``row.entrypoint_source`` is not one of
+    ``EntrypointSource``'s four values, and ``sqlite3.IntegrityError`` if a ref's kind or id
+    fails ``digest_refs``' constraints -- the caller's ``write_transaction`` then rolls back
+    the row already written, so a digest is never committed short of a ref an erasure needs to
+    find it.
+    """
+    entrypoint_source = _checked_entrypoint_source(row.entrypoint_source)
     conn.execute(
         "INSERT INTO digests (id, ts, user_id, project, harness, native_session_id, source, "
         "entrypoint, entrypoint_source, first_for_session, text, lines, chars, ms) "
@@ -195,7 +214,7 @@ def insert_digest(conn: sqlite3.Connection, row: DigestRow) -> None:
             row.native_session_id,
             row.source,
             row.entrypoint,
-            row.entrypoint_source,
+            entrypoint_source,
             int(row.first_for_session),
             row.text,
             _lines_json(row.lines),
@@ -204,7 +223,8 @@ def insert_digest(conn: sqlite3.Connection, row: DigestRow) -> None:
         ),
     )
     conn.executemany(
-        "INSERT OR IGNORE INTO digest_refs (digest_id, kind, ref_id) VALUES (?, ?, ?)",
+        "INSERT INTO digest_refs (digest_id, kind, ref_id) VALUES (?, ?, ?) "
+        "ON CONFLICT (digest_id, kind, ref_id) DO NOTHING",
         [(row.id, ref.kind, ref.ref_id) for ref in row.refs],
     )
 
