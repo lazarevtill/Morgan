@@ -792,6 +792,8 @@ def delete_sessions(conn: sqlite3.Connection, erasure: Erasure) -> int:
     """The erased sessions' rows, their cursors, and one exclusion each at ``erasure.erased_at``
     with ``erasure.exclusion_reason``: the transcript is still on disk, and a cursor alone
     would let the next sweep bring the session back. The pairs are read before the rows go."""
+    if not erasure.erased_at:
+        raise ValueError("Erasure.erased_at must be set before delete_sessions runs")
     where, params = _session_scope(erasure)
     # `where` is one of the two literals above, never caller input.
     pairs = conn.execute(
@@ -810,6 +812,7 @@ def delete_sessions(conn: sqlite3.Connection, erasure: Erasure) -> int:
             reason=erasure.exclusion_reason,
             now=erasure.erased_at,
         )
+    # `where` is one of `_session_scope`'s two literals, never caller input.
     return conn.execute(
         f"DELETE FROM sessions WHERE {where}",  # noqa: S608 # nosec B608
         params,
@@ -840,6 +843,7 @@ def _delete_fts_rows(conn: sqlite3.Connection, table: str, erasure: Erasure) -> 
         f"DELETE FROM {table} WHERE rowid IN (SELECT value FROM json_each(?))",  # noqa: S608 # nosec B608
         (erasure.turn_ids,),
     ).rowcount
+    # `table` is one of FTS_TABLES, never caller input.
     conn.execute(f"INSERT INTO {table}({table}) VALUES ('optimize')")  # noqa: S608 # nosec B608
     return erased
 

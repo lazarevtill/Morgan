@@ -120,9 +120,12 @@ come in" are answered by the directory names.
 - **`forget` reaches every project-keyed table.** `store/tables.py::PROJECT_TABLES` is the one
   list; a store that adds a table registers it there, and a test fails on any table with a
   `project` column missing from it. `forget` walks the registry and erases each table through
-  the deleter its store owns, by the memory ids and by the owner's `user_id` and `project`
-  columns wherever a table has both; a space's vec0 table other than `vec_items` is erased by
-  those columns alone. A registered table it cannot erase that way stops it by name before
+  the deleter its store owns, by the memory or turn ids it holds, and by the owner's
+  `user_id` and `project` columns where that deleter uses them; `turns_fts` and
+  `corrections_fts` are erased at the rowids of the turns they index, never by their own
+  `user_id`/`project` columns, because a filter on an FTS5 table's UNINDEXED column would scan
+  it inside the lock. A space's vec0 table other than `vec_items` is erased by those owner
+  columns alone. A registered table it cannot erase that way stops it by name before
   anything is erased. The forgotten words leave the database files: FTS5 is optimized, the
   database vacuumed and the write-ahead log truncated; while another connection's read blocks
   that checkpoint they stay until a later one, and a warning says so. The snapshot `morgan

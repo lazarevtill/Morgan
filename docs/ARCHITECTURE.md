@@ -137,8 +137,11 @@ memory ids are read. It erases:
 It walks `store/tables.py`, the registry of the tables this has to reach, and erases each table
 with the deleter its store owns:
 
-- Rows are matched by the memory ids, and by the owner's `user_id` and `project` columns
-  wherever a table has both, so an index row whose memory is gone goes too.
+- Rows are matched by the memory or turn ids the deleter holds, and by the owner's
+  `user_id` and `project` columns where the deleter uses them, so an index row whose memory is
+  gone goes too; `turns_fts` and `corrections_fts` are matched at the rowids of the turns they
+  index, never by their own `user_id`/`project` columns, because a filter on an FTS5 table's
+  UNINDEXED column would scan it inside the lock.
 - A space's vec0 table other than `vec_items` is matched by those columns alone.
 - A registered table with no deleter, or a space's table without those columns, stops it by
   name before anything is erased.

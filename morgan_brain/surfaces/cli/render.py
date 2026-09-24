@@ -47,9 +47,20 @@ def _render_facts(data: dict[str, Any]) -> str:
 
 def _render_forget(data: dict[str, Any]) -> str:
     scope = "all projects" if data["all_projects"] else f"project {data['project']!r}"
-    lines = [
+    summary = (
         f"Forgot {scope}: memories={data['memories']} facts={data['facts']} "
-        f"history={data['history']}",
+        f"history={data['history']}"
+    )
+    # The archive counts print only when they are not zero: a project with nothing captured
+    # never had sessions, turns or digests to lose, and a trailing "sessions=0 turns=0
+    # digests=0" would read as archive activity that did not happen.
+    archive = " ".join(
+        f"{key}={data[key]}" for key in ("sessions", "turns", "digests") if data[key]
+    )
+    if archive:
+        summary = f"{summary} {archive}"
+    lines = [
+        summary,
         f"Snapshot (undo with `morgan restore`): {data['snapshot']}",
     ]
     lines.extend(f"WARNING: {w}" for w in data["warnings"])

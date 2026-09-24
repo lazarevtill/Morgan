@@ -173,7 +173,9 @@ def merge_forget_reports(reports: list[ForgetReport]) -> ForgetReport:
 
 def forget_result(report: ForgetReport, *, project: str, all_projects: bool) -> dict[str, Any]:
     """The one output that must not lie: a skipped table prints as "not present", never as
-    a silent 0."""
+    a silent 0, and every count ``merge_forget_reports`` sums is in the result -- a forget
+    that erased a captured session's sessions, turns and digests reports them, not just the
+    memories, facts and history it also erased."""
     warnings: list[str] = []
     if report.tables_skipped:
         warnings.append(
@@ -186,6 +188,9 @@ def forget_result(report: ForgetReport, *, project: str, all_projects: bool) -> 
         "memories": report.memories,
         "facts": report.facts,
         "history": report.history,
+        "sessions": report.sessions,
+        "turns": report.turns,
+        "digests": report.digests,
         "tables_skipped": list(report.tables_skipped),
         "warnings": warnings,
     }

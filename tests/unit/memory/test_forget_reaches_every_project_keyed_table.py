@@ -8,6 +8,7 @@ refuses one by name before it erases anything.
 
 from __future__ import annotations
 
+import json
 import struct
 from datetime import UTC, datetime
 
@@ -704,9 +705,10 @@ async def test_a_second_embedding_spaces_table_holds_nothing_per_session(tmp_pat
     assert _vectors_in(conn, _SECOND_SPACE) == [(1, "u", "p")]
 
 
-async def test_links_and_link_ratings_go_from_either_end_at_both_grains(tmp_path):
-    """A link whose earlier turn is in the forgotten project, or whose later turn is in the
-    forgotten session, goes too -- and its rating with it."""
+async def test_links_and_link_ratings_go_from_either_end_at_the_project_grain(tmp_path):
+    """A link between two projects, its earlier turn in ``p`` and its later turn (and its own
+    ``project``) in ``q``, goes with its rating when ``p`` is forgotten, because its
+    ``earlier_project`` matches too; ``q``'s own link stays."""
     module = build_memory_module(str(tmp_path / "m.db"))
     conn = module._conn
     await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "p")
@@ -735,6 +737,114 @@ async def test_links_and_link_ratings_go_from_either_end_at_both_grains(tmp_path
     assert [tuple(r) for r in links] == [(q_ids[1], q_ids[0])]
     ratings = conn.execute("SELECT turn_id, earlier_turn_id FROM link_ratings").fetchall()
     assert [tuple(r) for r in ratings] == [(q_ids[1], q_ids[0])]
+
+
+async def test_links_and_link_ratings_go_from_either_end_at_the_session_grain(tmp_path):
+    """Two sessions of the same project, ``s-p`` (erased) and ``s-other`` (kept), with a link
+    from a later turn of ``s-p`` to an earlier turn of ``s-other``, and the mirror -- a later
+    turn of ``s-other`` to an earlier turn of ``s-p``. Erasing ``s-p`` alone takes both links
+    and both ratings, because either end sits in the erased session; ``s-other``'s own link
+    (written by ``_archive_rows``) stays."""
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    history = SessionHistoryStore(conn, clock=_clock)
+    await _write_every_table(module, history, "p")
+    memory_id = str(conn.execute("SELECT id FROM memories WHERE project = 'p'").fetchone()[0])
+    other, other_ids = _archive_rows(conn, "p", "s-other", memory_id=memory_id)
+    p_ids = [t.id for t in sessions_store.turns_of(conn, session_id_of("claude-code", "s-p"))]
+    with write_transaction(conn):
+        conn.execute(
+            "INSERT INTO turn_links (turn_id, earlier_turn_id, user_id, project, earlier_project, "
+            "similarity, lexicon_version, computed_at) VALUES (?, ?, 'u', ?, ?, 0.9, 1, ?)",
+            (p_ids[1], other_ids[0], "p", "p", NOW),
+        )
+        digests.rate_link(
+            conn,
+            turn_id=p_ids[1],
+            earlier_turn_id=other_ids[0],
+            user_id="u",
+            project="p",
+            rating="right",
+            now=NOW,
+        )
+        conn.execute(
+            "INSERT INTO turn_links (turn_id, earlier_turn_id, user_id, project, earlier_project, "
+            "similarity, lexicon_version, computed_at) VALUES (?, ?, 'u', ?, ?, 0.9, 1, ?)",
+            (other_ids[1], p_ids[0], "p", "p", NOW),
+        )
+        digests.rate_link(
+            conn,
+            turn_id=other_ids[1],
+            earlier_turn_id=p_ids[0],
+            user_id="u",
+            project="p",
+            rating="wrong",
+            now=NOW,
+        )
+
+    await module.forget_sessions(
+        user_id="u", project="p", session_ids=[session_id_of("claude-code", "s-p")], reason="forget"
+    )
+
+    links = {
+        tuple(r) for r in conn.execute("SELECT turn_id, earlier_turn_id FROM turn_links").fetchall()
+    }
+    assert links == {(other_ids[1], other_ids[0])}
+    ratings = {
+        tuple(r)
+        for r in conn.execute("SELECT turn_id, earlier_turn_id FROM link_ratings").fetchall()
+    }
+    assert ratings == {(other_ids[1], other_ids[0])}
+    assert [t.id for t in sessions_store.turns_of(conn, other.id)] == other_ids
+
+
+async def test_forget_sessions_refuses_to_run_inside_a_write_transaction(tmp_path):
+    """``forget_sessions()`` checkpoints the write-ahead log once its erasure has committed,
+    and SQLite refuses that checkpoint while any transaction is open, even the caller's own.
+    Nested in a caller's ``write_transaction``, it would erase, fail at the checkpoint, and
+    have the caller's block roll the erasure back behind an error that says nothing about
+    nesting. It refuses up front instead, before touching anything, the same way ``forget()``
+    already does for its own ``VACUUM``."""
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "p")
+    session_id = session_id_of("claude-code", "s-p")
+
+    with pytest.raises(RuntimeError, match="write transaction"), write_transaction(conn):
+        await module.forget_sessions(
+            user_id="u", project="p", session_ids=[session_id], reason="forget"
+        )
+
+    assert sessions_store.get_session(conn, session_id) is not None
+    assert sessions_store.cursor_get(conn, harness="claude-code", native_id="s-p") is not None
+    assert [e for e in sessions_store.exclusions(conn) if e.native_id == "s-p"] == []
+
+
+async def test_delete_sessions_refuses_an_empty_erasure_time(tmp_path):
+    """``Erasure.erased_at`` defaults to ``""``, which is not an ISO timestamp: a caller that
+    built one without filling it would persist an empty ``capture_exclusions.excluded_at``,
+    sorting before every real time. ``delete_sessions`` raises instead, before touching the
+    session, its cursor or writing an exclusion."""
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "p")
+    session_id = session_id_of("claude-code", "s-p")
+    erasure = tables.Erasure(
+        user_id="u",
+        project="p",
+        memory_ids="[]",
+        vector_rowids="[]",
+        grain="sessions",
+        session_ids=json.dumps([session_id]),
+        native_ids=json.dumps(["s-p"]),
+    )
+
+    with pytest.raises(ValueError, match="erased_at"), write_transaction(conn):
+        sessions_store.delete_sessions(conn, erasure)
+
+    assert sessions_store.get_session(conn, session_id) is not None
+    assert sessions_store.cursor_get(conn, harness="claude-code", native_id="s-p") is not None
+    assert [e for e in sessions_store.exclusions(conn) if e.native_id == "s-p"] == []
 
 
 def test_the_reads_that_walk_the_registry_never_touch_an_fts_table(tmp_path):

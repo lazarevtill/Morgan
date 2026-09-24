@@ -37,8 +37,9 @@ author or scope depends on this change.
 - `NAME_KEYED_PROJECT_TABLES`: the tables keyed by the project's own name. Today that is
   `projects`.
 
-`MemoryModule.forget` and `EpisodicStore.distinct_projects` read the registry. A store that adds
-a table registers it there. `tests/unit/memory/test_forget_reaches_every_project_keyed_table.py`
+`MemoryModule.forget`, `MemoryModule.forget_sessions` and `EpisodicStore.distinct_projects` read
+the registry. A store that adds a table registers it there.
+`tests/unit/memory/test_forget_reaches_every_project_keyed_table.py`
 opens a database with every store, walks `sqlite_master`, and fails on any table with a
 `project` column that the registry does not list. It also fails on any registered table that
 does not exist.
@@ -49,14 +50,23 @@ that holds a project's data has a `project` column, or is keyed by the project's
 listed in `NAME_KEYED_PROJECT_TABLES`.
 
 **How `forget` erases a registered table.** `forget()` walks `project_tables(conn)` and
-`NAME_KEYED_PROJECT_TABLES`. Each table is erased by a deleter its store owns: a function in the
-store's module, found by the table's name in `_DELETERS` in `memory/module.py`. Each deleter is
-handed one `Erasure` (`store/tables.py`):
+`NAME_KEYED_PROJECT_TABLES` at the project grain; `forget_sessions()` walks the same registry
+at the session grain, for named sessions instead of a whole project. Each table is erased by a
+deleter its store owns: a function in the store's module, found by the table's name in
+`_DELETERS` (project grain) or `_SESSION_DELETERS` (session grain) in `memory/module.py`. Each
+deleter is handed one `Erasure` (`store/tables.py`), its fields selected under the same write
+lock the erasure runs in:
 
-- the owner and the project;
-- the ids of the project's memories;
-- the rowids of the `vec_meta` rows erased with them, which is where
-  `SqliteVectorIndex.upsert` wrote their vectors in `vec_items`.
+- the owner, the project, and which grain the erasure runs at;
+- at the project grain, the ids of the project's memories and the rowids of the `vec_meta` rows
+  erased with them, which is where `SqliteVectorIndex.upsert` wrote their vectors in
+  `vec_items`;
+- the ids of the sessions erased whole and their harnesses' native ids, and the ids of the
+  erased turns -- filled at the session grain from the named sessions' own turns, and at the
+  project grain from the whole project's; the ids of the erased facts, filled at the project
+  grain only, since a session-grain erasure never reaches memories or facts;
+- the moment the erasure ran and the reason, stamped on every exclusion `delete_sessions`
+  writes.
 
 The deleters erase as follows:
 
@@ -67,28 +77,46 @@ The deleters erase as follows:
 - Another embedding space's vec0 table, named in `embedding_spaces`, is erased by its own
   `user_id` and `project` columns alone (`vectors.space_deleter`). No writer puts its vectors
   at `vec_meta`'s rowids, so a rowid there says nothing about whose row it is.
+- `turns_fts` and `corrections_fts` are erased at the rowids of the turns they index, never by
+  their own `user_id`/`project` columns: both carry those columns, but a filter on an FTS5
+  table's UNINDEXED column would scan the whole table inside the lock, so `distinct_projects`
+  and the project-row check skip them too, treating `turns` as answering for both.
+- `sessions`, `turns`, `turn_links`, `link_ratings`, `digests` and `call_log` -- the session
+  archive's own tables -- erase at either grain: the owner's whole project at the project
+  grain, or the named sessions' own ids at the session grain. A link or its rating goes when
+  either its earlier or its later turn is erased. `delete_sessions` also erases each erased
+  session's capture cursor and writes it one exclusion, so a later capture sweep does not read
+  the session back in. `capture_pauses` erases only at the project grain: a pause interval
+  outlives any one session, so a session-grain erasure leaves it.
 - The `projects` row is erased by its name, once no registered project-keyed table holds a
   row of the project from any owner. It has no owner of its own: its remote, root and
   switches belong to everyone with data in the project. So one owner's `forget` keeps it
   while another's rows remain, and the last one's removes it. The name-keyed tables are
   erased after every project-keyed one, so the check sees what the erasure left.
-- The FTS5 deleter then runs `optimize` on `fts_memories`. FTS5 answers a DELETE with a
-  tombstone and keeps the row's words in its segment b-tree until a merge; `optimize` merges
-  now, so the words leave `fts_memories_data`.
+- The FTS5 deleter then runs `optimize` on `fts_memories` (project grain) or on `turns_fts` and
+  `corrections_fts` (either grain). FTS5 answers a DELETE with a tombstone and keeps the row's
+  words in its segment b-tree until a merge; `optimize` merges now, so the words leave the
+  table's own shadow storage.
 
-Every table is resolved before any row is deleted. `forget()` raises, naming the table, with
-nothing erased, when a registered table exists and has no deleter, or when a space's table has
-no `user_id` and `project` columns. A table in `project_tables(conn)` that the database does not
-have is named in `ForgetReport.tables_skipped`. The ids and rowids are selected, and every
-table is erased, in one write transaction. Once it commits, the database is vacuumed and the
-write-ahead log truncated (`PRAGMA wal_checkpoint(TRUNCATE)`). A connection in the middle of a
-read blocks that checkpoint; the forgotten words then stay in the database file and its log
-until a later checkpoint completes, and `forget()` logs the warning `forget.wal-not-truncated`,
-naming the log, and still succeeds.
+Every table is resolved before any row is deleted, at either grain. `forget()` raises, naming
+the table, with nothing erased, when a registered table exists and has no deleter, or when a
+space's table has no `user_id` and `project` columns; `forget_sessions()` raises the same way
+when a registered, present table is in neither `_SESSION_DELETERS` nor
+`HOLDS_NOTHING_PER_SESSION` -- the tuple each store exports naming its tables with no rows kept
+per session (`memories`, `facts`, `capture_pauses`, and the rest of the project-grain-only
+tables). A table in `project_tables(conn)` that the database does not have is named in
+`ForgetReport.tables_skipped`. The ids are selected, and every table is erased, in one write
+transaction. `forget()` then vacuums the database; `forget_sessions()` takes no snapshot and
+never vacuums, because the archive it erases from is a derived copy of files the harnesses
+keep on disk. Both truncate the write-ahead log afterwards (`PRAGMA wal_checkpoint(TRUNCATE)`).
+A connection in the middle of a read blocks that checkpoint; the forgotten words then stay in
+the database file and its log until a later checkpoint completes, and the erasure logs the
+warning `forget.wal-not-truncated`, naming the log, and still succeeds.
 
-A store that adds a table therefore registers it in `tables.py` and maps its deleter in
-`_DELETERS`. The tests in `tests/unit/memory/test_forget_reaches_every_project_keyed_table.py`
-cover the following:
+A store that adds a table therefore registers it in `tables.py`, maps its project-grain deleter
+in `_DELETERS`, and either maps a session-grain deleter in `_SESSION_DELETERS` or declares
+`HOLDS_NOTHING_PER_SESSION`. The tests in
+`tests/unit/memory/test_forget_reaches_every_project_keyed_table.py` cover the following:
 
 - **Every registered table.** It writes rows for two projects into every registered table
   through the stores' own write paths and forgets one. Then it checks each table the registry
@@ -101,12 +129,19 @@ cover the following:
 - **The `projects` row.** With two owners in a project, the first owner's `forget` keeps the
   row and the second's removes it. A single owner's `forget` removes it, with every registered
   table holding that owner's rows beforehand.
-- **Refusals.** It checks that each refusal above stops `forget()` with every row of the
-  project still present.
+- **Refusals.** It checks that each refusal above stops `forget()` or `forget_sessions()` with
+  every row of the project still present.
+- **The session grain.** It erases one of two sessions in a project through
+  `forget_sessions()` and checks the erased session's turns, both FTS tables, its links and
+  ratings from either end -- including a link whose other end sits in a session that stays --
+  its digests with their refs and ratings, its call-log rows, cursor and lease all go, while
+  the other session, the memories, the facts, the history and the pause interval stay, and one
+  exclusion is written with the erasure's own time.
 
 `tests/unit/memory/test_forget_leaves_no_trace.py` reads the raw bytes of the database file
 and its `-wal` file after `forget()`, alone and beside a second open connection. It checks that
 a word of the forgotten project is in neither.
 
-**Later.** Erasing by session or by date, once `forget` can, cascades through the same
-registry.
+**Later.** Erasing part of a session by date narrows the session grain further:
+`Erasure.erased_since` is already a field on every erasure, `None` and unset by every caller
+today.

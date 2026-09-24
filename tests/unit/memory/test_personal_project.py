@@ -172,8 +172,9 @@ def test_step_five_moves_every_default_row_and_counts_them(tmp_path):
 
 
 #: The tables a database below step 5 can hold a ``'default'`` row in. Step 5 is a historical
-#: migration -- frozen at what it moved the day it ran -- and the session archive's tables did
-#: not exist until a later version, so they never held one and are not part of this count.
+#: migration that walks the live registry (``project_tables(conn)``) each time it runs; this
+#: fixture is built at version 4, before the session archive's tables exist, so step 5 finds
+#: them absent and moves rows only in these.
 _STEP_FIVE_TABLES = (
     "memories",
     "facts",

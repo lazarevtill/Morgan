@@ -651,6 +651,16 @@ class MemoryModule:
         keep. Memories and facts are not reached, and the report says so.
         """
         conn = self._conn
+        if conn.in_transaction:
+            # Nested in a caller's write, forget_sessions() would erase, then fail at the WAL
+            # checkpoint -- SQLite refuses that while any transaction is open, even the
+            # caller's own -- with the caller's block rolling the erasure back behind an
+            # error that says nothing about nesting. It refuses before touching anything.
+            raise RuntimeError(
+                "forget_sessions() cannot run inside a write transaction: it checkpoints the "
+                "write-ahead log once the erasure has committed"
+            )
+
         with write_transaction(conn):
             plan = _session_erasure_plan(conn)
             named = json.dumps(list(session_ids))
