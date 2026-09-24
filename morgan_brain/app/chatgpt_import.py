@@ -162,6 +162,11 @@ def split_for_embedding(text: str, budget: int = MAX_EMBED_CHARS) -> list[tuple[
     whitespace, so only a cut at the budget can land in one; it moves to the placeholder's
     start, or to its end when the placeholder opens the piece, which then runs past the
     budget by less than a placeholder's length.
+
+    A flag-only hit (``passport_rf``, ``phone_rf``) is not guarded that way: a cut can fall
+    inside its kept text, most often on a space the text holds. The hit then lies wholly
+    inside neither piece, and no piece records it. Nothing leaks, because a flag-only hit's
+    text is kept in clear by design.
     """
     guards = placeholder_spans(text)
     guard_starts = [start for start, _ in guards]
@@ -299,10 +304,14 @@ async def import_chatgpt(
                 # Already imported, unchanged: skip it. Every piece costs an embedding call
                 # and a real export is thousands of them, so an import that redoes finished
                 # work is one that never finishes on a machine that gets interrupted. The
-                # content check keeps a corrected turn from being frozen out by its own id;
-                # the piece is cut from the scanned text, so a piece stored redacted matches.
+                # content check keeps a corrected turn from being frozen out by its own id. It
+                # compares with the piece as `store` writes it: `store` scans the piece again,
+                # and a shorter text can redact what the whole turn did not.
                 existing = await gate.get(memory_id, user_id=user_id)
-                if existing is not None and existing.content == piece:
+                if (
+                    existing is not None
+                    and existing.content == gate.scan_result(piece, verdict="redact").text
+                ):
                     skipped += 1
                     wrote_any = True
                     continue

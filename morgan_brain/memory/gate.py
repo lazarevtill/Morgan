@@ -3,7 +3,8 @@
 Every store/recall/forget passes through here. It enforces user- and project-scope (the
 basis of multi-tenant readiness) and holds the secret gate (``memory/secrets``): every memory,
 fact, question and history row is scanned here -- refused where the caller can rephrase it,
-redacted where nobody can. A project's remote is recorded with its userinfo stripped; its
+redacted where nobody can. A project's remote has its userinfo stripped and the rest scanned
+under ``redact``; its classification is the caller's, computed from the remote as read, and its
 root, a local path, is recorded as given. Consent and audit come later. No caller holds the
 ``MemoryModule`` directly.
 """
@@ -187,16 +188,19 @@ class MemoryGate:
         *user_id* scopes the caller, not the row: ``projects`` has no owner column, because a
         repository's classification is the same for everyone with data in it.
 
-        The remote's userinfo is stripped before it is stored: ``user:token@`` is not part of
-        what the repository is.
+        The remote's userinfo is stripped -- ``user:token@`` is not part of what the repository
+        is -- and the rest is scanned under ``redact``, because the remote is read from the
+        repository's config and nobody can rephrase it: a token in its path or query is stored
+        as its placeholder. *classification* is the caller's, computed from the remote as read,
+        before this scan, and recomputed from the repository on every write, so a stored
+        redaction never feeds it. The root, a local path, is stored as given.
         """
         self.require_writable()
         self._require_scope(user_id, project)
+        if remote is not None:
+            remote = self._store.scan_result(strip_userinfo(remote), verdict="redact").text
         return await self._store.record_project(
-            project,
-            classification=classification,
-            remote=strip_userinfo(remote) if remote is not None else None,
-            root=root,
+            project, classification=classification, remote=remote, root=root
         )
 
     async def current_facts(

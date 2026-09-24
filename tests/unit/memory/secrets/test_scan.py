@@ -8,7 +8,10 @@ whole kept whatever cut run overlaps it, and a value carried past a window's edg
 keyword before it; a token at the write path's truncation boundary is whole
 because the scan runs on the whole text; a placeholder already in a text -- including the
 scanner's own, from a tool call's decoded pass -- is guarded rather than re-scanned; a flag-only
-hit found in a tool call's decoded pass is still carried to the stored text; nothing the scanner
+hit found in a tool call's decoded pass is still carried to the stored text; a hit a scan of a
+longer text made inside the text is recorded beside the text's own, a known redaction never
+refused and a known flag giving way to a span the text's own scan takes, while a known hit of no
+rule, outside the text or overlapping another is a caller's error; nothing the scanner
 produces -- an exception, a result, a log line -- carries a value; neither the scanner nor these
 tests hold a raw private-use character.
 """
@@ -30,6 +33,7 @@ from structlog.testing import capture_logs
 import morgan_brain.memory.secrets.scan as scan_module
 from morgan_brain.config import Settings
 from morgan_brain.memory.secrets import (
+    Hit,
     Scanner,
     ScanResult,
     SecretRefused,
@@ -535,6 +539,80 @@ def test_a_bracketed_span_that_is_not_a_real_rule_name_is_not_a_guard_and_is_sti
     result = scanner.scan(f"[redacted:{token}]", verdict="redact")
     assert result.redacted_rules() == ["github_token"]
     assert result.text == "[redacted:[redacted:github_token]]"
+
+
+# --- known hits: what a scan of a longer text found inside this one ---------------------------
+
+
+def _known(rule_name: str, start: int, length: int) -> Hit:
+    """A hit a scan of a longer text made, positioned on the text scanned now, with its rule's
+    own kind and effect."""
+    rule = RULES[rule_name]
+    return Hit(rule.name, rule.kind, start, length, rule.effect)
+
+
+def test_a_known_hit_of_no_rule_of_the_gates_raises_value_error():
+    text = f"note {MARKER} here"
+    unknown = Hit("no_such_rule", "generic", 5, 4, "flag")
+    with pytest.raises(ValueError, match="names no rule") as raised:
+        _scanner().scan(text, verdict="redact", known=[unknown])
+    assert MARKER not in str(raised.value)
+
+
+@pytest.mark.parametrize(("start", "length"), [(-1, 4), (5, 0), (10, 30)])
+def test_a_known_hit_outside_the_text_raises_value_error_by_rule_and_offset(start, length):
+    text = f"note {MARKER} here"
+    with pytest.raises(ValueError, match="lies outside the text") as raised:
+        _scanner().scan(text, verdict="redact", known=[_known("passport_rf", start, length)])
+    assert "passport_rf" in str(raised.value) and MARKER not in str(raised.value)
+
+
+def test_two_known_hits_that_overlap_raise_value_error_naming_both():
+    text = f"note {MARKER} here"
+    known = [_known("passport_rf", 5, 10), _known("phone_rf", 10, 10)]
+    with pytest.raises(ValueError, match="known hits overlap") as raised:
+        _scanner().scan(text, verdict="redact", known=known)
+    message = str(raised.value)
+    assert "passport_rf" in message and "phone_rf" in message and MARKER not in message
+
+
+def test_a_known_flag_over_a_span_the_texts_own_scan_takes_gives_way_to_it():
+    """A hit passed in never keeps a secret from being redacted: a known flag-only hit laid over
+    a provider token is dropped, and the token is redacted as the text's own scan found it. A
+    known flag that overlaps nothing the scan takes is recorded where its kept text lands."""
+    token = _github_token()
+    text = f"deploy {token} then 1234 5678"
+    known = [
+        _known("passport_rf", 7, len(token)),
+        _known("passport_rf", text.index("1234"), len("1234 5678")),
+    ]
+
+    result = _scanner().scan(text, verdict="redact", known=known)
+
+    assert result.text == "deploy [redacted:github_token] then 1234 5678"
+    assert [(h.rule, h.start) for h in result.redactions] == [("github_token", 7)]
+    assert [(h.rule, result.text[h.start : h.start + h.length]) for h in result.flags] == [
+        ("passport_rf", "1234 5678")
+    ]
+
+
+def test_a_known_redaction_never_refuses_and_a_token_the_text_holds_still_does():
+    """A known redaction is a placeholder already in the text and holds no value, so ``refuse``
+    records it where it stands rather than refusing it. A provider token the text holds itself
+    is still refused beside it."""
+    placeholder = "[redacted:github_token]"
+    text = f"see {placeholder} here"
+    known = [_known("github_token", 4, len(placeholder))]
+
+    result = _scanner().scan(text, verdict="refuse", known=known)
+
+    assert result.text == text
+    assert [(h.rule, h.start, h.length) for h in result.redactions] == [
+        ("github_token", 4, len(placeholder))
+    ]
+    with pytest.raises(SecretRefused) as raised:
+        _scanner().scan(f"{text} and {_github_token()}", verdict="refuse", known=known)
+    assert (raised.value.rule, raised.value.start) == ("github_token", len(f"{text} and "))
 
 
 def test_a_tool_calls_provider_token_beside_a_key_that_also_reads_as_an_assignment():

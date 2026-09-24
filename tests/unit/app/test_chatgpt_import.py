@@ -212,6 +212,19 @@ def test_a_cut_that_would_fall_inside_a_placeholder_moves_to_its_start():
     assert all(text[offset : offset + len(chunk)] == chunk for offset, chunk in pieces)
 
 
+def test_under_a_budget_shorter_than_a_placeholder_one_that_opens_a_piece_is_kept_whole():
+    """The cut moves to the placeholder's start, and where the placeholder opens the piece, to
+    its end: that piece runs past the budget by less than a placeholder's length, and no piece
+    holds half a placeholder."""
+    placeholder = "[redacted:github_token]"
+    text = "x" * 5 + placeholder + "y" * 12
+
+    pieces = split_for_embedding(text, budget=10)
+
+    assert pieces == [(0, "x" * 5), (5, placeholder), (28, "y" * 10), (38, "y" * 2)]
+    assert all(text[offset : offset + len(chunk)] == chunk for offset, chunk in pieces)
+
+
 async def test_a_long_turn_is_stored_as_several_memories_and_reimport_does_not_duplicate(
     gate, tmp_path
 ):

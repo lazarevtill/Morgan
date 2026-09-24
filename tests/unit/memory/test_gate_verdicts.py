@@ -2,8 +2,9 @@
 `ask`'s question raises `SecretRefused` by rule and offset: nothing is embedded, nothing is sent,
 nothing is stored. A generic hit goes on as its redacted text, everywhere the text goes -- the
 embedding request, the prompt, the history row, the stored memory -- and the result names the
-rules, never the value. What nobody can rephrase -- a history row, `ask`'s reply -- is redacted
-and never refused, and a remote is recorded without its userinfo."""
+rules, never the value. What nobody can rephrase -- a history row, `ask`'s reply, a remote read
+from the repository -- is redacted and never refused; a remote also loses its userinfo, and its
+label is computed from it as read."""
 
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ from morgan_brain.memory.secrets.rules import PROVIDER_RULE_NAMES
 from morgan_brain.memory.store import projects as projects_store
 from morgan_brain.models import Memory, MemoryQuery, Message, Role, TemporalFact
 from morgan_brain.surfaces.cli.commands import cmd_import, cmd_remember
+from morgan_brain.surfaces.cli.project import Repository, classify
 from morgan_brain.surfaces.cli.render import _render_import, _render_remember
 from tests.fakes import FakeChatClient, counting_model_server
 from tests.unit.memory.conftest import a_version_two_database, build_memory_module
@@ -327,6 +329,51 @@ async def test_a_remote_is_recorded_without_its_userinfo(tmp_path):
     assert row is not None and row.remote == "https://git.example/team/p.git"
     assert row.root == "/src/p"
     assert MARKER not in json.dumps(row.__dict__)
+
+
+async def test_a_token_in_a_remotes_query_is_stored_redacted_and_classified_as_read(tmp_path):
+    """A remote is read from the repository's config, so nobody can rephrase it: past its
+    userinfo it is scanned under redact, and a token in its query is stored as its placeholder.
+    The label is computed from the remote as read, before that scan: a glob that matches only
+    the text the scan redacts still classifies the project."""
+    token = _token()
+    settings = Settings(
+        data_dir=str(tmp_path / "data"),
+        embedding_backend="hash",
+        work_remote_globs=["*private_token=" + token[:4] + "*"],
+    )
+    repository = Repository(
+        root=tmp_path / "harbor",
+        remote=f"https://git.example/team/harbor.git?private_token={token}",
+        remote_readable=True,
+    )
+
+    await cmd_remember(argparse.Namespace(text="a note"), settings, "harbor", repository=repository)
+
+    ctx = build_memory_context(settings)
+    try:
+        row = projects_store.get(ctx.conn, "harbor")
+    finally:
+        ctx.conn.close()
+    assert row is not None
+    assert (row.classification, row.remote, row.root) == (
+        "work",
+        "https://git.example/team/harbor.git?private_token=[redacted:github_token]",
+        str(tmp_path / "harbor"),
+    )
+    assert classify(row.remote, settings.work_remote_globs) == "personal"
+    assert MARKER not in json.dumps(row.__dict__)
+
+
+@pytest.mark.parametrize("remote", ["https://git.example/team/p.git", "git@git.example:team/p.git"])
+async def test_a_clean_remote_is_recorded_exactly_as_given(tmp_path, remote):
+    gate = MemoryGate(build_memory_module(str(tmp_path / "m.db")))
+    await gate.store(Memory(user_id="u", project="p", content="a note"))
+    assert await gate.record_project(
+        user_id="u", project="p", classification="personal", remote=remote, root="/src/p"
+    )
+    row = projects_store.get(gate._store._conn, "p")
+    assert row is not None and (row.remote, row.root) == (remote, "/src/p")
 
 
 def test_the_provider_rule_names_are_what_an_import_counts():

@@ -11,10 +11,11 @@ import json
 
 import pytest
 
-from morgan_brain.app.chatgpt_import import ARCHIVE_PROJECT, import_chatgpt
+from morgan_brain.app.chatgpt_import import ARCHIVE_PROJECT, MAX_EMBED_CHARS, import_chatgpt
 from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.secrets.rules import GateLimits, rules
 from morgan_brain.memory.store.db import open_db
 
 
@@ -73,6 +74,26 @@ async def test_a_second_run_does_not_re_embed_what_is_already_stored(gate_and_em
     assert first.memories == 2
     assert embedder.calls == after_first, "re-embedded work it had already done"
     assert second.skipped_turns >= 2
+
+
+async def test_a_piece_its_own_scan_redacts_further_is_passed_on_a_rerun_and_not_embedded(
+    gate_and_embedder, tmp_path
+):
+    """A piece is stored as its own scan leaves it, and that scan can redact more than the scan
+    of the whole turn: a high-entropy run after a long run of one letter is part of one
+    low-entropy token in the turn, and a token of its own once the split cuts it off. A re-run
+    compares the stored piece with that same form, so it passes the piece and embeds nothing."""
+    gate, embedder = gate_and_embedder
+    run = next(rule for rule in rules(GateLimits.defaults()) if rule.name == "entropy").fixture()
+    path = _export(tmp_path / "c.json", ["a" * MAX_EMBED_CHARS + run])
+
+    first = await import_chatgpt(path, gate=gate, user_id="owner")
+    after_first = embedder.calls
+    second = await import_chatgpt(path, gate=gate, user_id="owner")
+
+    assert (first.memories, first.redacted_pieces) == (2, 1)
+    assert embedder.calls == after_first, "re-embedded a piece it had already stored"
+    assert (second.memories, second.skipped_turns, second.redacted_pieces) == (0, 2, 0)
 
 
 async def test_an_edited_turn_is_rewritten_rather_than_skipped(gate_and_embedder, tmp_path):

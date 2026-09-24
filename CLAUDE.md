@@ -123,11 +123,14 @@ come in" are answered by the directory names.
   fact's three fields, a history row, an imported message and a recorded remote before it is
   stored, and `ask`'s question before it is embedded or sent. A provider token refuses text
   the caller can rephrase — a `remember`, a question, a fact — and is redacted and counted in
-  history nobody can: an imported message, a reply already produced. A generic or
-  high-entropy match and a Russian identifier with a passing checksum and its keyword are
-  redacted and flagged; a pattern without a checksum is flagged only beside its keyword. No
-  error, log line, result or report ever carries the value: a refusal names the rule, the
-  offset and the length, and a question that goes on goes on redacted.
+  history nobody can: an imported message, a reply already produced. A recorded remote loses
+  its userinfo and the rest is scanned under redact, so a token in its path or query is stored
+  as its placeholder; its classification is computed from the remote as read, before that
+  scan, and its root, a local path, is stored as given. A generic or high-entropy match and a
+  Russian identifier with a passing checksum and its keyword are redacted and flagged; a
+  pattern without a checksum is flagged only beside its keyword. No error, log line, result or
+  report ever carries the value: a refusal names the rule, the offset and the length, and a
+  question that goes on goes on redacted.
 - **`forget` reaches every project-keyed table.** `store/tables.py::PROJECT_TABLES` is the one
   list; a store that adds a table registers it there, and a test fails on any table with a
   `project` column missing from it. `forget` walks the registry and erases each table through
