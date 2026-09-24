@@ -14,15 +14,42 @@ from pathlib import Path
 
 import sqlite_vec  # type: ignore[import-untyped]
 
+#: The oldest SQLite Morgan runs on: FTS5's ``secure-delete`` option needs 3.42.0. A
+#: requirement of the code, not a choice, so not a setting.
+MIN_SQLITE: tuple[int, int, int] = (3, 42, 0)
+
+
+class SQLiteTooOld(RuntimeError):
+    """The linked SQLite is below ``MIN_SQLITE``. Raised before any file is opened."""
+
+
+def sqlite_version() -> str:
+    """The linked library's version, dotted, as ``doctor`` prints it."""
+    return sqlite3.sqlite_version
+
+
+def check_sqlite() -> None:
+    """Refuse a SQLite below ``MIN_SQLITE`` by name, stating both versions. Read at call time,
+    so a test can patch ``sqlite3.sqlite_version_info``."""
+    if tuple(sqlite3.sqlite_version_info[:3]) < MIN_SQLITE:
+        needed = ".".join(str(part) for part in MIN_SQLITE)
+        raise SQLiteTooOld(
+            f"SQLite {sqlite3.sqlite_version} is too old: Morgan needs {needed} for FTS5's "
+            "secure-delete"
+        )
+
 
 def open_db(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connection:
-    """Open (or create) the Morgan database with WAL, a busy timeout, and sqlite-vec loaded.
+    """Open (or create) the Morgan database with WAL, a busy timeout, ``secure_delete`` and
+    sqlite-vec loaded, after refusing a SQLite below ``MIN_SQLITE`` by name.
 
     *busy_timeout_ms* is how long a statement waits on another process's lock before it fails
     with "database is locked". Every caller in Morgan that opens the database file passes
     ``Settings.db_busy_timeout_ms``; the default, that setting's own, serves an in-memory
-    database and the tests.
+    database and the tests. ``secure_delete`` zeroes a freed byte when it is freed, on every
+    connection, so a forgotten row's words do not linger in a freed page.
     """
+    check_sqlite()
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
 
@@ -35,6 +62,7 @@ def open_db(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connection:
     # ":memory:" has no journal to switch; WAL is meaningless and PRAGMA returns "memory".
     if path != ":memory:":
         conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA secure_delete=ON")
     conn.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.commit()
@@ -69,7 +97,10 @@ def open_readonly(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connecti
     directory read-only, keeps a wal-index of its own and reads the database and its log
     anyway. ``:memory:`` is a new, empty database with nothing on disk to protect, and opens
     as ``open_db`` opens it.
+
+    A SQLite below ``MIN_SQLITE`` is refused first, by name, as ``open_db`` refuses it.
     """
+    check_sqlite()
     if path == ":memory:":
         return open_db(path, busy_timeout_ms=busy_timeout_ms)
     # The busy timeout is the connection's own, not a write: a reader can meet a checkpoint.

@@ -2,7 +2,13 @@ import sqlite3
 
 import pytest
 
-from morgan_brain.memory.store.db import open_db, open_readonly, write_transaction
+from morgan_brain.memory.store.db import (
+    MIN_SQLITE,
+    SQLiteTooOld,
+    open_db,
+    open_readonly,
+    write_transaction,
+)
 
 
 def test_open_db_enables_wal_and_vec(tmp_path):
@@ -119,3 +125,26 @@ def test_open_readonly_opens_the_path_it_is_given_whatever_its_characters(tmp_pa
     finally:
         conn.close()
     assert sorted(p.name for p in tmp_path.iterdir()) == ["a #1 %20"]
+
+
+def test_open_refuses_an_sqlite_below_the_floor_naming_both_versions(tmp_path, monkeypatch):
+    """The check runs before anything else: no file is created, and the read-only open refuses
+    the same way. ``sqlite_version_info`` is read at call time, so patching the module attribute
+    is enough."""
+    monkeypatch.setattr(sqlite3, "sqlite_version_info", (3, 40, 1))
+    monkeypatch.setattr(sqlite3, "sqlite_version", "3.40.1")
+    path = tmp_path / "m.db"
+    with pytest.raises(SQLiteTooOld) as raised:
+        open_db(str(path))
+    assert str(raised.value) == (
+        "SQLite 3.40.1 is too old: Morgan needs 3.42.0 for FTS5's secure-delete"
+    )
+    assert not path.exists()
+    with pytest.raises(SQLiteTooOld, match=r"3\.40\.1"):
+        open_readonly(str(path))
+    assert MIN_SQLITE == (3, 42, 0)
+
+
+def test_every_connection_opens_with_secure_delete_on(tmp_path):
+    for conn in (open_db(str(tmp_path / "m.db")), open_db(":memory:")):
+        assert conn.execute("PRAGMA secure_delete").fetchone()[0] == 1
