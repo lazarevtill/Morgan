@@ -13,8 +13,11 @@ from datetime import datetime
 from typing import Any
 
 from morgan_brain.memory.store.db import write_transaction
-from morgan_brain.memory.store.tables import Erasure, project_tables
+from morgan_brain.memory.store.tables import ANSWERED_BY, Erasure, project_tables
 from morgan_brain.models import PERSONAL_PROJECT, Entity, Memory, MemoryKind, MemorySource
+
+#: Nothing here is keyed by a session; the session grain passes the table over.
+HOLDS_NOTHING_PER_SESSION: tuple[str, ...] = ("memories",)
 
 #: The columns migration step 4 added. ``Memory`` validates each from its stored text.
 _PROVENANCE = (
@@ -163,10 +166,13 @@ class EpisodicStore:
         A table name cannot be a bound parameter, so each is interpolated into the SQL text
         rather than bound -- safe here because every name comes from `project_tables`, never
         from a caller: `PROJECT_TABLES` is a module-level constant and its `embedding_spaces`
-        additions are table names Morgan itself registered, not query input.
+        additions are table names Morgan itself registered, not query input. A table in
+        `ANSWERED_BY` is skipped: the FTS tables' rows are the `turns` rows'.
         """
         projects: set[str] = set()
         for table in project_tables(self._conn):
+            if table in ANSWERED_BY:
+                continue
             if not self._table_exists(table):
                 continue
             # Table name from the registry above, never from a caller -- see the docstring.

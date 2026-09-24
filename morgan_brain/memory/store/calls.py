@@ -11,6 +11,8 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
+from morgan_brain.memory.store.tables import Erasure
+
 _SCHEMA_STATEMENTS: tuple[str, ...] = (
     """
     CREATE TABLE IF NOT EXISTS call_log (
@@ -176,3 +178,18 @@ def call_counts_since(conn: sqlite3.Connection, *, user_id: str, since: str) -> 
         facts=by_command.get("facts", 0),
         asks=by_command.get("ask", 0),
     )
+
+
+def delete_calls(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """The erased sessions' rows by ``native_session_id`` at the session grain; the owner's
+    whole project at the project grain."""
+    if erasure.grain == "sessions":
+        return conn.execute(
+            "DELETE FROM call_log WHERE user_id = ? "
+            "AND native_session_id IN (SELECT value FROM json_each(?))",
+            (erasure.user_id, erasure.native_ids),
+        ).rowcount
+    return conn.execute(
+        "DELETE FROM call_log WHERE user_id = ? AND project = ?",
+        (erasure.user_id, erasure.project),
+    ).rowcount

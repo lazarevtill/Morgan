@@ -39,6 +39,9 @@ from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import Deleter, Erasure
 from morgan_brain.models import PERSONAL_PROJECT, MemoryStatus, Scope
 
+#: Nothing here is keyed by a session; the session grain passes the table over.
+HOLDS_NOTHING_PER_SESSION: tuple[str, ...] = ("vec_meta", "vec_items")
+
 
 @dataclass
 class VectorRecord:

@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.fts import to_match_query
+from morgan_brain.memory.store.tables import Erasure
 from morgan_brain.models import (
     CaptureCursor,
     CaptureTrigger,
@@ -31,6 +32,11 @@ from morgan_brain.models import (
     Turn,
     parse_iso,
 )
+
+#: Of this module's registered tables, only ``capture_pauses`` holds nothing per session: a
+#: pause interval outlives every session, so only a project-grain forget removes it, and the
+#: session grain passes it over.
+HOLDS_NOTHING_PER_SESSION: tuple[str, ...] = ("capture_pauses",)
 
 _SCHEMA_STATEMENTS: tuple[str, ...] = (
     """
@@ -769,3 +775,105 @@ def in_pause(ts: str, pauses: Sequence[Pause]) -> bool:
         if pause.paused_until is None or moment < parse_iso(pause.paused_until):
             return True
     return False
+
+
+# --- the deleters, at both grains -----------------------------------------------------------
+
+
+def _session_scope(erasure: Erasure) -> tuple[str, tuple[object, ...]]:
+    """The ``WHERE`` that picks the erasure's sessions: the listed ids at the session grain, the
+    owner's whole project at the project grain."""
+    if erasure.grain == "sessions":
+        return "id IN (SELECT value FROM json_each(?))", (erasure.session_ids,)
+    return "user_id = ? AND project = ?", (erasure.user_id, erasure.project)
+
+
+def delete_sessions(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """The erased sessions' rows, their cursors, and one exclusion each at ``erasure.erased_at``
+    with ``erasure.exclusion_reason``: the transcript is still on disk, and a cursor alone
+    would let the next sweep bring the session back. The pairs are read before the rows go."""
+    where, params = _session_scope(erasure)
+    # `where` is one of the two literals above, never caller input.
+    pairs = conn.execute(
+        f"SELECT harness, native_id FROM sessions WHERE {where}",  # noqa: S608 # nosec B608
+        params,
+    ).fetchall()
+    for row in pairs:
+        conn.execute(
+            "DELETE FROM capture_cursors WHERE harness = ? AND native_id = ?",
+            (row["harness"], row["native_id"]),
+        )
+        exclusion_add(
+            conn,
+            harness=row["harness"],
+            native_id=row["native_id"],
+            reason=erasure.exclusion_reason,
+            now=erasure.erased_at,
+        )
+    return conn.execute(
+        f"DELETE FROM sessions WHERE {where}",  # noqa: S608 # nosec B608
+        params,
+    ).rowcount
+
+
+def delete_turns(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """The erased turns by id at both grains, and the owner's whole project at the project
+    grain. The caller building *erasure* decides which turns ``turn_ids`` names; this deleter
+    erases exactly those, plus the project's whole set at the project grain."""
+    erased = conn.execute(
+        "DELETE FROM turns WHERE id IN (SELECT value FROM json_each(?))", (erasure.turn_ids,)
+    ).rowcount
+    if erasure.grain == "project":
+        erased += conn.execute(
+            "DELETE FROM turns WHERE user_id = ? AND project = ?",
+            (erasure.user_id, erasure.project),
+        ).rowcount
+    return erased
+
+
+def _delete_fts_rows(conn: sqlite3.Connection, table: str, erasure: Erasure) -> int:
+    """The FTS rows at the erased turns' rowids, never by a scan of an UNINDEXED column, then
+    ``optimize``, so the deleted terms leave the segment b-tree inside this transaction (the
+    ``secure-delete`` option has already overwritten them in place)."""
+    # `table` is one of FTS_TABLES, never caller input.
+    erased = conn.execute(
+        f"DELETE FROM {table} WHERE rowid IN (SELECT value FROM json_each(?))",  # noqa: S608 # nosec B608
+        (erasure.turn_ids,),
+    ).rowcount
+    conn.execute(f"INSERT INTO {table}({table}) VALUES ('optimize')")  # noqa: S608 # nosec B608
+    return erased
+
+
+def delete_turns_fts(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    return _delete_fts_rows(conn, "turns_fts", erasure)
+
+
+def delete_corrections_fts(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    return _delete_fts_rows(conn, "corrections_fts", erasure)
+
+
+def delete_turn_links(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """Links from either end: a link whose later or earlier turn is erased goes at both
+    grains; at the project grain so does every link of the owner whose either project is the
+    erased one."""
+    erased = conn.execute(
+        "DELETE FROM turn_links WHERE turn_id IN (SELECT value FROM json_each(?)) "
+        "OR earlier_turn_id IN (SELECT value FROM json_each(?))",
+        (erasure.turn_ids, erasure.turn_ids),
+    ).rowcount
+    if erasure.grain == "project":
+        erased += conn.execute(
+            "DELETE FROM turn_links WHERE user_id = ? AND (project = ? OR earlier_project = ?)",
+            (erasure.user_id, erasure.project, erasure.project),
+        ).rowcount
+    return erased
+
+
+def delete_capture_pauses(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """Project grain only: a pause interval outlives every session."""
+    if erasure.grain != "project":
+        return 0
+    return conn.execute(
+        "DELETE FROM capture_pauses WHERE user_id = ? AND project = ?",
+        (erasure.user_id, erasure.project),
+    ).rowcount

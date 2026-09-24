@@ -23,6 +23,9 @@ from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import Erasure
 from morgan_brain.models import PERSONAL_PROJECT, Message, Role
 
+#: Nothing here is keyed by a session; the session grain passes the table over.
+HOLDS_NOTHING_PER_SESSION: tuple[str, ...] = ("session_history",)
+
 
 def session_key(user_id: str, session_id: str | None) -> str:
     """Compose the durable history key from ``(user_id, session_id)``.

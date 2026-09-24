@@ -19,6 +19,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast, get_args
 
+from morgan_brain.memory.store.tables import Erasure
+
 RefKind = Literal["turn", "memory", "fact"]
 EntrypointSource = Literal["env", "transcript", "backfill", "none"]
 
@@ -394,3 +396,52 @@ def backfill_entrypoint(
         (entrypoint, harness, native_session_id),
     )
     return updated.rowcount
+
+
+def _delete_by_ids(conn: sqlite3.Connection, ids: str) -> int:
+    """The digests in the JSON array *ids*, with their refs and ratings, each table by an
+    explicit ``DELETE``: a deleter never relies on the foreign-key pragma another connection
+    may lack."""
+    for table in ("digest_refs", "digest_ratings"):
+        # `table` is one of the two literals, never caller input.
+        conn.execute(
+            f"DELETE FROM {table} WHERE digest_id IN (SELECT value FROM json_each(?))",  # noqa: S608 # nosec B608
+            (ids,),
+        )
+    return conn.execute(
+        "DELETE FROM digests WHERE id IN (SELECT value FROM json_each(?))", (ids,)
+    ).rowcount
+
+
+def delete_digests(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """The owner's digests of the erased project, or those rendered for the erased sessions. A
+    later cascade to every digest that quoted an erased row, wherever it was rendered, is not
+    built here."""
+    if erasure.grain == "sessions":
+        rows = conn.execute(
+            "SELECT id FROM digests WHERE user_id = ? "
+            "AND native_session_id IN (SELECT value FROM json_each(?))",
+            (erasure.user_id, erasure.native_ids),
+        )
+    else:
+        rows = conn.execute(
+            "SELECT id FROM digests WHERE user_id = ? AND project = ?",
+            (erasure.user_id, erasure.project),
+        )
+    return _delete_by_ids(conn, json.dumps([str(r["id"]) for r in rows]))
+
+
+def delete_link_ratings(conn: sqlite3.Connection, erasure: Erasure) -> int:
+    """Ratings from either end at both grains, and the owner's whole project at the project
+    grain, as ``turn_links`` is erased."""
+    erased = conn.execute(
+        "DELETE FROM link_ratings WHERE turn_id IN (SELECT value FROM json_each(?)) "
+        "OR earlier_turn_id IN (SELECT value FROM json_each(?))",
+        (erasure.turn_ids, erasure.turn_ids),
+    ).rowcount
+    if erasure.grain == "project":
+        erased += conn.execute(
+            "DELETE FROM link_ratings WHERE user_id = ? AND project = ?",
+            (erasure.user_id, erasure.project),
+        ).rowcount
+    return erased

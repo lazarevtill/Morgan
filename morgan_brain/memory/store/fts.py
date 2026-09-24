@@ -20,6 +20,9 @@ from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import Erasure
 from morgan_brain.models import PERSONAL_PROJECT, MemoryStatus, Scope
 
+#: Nothing here is keyed by a session; the session grain passes the table over.
+HOLDS_NOTHING_PER_SESSION: tuple[str, ...] = ("fts_memories",)
+
 _TOKEN = re.compile(r"\w+", re.UNICODE)
 
 #: ``fts_memories`` as this code creates it. ``status``, ``scope`` and ``author_id`` follow

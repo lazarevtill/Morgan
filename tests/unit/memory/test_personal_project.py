@@ -22,7 +22,6 @@ from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
 from morgan_brain.memory.store.fts import FtsIndex
 from morgan_brain.memory.store.history import SessionHistoryStore
-from morgan_brain.memory.store.tables import PROJECT_TABLES
 from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.memory.store.vectors import SqliteVectorIndex, VectorRecord
 from morgan_brain.models import (
@@ -172,16 +171,30 @@ def test_step_five_moves_every_default_row_and_counts_them(tmp_path):
     assert remaining == 0
 
 
+#: The tables a database below step 5 can hold a ``'default'`` row in. Step 5 is a historical
+#: migration -- frozen at what it moved the day it ran -- and the session archive's tables did
+#: not exist until a later version, so they never held one and are not part of this count.
+_STEP_FIVE_TABLES = (
+    "memories",
+    "facts",
+    "memory_entities",
+    "vec_meta",
+    "vec_items",
+    "fts_memories",
+    "session_history",
+)
+
+
 def test_step_five_moves_default_rows_in_every_project_keyed_table(tmp_path):
-    """Every table ``PROJECT_TABLES`` names -- ``facts``, ``memory_entities`` and ``vec_meta``
-    included."""
+    """Every table a version-4 database can hold a ``'default'`` row in -- ``facts``,
+    ``memory_entities`` and ``vec_meta`` included."""
     conn = _a_version_four_database_with_default_rows(tmp_path)
 
     applied = migrations.migrate(conn, _stores(conn))
     counts = next(c for s, c in applied if s.number == 5)
 
-    assert counts == dict.fromkeys(PROJECT_TABLES, 2)
-    for table in PROJECT_TABLES:
+    assert counts == dict.fromkeys(_STEP_FIVE_TABLES, 2)
+    for table in _STEP_FIVE_TABLES:
         remaining = conn.execute(
             f"SELECT COUNT(*) FROM {table} WHERE project = 'default'"  # noqa: S608
         ).fetchone()[0]

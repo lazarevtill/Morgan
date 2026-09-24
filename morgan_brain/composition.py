@@ -25,12 +25,15 @@ from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
 from morgan_brain.memory.migrations import Step, Stores, pending, stamp_if_new, upgrade
 from morgan_brain.memory.module import MemoryModule
 from morgan_brain.memory.store import spaces, vectors
+from morgan_brain.memory.store.calls import CallLogStore
 from morgan_brain.memory.store.db import open_db, write_transaction
+from morgan_brain.memory.store.digests import DigestStore
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
 from morgan_brain.memory.store.fts import FtsIndex
 from morgan_brain.memory.store.history import SessionHistoryStore
 from morgan_brain.memory.store.projects import ProjectStore
+from morgan_brain.memory.store.sessions import SessionStore
 from morgan_brain.memory.store.spaces import EmbeddingSpaceStore
 from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.memory.store.vectors import SqliteVectorIndex
@@ -94,12 +97,16 @@ def build_memory_module(
     A database with none of Morgan's tables is stamped at the code's version first, before
     any store creates one: this code writes it at the latest schema. A heavy step is left for
     ``morgan migrate``; ``build_memory_context`` then opens the gate read-only. Also the seam
-    tests use with a small fake embedder.
+    tests use with a small fake embedder. The archive's stores open here too, so a fresh file
+    carries every table before ``upgrade`` runs.
     """
     stamp_if_new(conn)
     stores = migration_stores(conn)
     EmbeddingSpaceStore(conn)
     ProjectStore(conn)
+    SessionStore(conn)
+    CallLogStore(conn)
+    DigestStore(conn)
     module = MemoryModule(
         embedder=embedder,
         vectors=SqliteVectorIndex(conn, dim=dim),

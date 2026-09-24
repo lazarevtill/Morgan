@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from datetime import datetime
 
@@ -24,12 +24,23 @@ import structlog
 
 from morgan_brain.memory.checked_embedder import CheckedEmbedder
 from morgan_brain.memory.embedder import Embedder
-from morgan_brain.memory.gate import ForgetReport, RecallOutcome, RecallReason
+from morgan_brain.memory.gate import ForgetReport, RecallOutcome, RecallReason, SessionForgetReport
 from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
-from morgan_brain.memory.store import projects
+from morgan_brain.memory.store import (
+    calls,
+    digests,
+    entities,
+    episodic,
+    fts,
+    history,
+    projects,
+    temporal,
+    vectors,
+)
+from morgan_brain.memory.store import sessions as sessions_store
 from morgan_brain.memory.store import tables as registry
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex, delete_entities
@@ -55,6 +66,7 @@ from morgan_brain.models import (
     MemoryKind,
     MemoryQuery,
     TemporalFact,
+    utc_iso,
 )
 from morgan_brain.providers.wire import EmbedOutcome, ProviderRefused, ProviderUnreachable
 
@@ -83,8 +95,75 @@ _DELETERS: dict[str, Deleter] = {
     "vec_items": delete_vec_items,
     "fts_memories": delete_keywords,
     "session_history": delete_history,
+    "link_ratings": digests.delete_link_ratings,
+    "turn_links": sessions_store.delete_turn_links,
+    "corrections_fts": sessions_store.delete_corrections_fts,
+    "turns_fts": sessions_store.delete_turns_fts,
+    "turns": sessions_store.delete_turns,
+    "sessions": sessions_store.delete_sessions,
+    "capture_pauses": sessions_store.delete_capture_pauses,
+    "digests": digests.delete_digests,
+    "call_log": calls.delete_calls,
     "projects": delete_project,
 }
+
+#: The session grain: each registered table its store erases per session, or the declaration
+#: that it holds nothing per session. A registered, present table in neither stops a
+#: session-grain erasure by name before anything is erased.
+_SESSION_DELETERS: dict[str, Deleter] = {
+    "sessions": sessions_store.delete_sessions,
+    "turns": sessions_store.delete_turns,
+    "turns_fts": sessions_store.delete_turns_fts,
+    "corrections_fts": sessions_store.delete_corrections_fts,
+    "turn_links": sessions_store.delete_turn_links,
+    "link_ratings": digests.delete_link_ratings,
+    "digests": digests.delete_digests,
+    "call_log": calls.delete_calls,
+}
+_HOLDS_NOTHING_PER_SESSION: frozenset[str] = frozenset(
+    episodic.HOLDS_NOTHING_PER_SESSION
+    + temporal.HOLDS_NOTHING_PER_SESSION
+    + entities.HOLDS_NOTHING_PER_SESSION
+    + vectors.HOLDS_NOTHING_PER_SESSION
+    + fts.HOLDS_NOTHING_PER_SESSION
+    + history.HOLDS_NOTHING_PER_SESSION
+    + projects.HOLDS_NOTHING_PER_SESSION
+    + sessions_store.HOLDS_NOTHING_PER_SESSION
+)
+
+
+def _session_erasure_plan(conn: sqlite3.Connection) -> list[tuple[str, Deleter]]:
+    """Each registered table *conn* has that erases per session, with its deleter, in the
+    registry's order. A table that declares it holds nothing per session, a name-keyed table,
+    and another embedding space's vec0 table are passed over; a present table in neither map
+    raises here, by name, with nothing erased."""
+    spaces = set(registry.space_tables(conn))
+    plan: list[tuple[str, Deleter]] = []
+    unresolved: list[str] = []
+    for table in registry.project_tables(conn):
+        if not _table_exists(conn, table):
+            continue
+        deleter = _SESSION_DELETERS.get(table)
+        if deleter is not None:
+            plan.append((table, deleter))
+        elif table not in _HOLDS_NOTHING_PER_SESSION and table not in spaces:
+            unresolved.append(
+                f"{table} has no session deleter and does not declare "
+                "HOLDS_NOTHING_PER_SESSION (its store's belongs in memory/module.py)"
+            )
+    if unresolved:
+        raise RuntimeError(
+            "forget_sessions() erased nothing: it cannot erase every registered table at the "
+            "session grain: " + "; ".join(unresolved)
+        )
+    return plan
+
+
+def _json_ids(conn: sqlite3.Connection, table: str, sql: str, params: tuple[object, ...]) -> str:
+    """The ids *sql* selects, as a JSON array; ``[]`` when *table* is not there."""
+    if not _table_exists(conn, table):
+        return "[]"
+    return json.dumps([r[0] for r in conn.execute(sql, params)])
 
 
 def _erasure_plan(conn: sqlite3.Connection) -> tuple[list[tuple[str, Deleter]], list[str]]:
@@ -504,12 +583,12 @@ class MemoryModule:
 
         with write_transaction(conn):
             plan, skipped = _erasure_plan(conn)
-            # The ids are selected inside the write transaction, which holds the lock from its
-            # first statement. Selecting before the lock left a window in which another process
-            # -- morgan-mcp storing a memory while `morgan forget` runs -- could insert a memory
-            # for this project between the SELECT and the DELETE: the new row is absent from
-            # `ids`, survives the erasure, and forget() still reports success. Holding the lock
-            # for the whole read-then-delete sequence is what makes the id list authoritative.
+            # Every id list is selected inside the write transaction, which holds the lock from
+            # its first statement. Selecting before the lock left a window in which another
+            # process -- morgan-mcp storing a memory while `morgan forget` runs -- could insert
+            # a memory for this project between the SELECT and the DELETE: the new row is absent
+            # from `ids`, survives the erasure, and forget() still reports success. Holding the
+            # lock for the whole read-then-delete sequence is what makes the id lists authoritative.
             ids = [
                 str(r["id"])
                 for r in conn.execute(
@@ -518,23 +597,94 @@ class MemoryModule:
                 )
             ]
             memory_ids = json.dumps(ids)
+            scope = (user_id, project)
+            session_rows = (
+                conn.execute(
+                    "SELECT id, native_id FROM sessions WHERE user_id = ? AND project = ?", scope
+                ).fetchall()
+                if _table_exists(conn, "sessions")
+                else []
+            )
             erasure = Erasure(
                 user_id=user_id,
                 project=project,
                 memory_ids=memory_ids,
                 vector_rowids=vector_rowids(conn, memory_ids, user_id, project),
+                grain="project",
+                session_ids=json.dumps([str(r["id"]) for r in session_rows]),
+                native_ids=json.dumps([str(r["native_id"]) for r in session_rows]),
+                turn_ids=_json_ids(
+                    conn, "turns", "SELECT id FROM turns WHERE user_id = ? AND project = ?", scope
+                ),
+                fact_ids=_json_ids(
+                    conn, "facts", "SELECT id FROM facts WHERE user_id = ? AND project = ?", scope
+                ),
+                erased_at=utc_iso(self._clock()),
             )
             erased = {table: delete(conn, erasure) for table, delete in plan}
 
         conn.execute("VACUUM")  # cannot run inside a transaction
         _truncate_wal(conn)
-        # `ForgetReport` counts what the owner asked to erase: memories, facts and history.
-        # The index rows follow from the memories, and a `projects` row is none of the three.
+        # `ForgetReport` counts what the owner asked to erase: memories, facts, history, and
+        # the archive's own sessions, turns and digests. The index rows follow from the
+        # memories, and a `projects` row is none of these.
         return ForgetReport(
             memories=len(ids),
             facts=erased.get("facts", 0),
             history=erased.get("session_history", 0),
+            sessions=erased.get("sessions", 0),
+            turns=erased.get("turns", 0),
+            digests=erased.get("digests", 0),
             tables_skipped=skipped,
+        )
+
+    async def forget_sessions(
+        self, *, user_id: str, project: str, session_ids: Sequence[str], reason: str
+    ) -> SessionForgetReport:
+        """Erase whole sessions of *user_id*'s *project*, in one transaction, at the session
+        grain: every registered table's store erases its rows of those sessions or has
+        declared it holds nothing per session (``_session_erasure_plan``); a session of
+        another owner or project named in *session_ids* is not touched. The FTS tables are
+        optimized inside the transaction; afterwards the write-ahead log is truncated
+        (``_truncate_wal``, which only logs if a concurrent reader keeps it from completing).
+        No snapshot and no ``VACUUM``: the archive is a derived copy of files the harnesses
+        keep. Memories and facts are not reached, and the report says so.
+        """
+        conn = self._conn
+        with write_transaction(conn):
+            plan = _session_erasure_plan(conn)
+            named = json.dumps(list(session_ids))
+            rows = conn.execute(
+                "SELECT id, native_id FROM sessions WHERE user_id = ? AND project = ? "
+                "AND id IN (SELECT value FROM json_each(?))",
+                (user_id, project, named),
+            ).fetchall()
+            ids = json.dumps([str(r["id"]) for r in rows])
+            erasure = Erasure(
+                user_id=user_id,
+                project=project,
+                memory_ids="[]",
+                vector_rowids="[]",
+                grain="sessions",
+                session_ids=ids,
+                native_ids=json.dumps([str(r["native_id"]) for r in rows]),
+                turn_ids=_json_ids(
+                    conn,
+                    "turns",
+                    "SELECT id FROM turns WHERE session_id IN (SELECT value FROM json_each(?))",
+                    (ids,),
+                ),
+                exclusion_reason=reason,
+                erased_at=utc_iso(self._clock()),
+            )
+            erased = {table: delete(conn, erasure) for table, delete in plan}
+        _truncate_wal(conn)
+        return SessionForgetReport(
+            sessions=erased.get("sessions", 0),
+            turns=erased.get("turns", 0),
+            links=erased.get("turn_links", 0),
+            digests=erased.get("digests", 0),
+            excluded=len(rows),
         )
 
 

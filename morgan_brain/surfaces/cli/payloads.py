@@ -163,6 +163,9 @@ def merge_forget_reports(reports: list[ForgetReport]) -> ForgetReport:
         merged.memories += r.memories
         merged.facts += r.facts
         merged.history += r.history
+        merged.sessions += r.sessions
+        merged.turns += r.turns
+        merged.digests += r.digests
         skipped.update(r.tables_skipped)
     merged.tables_skipped = sorted(skipped)
     return merged

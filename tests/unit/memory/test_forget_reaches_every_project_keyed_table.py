@@ -13,11 +13,27 @@ from datetime import UTC, datetime
 
 import pytest
 
+from morgan_brain.composition import build_memory_module as build_full_stack_module
+from morgan_brain.memory.embedder import FakeEmbedder
+from morgan_brain.memory.store import calls, digests, spaces, tables
 from morgan_brain.memory.store import projects as projects_store
-from morgan_brain.memory.store import spaces, tables
+from morgan_brain.memory.store import sessions as sessions_store
+from morgan_brain.memory.store.db import open_db, write_transaction
+from morgan_brain.memory.store.digests import DigestLineRef, DigestRef, DigestRow
 from morgan_brain.memory.store.history import SessionHistoryStore
-from morgan_brain.memory.store.tables import NAME_KEYED_PROJECT_TABLES, project_tables
-from morgan_brain.models import Entity, Memory, Message, Role, TemporalFact
+from morgan_brain.memory.store.tables import ANSWERED_BY, NAME_KEYED_PROJECT_TABLES, project_tables
+from morgan_brain.models import (
+    CaptureCursor,
+    Entity,
+    Memory,
+    Message,
+    Role,
+    Session,
+    TemporalFact,
+    Turn,
+    session_id_of,
+    utc_iso,
+)
 from tests.unit.memory.conftest import build_memory_module
 
 
@@ -98,12 +114,145 @@ def _rows(conn, table: str, project: str) -> int:
     return int(conn.execute(sql, (project,)).fetchone()[0])
 
 
+NOW = "2026-09-22T10:00:00.000Z"
+
+
+def _session(project: str, native_id: str, *, user_id: str = "u") -> Session:
+    return Session(
+        id=session_id_of("claude-code", native_id),
+        user_id=user_id,
+        project=project,
+        harness="claude-code",
+        native_id=native_id,
+        source_path=f"/transcripts/{native_id}.jsonl",
+        cwd=f"/src/{project}",
+        project_source="git",
+        started_at=NOW,
+        reader_version=1,
+        gate_version=1,
+    )
+
+
+def _archive_rows(
+    conn, project: str, native_id: str, *, memory_id: str
+) -> tuple[Session, list[int]]:
+    """A session of *project* with two turns, a correction row, a link between them, a rating
+    of that link, a digest quoting the second turn and the memory, a rating of the digest, a
+    call, a pause and a cursor -- every archive table, through its store."""
+    session = _session(project, native_id)
+    digest_id = f"d-{project}-{native_id}"
+    with write_transaction(conn):
+        sessions_store.upsert_session(conn, session, now=NOW)
+        ids = sessions_store.insert_turns(
+            conn,
+            [
+                Turn(
+                    session_id=session.id,
+                    user_id="u",
+                    project=project,
+                    native_key="a:0",
+                    role="user",
+                    text=f"harbor mirror secret of {project}",
+                    ts=NOW,
+                ),
+                Turn(
+                    session_id=session.id,
+                    user_id="u",
+                    project=project,
+                    native_key="b:0",
+                    role="user",
+                    text=f"no, the mirror of {project} is on the other host",
+                    ts=NOW,
+                ),
+            ],
+        )
+        conn.execute(
+            "INSERT INTO corrections_fts (rowid, norm, project) VALUES (?, ?, ?)",
+            (ids[1], f"no the mirror of {project} is on the other host", project),
+        )
+        conn.execute("UPDATE turns SET is_correction = 1 WHERE id = ?", (ids[1],))
+        conn.execute(
+            "INSERT INTO turn_links (turn_id, earlier_turn_id, user_id, project, earlier_project, "
+            "similarity, lexicon_version, computed_at) VALUES (?, ?, 'u', ?, ?, 0.8, 1, ?)",
+            (ids[1], ids[0], project, project, NOW),
+        )
+        digests.rate_link(
+            conn,
+            turn_id=ids[1],
+            earlier_turn_id=ids[0],
+            user_id="u",
+            project=project,
+            rating="right",
+            now=NOW,
+        )
+        digests.insert_digest(
+            conn,
+            DigestRow(
+                id=digest_id,
+                ts=NOW,
+                user_id="u",
+                project=project,
+                harness="claude-code",
+                native_session_id=native_id,
+                source="startup",
+                entrypoint="cli",
+                entrypoint_source="env",
+                first_for_session=True,
+                text=f"| memory: harbor mirror secret of {project}\n",
+                lines=(DigestLineRef(1, "memory", memory_id),),
+                refs=(DigestRef("memory", memory_id), DigestRef("turn", str(ids[1]))),
+                chars=40,
+                ms=1,
+            ),
+        )
+        digests.rate_line(conn, digest_id=digest_id, line_no=1, rating="right", now=NOW)
+        calls.insert_call(
+            conn,
+            calls.CallRecord(
+                ts=NOW,
+                surface="cli",
+                client="cli",
+                native_session_id=native_id,
+                command="recall",
+                user_id="u",
+                project=project,
+                all_projects=False,
+                outcome="ok",
+                embed_outcome="ok",
+                degraded=None,
+                degrade_reason=None,
+                embed_latency_ms=1.0,
+                total_ms=2.0,
+                query_language="en",
+                reason=None,
+            ),
+        )
+        sessions_store.pause_open(
+            conn, user_id="u", project=project, paused_from=NOW, paused_until=None
+        )
+        sessions_store.cursor_put(
+            conn,
+            CaptureCursor(
+                harness="claude-code",
+                native_id=native_id,
+                source_path=session.source_path,
+                byte_offset=10,
+                size=10,
+                mtime_ns=1,
+                identity="x",
+                status="ok",
+                last_read_at=NOW,
+            ),
+        )
+    return session, ids
+
+
 async def _write_every_table(module, history: SessionHistoryStore, project: str) -> None:
     """Rows for *project* in every registered table, each through its store's real write
     path: a memory with an entity (``memories``, ``vec_meta``, ``vec_items``,
-    ``fts_memories``, ``memory_entities``), a fact, a session-history row. ``projects`` is
-    seeded from these by the caller."""
-    await module.store(
+    ``fts_memories``, ``memory_entities``), a fact, a session-history row, and the archive's
+    rows (``_archive_rows``). ``projects`` is seeded from these by the caller."""
+    memory_id = await module.store(
         Memory(
             user_id="u",
             project=project,
@@ -119,6 +268,7 @@ async def _write_every_table(module, history: SessionHistoryStore, project: str)
         Message(user_id="u", role=Role.USER, content=f"harbor mirror of {project}"),
         project=project,
     )
+    _archive_rows(module._conn, project, f"s-{project}", memory_id=memory_id)
 
 
 async def test_forget_erases_every_registered_table_and_leaves_other_projects(tmp_path):
@@ -143,12 +293,17 @@ async def test_forget_erases_every_registered_table_and_leaves_other_projects(tm
     report = await module.forget(user_id="u", project="p")
 
     assert (report.memories, report.facts, report.history) == (1, 1, 1)
+    assert (report.sessions, report.turns, report.digests) == (1, 2, 1)
     assert report.tables_skipped == []
     for table in registered:
         assert _rows(conn, table, "p") == 0, f"{table} still holds p after forget"
         assert _rows(conn, table, "q") == before_q[table], f"forget of p touched q in {table}"
     assert projects_store.get(conn, "p") is None
     assert projects_store.get(conn, "q") == kept
+    assert sessions_store.cursor_get(conn, harness="claude-code", native_id="s-p") is None
+    assert sessions_store.is_excluded(conn, harness="claude-code", native_id="s-p")
+    assert sessions_store.cursor_get(conn, harness="claude-code", native_id="s-q") is not None
+    assert not sessions_store.is_excluded(conn, harness="claude-code", native_id="s-q")
 
 
 #: A second embedding space's vec0 table, at the DDL ``vec_items`` has. Named outside
@@ -371,3 +526,230 @@ async def test_a_single_owners_forget_removes_the_projects_row_once_every_table_
     await module.forget(user_id="u", project="p")
 
     assert projects_store.get(conn, "p") is None
+
+
+#: A moment distinct from ``NOW``, the session's own ``started_at``/``updated_at`` literal, so
+#: an exclusion's ``excluded_at`` equalling it cannot be a coincidence of a shared timestamp.
+_ERASED_AT = datetime(2026, 9, 23, 12, 0, 0, tzinfo=UTC)
+
+
+def _erasure_time_module(tmp_path):
+    """A module whose clock always answers ``_ERASED_AT``, built through the composition root
+    directly rather than the test conftest's wrapper, which hard-codes ``datetime.now(UTC)``."""
+    conn = open_db(str(tmp_path / "m.db"))
+    return build_full_stack_module(
+        conn, embedder=FakeEmbedder(dim=4), dim=4, clock=lambda: _ERASED_AT
+    )
+
+
+async def test_a_project_grain_forget_stamps_the_exclusion_with_the_erasure_time(tmp_path):
+    """The exclusion a project-grain forget writes for each session it erases whole carries
+    the moment the erasure ran, not the session's own ``updated_at``."""
+    module = _erasure_time_module(tmp_path)
+    conn = module._conn
+    await _write_every_table(module, SessionHistoryStore(conn, clock=lambda: _ERASED_AT), "p")
+
+    await module.forget(user_id="u", project="p")
+
+    [exclusion] = [e for e in sessions_store.exclusions(conn) if e.native_id == "s-p"]
+    assert exclusion.excluded_at == utc_iso(_ERASED_AT)
+    assert exclusion.excluded_at != NOW
+
+
+async def test_a_session_grain_forget_stamps_the_exclusion_with_the_erasure_time(tmp_path):
+    """The same, for ``forget_sessions``: the exclusion it writes carries the erasure's own
+    moment, not the session's ``updated_at``."""
+    module = _erasure_time_module(tmp_path)
+    conn = module._conn
+    await _write_every_table(module, SessionHistoryStore(conn, clock=lambda: _ERASED_AT), "p")
+
+    await module.forget_sessions(
+        user_id="u",
+        project="p",
+        session_ids=[session_id_of("claude-code", "s-p")],
+        reason="forget",
+    )
+
+    [exclusion] = [e for e in sessions_store.exclusions(conn) if e.native_id == "s-p"]
+    assert exclusion.excluded_at == utc_iso(_ERASED_AT)
+    assert exclusion.excluded_at != NOW
+
+
+async def test_the_session_grain_erases_one_sessions_rows_and_leaves_the_rest(tmp_path):
+    """Two sessions of ``p``: the erased one's turns, both FTS rows, links and link ratings from
+    either end, digests with their refs and ratings, call rows, cursor and lease go, and an
+    exclusion keeps the next sweep out; the other session, the memories, the facts, the history
+    and the pause stay."""
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    history = SessionHistoryStore(conn, clock=_clock)
+    await _write_every_table(module, history, "p")
+    memory_id = str(conn.execute("SELECT id FROM memories WHERE project = 'p'").fetchone()[0])
+    other, other_ids = _archive_rows(conn, "p", "s-other", memory_id=memory_id)
+    erased_session = session_id_of("claude-code", "s-p")
+    before = {table: _rows(conn, table, "p") for table in project_tables(conn)}
+
+    report = await module.forget_sessions(
+        user_id="u", project="p", session_ids=[erased_session], reason="forget"
+    )
+
+    assert (report.sessions, report.turns, report.links, report.digests, report.excluded) == (
+        1,
+        2,
+        1,
+        1,
+        1,
+    )
+    assert report.memories_reached is False
+    assert sessions_store.get_session(conn, erased_session) is None
+    assert sessions_store.get_session(conn, other.id) is not None
+    assert [t.id for t in sessions_store.turns_of(conn, other.id)] == other_ids
+    for table in (
+        "turns",
+        "turns_fts",
+        "corrections_fts",
+        "turn_links",
+        "link_ratings",
+        "digests",
+        "call_log",
+    ):
+        assert _rows(conn, table, "p") == before[table] // 2, table
+    assert conn.execute("SELECT COUNT(*) FROM digest_refs").fetchone()[0] == 2
+    assert conn.execute("SELECT COUNT(*) FROM digest_ratings").fetchone()[0] == 1
+    for table in (
+        "memories",
+        "facts",
+        "session_history",
+        "capture_pauses",
+        "memory_entities",
+        "vec_meta",
+        "fts_memories",
+    ):
+        assert _rows(conn, table, "p") == before[table], table
+    assert sessions_store.cursor_get(conn, harness="claude-code", native_id="s-p") is None
+    exclusion = [e for e in sessions_store.exclusions(conn) if e.native_id == "s-p"]
+    assert [e.reason for e in exclusion] == ["forget"]
+    assert sessions_store.cursor_get(conn, harness="claude-code", native_id="s-other") is not None
+    assert not conn.in_transaction
+
+
+async def test_a_session_of_another_owner_or_project_is_not_erased_by_name(tmp_path):
+    """Naming a session in *session_ids* is not enough: ``forget_sessions`` also scopes by the
+    caller's own ``user_id`` and ``project``, so a session of another project (``s-q``) and one
+    of another owner in the same project (``s-v``) are both left alone."""
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "p")
+    await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "q")
+    with write_transaction(conn):
+        sessions_store.upsert_session(conn, _session("p", "s-v", user_id="v"), now=NOW)
+
+    report = await module.forget_sessions(
+        user_id="u",
+        project="p",
+        session_ids=[session_id_of("claude-code", "s-q"), session_id_of("claude-code", "s-v")],
+        reason="forget",
+    )
+
+    assert (report.sessions, report.turns, report.excluded) == (0, 0, 0)
+    assert sessions_store.get_session(conn, session_id_of("claude-code", "s-q")) is not None
+    assert sessions_store.get_session(conn, session_id_of("claude-code", "s-v")) is not None
+
+
+async def test_a_table_with_neither_a_session_deleter_nor_the_declaration_stops_the_erasure(
+    tmp_path, monkeypatch
+):
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "p")
+    conn.execute("CREATE TABLE stray_notes (user_id TEXT, project TEXT, note TEXT)")
+    conn.execute("INSERT INTO stray_notes VALUES ('u', 'p', 'harbor mirror secret')")
+    conn.commit()
+    monkeypatch.setattr(tables, "PROJECT_TABLES", (*tables.PROJECT_TABLES, "stray_notes"))
+    before = {table: _rows(conn, table, "p") for table in project_tables(conn)}
+
+    with pytest.raises(RuntimeError, match="stray_notes"):
+        await module.forget_sessions(
+            user_id="u",
+            project="p",
+            session_ids=[session_id_of("claude-code", "s-p")],
+            reason="forget",
+        )
+
+    assert {table: _rows(conn, table, "p") for table in project_tables(conn)} == before
+    assert sessions_store.cursor_get(conn, harness="claude-code", native_id="s-p") is not None
+
+
+async def test_a_second_embedding_spaces_table_holds_nothing_per_session(tmp_path):
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "p")
+    spaces.register(
+        conn, model="second-model", dims=4, table_name=_SECOND_SPACE, status="shadow", clock=_clock
+    )
+    conn.execute(_SECOND_SPACE_DDL)
+    conn.execute(
+        f"INSERT INTO {_SECOND_SPACE} "  # noqa: S608
+        "(rowid, embedding, user_id, project, status, scope, author_id) "
+        "VALUES (1, ?, 'u', 'p', 'stored', 'private', 'u')",
+        (struct.pack("4f", 0.5, 0.5, 0.5, 0.5),),
+    )
+    conn.commit()
+
+    report = await module.forget_sessions(
+        user_id="u", project="p", session_ids=[session_id_of("claude-code", "s-p")], reason="forget"
+    )
+
+    assert report.sessions == 1
+    assert _vectors_in(conn, _SECOND_SPACE) == [(1, "u", "p")]
+
+
+async def test_links_and_link_ratings_go_from_either_end_at_both_grains(tmp_path):
+    """A link whose earlier turn is in the forgotten project, or whose later turn is in the
+    forgotten session, goes too -- and its rating with it."""
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "p")
+    await _write_every_table(module, SessionHistoryStore(conn, clock=_clock), "q")
+    p_ids = [t.id for t in sessions_store.turns_of(conn, session_id_of("claude-code", "s-p"))]
+    q_ids = [t.id for t in sessions_store.turns_of(conn, session_id_of("claude-code", "s-q"))]
+    with write_transaction(conn):
+        conn.execute(
+            "INSERT INTO turn_links (turn_id, earlier_turn_id, user_id, project, earlier_project, "
+            "similarity, lexicon_version, computed_at) VALUES (?, ?, 'u', 'q', 'p', 0.9, 1, ?)",
+            (q_ids[1], p_ids[0], NOW),
+        )
+        digests.rate_link(
+            conn,
+            turn_id=q_ids[1],
+            earlier_turn_id=p_ids[0],
+            user_id="u",
+            project="q",
+            rating="wrong",
+            now=NOW,
+        )
+
+    await module.forget(user_id="u", project="p")
+
+    links = conn.execute("SELECT turn_id, earlier_turn_id FROM turn_links").fetchall()
+    assert [tuple(r) for r in links] == [(q_ids[1], q_ids[0])]
+    ratings = conn.execute("SELECT turn_id, earlier_turn_id FROM link_ratings").fetchall()
+    assert [tuple(r) for r in ratings] == [(q_ids[1], q_ids[0])]
+
+
+def test_the_reads_that_walk_the_registry_never_touch_an_fts_table(tmp_path):
+    """``distinct_projects`` and ``_holds_rows_of`` skip ``turns_fts`` and ``corrections_fts``:
+    ``turns`` answers for them, and a filter on an FTS5 table's UNINDEXED column is a full scan
+    inside the lock."""
+    module = build_memory_module(str(tmp_path / "m.db"))
+    conn = module._conn
+    SessionHistoryStore(conn, clock=_clock)
+    assert ANSWERED_BY == {"turns_fts": "turns", "corrections_fts": "turns"}
+    statements: list[str] = []
+    conn.set_trace_callback(statements.append)
+    module._episodics.distinct_projects("u")
+    projects_store._holds_rows_of(conn, "p")
+    conn.set_trace_callback(None)
+    touched = [s for s in statements if "turns_fts" in s or "corrections_fts" in s]
+    assert touched == []
+    assert any("FROM turns " in s or "FROM turns\n" in s for s in statements)

@@ -27,12 +27,30 @@ class ForgetReport:
     table exists and genuinely had nothing under this project, or it was never created on
     this connection. ``tables_skipped`` names every table that was absent (and therefore not
     touched) so a caller can print "not tracked here" instead of a false "0 erased".
+    ``sessions``, ``turns`` and ``digests`` count what the session archive's tables lost.
     """
 
     memories: int = 0
     facts: int = 0
     history: int = 0
+    sessions: int = 0
+    turns: int = 0
+    digests: int = 0
     tables_skipped: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SessionForgetReport:
+    """What a session-grain erasure erased: sessions, turns, links (from either end), digests,
+    and how many exclusions it wrote. ``memories_reached`` is always ``False``: memories and
+    facts are not keyed by a session, and the report says so rather than printing a 0."""
+
+    sessions: int = 0
+    turns: int = 0
+    links: int = 0
+    digests: int = 0
+    excluded: int = 0
+    memories_reached: bool = False
 
 
 #: Why a recall returned what it did. ``empty``: nothing in scope came back, not even a fact

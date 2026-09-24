@@ -14,6 +14,9 @@ from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import Erasure
 from morgan_brain.models import PERSONAL_PROJECT
 
+#: Nothing here is keyed by a session; the session grain passes the table over.
+HOLDS_NOTHING_PER_SESSION: tuple[str, ...] = ("memory_entities",)
+
 
 class EntityIndex:
     """Persistent entity-overlap index over memory entity names, backed by SQLite."""

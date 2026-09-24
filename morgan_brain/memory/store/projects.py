@@ -24,7 +24,10 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from morgan_brain.memory.store.db import write_transaction
-from morgan_brain.memory.store.tables import Erasure, project_tables
+from morgan_brain.memory.store.tables import ANSWERED_BY, Erasure, project_tables
+
+#: Nothing here is keyed by a session; the session grain passes the table over.
+HOLDS_NOTHING_PER_SESSION: tuple[str, ...] = ("projects",)
 
 #: A single statement, run with plain ``execute`` rather than ``executescript`` -- the latter
 #: issues an implicit ``COMMIT`` before it runs anything, which would end migration step 3's
@@ -214,8 +217,14 @@ def seed(conn: sqlite3.Connection, clock: Callable[[], datetime]) -> int:
 
 def _holds_rows_of(conn: sqlite3.Connection, project: str) -> bool:
     """Whether any registered project-keyed table still holds a row of *project*, from any
-    owner."""
+    owner.
+
+    A table another answers for (``ANSWERED_BY``) is skipped: the FTS tables' rows are the
+    ``turns`` rows'.
+    """
     for table in project_tables(conn):
+        if table in ANSWERED_BY:
+            continue
         if not _table_exists(conn, table):
             continue
         # `table` comes from `project_tables`: `PROJECT_TABLES` or a name Morgan wrote to

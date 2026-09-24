@@ -14,6 +14,9 @@ from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import Erasure
 from morgan_brain.models import PERSONAL_PROJECT, MemorySource, TemporalFact
 
+#: Nothing here is keyed by a session; the session grain passes the table over.
+HOLDS_NOTHING_PER_SESSION: tuple[str, ...] = ("facts",)
+
 #: The columns migration step 4 added. ``TemporalFact`` validates each from its stored text.
 _PROVENANCE = ("author_id", "scope")
 
