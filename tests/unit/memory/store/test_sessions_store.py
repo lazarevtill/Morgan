@@ -87,7 +87,7 @@ def _option(conn: sqlite3.Connection, table: str) -> int | None:
 # --- the schema -----------------------------------------------------------------------------
 
 
-def test_the_schema_is_the_specs_and_the_fts_options_are_set_by_the_create(conn):
+def test_the_archive_tables_and_indexes_exist_and_each_fts_table_has_secure_delete_on(conn):
     ddl = _ddl(conn)
     assert set(TABLES) <= set(ddl)
     assert set(INDEXES) <= set(ddl)
@@ -114,6 +114,74 @@ def test_a_second_open_changes_nothing_and_writes_nothing(tmp_path):
         assert all(_option(again, table) == 1 for table in FTS_TABLES)
     finally:
         holder.rollback()
+
+
+def test_a_first_open_that_meets_lock_contention_leaves_no_table_half_made(tmp_path):
+    """The whole schema is built under one lock. A writer that already holds the database when
+    the first open runs makes it fail outright -- not partway through, with one table caught
+    without its ``secure-delete`` option for good."""
+    path = str(tmp_path / "m.db")
+    reader = open_db(path)
+    holder = open_db(path)
+    holder.execute("BEGIN IMMEDIATE")
+    try:
+        blocked = open_db(path, busy_timeout_ms=50)
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            SessionStore(blocked)
+        assert _ddl(reader) == {}
+    finally:
+        holder.rollback()
+    SessionStore(reader)
+    assert set(TABLES) <= set(_ddl(reader))
+    assert all(_option(reader, table) == 1 for table in FTS_TABLES)
+
+
+class _RaisesOnStatement:
+    """Wraps a real connection; the first ``execute`` whose SQL contains *trigger* raises
+    instead of running, and every other call is delegated untouched. Simulates a process that
+    dies, or a lock it loses, partway through building the schema."""
+
+    def __init__(self, conn: sqlite3.Connection, trigger: str) -> None:
+        self._conn = conn
+        self._trigger = trigger
+
+    def execute(self, sql, *args, **kwargs):
+        if self._trigger in sql:
+            raise RuntimeError("simulated interruption")
+        return self._conn.execute(sql, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+def test_an_interruption_between_two_creates_commits_nothing(tmp_path):
+    """The whole schema is built under one write transaction: a failure between two ``CREATE``
+    statements rolls every earlier one in the same attempt back too, rather than leaving
+    ``turns_fts`` committed without its ``secure-delete`` option because ``corrections_fts``
+    never got made."""
+    path = str(tmp_path / "m.db")
+    real = open_db(path)
+    interrupted = _RaisesOnStatement(real, "CREATE VIRTUAL TABLE IF NOT EXISTS corrections_fts")
+    with pytest.raises(RuntimeError, match="simulated interruption"):
+        sessions.create_schema(interrupted)
+    assert _ddl(real) == {}
+
+    sessions.create_schema(real)
+    assert set(TABLES) <= set(_ddl(real))
+    assert all(_option(real, table) == 1 for table in FTS_TABLES)
+
+
+def test_a_partially_created_schema_is_completed_atomically_on_the_next_open(tmp_path):
+    """A database left with only one table -- an earlier open that stopped between two
+    ``CREATE``s -- is finished in one write: every remaining table appears together, and each
+    FTS table it makes gets ``secure-delete`` set."""
+    path = str(tmp_path / "m.db")
+    conn = open_db(path)
+    conn.execute(sessions._SCHEMA_STATEMENTS[0])  # `sessions` alone; nothing else exists yet
+    conn.commit()
+    SessionStore(conn)
+    assert set(TABLES) <= set(_ddl(conn))
+    assert all(_option(conn, table) == 1 for table in FTS_TABLES)
 
 
 def test_session_id_of_is_the_harness_and_the_native_id():
@@ -172,6 +240,62 @@ def test_a_session_is_inserted_then_updated_in_its_mutable_fields_only(conn):
     assert conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 1
 
 
+def test_upsert_never_blanks_forked_from_cwd_changed_or_ended_at(conn):
+    """A later capture that does not know a value -- the model's own defaults, ``None`` and
+    ``False`` -- must never undo what an earlier capture already established."""
+    session = _session(forked_from="claude-code:parent", cwd_changed=True, ended_at=NOW)
+    _put(conn, session)
+    later_unknown = _session(forked_from=None, cwd_changed=False, ended_at=None)
+    with write_transaction(conn):
+        sessions.upsert_session(conn, later_unknown, now=LATER)
+    updated = sessions.get_session(conn, session.id)
+    assert updated is not None
+    assert (updated.forked_from, updated.cwd_changed, updated.ended_at) == (
+        "claude-code:parent",
+        True,
+        NOW,
+    )
+
+
+def test_upsert_still_advances_forked_from_cwd_changed_and_ended_at_when_known(conn):
+    session = _session()
+    _put(conn, session)
+    later_known = _session(forked_from="claude-code:parent", cwd_changed=True, ended_at=LATER)
+    with write_transaction(conn):
+        sessions.upsert_session(conn, later_known, now=LATER)
+    updated = sessions.get_session(conn, session.id)
+    assert updated is not None
+    assert (updated.forked_from, updated.cwd_changed, updated.ended_at) == (
+        "claude-code:parent",
+        True,
+        LATER,
+    )
+
+
+def test_upsert_keeps_the_later_ended_at_when_a_capture_arrives_out_of_order(conn):
+    """A sweep over an older slice of the transcript must not roll a session's end back below
+    what a later-running capture already recorded."""
+    session = _session(ended_at=LATER)
+    _put(conn, session)
+    out_of_order = _session(ended_at=NOW)
+    with write_transaction(conn):
+        sessions.upsert_session(conn, out_of_order, now=LATER)
+    updated = sessions.get_session(conn, session.id)
+    assert updated is not None
+    assert updated.ended_at == LATER
+
+
+def test_upsert_keeps_harness_mode_when_a_later_capture_does_not_know_it(conn):
+    session = _session(harness_mode="print")
+    _put(conn, session)
+    later_unknown = _session(harness_mode="")
+    with write_transaction(conn):
+        sessions.upsert_session(conn, later_unknown, now=LATER)
+    updated = sessions.get_session(conn, session.id)
+    assert updated is not None
+    assert updated.harness_mode == "print"
+
+
 def test_mark_trigger_first_sets_each_stamp_once(conn):
     session = _session()
     _put(conn, session)
@@ -198,6 +322,22 @@ def test_add_session_counts_accumulates(conn):
     assert (stored.turn_count, stored.authored_turn_count) == (5, 3)
     assert (stored.gate_redactions, stored.gate_flags, stored.gate_provider_hits) == (1, 3, 1)
     assert (stored.paused_turns, stored.ended_at, stored.updated_at) == (1, LATER, LATER)
+
+
+def test_add_session_counts_keeps_the_later_ended_at_when_a_batch_arrives_out_of_order(conn):
+    """A sweep that lands after the hook already recorded a later end must not roll it back."""
+    session = _session()
+    _put(conn, session)
+    with write_transaction(conn):
+        sessions.add_session_counts(
+            conn, session.id, SessionDelta(1, 1, 0, 0, 0, 0, ended_at=LATER), now=NOW
+        )
+        sessions.add_session_counts(
+            conn, session.id, SessionDelta(1, 1, 0, 0, 0, 0, ended_at=NOW), now=LATER
+        )
+    stored = sessions.get_session(conn, session.id)
+    assert stored is not None
+    assert stored.ended_at == LATER
 
 
 # --- turns ----------------------------------------------------------------------------------
@@ -241,6 +381,15 @@ def test_a_turn_stored_under_another_session_of_the_same_harness_is_skipped(conn
     assert _put(conn, resumed, _turn(resumed, "u1:0", "copied", native_uuid="u1")) == []
     other_harness = _session("rollout", harness="codex")
     assert _put(conn, other_harness, _turn(other_harness, "0:0", "copied", native_uuid="u1")) == [2]
+
+
+def test_insert_turns_refuses_turns_of_two_sessions_in_one_call(conn):
+    session = _session()
+    other = _session("other")
+    _put(conn, session)
+    _put(conn, other)
+    with pytest.raises(ValueError, match="one session"), write_transaction(conn):
+        sessions.insert_turns(conn, [_turn(session, "a:0", "here"), _turn(other, "b:0", "there")])
 
 
 def test_a_turn_of_an_unknown_session_is_refused_by_the_foreign_key(conn):

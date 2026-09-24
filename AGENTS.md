@@ -56,17 +56,20 @@ come in" are answered by the directory names.
   `SecretRefused` by rule and offset, never a value; CPU only, no model, no network. Below them:
   - `store/` — persistence only: `db` (refuses an SQLite older than 3.42.0 by name, and opens every
     connection with `secure_delete` on), `episodic`, `temporal`, `vectors`, `fts`, `entities`,
-    `history`, `sessions` (the archive's `sessions` and `turns` tables and their
-    `turns_fts`/`corrections_fts` keyword index, and their writers and readers: `upsert_session`,
-    `mark_trigger_first`, `add_session_counts`, `insert_turns`, `get_session`, `find_session`,
-    `turns_of`, `list_sessions` and `search_turns`), `spaces` (the `embedding_spaces` table and its
-    one-active partial index), `projects` (the `projects` table, keyed by name: classification,
-    remote, root and the per-project capture/consolidate switches; `get` and `list_all`, `seed` for
-    migration step 7's one row per project already named in `memories`, `facts` or
-    `session_history`, `register` for every project-keyed write after it, and `record` for the
-    classification, remote and root a CLI write from inside a repository fills in), `tables`
-    (`PROJECT_TABLES`, the one list of project-keyed tables `forget` reaches). Each owns its schema
-    and its queries; none of them ranks anything. Every write goes through `db.write_transaction`.
+    `history`, `sessions` (the archive's `sessions` and `turns` tables, `turns_fts` as the
+    turns' keyword index, and their writers and readers: `upsert_session`, `mark_trigger_first`,
+    `add_session_counts`, `insert_turns`, `get_session`, `find_session`, `turns_of`,
+    `list_sessions` and `search_turns`; `corrections_fts`, the keyword index over corrections'
+    normalised text, and `turn_links`, a turn's links to earlier similar turns by its columns,
+    are also created here, with no writer or reader of either yet), `spaces` (the
+    `embedding_spaces` table and its one-active partial index), `projects` (the `projects`
+    table, keyed by name: classification, remote, root and the per-project capture/consolidate
+    switches; `get` and `list_all`, `seed` for migration step 7's one row per project already
+    named in `memories`, `facts` or `session_history`, `register` for every project-keyed write
+    after it, and `record` for the classification, remote and root a CLI write from inside a
+    repository fills in), `tables` (`PROJECT_TABLES`, the one list of project-keyed tables
+    `forget` reaches). Each owns its schema and its queries; none of them ranks anything. Every
+    write goes through `db.write_transaction`.
   - `recall/` — `fusion` (reciprocal rank over vector and keyword search, rank-only),
     `floor` (the relevance floor, judged on vector scores) and `language` (a query's language
     by script alone, no model call, logged on every recall).

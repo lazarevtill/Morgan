@@ -24,7 +24,7 @@ class SQLiteTooOld(RuntimeError):
 
 
 def sqlite_version() -> str:
-    """The linked library's version, dotted, as ``doctor`` prints it."""
+    """The linked SQLite library's version, dotted (for example ``3.42.0``)."""
     return sqlite3.sqlite_version
 
 

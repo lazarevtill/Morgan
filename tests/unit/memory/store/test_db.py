@@ -148,3 +148,17 @@ def test_open_refuses_an_sqlite_below_the_floor_naming_both_versions(tmp_path, m
 def test_every_connection_opens_with_secure_delete_on(tmp_path):
     for conn in (open_db(str(tmp_path / "m.db")), open_db(":memory:")):
         assert conn.execute("PRAGMA secure_delete").fetchone()[0] == 1
+
+
+def test_the_floor_version_is_accepted_and_the_version_just_below_it_is_refused(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(sqlite3, "sqlite_version_info", (3, 42, 0))
+    monkeypatch.setattr(sqlite3, "sqlite_version", "3.42.0")
+    conn = open_db(str(tmp_path / "at_floor.db"))
+    assert conn.execute("PRAGMA secure_delete").fetchone()[0] == 1
+
+    monkeypatch.setattr(sqlite3, "sqlite_version_info", (3, 41, 9))
+    monkeypatch.setattr(sqlite3, "sqlite_version", "3.41.9")
+    with pytest.raises(SQLiteTooOld, match=r"3\.41\.9"):
+        open_db(str(tmp_path / "below_floor.db"))

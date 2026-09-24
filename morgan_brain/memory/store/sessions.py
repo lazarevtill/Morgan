@@ -16,6 +16,7 @@ import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.fts import to_match_query
 from morgan_brain.models import CaptureTrigger, Session, Turn
 
@@ -129,6 +130,10 @@ _SCHEMA_STATEMENTS: tuple[str, ...] = (
 #: The FTS5 tables whose rowid is ``turns.id``, each created with ``secure-delete`` on.
 FTS_TABLES: tuple[str, ...] = ("turns_fts", "corrections_fts")
 
+#: Every table this module owns. Used only to decide, with no lock, whether an open has
+#: anything left to build.
+_ALL_TABLES: tuple[str, ...] = ("sessions", "turns", *FTS_TABLES, "turn_links")
+
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
     row = conn.execute(
@@ -138,27 +143,36 @@ def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
 
 
 def create_schema(conn: sqlite3.Connection) -> None:
-    """Create the archive's tables and indexes, joining *conn*'s current transaction rather than
-    committing one of its own. An FTS table's ``secure-delete`` option is set only when the
-    ``CREATE`` here made the table: on an existing database this function writes nothing.
+    """Create the archive's tables and indexes when any of them is missing, and set each newly
+    made FTS table's ``secure-delete`` option.
+
+    The ``CREATE`` statements and the option inserts run under one ``write_transaction``, so a
+    lock timeout or an interruption between them commits nothing rather than leaving a table
+    without the option for good. Called from inside a caller's own write transaction -- a
+    migration step -- the work joins it as a savepoint instead of starting a new one. An open
+    that finds every table already in place takes no write lock and writes nothing.
     """
-    created = {table: not _table_exists(conn, table) for table in FTS_TABLES}
-    for statement in _SCHEMA_STATEMENTS:
-        conn.execute(statement)
-    for table in FTS_TABLES:
-        if created[table]:
-            # `table` is one of FTS_TABLES, never caller input.
-            conn.execute(f"INSERT INTO {table}({table}, rank) VALUES ('secure-delete', 1)")  # noqa: S608 # nosec B608
+    if all(_table_exists(conn, table) for table in _ALL_TABLES):
+        return
+    with write_transaction(conn):
+        # Re-read under the lock: another connection may have finished this since the
+        # lock-free check above.
+        created = {table: not _table_exists(conn, table) for table in FTS_TABLES}
+        for statement in _SCHEMA_STATEMENTS:
+            conn.execute(statement)
+        for table in FTS_TABLES:
+            if created[table]:
+                # `table` is one of FTS_TABLES, never caller input.
+                conn.execute(f"INSERT INTO {table}({table}, rank) VALUES ('secure-delete', 1)")  # noqa: S608 # nosec B608
 
 
 class SessionStore:
-    """Creates the archive's tables. Every query over them is one of the module-level
-    functions below, which take a plain connection rather than this store, like
+    """Creates the archive's tables when any is missing. Every query over them is one of the
+    module-level functions below, which take a plain connection rather than this store, like
     ``ProjectStore``."""
 
     def __init__(self, conn: sqlite3.Connection) -> None:
         create_schema(conn)
-        conn.commit()
 
 
 # --- rows --------------------------------------------------------------------------------------
@@ -188,13 +202,16 @@ def _row_to_turn(row: sqlite3.Row) -> Turn:
 def upsert_session(conn: sqlite3.Connection, session: Session, *, now: str) -> None:
     """Insert *session*, or update the fields a later capture may change.
 
-    Mutable: ``ended_at``, ``cwd_changed``, ``interactive``, ``reader_version``,
-    ``gate_version``, ``forked_from`` and ``updated_at`` take the new values; ``entrypoint``,
-    ``harness_version`` and ``harness_mode`` take a new value only when it is not ``''``, so a
-    capture that does not know them never blanks what an earlier one knew; ``started_at`` is set
-    once, by the first capture that knows it. The project, the file and the counts are not
-    touched here: ``add_session_counts`` and ``mark_trigger_first`` own the counts and the
-    stamps, and ``imported_at`` is set only on insert.
+    ``interactive``, ``reader_version``, ``gate_version`` and ``updated_at`` take the new value
+    outright. ``entrypoint``, ``harness_version`` and ``harness_mode`` take a new value only
+    when it is not ``''``, and ``forked_from`` only when it is not ``NULL``, so a capture that
+    does not know one of them never blanks what an earlier one knew. ``cwd_changed`` is true
+    once it has ever been true: a later capture that does not know the cwd changed cannot undo
+    an earlier one that saw it. ``ended_at`` keeps the later of the two known timestamps, so a
+    capture built from an older slice of the transcript cannot roll the session's end back.
+    ``started_at`` is set once, by the first capture that knows it. The project, the file and
+    the counts are not touched here: ``add_session_counts`` and ``mark_trigger_first`` own the
+    counts and the stamps, and ``imported_at`` is set only on insert.
     """
     values = session.model_dump()
     values["cwd_changed"] = int(session.cwd_changed)
@@ -207,10 +224,13 @@ def upsert_session(conn: sqlite3.Connection, session: Session, *, now: str) -> N
     conn.execute(
         f"INSERT INTO sessions ({columns}) VALUES ({marks}) "  # noqa: S608 # nosec B608
         "ON CONFLICT (harness, native_id) DO UPDATE SET "
-        "ended_at = excluded.ended_at, cwd_changed = excluded.cwd_changed, "
         "interactive = excluded.interactive, reader_version = excluded.reader_version, "
-        "gate_version = excluded.gate_version, forked_from = excluded.forked_from, "
-        "updated_at = excluded.updated_at, "
+        "gate_version = excluded.gate_version, updated_at = excluded.updated_at, "
+        "ended_at = COALESCE("
+        "MAX(sessions.ended_at, excluded.ended_at), sessions.ended_at, excluded.ended_at"
+        "), "
+        "cwd_changed = MAX(sessions.cwd_changed, excluded.cwd_changed), "
+        "forked_from = COALESCE(excluded.forked_from, sessions.forked_from), "
         "started_at = COALESCE(sessions.started_at, excluded.started_at), "
         "entrypoint = CASE WHEN excluded.entrypoint = '' THEN sessions.entrypoint "
         "ELSE excluded.entrypoint END, "
@@ -244,8 +264,9 @@ def mark_trigger_first(
 
 @dataclass(frozen=True)
 class SessionDelta:
-    """What one batch adds to a session's counts; ``ended_at`` replaces the stored value when
-    it is not ``None``."""
+    """What one batch adds to a session's counts; ``ended_at`` keeps the later of the two known
+    timestamps, as ``upsert_session`` does for the same column, rather than whatever value a
+    batch happens to supply."""
 
     turns: int
     authored: int
@@ -260,22 +281,25 @@ def add_session_counts(
     conn: sqlite3.Connection, session_id: str, delta: SessionDelta, *, now: str
 ) -> None:
     conn.execute(
-        "UPDATE sessions SET turn_count = turn_count + ?, "
-        "authored_turn_count = authored_turn_count + ?, "
-        "gate_redactions = gate_redactions + ?, gate_flags = gate_flags + ?, "
-        "gate_provider_hits = gate_provider_hits + ?, paused_turns = paused_turns + ?, "
-        "ended_at = COALESCE(?, ended_at), updated_at = ? WHERE id = ?",
-        (
-            delta.turns,
-            delta.authored,
-            delta.redactions,
-            delta.flags,
-            delta.provider_hits,
-            delta.paused_turns,
-            delta.ended_at,
-            now,
-            session_id,
-        ),
+        "UPDATE sessions SET turn_count = turn_count + :turns, "
+        "authored_turn_count = authored_turn_count + :authored, "
+        "gate_redactions = gate_redactions + :redactions, "
+        "gate_flags = gate_flags + :flags, "
+        "gate_provider_hits = gate_provider_hits + :provider_hits, "
+        "paused_turns = paused_turns + :paused_turns, "
+        "ended_at = COALESCE(MAX(ended_at, :ended_at), ended_at, :ended_at), "
+        "updated_at = :now WHERE id = :session_id",
+        {
+            "turns": delta.turns,
+            "authored": delta.authored,
+            "redactions": delta.redactions,
+            "flags": delta.flags,
+            "provider_hits": delta.provider_hits,
+            "paused_turns": delta.paused_turns,
+            "ended_at": delta.ended_at,
+            "now": now,
+            "session_id": session_id,
+        },
     )
 
 
