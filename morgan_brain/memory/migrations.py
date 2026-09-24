@@ -30,7 +30,7 @@ from itertools import takewhile
 from typing import NamedTuple
 
 from morgan_brain.memory.knowledge.extract import extract_entity_names
-from morgan_brain.memory.store import projects, spaces, vectors
+from morgan_brain.memory.store import calls, digests, projects, sessions, spaces, vectors
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
@@ -360,6 +360,44 @@ def _seed_projects(conn: sqlite3.Connection, stores: Stores) -> dict[str, int]:
     return {"projects": projects.seed(conn, clock=_utcnow)}
 
 
+#: Step 8's columns, in the order it adds them, each with a constant default. Each store's
+#: ``CREATE TABLE`` ends with the same columns in the same order, so a fresh database and one
+#: migrated through step 8 match table by table; a test compares the two. ``digests`` carries
+#: ``entrypoint_source`` in its own DDL -- the table has no earlier version to migrate from --
+#: so it is not here.
+_ARCHIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("projects", "retention_confirmed", "INTEGER NOT NULL DEFAULT 0"),
+    ("memories", "redactions", "TEXT NOT NULL DEFAULT '[]'"),
+    ("memories", "flags", "TEXT NOT NULL DEFAULT '[]'"),
+    ("facts", "redactions", "TEXT NOT NULL DEFAULT '[]'"),
+    ("facts", "flags", "TEXT NOT NULL DEFAULT '[]'"),
+)
+
+
+def _create_archive_and_redaction_columns(conn: sqlite3.Connection, stores: Stores) -> None:
+    """Create the session archive's fourteen tables and add the five gate columns where they
+    are missing. Light: DDL only, no row moved.
+
+    Idempotent against the stores: every ``CREATE`` is ``IF NOT EXISTS``, and the stores have
+    usually created these tables already, at open, before ``upgrade`` runs -- then this step
+    finds them and creates nothing; an FTS5 ``secure-delete`` option is set only by the
+    ``CREATE`` that makes its table (``sessions.create_schema`` does that), so a step that
+    creates nothing writes nothing there either. A column is added only where
+    ``pragma_table_info`` lacks it, the way step 4 adds its own: a table this code created
+    carries it already. ``memories`` and ``projects`` always exist here; ``facts`` exists only
+    if its store ever opened this file, and when it is made later its ``CREATE TABLE`` carries
+    the columns.
+    """
+    sessions.create_schema(conn)
+    calls.create_schema(conn)
+    digests.create_schema(conn)
+    for table, column, definition in _ARCHIVE_COLUMNS:
+        if not _table_exists(conn, table) or column in _column_names(conn, table):
+            continue
+        # Names from the constant above, never from a caller: DDL takes no bound parameters.
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 #: In order. Step *n* brings a database from ``user_version`` *n - 1* to *n*; append only.
 #: Steps 1 and 2 rewrite and drop, yet stay light: they predate the split, and every Morgan
 #: that shipped them already ran them on open.
@@ -372,6 +410,7 @@ _STEPS: tuple[Step, ...] = (
     Step(5, "rename default to personal", True, _rename_default_project),
     Step(6, "rebuild vec0 and FTS5", True, _rebuild_vec0_and_fts5),
     Step(7, "seed projects", False, _seed_projects),
+    Step(8, "archive tables and redaction columns", False, _create_archive_and_redaction_columns),
 )
 
 

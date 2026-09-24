@@ -59,7 +59,9 @@ class EpisodicStore:
                 author_id        TEXT NOT NULL DEFAULT '',
                 scope            TEXT NOT NULL DEFAULT 'private',
                 instruction_like INTEGER NOT NULL DEFAULT 0,
-                status           TEXT NOT NULL DEFAULT 'stored'
+                status           TEXT NOT NULL DEFAULT 'stored',
+                redactions       TEXT NOT NULL DEFAULT '[]',
+                flags            TEXT NOT NULL DEFAULT '[]'
             );
             CREATE INDEX IF NOT EXISTS idx_memories_user ON memories (user_id);
             """

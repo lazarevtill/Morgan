@@ -235,8 +235,10 @@ def create_schema(conn: sqlite3.Connection) -> None:
 
     The ``CREATE`` statements and the option inserts run under one ``write_transaction``, so a
     lock timeout or an interruption between them commits nothing rather than leaving a table
-    without the option for good. Called from inside a caller's own write transaction, the work
-    joins it as a savepoint instead of starting a new one. An open that finds every table and
+    without the option for good. Called by ``SessionStore`` at open and by migration step 8, so
+    both leave the same DDL: called from inside a caller's own write transaction, the work
+    joins it as a savepoint instead of starting a new one, and step 8's DDL then rolls back
+    with the rest of its wave when a later step fails. An open that finds every table and
     index already in place takes no write lock and writes nothing.
     """
     if all(_schema_object_exists(conn, name) for name in _SCHEMA_OBJECT_NAMES):

@@ -99,6 +99,7 @@ A database written by an older Morgan is upgraded by numbered steps:
 | 5 | heavy | rename the project `default` to `personal` in every project-keyed table |
 | 6 | heavy | rebuild `vec_items` and `fts_memories` with `status`, `scope` and `author_id` |
 | 7 | light | seed `projects` with one row per project already named (every write after this registers its own) |
+| 8 | light | create the session archive's fourteen tables (`sessions`, `turns`, their two FTS5 indexes, `turn_links`, the capture cursors, exclusions, pauses and state, `call_log`, `digests`, `digest_refs`, `digest_ratings`, `link_ratings`) and add `retention_confirmed` to `projects` and `redactions`/`flags` to `memories` and `facts` where missing |
 
 Opening the database runs the pending light steps up to the first heavy one. While a heavy
 step waits, the gate refuses every write with `DatabaseNeedsMigration`, whose message names the

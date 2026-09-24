@@ -61,7 +61,9 @@ come in" are answered by the directory names.
     `add_session_counts`, `insert_turns`, `get_session`, `find_session`, `turns_of`,
     `list_sessions` and `search_turns`; `corrections_fts`, the keyword index over corrections'
     normalised text, and `turn_links`, a turn's links to earlier similar turns by its columns,
-    are also created here, with no writer or reader of either yet), `calls` (the `call_log`
+    are also created here, with no writer or reader of either yet; the capture cursors with
+    their lease, the exclusions, the capture state and the pause intervals are also created
+    here, each with its own writers and readers), `calls` (the `call_log`
     table and its `ts` index, and its writer and readers: `insert_call`, `calls_between` and
     `call_counts_since`), `digests` (`digests`, `digest_refs`, `digest_ratings` and
     `link_ratings` and their indexes, and their writers and readers: `insert_digest`,

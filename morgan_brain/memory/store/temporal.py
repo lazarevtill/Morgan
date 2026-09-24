@@ -40,7 +40,9 @@ CREATE TABLE IF NOT EXISTS facts (
     superseded_by TEXT,
     last_confirmed TEXT,
     author_id TEXT NOT NULL DEFAULT '',
-    scope TEXT NOT NULL DEFAULT 'private'
+    scope TEXT NOT NULL DEFAULT 'private',
+    redactions TEXT NOT NULL DEFAULT '[]',
+    flags TEXT NOT NULL DEFAULT '[]'
 );
 """
 

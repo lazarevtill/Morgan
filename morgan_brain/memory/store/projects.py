@@ -43,7 +43,8 @@ _SCHEMA_STATEMENTS: tuple[str, ...] = (
         retention_days      INTEGER,
         paused_until        TEXT,
         consolidate_enabled INTEGER NOT NULL DEFAULT 1,
-        created_at          TEXT NOT NULL
+        created_at          TEXT NOT NULL,
+        retention_confirmed INTEGER NOT NULL DEFAULT 0
     )
     """,
 )
@@ -79,9 +80,14 @@ class Project:
     paused_until: str | None
     consolidate_enabled: bool
     created_at: str
+    #: Set once the owner answered the retention question for this project; 0 for a project
+    #: first seen after enabling.
+    retention_confirmed: bool = False
 
 
 def _row_to_project(row: sqlite3.Row) -> Project:
+    # A file read over `open_readonly` from before this column existed has no such column yet.
+    present = set(row.keys())
     return Project(
         name=row["name"],
         classification=row["classification"],
@@ -92,6 +98,9 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         paused_until=row["paused_until"],
         consolidate_enabled=bool(row["consolidate_enabled"]),
         created_at=row["created_at"],
+        retention_confirmed=bool(row["retention_confirmed"])
+        if "retention_confirmed" in present
+        else False,
     )
 
 
@@ -138,9 +147,10 @@ def record(
 
     Only the three columns that derive from the repository and the settings; the owner's
     switches (``capture_enabled``, ``retention_days``, ``paused_until``,
-    ``consolidate_enabled``) and the row's ``created_at`` are never touched here. The label is
-    recomputed on every CLI write rather than stored once, because a repository's remote and
-    ``MORGAN_WORK_REMOTE_GLOBS`` both change without Morgan hearing about it.
+    ``consolidate_enabled``, ``retention_confirmed``) and the row's ``created_at`` are never
+    touched here. The label is recomputed on every CLI write rather than stored once, because a
+    repository's remote and ``MORGAN_WORK_REMOTE_GLOBS`` both change without Morgan hearing
+    about it.
 
     An ``UPDATE``, never an insert: the write this rides with has already registered the
     project, so a missing row means there is nothing to describe -- a command that wrote
