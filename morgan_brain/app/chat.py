@@ -72,8 +72,8 @@ class Chat:
         A question holding a provider token is refused here, before the recall or any model
         call. One with a generic hit is redacted everywhere it reaches from here -- the
         recall, the prompt and the user's history row -- while ``store`` scans the raw
-        question again when it writes the memory, so the stored row ends up redacted too, and
-        each written row is scanned exactly once, by the writer that wrote it.
+        question itself when it writes the memory, so the stored memory records its own hits.
+        The assistant's reply is not scanned before its history row.
 
         *caller_client*/*caller_session_id* are provenance for the two memories this turn
         writes -- named apart from *session_id* (history bucketing) and ``Chat``'s own
