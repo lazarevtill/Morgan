@@ -171,10 +171,9 @@ def test_an_interruption_between_two_creates_commits_nothing(tmp_path):
     assert all(_option(real, table) == 1 for table in FTS_TABLES)
 
 
-def test_a_partially_created_schema_is_completed_atomically_on_the_next_open(tmp_path):
-    """A database left with only one table -- an earlier open that stopped between two
-    ``CREATE``s -- is finished in one write: every remaining table appears together, and each
-    FTS table it makes gets ``secure-delete`` set."""
+def test_a_schema_with_only_one_table_present_is_completed_on_the_next_open(tmp_path):
+    """A database holding only ``sessions`` gets the rest of the schema on the next open: every
+    missing table appears together, and each FTS table it makes gets ``secure-delete`` set."""
     path = str(tmp_path / "m.db")
     conn = open_db(path)
     conn.execute(sessions._SCHEMA_STATEMENTS[0])  # `sessions` alone; nothing else exists yet
@@ -182,6 +181,37 @@ def test_a_partially_created_schema_is_completed_atomically_on_the_next_open(tmp
     SessionStore(conn)
     assert set(TABLES) <= set(_ddl(conn))
     assert all(_option(conn, table) == 1 for table in FTS_TABLES)
+
+
+def test_a_schema_holding_only_the_earlier_tables_gains_later_ones_on_the_next_open(tmp_path):
+    """The early return that skips building the schema is read out of the statements
+    themselves, not kept in a separate list: a table or index appended to them later is still
+    created on a database that predates it, rather than staying missing because nobody added
+    its name to that list by hand."""
+    path = str(tmp_path / "m.db")
+    conn = open_db(path)
+    with write_transaction(conn):
+        for statement in sessions._SCHEMA_STATEMENTS:
+            if "capture_" not in statement:
+                conn.execute(statement)
+    assert "capture_cursors" not in _ddl(conn)
+    sessions.create_schema(conn)
+    ddl = _ddl(conn)
+    assert {"capture_cursors", "capture_exclusions", "capture_state", "capture_pauses"} <= set(ddl)
+    assert "idx_capture_pauses_project" in ddl
+
+
+def test_a_fresh_schemas_objects_are_exactly_what_the_statements_declare(conn):
+    """Guards the name read out of each statement in ``_SCHEMA_STATEMENTS``: nothing is missed
+    and nothing is invented, so the early return checks exactly what a fresh open makes. An
+    FTS5 table's shadow tables carry their own ``CREATE TABLE`` text too, so they are told
+    apart from a stated table by ``pragma_table_list``'s own ``shadow`` type, not by that."""
+    shadow = {
+        r["name"] for r in conn.execute("SELECT name FROM pragma_table_list WHERE type = 'shadow'")
+    }
+    present = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master")} - shadow
+    present = {name for name in present if not name.startswith("sqlite_")}
+    assert present == sessions._SCHEMA_OBJECT_NAMES
 
 
 def test_session_id_of_is_the_harness_and_the_native_id():

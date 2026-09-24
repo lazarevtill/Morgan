@@ -1,5 +1,7 @@
 """The archive's session tables: ``sessions``, ``turns``, ``turns_fts``, ``corrections_fts`` and
-``turn_links``, their writers and the reads built on them.
+``turn_links``, and the tables capture keeps beside them -- ``capture_cursors`` with its lease,
+``capture_exclusions``, ``capture_state`` and ``capture_pauses`` -- their writers and the reads
+built on them.
 
 No vectors: the archive is keyword-indexed only, and capture never embeds. ``turns_fts`` and
 ``corrections_fts`` are regular FTS5 tables whose rowid is ``turns.id``. Each is created with
@@ -12,13 +14,23 @@ a caller's own write transaction without an implicit commit ending it partway th
 
 from __future__ import annotations
 
+import json
+import re
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.fts import to_match_query
-from morgan_brain.models import CaptureTrigger, Session, Turn
+from morgan_brain.models import (
+    CaptureCursor,
+    CaptureTrigger,
+    Exclusion,
+    Pause,
+    Session,
+    Turn,
+    parse_iso,
+)
 
 _SCHEMA_STATEMENTS: tuple[str, ...] = (
     """
@@ -125,19 +137,88 @@ _SCHEMA_STATEMENTS: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_turn_links_earlier ON turn_links (earlier_turn_id)",
+    """
+    CREATE TABLE IF NOT EXISTS capture_cursors (
+        harness      TEXT NOT NULL,
+        native_id    TEXT NOT NULL,
+        source_path  TEXT NOT NULL,
+        byte_offset  INTEGER NOT NULL,
+        size         INTEGER NOT NULL,
+        mtime_ns     INTEGER NOT NULL,
+        identity     TEXT NOT NULL,
+        status       TEXT NOT NULL,
+        last_read_at TEXT NOT NULL,
+        lease_owner  TEXT,
+        lease_until  TEXT,
+        open_calls   TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY (harness, native_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS capture_exclusions (
+        harness     TEXT NOT NULL,
+        native_id   TEXT NOT NULL,
+        reason      TEXT NOT NULL,
+        excluded_at TEXT NOT NULL,
+        PRIMARY KEY (harness, native_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS capture_pauses (
+        id           INTEGER PRIMARY KEY,
+        user_id      TEXT NOT NULL,
+        project      TEXT NOT NULL,
+        paused_from  TEXT NOT NULL,
+        paused_until TEXT
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_capture_pauses_project
+        ON capture_pauses (user_id, project, paused_from)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS capture_state (
+        key        TEXT PRIMARY KEY,
+        value      TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )
+    """,
 )
 
 #: The FTS5 tables whose rowid is ``turns.id``, each created with ``secure-delete`` on.
 FTS_TABLES: tuple[str, ...] = ("turns_fts", "corrections_fts")
 
-#: Every table this module owns. Used only to decide, with no lock, whether an open has
-#: anything left to build.
-_ALL_TABLES: tuple[str, ...] = ("sessions", "turns", *FTS_TABLES, "turn_links")
+_OBJECT_NAME_RE = re.compile(r"CREATE (?:VIRTUAL TABLE|TABLE|INDEX) IF NOT EXISTS (\w+)")
+
+
+def _schema_object_names() -> frozenset[str]:
+    """Every table and index name ``_SCHEMA_STATEMENTS`` creates, read from the statements
+    themselves so a name appended there is checked here too, with no second list kept by hand
+    beside it and liable to fall out of step."""
+    names: set[str] = set()
+    for statement in _SCHEMA_STATEMENTS:
+        match = _OBJECT_NAME_RE.search(statement)
+        if match is None:
+            raise ValueError(f"no table or index name found in schema statement: {statement!r}")
+        names.add(match.group(1))
+    return frozenset(names)
+
+
+#: Every table and index this module owns. Used only to decide, with no lock, whether an open
+#: has anything left to build.
+_SCHEMA_OBJECT_NAMES: frozenset[str] = _schema_object_names()
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
     row = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
+    ).fetchone()
+    return row is not None
+
+
+def _schema_object_exists(conn: sqlite3.Connection, name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type IN ('table', 'index') AND name = ?", (name,)
     ).fetchone()
     return row is not None
 
@@ -148,11 +229,11 @@ def create_schema(conn: sqlite3.Connection) -> None:
 
     The ``CREATE`` statements and the option inserts run under one ``write_transaction``, so a
     lock timeout or an interruption between them commits nothing rather than leaving a table
-    without the option for good. Called from inside a caller's own write transaction -- a
-    migration step -- the work joins it as a savepoint instead of starting a new one. An open
-    that finds every table already in place takes no write lock and writes nothing.
+    without the option for good. Called from inside a caller's own write transaction, the work
+    joins it as a savepoint instead of starting a new one. An open that finds every table and
+    index already in place takes no write lock and writes nothing.
     """
-    if all(_table_exists(conn, table) for table in _ALL_TABLES):
+    if all(_schema_object_exists(conn, name) for name in _SCHEMA_OBJECT_NAMES):
         return
     with write_transaction(conn):
         # Re-read under the lock: another connection may have finished this since the
@@ -460,3 +541,231 @@ def search_turns(
         )
         for r in conn.execute(sql, params)
     ]
+
+
+# --- capture cursors and the lease ---------------------------------------------------------------
+
+_CURSOR_COLUMNS: tuple[str, ...] = tuple(CaptureCursor.model_fields)
+
+
+def _row_to_cursor(row: sqlite3.Row) -> CaptureCursor:
+    values = dict(row)
+    values["open_calls"] = json.loads(values["open_calls"])
+    return CaptureCursor(**values)
+
+
+def cursor_get(conn: sqlite3.Connection, *, harness: str, native_id: str) -> CaptureCursor | None:
+    row = conn.execute(
+        "SELECT * FROM capture_cursors WHERE harness = ? AND native_id = ?", (harness, native_id)
+    ).fetchone()
+    return None if row is None else _row_to_cursor(row)
+
+
+def cursors(conn: sqlite3.Connection) -> dict[tuple[str, str], CaptureCursor]:
+    """Every cursor, keyed by ``(harness, native_id)``."""
+    return {
+        (r["harness"], r["native_id"]): _row_to_cursor(r)
+        for r in conn.execute("SELECT * FROM capture_cursors ORDER BY harness, native_id")
+    }
+
+
+def cursor_put(conn: sqlite3.Connection, cursor: CaptureCursor) -> None:
+    """Insert or replace the cursor's own columns, ``open_calls`` included. The two lease
+    columns are the lease's (``lease_claim``/``lease_release``): set from the model on insert,
+    left alone on update, so a batch that writes its cursor never drops or forges a lease."""
+    values = cursor.model_dump()
+    values["open_calls"] = json.dumps(values["open_calls"])
+    columns = ", ".join(_CURSOR_COLUMNS)
+    marks = ", ".join(f":{name}" for name in _CURSOR_COLUMNS)
+    # The column names are the model's fields, never caller input.
+    conn.execute(
+        f"INSERT INTO capture_cursors ({columns}) VALUES ({marks}) "  # noqa: S608 # nosec B608
+        "ON CONFLICT (harness, native_id) DO UPDATE SET source_path = excluded.source_path, "
+        "byte_offset = excluded.byte_offset, size = excluded.size, mtime_ns = excluded.mtime_ns, "
+        "identity = excluded.identity, status = excluded.status, "
+        "last_read_at = excluded.last_read_at, open_calls = excluded.open_calls",
+        values,
+    )
+
+
+def lease_claim(
+    conn: sqlite3.Connection,
+    *,
+    harness: str,
+    native_id: str,
+    source_path: str,
+    owner: str,
+    now: str,
+    until: str,
+) -> bool:
+    """Take the lease on one transcript for *owner* until *until*: the cursor row is inserted
+    when missing (``status "new"``), and the lease is taken when nobody holds it, *owner*
+    already holds it, or the holder's lease lapsed before *now*. ``False`` when another owner
+    holds it into the future. *now* and *until* are ``utc_iso`` strings, so the comparison is
+    lexical. Joins the caller's write transaction rather than opening one of its own -- the
+    caller owns the one short write transaction per file."""
+    conn.execute(
+        "INSERT OR IGNORE INTO capture_cursors (harness, native_id, source_path, byte_offset, "
+        "size, mtime_ns, identity, status, last_read_at) "
+        "VALUES (?, ?, ?, 0, 0, 0, '', 'new', ?)",
+        (harness, native_id, source_path, now),
+    )
+    taken = conn.execute(
+        "UPDATE capture_cursors SET lease_owner = ?, lease_until = ? "
+        "WHERE harness = ? AND native_id = ? AND (lease_owner IS NULL OR lease_owner = ? "
+        "OR lease_until IS NULL OR lease_until < ?)",
+        (owner, until, harness, native_id, owner, now),
+    )
+    return taken.rowcount == 1
+
+
+def lease_release(conn: sqlite3.Connection, *, harness: str, native_id: str, owner: str) -> None:
+    """Drop the lease *owner* holds; another owner's lease is left alone."""
+    conn.execute(
+        "UPDATE capture_cursors SET lease_owner = NULL, lease_until = NULL "
+        "WHERE harness = ? AND native_id = ? AND lease_owner = ?",
+        (harness, native_id, owner),
+    )
+
+
+# --- exclusions ------------------------------------------------------------------------------
+
+
+def exclusion_add(
+    conn: sqlite3.Connection, *, harness: str, native_id: str, reason: str, now: str
+) -> None:
+    conn.execute(
+        "INSERT INTO capture_exclusions (harness, native_id, reason, excluded_at) "
+        "VALUES (?, ?, ?, ?) ON CONFLICT (harness, native_id) DO UPDATE SET "
+        "reason = excluded.reason, excluded_at = excluded.excluded_at",
+        (harness, native_id, reason, now),
+    )
+
+
+def exclusion_remove(conn: sqlite3.Connection, *, harness: str, native_id: str) -> bool:
+    removed = conn.execute(
+        "DELETE FROM capture_exclusions WHERE harness = ? AND native_id = ?", (harness, native_id)
+    )
+    return removed.rowcount == 1
+
+
+def exclusions(conn: sqlite3.Connection) -> list[Exclusion]:
+    return [
+        Exclusion(**dict(r))
+        for r in conn.execute("SELECT * FROM capture_exclusions ORDER BY harness, native_id")
+    ]
+
+
+def is_excluded(conn: sqlite3.Connection, *, harness: str, native_id: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM capture_exclusions WHERE harness = ? AND native_id = ?",
+        (harness, native_id),
+    ).fetchone()
+    return row is not None
+
+
+# --- state -------------------------------------------------------------------------------------
+
+STATE_ENABLED = "enabled"
+STATE_ENABLED_AT = "enabled_at"
+STATE_REPORT_PATH = "report_path"
+STATE_LAST_SWEEP = "last_sweep"
+
+
+def state_get(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM capture_state WHERE key = ?", (key,)).fetchone()
+    return None if row is None else str(row["value"])
+
+
+def state_set(conn: sqlite3.Connection, key: str, value: str, *, now: str) -> None:
+    conn.execute(
+        "INSERT INTO capture_state (key, value, updated_at) VALUES (?, ?, ?) "
+        "ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        (key, value, now),
+    )
+
+
+def capture_enabled(conn: sqlite3.Connection) -> bool:
+    """Off until a capture is explicitly turned on."""
+    return state_get(conn, STATE_ENABLED) == "1"
+
+
+# --- pauses --------------------------------------------------------------------------------------
+
+
+def _row_to_pause(row: sqlite3.Row) -> Pause:
+    return Pause(**dict(row))
+
+
+def pause_open(
+    conn: sqlite3.Connection,
+    *,
+    user_id: str,
+    project: str,
+    paused_from: str,
+    paused_until: str | None,
+) -> Pause:
+    """Record a pause interval; ``None`` for an open-ended one. The row goes only with the
+    project."""
+    cursor = conn.execute(
+        "INSERT INTO capture_pauses (user_id, project, paused_from, paused_until) "
+        "VALUES (?, ?, ?, ?)",
+        (user_id, project, paused_from, paused_until),
+    )
+    return Pause(
+        id=cursor.lastrowid,
+        user_id=user_id,
+        project=project,
+        paused_from=paused_from,
+        paused_until=paused_until,
+    )
+
+
+def pause_close(conn: sqlite3.Connection, *, user_id: str, project: str, now: str) -> int:
+    """End every *current* interval of the project at *now* -- one whose end is NULL or after
+    *now* -- and return how many, so ending a pause early cuts a longer running one short too.
+    A past interval is history and is left as it is."""
+    closed = conn.execute(
+        "UPDATE capture_pauses SET paused_until = ? WHERE user_id = ? AND project = ? "
+        "AND (paused_until IS NULL OR paused_until > ?)",
+        (now, user_id, project, now),
+    )
+    return closed.rowcount
+
+
+def pauses_of(conn: sqlite3.Connection, *, user_id: str, project: str) -> list[Pause]:
+    return [
+        _row_to_pause(r)
+        for r in conn.execute(
+            "SELECT * FROM capture_pauses WHERE user_id = ? AND project = ? "
+            "ORDER BY paused_from, id",
+            (user_id, project),
+        )
+    ]
+
+
+def current_pause(
+    conn: sqlite3.Connection, *, user_id: str, project: str, now: str
+) -> Pause | None:
+    """The interval whose end is NULL or after *now*, the latest ``paused_from`` when several;
+    ``None`` when the project is not paused."""
+    row = conn.execute(
+        "SELECT * FROM capture_pauses WHERE user_id = ? AND project = ? "
+        "AND (paused_until IS NULL OR paused_until > ?) ORDER BY paused_from DESC, id DESC "
+        "LIMIT 1",
+        (user_id, project, now),
+    ).fetchone()
+    return None if row is None else _row_to_pause(row)
+
+
+def in_pause(ts: str, pauses: Sequence[Pause]) -> bool:
+    """Whether the moment *ts* lies inside any interval: ``paused_from <= ts`` and the end NULL
+    or ``ts < paused_until``. Pure, and compares parsed moments, so a harness's own timestamp
+    shape compares with ``utc_iso``'s by time."""
+    moment = parse_iso(ts)
+    for pause in pauses:
+        if parse_iso(pause.paused_from) > moment:
+            continue
+        if pause.paused_until is None or moment < parse_iso(pause.paused_until):
+            return True
+    return False

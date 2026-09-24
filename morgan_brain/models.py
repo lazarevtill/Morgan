@@ -259,3 +259,55 @@ class Turn(BaseModel):
     flags: str = "[]"
     norm_hash: str | None = None
     is_correction: bool = False
+
+
+class OpenCall(BaseModel):
+    """A call a read met whose later items can still arrive: its result (or output, and for a
+    Codex MCP call its item), with whether it is Morgan's own."""
+
+    id: str
+    morgan: bool = False
+    pending: list[str] = Field(default_factory=list)
+
+
+class CaptureCursor(BaseModel):
+    """Where capture stopped reading one transcript: the row of ``capture_cursors``.
+    ``identity`` is the sha256 of the file's first line, so a rewritten file resets;
+    ``lease_owner``/``lease_until`` are the lease's own columns; ``open_calls`` holds the calls
+    a read met whose later items have not been read yet, so a read that ends between a call
+    and its result still skips the result on its next pass."""
+
+    harness: str
+    native_id: str
+    source_path: str
+    byte_offset: int = 0
+    size: int = 0
+    mtime_ns: int = 0
+    identity: str = ""
+    status: Literal["new", "ok", "reset"] = "new"
+    last_read_at: str = ""
+    lease_owner: str | None = None
+    lease_until: str | None = None
+    open_calls: list[OpenCall] = Field(default_factory=list)
+
+
+class Exclusion(BaseModel):
+    """A session capture must not read again, by its harness's native id: the row of
+    ``capture_exclusions``. ``reason`` is ``forget``, ``since``, ``retention`` or ``exclude``."""
+
+    harness: str
+    native_id: str
+    reason: str
+    excluded_at: str
+
+
+class Pause(BaseModel):
+    """One pause interval of a project: the row of ``capture_pauses``. An interval is current
+    while ``paused_until`` is ``None`` or in the future; a turn inside any interval is never
+    stored, however the interval later ended."""
+
+    id: int | None = None
+    user_id: str
+    project: str
+    paused_from: str
+    paused_until: str | None = None
