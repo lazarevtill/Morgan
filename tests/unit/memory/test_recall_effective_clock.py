@@ -20,10 +20,14 @@ async def test_recall_respects_effective_boundary_and_scope():
         await gate.upsert_fact(
             TemporalFact(user_id="owner", subject="user", predicate="drink", object="tea")
         )
-        # Prepare a persisted timeline whose predecessor ends at the future boundary.
-        now = future
         await gate.upsert_fact(
-            TemporalFact(user_id="owner", subject="user", predicate="drink", object="water")
+            TemporalFact(
+                user_id="owner",
+                subject="user",
+                predicate="drink",
+                object="water",
+                valid_from=future,
+            )
         )
         for owner, project in (("other", "personal"), ("owner", "work")):
             await gate.upsert_fact(

@@ -165,21 +165,33 @@ class SqliteTemporalStore:
         # left with two currently-valid facts.
         with write_transaction(self._conn):
             cur = self._conn.execute(
-                "SELECT id FROM facts WHERE user_id=? AND project=? AND subject=? AND predicate=? "
+                "SELECT id, valid_from FROM facts WHERE user_id=? AND project=? "
+                "AND subject=? AND predicate=? "
                 "AND valid_to IS NULL",
                 (fact.user_id, fact.project, fact.subject, fact.predicate),
             )
-            existing = [r["id"] for r in cur.fetchall()]
+            existing_rows = cur.fetchall()
+            existing = [r["id"] for r in existing_rows]
             fact = fact.model_copy(deep=True)
             if fact.valid_from is None:
                 fact.valid_from = now
+            if any(
+                (start := _dt(row["valid_from"])) is not None
+                and _instant(start) > _instant(now)
+                and _instant(start) > _instant(fact.valid_from)
+                for row in existing_rows
+            ):
+                raise ValueError("Fact cannot precede the existing scheduled timeline head")
             fact.last_confirmed = now
+            # A scheduled assertion must not close today's predecessor before its
+            # effective start. Historical writes retain their existing closure semantics.
+            supersedes_at = fact.valid_from if _instant(fact.valid_from) > _instant(now) else now
             # Closed before the new fact is inserted: a key may hold one current fact at a time,
             # and the unique index checks that at each statement, not at commit.
             for old_id in existing:
                 self._conn.execute(
                     "UPDATE facts SET valid_to=?, superseded_by=? WHERE id=?",
-                    (_iso(now), fact.id, old_id),
+                    (_iso(supersedes_at), fact.id, old_id),
                 )
             self._conn.execute(
                 "INSERT INTO facts (id, user_id, project, subject, predicate, object, source, "
