@@ -39,6 +39,60 @@ async def test_effective_clock_normalizes_offsets_and_legacy_naive_boundaries():
         store._conn.close()
 
 
+async def test_ordinary_writes_with_reversed_captured_clocks_serialize_without_negative_interval():
+    store = SqliteTemporalStore()
+    earlier = datetime(2026, 1, 1, tzinfo=UTC)
+    later = earlier + timedelta(microseconds=1)
+    try:
+        for identity, clock in (("first", later), ("second", earlier), ("third", earlier)):
+            await store.upsert_fact(
+                TemporalFact(
+                    id=identity, user_id="u", subject="user", predicate="drink", object=identity
+                ),
+                now=clock,
+            )
+        rows = await store.history(user_id="u", subject="user", predicate="drink")
+        assert len(rows) == 3
+        assert all(fact.valid_from == later for fact in rows)
+        assert all(fact.valid_to is None or fact.valid_to >= fact.valid_from for fact in rows)
+        assert [fact.id for fact in await store.current_facts(user_id="u", at=later)] == ["third"]
+    finally:
+        store._conn.close()
+
+
+async def test_past_schedule_does_not_block_existing_backdated_import_semantics():
+    store = SqliteTemporalStore()
+    try:
+        await store.upsert_fact(
+            TemporalFact(
+                id="scheduled",
+                user_id="u",
+                subject="user",
+                predicate="drink",
+                object="tea",
+                valid_from=datetime(2027, 1, 1, tzinfo=UTC),
+            ),
+            now=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        await store.upsert_fact(
+            TemporalFact(
+                id="late",
+                user_id="u",
+                subject="user",
+                predicate="drink",
+                object="water",
+                valid_from=datetime(2026, 6, 1, tzinfo=UTC),
+            ),
+            now=datetime(2028, 1, 1, tzinfo=UTC),
+        )
+        rows = await store.history(user_id="u", subject="user", predicate="drink")
+        scheduled = next(fact for fact in rows if fact.id == "scheduled")
+        assert scheduled.valid_to == datetime(2028, 1, 1, tzinfo=UTC)
+        assert [fact.id for fact in await store.current_facts(user_id="u")] == ["late"]
+    finally:
+        store._conn.close()
+
+
 @pytest.mark.parametrize("legacy_naive", [False, True])
 @pytest.mark.parametrize("immediate", [False, True])
 async def test_scheduled_write_keeps_present_fact_and_rejects_reverse_order(

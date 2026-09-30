@@ -165,7 +165,7 @@ class SqliteTemporalStore:
         # left with two currently-valid facts.
         with write_transaction(self._conn):
             cur = self._conn.execute(
-                "SELECT id, valid_from FROM facts WHERE user_id=? AND project=? "
+                "SELECT id, valid_from, last_confirmed FROM facts WHERE user_id=? AND project=? "
                 "AND subject=? AND predicate=? "
                 "AND valid_to IS NULL",
                 (fact.user_id, fact.project, fact.subject, fact.predicate),
@@ -173,16 +173,26 @@ class SqliteTemporalStore:
             existing_rows = cur.fetchall()
             existing = [r["id"] for r in existing_rows]
             fact = fact.model_copy(deep=True)
+            implicit_start = fact.valid_from is None
             if fact.valid_from is None:
                 fact.valid_from = now
             if any(
                 (start := _dt(row["valid_from"])) is not None
                 and _instant(start) > _instant(now)
+                and _instant(start) > _instant(_dt(row["last_confirmed"]) or now)
                 and _instant(start) > _instant(fact.valid_from)
                 for row in existing_rows
             ):
                 raise ValueError("Fact cannot precede the existing scheduled timeline head")
-            fact.last_confirmed = now
+            if implicit_start:
+                # Other writers can capture their clocks before acquiring the lock.
+                # Serialize ordinary assertions monotonically, rather than mistaking
+                # a slightly later committed start for an intentional future schedule.
+                for row in existing_rows:
+                    start = _dt(row["valid_from"])
+                    if start is not None and _instant(start) > _instant(fact.valid_from):
+                        fact.valid_from = start
+            fact.last_confirmed = fact.valid_from if implicit_start else now
             # A scheduled assertion must not close today's predecessor before its
             # effective start. Historical writes retain their existing closure semantics.
             supersedes_at = fact.valid_from if _instant(fact.valid_from) > _instant(now) else now
