@@ -6,7 +6,7 @@ confidently stale."""
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from itertools import pairwise
 from typing import Any
 
@@ -71,6 +71,11 @@ def _iso(dt: datetime | None) -> str | None:
 
 def _dt(s: str | None) -> datetime | None:
     return datetime.fromisoformat(s) if s else None
+
+
+def _instant(value: datetime) -> datetime:
+    """Compare offsets by instant, interpreting legacy naive timestamps as UTC."""
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 class SqliteTemporalStore:
@@ -205,8 +210,16 @@ class SqliteTemporalStore:
         user_id: str,
         subject: str | None = None,
         project: str | None = PERSONAL_PROJECT,
+        at: datetime | None = None,
     ) -> list[TemporalFact]:
-        sql = "SELECT * FROM facts WHERE user_id=? AND valid_to IS NULL"
+        """Return effective facts at *at*, or structural unclosed heads when omitted.
+
+        Validity is half-open: ``[valid_from, valid_to)``. Present-time retrieval
+        supplies its injected clock; version checks retain the default head semantics.
+        """
+        sql = "SELECT * FROM facts WHERE user_id=?"
+        if at is None:
+            sql += " AND valid_to IS NULL"
         params: list[object] = [user_id]
         if project is not None:
             sql += " AND project=?"
@@ -215,7 +228,16 @@ class SqliteTemporalStore:
             sql += " AND subject=?"
             params.append(subject)
         rows = self._conn.execute(sql, params).fetchall()
-        return [self._row_to_fact(r) for r in rows]
+        facts = [self._row_to_fact(r) for r in rows]
+        if at is None:
+            return facts
+        instant = _instant(at)
+        return [
+            fact
+            for fact in facts
+            if (fact.valid_from is None or _instant(fact.valid_from) <= instant)
+            and (fact.valid_to is None or instant < _instant(fact.valid_to))
+        ]
 
     async def history(self, *, user_id: str, subject: str, predicate: str) -> list[TemporalFact]:
         rows = self._conn.execute(
