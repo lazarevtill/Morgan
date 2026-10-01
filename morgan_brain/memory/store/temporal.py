@@ -6,7 +6,7 @@ confidently stale."""
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from itertools import pairwise
 from typing import Any
 
@@ -71,6 +71,11 @@ def _iso(dt: datetime | None) -> str | None:
 
 def _dt(s: str | None) -> datetime | None:
     return datetime.fromisoformat(s) if s else None
+
+
+def _instant(value: datetime) -> datetime:
+    """Compare offsets by instant, interpreting legacy naive timestamps as UTC."""
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 class SqliteTemporalStore:
@@ -160,21 +165,43 @@ class SqliteTemporalStore:
         # left with two currently-valid facts.
         with write_transaction(self._conn):
             cur = self._conn.execute(
-                "SELECT id FROM facts WHERE user_id=? AND project=? AND subject=? AND predicate=? "
+                "SELECT id, valid_from, last_confirmed FROM facts WHERE user_id=? AND project=? "
+                "AND subject=? AND predicate=? "
                 "AND valid_to IS NULL",
                 (fact.user_id, fact.project, fact.subject, fact.predicate),
             )
-            existing = [r["id"] for r in cur.fetchall()]
+            existing_rows = cur.fetchall()
+            existing = [r["id"] for r in existing_rows]
             fact = fact.model_copy(deep=True)
+            implicit_start = fact.valid_from is None
             if fact.valid_from is None:
                 fact.valid_from = now
-            fact.last_confirmed = now
+            if any(
+                (start := _dt(row["valid_from"])) is not None
+                and _instant(start) > _instant(now)
+                and _instant(start) > _instant(_dt(row["last_confirmed"]) or now)
+                and _instant(start) > _instant(fact.valid_from)
+                for row in existing_rows
+            ):
+                raise ValueError("Fact cannot precede the existing scheduled timeline head")
+            if implicit_start:
+                # Other writers can capture their clocks before acquiring the lock.
+                # Serialize ordinary assertions monotonically, rather than mistaking
+                # a slightly later committed start for an intentional future schedule.
+                for row in existing_rows:
+                    start = _dt(row["valid_from"])
+                    if start is not None and _instant(start) > _instant(fact.valid_from):
+                        fact.valid_from = start
+            fact.last_confirmed = fact.valid_from if implicit_start else now
+            # A scheduled assertion must not close today's predecessor before its
+            # effective start. Historical writes retain their existing closure semantics.
+            supersedes_at = fact.valid_from if _instant(fact.valid_from) > _instant(now) else now
             # Closed before the new fact is inserted: a key may hold one current fact at a time,
             # and the unique index checks that at each statement, not at commit.
             for old_id in existing:
                 self._conn.execute(
                     "UPDATE facts SET valid_to=?, superseded_by=? WHERE id=?",
-                    (_iso(now), fact.id, old_id),
+                    (_iso(supersedes_at), fact.id, old_id),
                 )
             self._conn.execute(
                 "INSERT INTO facts (id, user_id, project, subject, predicate, object, source, "
@@ -205,8 +232,16 @@ class SqliteTemporalStore:
         user_id: str,
         subject: str | None = None,
         project: str | None = PERSONAL_PROJECT,
+        at: datetime | None = None,
     ) -> list[TemporalFact]:
-        sql = "SELECT * FROM facts WHERE user_id=? AND valid_to IS NULL"
+        """Return effective facts at *at*, or structural unclosed heads when omitted.
+
+        Validity is half-open: ``[valid_from, valid_to)``. Present-time retrieval
+        supplies its injected clock; version checks retain the default head semantics.
+        """
+        sql = "SELECT * FROM facts WHERE user_id=?"
+        if at is None:
+            sql += " AND valid_to IS NULL"
         params: list[object] = [user_id]
         if project is not None:
             sql += " AND project=?"
@@ -215,7 +250,16 @@ class SqliteTemporalStore:
             sql += " AND subject=?"
             params.append(subject)
         rows = self._conn.execute(sql, params).fetchall()
-        return [self._row_to_fact(r) for r in rows]
+        facts = [self._row_to_fact(r) for r in rows]
+        if at is None:
+            return facts
+        instant = _instant(at)
+        return [
+            fact
+            for fact in facts
+            if (fact.valid_from is None or _instant(fact.valid_from) <= instant)
+            and (fact.valid_to is None or instant < _instant(fact.valid_to))
+        ]
 
     async def history(self, *, user_id: str, subject: str, predicate: str) -> list[TemporalFact]:
         rows = self._conn.execute(

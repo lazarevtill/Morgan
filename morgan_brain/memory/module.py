@@ -322,7 +322,9 @@ class MemoryModule:
         # is crossed silently as consolidation runs, and the probe harness stores no facts
         # and could never see it. Verbatim memories also measure better than extracted
         # artifacts on the published comparisons, so crowding them out loses twice.
-        facts = await self._temporal.current_facts(user_id=query.user_id, project=project)
+        facts = await self._temporal.current_facts(
+            user_id=query.user_id, project=project, at=self._clock()
+        )
         fact_memories = [
             Memory(
                 user_id=query.user_id,
