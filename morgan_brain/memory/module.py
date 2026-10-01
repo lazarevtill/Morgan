@@ -701,7 +701,8 @@ class MemoryModule:
         return [
             fact
             for fact in facts
-            if resolver.support_state(fact) not in ("inactive_support", "conflicted_support")
+            if fact.predicate not in (CHECKPOINT_PREDICATE, WORKING_CONTEXT_PREDICATE)
+            and resolver.support_state(fact) not in ("inactive_support", "conflicted_support")
         ]
 
     async def upsert_fact(self, fact: TemporalFact, *, now: datetime | None = None) -> str:
