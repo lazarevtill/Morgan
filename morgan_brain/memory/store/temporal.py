@@ -249,6 +249,19 @@ class SqliteTemporalStore:
         if subject is not None:
             sql += " AND subject=?"
             params.append(subject)
+        if at is not None:
+            # SQLite narrows candidates before Python objects are built. Its date
+            # parser has lower precision and accepts fewer ISO forms than Python,
+            # so retain a one-second boundary margin and every unparsed bound.
+            # The exact Python interval check below remains authoritative.
+            sql += (
+                " AND (julianday(valid_from) IS NULL OR "
+                "julianday(valid_from) <= julianday(?) + 1.0 / 86400.0)"
+                " AND (julianday(valid_to) IS NULL OR "
+                "julianday(valid_to) >= julianday(?) - 1.0 / 86400.0)"
+            )
+            clock = _instant(at).isoformat()
+            params.extend((clock, clock))
         rows = self._conn.execute(sql, params).fetchall()
         facts = [self._row_to_fact(r) for r in rows]
         if at is None:
