@@ -191,7 +191,11 @@ def test_settings_edited_between_the_listing_and_the_yes_keep_the_edit(tmp_path)
 
     written = json.loads(settings.read_text(encoding="utf-8"))
     assert written["model"] == "sonnet"
-    assert written["permissions"]["allow"] == ["mcp__morgan__recall", "mcp__morgan__evidence", "mcp__morgan__facts"]
+    assert written["permissions"]["allow"] == [
+        "mcp__morgan__recall",
+        "mcp__morgan__evidence",
+        "mcp__morgan__facts",
+    ]
 
 
 def test_a_foreign_skill_that_appears_after_the_listing_is_left_alone(tmp_path):

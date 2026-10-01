@@ -108,6 +108,11 @@ async def test_evidence_is_bounded_and_explicitly_scoped(monkeypatch):
             user_id="owner", project="personal", evidence_ids=[f"missing-{i}" for i in range(32)]
         )
         assert len(boundary.missing_ids) == 32
+        longest_id = "x" * 256
+        longest = await gate.evidence(
+            user_id="owner", project="personal", evidence_ids=[longest_id]
+        )
+        assert longest.missing_ids == [longest_id]
 
         async def fail_read(**kwargs):
             raise AssertionError("invalid request reached storage")
@@ -188,6 +193,59 @@ async def test_evidence_and_recall_preserve_literal_subject_and_object_identifie
         persisted = (await gate.current_facts(user_id="owner"))[0]
         assert persisted.subject == "alex_work@example.com"
         assert persisted.object == "account_foo_v2"
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize(
+    "root_fields",
+    [
+        {"source": "unknown"},
+        {"source": "agent_inferred"},
+        {"kind": "semantic"},
+        {"status": "quarantined"},
+        {"project": "work"},
+    ],
+)
+async def test_support_roots_require_stored_source_events_in_exact_context(root_fields):
+    conn = open_db(":memory:")
+    gate = build(conn)
+    try:
+        root = Memory.model_validate(
+            {
+                "id": "root",
+                "user_id": "owner",
+                "content": "Synthetic source",
+                "source": "user_stated",
+                **root_fields,
+            }
+        )
+        await gate.store(root)
+        before = conn.serialize()
+        with pytest.raises(ValueError, match="scoped source events"):
+            await gate.upsert_fact(
+                fact(source=MemorySource.AGENT_INFERRED, support_event_ids=["root"])
+            )
+        assert conn.serialize() == before
+    finally:
+        conn.close()
+
+
+async def test_tool_observed_source_root_can_support_inference():
+    conn = open_db(":memory:")
+    gate = build(conn)
+    try:
+        await gate.store(
+            Memory(
+                id="tool",
+                user_id="owner",
+                content="Synthetic observation",
+                source=MemorySource.TOOL_OBSERVED,
+            )
+        )
+        await gate.upsert_fact(fact(source=MemorySource.AGENT_INFERRED, support_event_ids=["tool"]))
+        result = await gate.evidence(user_id="owner", project="personal", evidence_ids=["fact"])
+        assert result.records[0].support_event_ids == ["tool"]
     finally:
         conn.close()
 
