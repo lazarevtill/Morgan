@@ -44,8 +44,8 @@ def freeze(source: Path, output: Path):
 
 def populate(module, path: Path, count: int) -> datetime:
     require(not path.exists(), "Refusing to open an existing database")
-    store = module.SqliteTemporalStore(str(path))
-    conn = store._conn
+    conn = sqlite3.connect(path)
+    module.SqliteTemporalStore(conn=conn)
     intervals = count // 10
     rows = []
     for owner, project in (("owner", "personal"), ("other", "personal"), ("owner", "work")):
@@ -79,65 +79,80 @@ def populate(module, path: Path, count: int) -> datetime:
     return datetime(2020, 1, 1, tzinfo=UTC) + timedelta(days=intervals - 1, hours=12)
 
 
+async def read_at(store, at: datetime):
+    return await store.current_facts(user_id="owner", project="personal", at=at)
+
+
+async def sample_timings(stores, arms, at: datetime, expected) -> dict:
+    for arm in arms:
+        for _ in range(5):
+            require(
+                {fact.id for fact in await read_at(stores[arm], at)} == expected,
+                "Incorrect warmup result",
+            )
+    timings = {arm: [] for arm in arms}
+    for iteration in range(30):
+        for arm in arms if iteration % 2 == 0 else list(reversed(arms)):
+            start = time.perf_counter_ns()
+            result = await read_at(stores[arm], at)
+            elapsed = time.perf_counter_ns() - start
+            require({fact.id for fact in result} == expected, "Incorrect result")
+            timings[arm].append(elapsed / 1_000_000)
+    return timings
+
+
+async def allocation_peaks(stores, arms, at: datetime, expected) -> dict:
+    peaks = {}
+    for arm in arms:
+        tracemalloc.start()
+        try:
+            result = await read_at(stores[arm], at)
+            _, peaks[arm] = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        require({fact.id for fact in result} == expected, "Incorrect result")
+    return peaks
+
+
+async def measure_repeat(modules, path: Path, at: datetime, expected, repeat: int) -> dict:
+    connections = {
+        arm: sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True) for arm in modules
+    }
+    try:
+        stores = {
+            arm: module.SqliteTemporalStore(conn=connections[arm])
+            for arm, module in modules.items()
+        }
+        arms = list(modules)
+        if repeat % 2:
+            arms.reverse()
+        timings = await sample_timings(stores, arms, at, expected)
+        peaks = await allocation_peaks(stores, arms, at, expected)
+        return {
+            "repeat": repeat,
+            "initial_order": arms,
+            "arms": {
+                arm: {
+                    "median_ms": statistics.median(values),
+                    "p95_ms": sorted(values)[math.ceil(0.95 * len(values)) - 1],
+                    "timings_ms": values,
+                    "traced_python_peak_bytes": peaks[arm],
+                    "selected_rows": len(expected),
+                }
+                for arm, values in timings.items()
+            },
+        }
+    finally:
+        for conn in connections.values():
+            conn.close()
+
+
 async def measure(modules, path: Path, count: int, at: datetime) -> dict:
     before = digest(path)
     expected = {f"owner/personal/{key}/{count // 10 - 1}" for key in range(10)}
     repeats = []
     for repeat in range(3):
-        connections = {
-            arm: sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True) for arm in modules
-        }
-        try:
-            stores = {
-                arm: module.SqliteTemporalStore(conn=connections[arm])
-                for arm, module in modules.items()
-            }
-
-            async def read(arm, stores=stores):
-                return await stores[arm].current_facts(user_id="owner", project="personal", at=at)
-
-            arms = list(modules)
-            if repeat % 2:
-                arms.reverse()
-            for arm in arms:
-                for _ in range(5):
-                    require(
-                        {fact.id for fact in await read(arm)} == expected, "Incorrect warmup result"
-                    )
-            timings = {arm: [] for arm in arms}
-            for iteration in range(30):
-                for arm in arms if iteration % 2 == 0 else list(reversed(arms)):
-                    start = time.perf_counter_ns()
-                    result = await read(arm)
-                    elapsed = time.perf_counter_ns() - start
-                    require({fact.id for fact in result} == expected, "Incorrect result")
-                    timings[arm].append(elapsed / 1_000_000)
-            peaks = {}
-            for arm in arms:
-                tracemalloc.start()
-                result = await read(arm)
-                _, peaks[arm] = tracemalloc.get_traced_memory()
-                tracemalloc.stop()
-                require({fact.id for fact in result} == expected, "Incorrect result")
-            repeats.append(
-                {
-                    "repeat": repeat,
-                    "initial_order": arms,
-                    "arms": {
-                        arm: {
-                            "median_ms": statistics.median(values),
-                            "p95_ms": sorted(values)[math.ceil(0.95 * len(values)) - 1],
-                            "timings_ms": values,
-                            "traced_python_peak_bytes": peaks[arm],
-                            "selected_rows": len(expected),
-                        }
-                        for arm, values in timings.items()
-                    },
-                }
-            )
-        finally:
-            for conn in connections.values():
-                conn.close()
+        repeats.append(await measure_repeat(modules, path, at, expected, repeat))
     after = digest(path)
     require(before == after, "Synthetic database changed during reads")
     return {
