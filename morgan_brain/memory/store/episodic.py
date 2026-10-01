@@ -12,8 +12,8 @@ import sqlite3
 from datetime import datetime
 from typing import Any
 
-from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import Erasure, project_tables
+from morgan_brain.memory.store.transactions import write_transaction
 from morgan_brain.models import PERSONAL_PROJECT, Entity, Memory, MemoryKind, MemorySource
 
 #: The columns migration step 4 added. ``Memory`` validates each from its stored text.

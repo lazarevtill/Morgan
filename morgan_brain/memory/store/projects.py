@@ -23,8 +23,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import Erasure, project_tables
+from morgan_brain.memory.store.transactions import write_transaction
 
 #: A single statement, run with plain ``execute`` rather than ``executescript`` -- the latter
 #: issues an implicit ``COMMIT`` before it runs anything, which would end migration step 3's

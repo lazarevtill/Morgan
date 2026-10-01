@@ -2,6 +2,8 @@
 
 import json
 import sqlite3
+import subprocess
+import sys
 
 import pytest
 
@@ -165,3 +167,43 @@ async def test_future_version_on_synthetic_current_copy_keeps_lineage_and_schema
         )
     finally:
         conn.close()
+
+
+@pytest.mark.parametrize(
+    "first",
+    [
+        "morgan_brain.memory.store.db",
+        "morgan_brain.memory.migrations",
+        "morgan_brain.composition",
+        "morgan_brain.memory.store.projects",
+        "morgan_brain.memory.store.spaces",
+        "morgan_brain.memory.store.vectors",
+        "morgan_brain.memory.store.entities",
+        "morgan_brain.memory.store.episodic",
+    ],
+)
+def test_schema_guard_import_order_and_transaction_reexports_in_fresh_process(first):
+    program = (
+        f"import importlib; importlib.import_module({first!r})"
+        + """
+from morgan_brain.memory.store import db, transactions
+from morgan_brain.memory import migrations
+from morgan_brain import composition
+assert db.read_transaction is transactions.read_transaction
+assert db.write_transaction is transactions.write_transaction
+conn=db.open_db(":memory:")
+conn.execute("PRAGMA user_version=999")
+try:
+    migrations.require_supported_version(conn)
+except ValueError as error:
+    assert "newer" in str(error)
+else:
+    raise AssertionError("Future schema must be refused")
+finally:
+    conn.close()
+"""
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", program], capture_output=True, text=True, timeout=30
+    )
+    assert result.returncode == 0, result.stderr

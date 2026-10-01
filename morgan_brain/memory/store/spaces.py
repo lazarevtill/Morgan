@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from morgan_brain.memory import fingerprint
-from morgan_brain.memory.store.db import write_transaction
+from morgan_brain.memory.store.transactions import write_transaction
 
 #: Individual statements, run with plain ``execute`` rather than ``executescript`` -- the
 #: latter issues an implicit ``COMMIT`` before it runs anything, which would end migration

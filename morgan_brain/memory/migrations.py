@@ -32,10 +32,10 @@ from typing import NamedTuple
 from morgan_brain.memory.errors import DatabaseSchemaTooNew
 from morgan_brain.memory.knowledge.extract import extract_entity_names
 from morgan_brain.memory.store import erasure, projects, spaces, vectors
-from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
 from morgan_brain.memory.store.tables import PROJECT_TABLES, project_tables
+from morgan_brain.memory.store.transactions import write_transaction
 from morgan_brain.models import PERSONAL_PROJECT, Entity
 
 
