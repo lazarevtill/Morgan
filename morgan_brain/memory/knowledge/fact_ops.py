@@ -8,9 +8,10 @@ do and never what a fact should end up looking like.
 
 from __future__ import annotations
 
+import builtins
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class FactOpKind(str, Enum):
@@ -29,6 +30,18 @@ class FactOp(BaseModel):
     object: str = ""
     confidence: float = Field(default=0.8, ge=0.0, le=1.0)
     reason: str = ""
+    support_event_ids: list[str] = Field(default_factory=list, max_length=32)
+
+    @field_validator("support_event_ids", mode="before")
+    @classmethod
+    def declared_supports(cls, value: builtins.object) -> list[str]:
+        if not isinstance(value, list) or len(value) > 32:
+            raise ValueError("support_event_ids must be a list of at most 32 IDs")
+        if any(not isinstance(item, str) or not item.strip() or len(item) > 256 for item in value):
+            raise ValueError("support_event_ids contains an invalid ID")
+        if len(set(value)) != len(value):
+            raise ValueError("support_event_ids must be distinct")
+        return sorted(value)
 
 
 class FactOpBatch(BaseModel):

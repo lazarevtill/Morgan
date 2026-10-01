@@ -37,6 +37,7 @@ T_FAR = datetime(2027, 6, 1, tzinfo=UTC)  # ~1 year later for decay tests
 
 def _make_batch(**ops_kwargs: object) -> str:
     """Serialise a FactOpBatch to JSON for use as FakeChatClient reply."""
+    ops_kwargs.setdefault("support_event_ids", ["fixture-source"])
     batch = FactOpBatch(ops=[FactOp(**ops_kwargs)])  # type: ignore[arg-type]
     return batch.model_dump_json()
 
@@ -56,6 +57,35 @@ def _build_stack(
         clock=clock,  # type: ignore[arg-type]
     )
     return consolidator, module._temporal, gate
+
+
+async def _apply_supported(consolidator, gate, batch):
+    """Author actual scoped source assertions and capture before applying a test proposal."""
+    identities = []
+    for index, op in enumerate(batch.ops):
+        if op.op is FactOpKind.NOOP:
+            continue
+        identity = f"operation-source-{index}"
+        await gate.store(
+            Memory(
+                id=identity,
+                user_id="u1",
+                project="personal",
+                content=f"Synthetic statement: {op.subject} {op.predicate} {op.object}",
+                source=MemorySource.USER_STATED,
+                author_id="person:u1",
+                created_at=T0,
+            )
+        )
+        op.support_event_ids = [identity]
+        identities.append(identity)
+    inputs = await gate.capture_consolidation_basis(
+        user_id="u1",
+        project="personal",
+        event_ids=identities,
+        generation=gate.capture_erasure_generation(),
+    )
+    return await consolidator.apply("u1", batch, project="personal", basis=inputs.basis)
 
 
 # ---------------------------------------------------------------------------
@@ -112,12 +142,12 @@ async def test_propose_calls_llm_and_returns_batch() -> None:
 
 @pytest.mark.asyncio
 async def test_apply_add_creates_current_fact() -> None:
-    consolidator, temporal, _gate = _build_stack([], clock=lambda: T0)
+    consolidator, temporal, gate = _build_stack([], clock=lambda: T0)
 
     batch = FactOpBatch(
         ops=[FactOp(op=FactOpKind.ADD, subject="user", predicate="lives_in", object="Berlin")]
     )
-    applied = await consolidator.apply("u1", batch, project="personal")
+    applied = await _apply_supported(consolidator, gate, batch)
 
     assert len(applied) == 1
     current = await temporal.current_facts(user_id="u1")
@@ -149,7 +179,7 @@ async def test_apply_update_closes_old_fact_and_opens_new() -> None:
     batch = FactOpBatch(
         ops=[FactOp(op=FactOpKind.UPDATE, subject="user", predicate="lives_in", object="Munich")]
     )
-    applied = await consolidator.apply("u1", batch, project="personal")
+    applied = await _apply_supported(consolidator, gate, batch)
 
     assert len(applied) == 1
     current = await temporal.current_facts(user_id="u1")
@@ -187,7 +217,7 @@ async def test_apply_delete_closes_interval_not_hard_delete() -> None:
     batch = FactOpBatch(
         ops=[FactOp(op=FactOpKind.DELETE, subject="user", predicate="prefers", object="dark_mode")]
     )
-    applied = await consolidator.apply("u1", batch, project="personal")
+    applied = await _apply_supported(consolidator, gate, batch)
 
     assert len(applied) == 1
     # No longer current
@@ -240,7 +270,7 @@ async def test_apply_add_dedup_skips_existing_fact() -> None:
     batch = FactOpBatch(
         ops=[FactOp(op=FactOpKind.ADD, subject="user", predicate="lives_in", object="Berlin")]
     )
-    applied = await consolidator.apply("u1", batch, project="personal")
+    applied = await _apply_supported(consolidator, gate, batch)
 
     # Should be treated as NOOP — not applied
     assert applied == []
@@ -269,6 +299,7 @@ async def test_consolidate_orchestrates_propose_and_apply() -> None:
     module = gate._store  # type: ignore[attr-defined]
     await module.store(
         Memory(
+            id="fixture-source",
             user_id="u1",
             kind=MemoryKind.EPISODIC,
             content="I work at Acme",
@@ -396,7 +427,7 @@ async def test_protected_source_op_does_not_abort_other_batch_updates(
     accepted = FactOp(op=FactOpKind.ADD, subject="user", predicate="color", object="blue")
     protected = FactOp(op=protected_op, subject="user", predicate="drink", object="coffee")
     operations = [protected, accepted] if protected_first else [accepted, protected]
-    result = await consolidator.apply("u1", FactOpBatch(ops=operations), project="personal")
+    result = await _apply_supported(consolidator, gate, FactOpBatch(ops=operations))
     assert result == [accepted]
     current = await temporal.current_facts(user_id="u1")
     assert {(f.predicate, f.object) for f in current} == {("drink", "tea"), ("color", "blue")}
@@ -407,12 +438,12 @@ async def test_unexpected_value_error_still_rolls_back_consolidation_batch(monke
     original = gate.upsert_fact
     calls = 0
 
-    async def failing(fact):
+    async def failing(fact, *, now=None):
         nonlocal calls
         calls += 1
         if calls == 2:
             raise ValueError("Unexpected integrity failure")
-        return await original(fact)
+        return await original(fact, now=now)
 
     monkeypatch.setattr(gate, "upsert_fact", failing)
     batch = FactOpBatch(
@@ -422,7 +453,7 @@ async def test_unexpected_value_error_still_rolls_back_consolidation_batch(monke
         ]
     )
     with pytest.raises(ValueError, match="Unexpected integrity failure"):
-        await consolidator.apply("u1", batch, project="personal")
+        await _apply_supported(consolidator, gate, batch)
     assert await temporal.current_facts(user_id="u1") == []
 
 
@@ -440,10 +471,10 @@ async def test_new_consolidated_fact_reports_model_author_and_keeps_legacy_autho
             source=MemorySource.AGENT_INFERRED,
         )
     )
-    result = await consolidator.apply(
-        "u1",
+    result = await _apply_supported(
+        consolidator,
+        gate,
         FactOpBatch(ops=[FactOp(op=operation, subject="new", predicate="drink", object="coffee")]),
-        project="personal",
     )
     assert len(result) == 1
     current = {f.subject: f for f in await temporal.current_facts(user_id="u1")}

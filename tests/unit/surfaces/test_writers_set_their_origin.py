@@ -33,7 +33,7 @@ from morgan_brain.memory.knowledge.consolidation import (
     MemoryConsolidator,
 )
 from morgan_brain.memory.store.db import open_db
-from morgan_brain.models import MemoryQuery, MemorySource, OriginKind, Scope, TemporalFact
+from morgan_brain.models import Memory, MemoryQuery, MemorySource, OriginKind, Scope, TemporalFact
 from morgan_brain.surfaces.cli.commands import cmd_ask, cmd_import, cmd_recall, cmd_remember
 from morgan_brain.surfaces.cli.doctor import _missing_provenance
 from morgan_brain.surfaces.mcp_server import build_server
@@ -261,10 +261,33 @@ async def test_consolidated_facts_report_the_model_authorship() -> None:
         gate=gate, client=FakeChatClient(), model="test-model", clock=utcnow
     )
     batch = FactOpBatch(
-        ops=[FactOp(op=FactOpKind.ADD, subject="user", predicate="lives_in", object="Berlin")]
+        ops=[
+            FactOp(
+                op=FactOpKind.ADD,
+                subject="user",
+                predicate="lives_in",
+                object="Berlin",
+                support_event_ids=["source"],
+            )
+        ]
     )
-
-    await consolidator.apply("owner", batch, project="p")
+    await gate.store(
+        Memory(
+            id="source",
+            user_id="owner",
+            project="p",
+            content="I live in Berlin",
+            source=MemorySource.USER_STATED,
+            author_id="person:owner",
+        )
+    )
+    inputs = await gate.capture_consolidation_basis(
+        user_id="owner",
+        project="p",
+        event_ids=["source"],
+        generation=gate.capture_erasure_generation(),
+    )
+    await consolidator.apply("owner", batch, project="p", basis=inputs.basis)
 
     current = await gate.current_facts(user_id="owner", project="p")
     assert len(current) == 1
