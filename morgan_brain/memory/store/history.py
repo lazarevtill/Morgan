@@ -86,6 +86,10 @@ class SessionHistoryStore:
         self._conn.commit()
         self._migrate_project_column()
 
+    def shares_connection(self, conn: sqlite3.Connection) -> bool:
+        """Internal composition check for a single atomic history/memory write."""
+        return self._conn is conn
+
     def _migrate_project_column(self) -> None:
         """Idempotent upgrade for a database written before project scoping existed --
         required for forget() to filter session_history by (user_id, project)."""
@@ -127,12 +131,17 @@ class SessionHistoryStore:
                 ),
             )
 
-    def recent(self, session_id: str, *, project: str, limit: int = 10) -> list[Message]:
+    def recent(
+        self, session_id: str, *, project: str, limit: int = 10, user_id: str | None = None
+    ) -> list[Message]:
         """Return the *limit* most-recent messages for *session_id* **in *project***.
 
         Fetches the last *limit* rows by insertion order, then re-sorts ascending so
         callers receive them oldest-first (correct context order for LLM prompts).
         Returns an empty list when no history exists (e.g. first turn).
+        Native chat supplies ``user_id``: owner filtering precedes the limit because the
+        legacy colon-separated session keys can collide across distinct owner/session pairs.
+        Omitting it retains the existing low-level caller behavior and persisted key format.
 
         ``project`` is required, and filtering on it is not optional decoration. Rows carried
         a project already, but this read did not use it, and ``session_key`` falls back to a
@@ -147,12 +156,12 @@ class SessionHistoryStore:
             SELECT user_id, role, content FROM (
                 SELECT user_id, role, content, id
                 FROM session_history
-                WHERE session_id = ? AND project = ?
+                WHERE session_id = ? AND project = ? AND (? IS NULL OR user_id = ?)
                 ORDER BY id DESC
                 LIMIT ?
             ) ORDER BY id ASC
             """,
-            (session_id, project, limit),
+            (session_id, project, user_id, user_id, limit),
         ).fetchall()
         return [
             Message(user_id=row["user_id"], role=Role(row["role"]), content=row["content"])
