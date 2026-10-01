@@ -33,6 +33,15 @@ def _entities_json(entities: list[Entity]) -> str:
     return json.dumps([{"name": e.name, "type": e.type} for e in entities])
 
 
+class EventIdentityConflict(ValueError):
+    """An existing event ID was reused with changed assertion identity or content."""
+
+    def __init__(self, fields: list[str]) -> None:
+        self.fields = tuple(fields)
+        # Never expose the existing owner's content in a collision diagnostic.
+        super().__init__("event identity conflict: " + ", ".join(fields))
+
+
 class EpisodicStore:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
@@ -56,7 +65,8 @@ class EpisodicStore:
                 author_id        TEXT NOT NULL DEFAULT '',
                 scope            TEXT NOT NULL DEFAULT 'private',
                 instruction_like INTEGER NOT NULL DEFAULT 0,
-                status           TEXT NOT NULL DEFAULT 'stored'
+                status           TEXT NOT NULL DEFAULT 'stored',
+                recorded_at      TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_memories_user ON memories (user_id);
             """
@@ -70,15 +80,49 @@ class EpisodicStore:
             )
             conn.commit()
 
-    def put(self, memory: Memory) -> None:
+    def check_replay(self, memory: Memory) -> Memory | None:
+        """Return an identical stored assertion, or refuse changed identity.
+
+        Omitted event time/entities reuse stored values. Embeddings and recorded
+        time are derived metadata and never authorize replacing an assertion.
+        Recheck inside the write transaction after awaited preparation.
+        """
+        stored = self.get(memory.id)
+        if stored is None:
+            return None
+        fields = [
+            name
+            for name in (
+                "user_id",
+                "project",
+                "kind",
+                "source",
+                "content",
+                "importance",
+                *_PROVENANCE,
+            )
+            if getattr(memory, name) != getattr(stored, name)
+        ]
+        if memory.created_at is not None and memory.created_at != stored.created_at:
+            fields.append("created_at")
+        if memory.entities and memory.entities != stored.entities:
+            fields.append("entities")
+        if fields:
+            raise EventIdentityConflict(fields)
+        return stored
+
+    def put(self, memory: Memory) -> bool:
+        """Insert an immutable assertion; return false for an identical replay."""
         with write_transaction(self._conn):
+            if self.check_replay(memory) is not None:
+                return False
             self._conn.execute(
                 """
-                INSERT OR REPLACE INTO memories
+                INSERT INTO memories
                     (id, user_id, project, kind, source, content, importance, entities, created_at,
                      origin_kind, client, session_id, cwd, author_id, scope, instruction_like,
-                     status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     status, recorded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     memory.id,
@@ -98,8 +142,10 @@ class EpisodicStore:
                     memory.scope.value,
                     int(memory.instruction_like),
                     memory.status.value,
+                    memory.recorded_at.isoformat() if memory.recorded_at else None,
                 ),
             )
+            return True
 
     def set_entities(self, memory_id: str, entities: list[Entity]) -> None:
         """Rewrite one memory's stored entity list, and nothing else in its row.
@@ -128,6 +174,10 @@ class EpisodicStore:
         # Membership in a Row tests its values, so the column names are taken out first.
         present = set(row.keys())
         provenance: dict[str, Any] = {c: row[c] for c in _PROVENANCE if c in present}
+        if "recorded_at" in present:
+            provenance["recorded_at"] = (
+                datetime.fromisoformat(row["recorded_at"]) if row["recorded_at"] else None
+            )
         return Memory(
             id=row["id"],
             user_id=row["user_id"],

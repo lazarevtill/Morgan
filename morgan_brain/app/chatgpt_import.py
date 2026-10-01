@@ -12,8 +12,8 @@ against ever share a conversation. Reusing the scoping invariant means no future
 to remember a rule; the one that already guards every read and write guards this too.
 
 Membership follows from the conversation id alone, so a re-import selects the same holdout
-without a seed having to survive between runs, and re-importing updates in place: the memory
-id is derived from the message id, and the write path replaces by id.
+without a seed having to survive between runs. Memory IDs derive from source message IDs;
+unchanged assertions resume without embeddings, while changed identities fail closed.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from typing import Any
 
 from morgan_brain.config import DEFAULT_IMPORT_CANARY_EVERY
 from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.store.episodic import EventIdentityConflict
 from morgan_brain.models import Memory, MemoryKind, MemorySource, OriginKind
 from morgan_brain.providers.wire import EmbeddingSpaceMismatch
 
@@ -242,20 +243,57 @@ async def import_chatgpt(
 
         wrote_any = False
         for message in _messages(conversation):
-            source = _SOURCE_BY_ROLE.get((message.get("author") or {}).get("role", ""))
+            role = (message.get("author") or {}).get("role", "")
+            source = _SOURCE_BY_ROLE.get(role)
             text = _turn_text(message)
             if source is None or not text:
                 skipped += 1
                 continue
+            author_id = user_id if role == "user" else f"chatgpt:{role}"
             message_id = str(message.get("id") or f"{conversation_id}-{stored}")
             for part, piece in enumerate(split_for_embedding(text)):
                 memory_id = _memory_id(message_id, part)
                 # Already imported, unchanged: skip it. Every piece costs an embedding call
                 # and a real export is thousands of them, so an import that redoes finished
                 # work is one that never finishes on a machine that gets interrupted. The
-                # content check keeps a corrected turn from being frozen out by its own id.
+                # content check sends changed payloads to the immutable store, which
+                # refuses reuse of an event identity rather than overwriting its evidence.
                 existing = await gate.get(memory_id, user_id=user_id)
                 if existing is not None and existing.content == piece:
+                    # Import runtime location may change on resumption; source assertion
+                    # identity (including author, applicability and event time) may not.
+                    event_time = _created_at(message)
+                    # Old releases reported the owner as assistant author. An exact
+                    # import replay preserves that historical label; it does not
+                    # authorize the same compatibility rule on unrelated events.
+                    legacy_assistant = (
+                        source is MemorySource.AGENT_INFERRED
+                        and existing.source is MemorySource.AGENT_INFERRED
+                        and existing.origin_kind is OriginKind.IMPORT
+                        and existing.client in ("", "cli")
+                        and existing.author_id == user_id
+                    )
+                    changed = [
+                        name
+                        for name, value in (
+                            ("source", source),
+                            ("project", project),
+                            ("kind", MemoryKind.EPISODIC),
+                            ("author_id", user_id if legacy_assistant else author_id),
+                            ("origin_kind", OriginKind.IMPORT),
+                            (
+                                "client",
+                                ""
+                                if existing.client == "" and existing.recorded_at is None
+                                else "cli",
+                            ),
+                        )
+                        if getattr(existing, name) != value
+                    ]
+                    if event_time is not None and existing.created_at != event_time:
+                        changed.append("created_at")
+                    if changed:
+                        raise EventIdentityConflict(changed)
                     skipped += 1
                     wrote_any = True
                     continue
@@ -271,7 +309,7 @@ async def import_chatgpt(
                         origin_kind=OriginKind.IMPORT,
                         client="cli",
                         cwd=str(Path.cwd()),
-                        author_id=user_id,
+                        author_id=author_id,
                     )
                 )
                 stored += 1

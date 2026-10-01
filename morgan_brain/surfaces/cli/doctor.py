@@ -135,18 +135,13 @@ _PROVENANCE_CHECKS: tuple[tuple[str, str], ...] = (
 
 
 def _missing_provenance(conn: sqlite3.Connection, *, user_id: str) -> tuple[int | None, str | None]:
-    """Rows carrying the signature of an older Morgan's process still writing into a migrated
-    database: an empty ``author_id`` on ``memories`` or ``facts`` (step 4 backfilled every
-    existing row) or a NULL ``vec_items.status`` (step 6 backfilled it) -- every writer in this
-    code sets both, so a row missing either after ``migrate`` did not come from this code.
-    That covers a row of unknown origin written after the migration too: an old writer also
-    leaves ``author_id`` empty, and nothing records when the migration ran.
+    """Count stale-writer signatures, preserving diagnostics on older schemas.
 
-    Returns ``(None, reason)`` when a checked table has not been through the step that added
-    its column yet, *or* is absent -- doctor creates no table, so one the database does not
-    have stays missing. Either way a count would be meaningless, not an honest zero: an absent
-    table is named in the reason exactly like a present one missing its column, never silently
-    skipped into the total the way ``0`` rows would be.
+    A current memory writer stamps ``recorded_at`` even when its author is unknown.
+    Legacy memories without that stamp and an empty author remain suspicious.
+    Unknown-source facts may have no author; known-source facts keep their author check.
+    Vectors require a status.
+    Missing tables or provenance columns make the count unavailable.
     """
     missing = [
         f"{table}.{column}" if _table_exists(conn, table) else table
@@ -162,6 +157,10 @@ def _missing_provenance(conn: sqlite3.Connection, *, user_id: str) -> tuple[int 
     total = 0
     for table, column in _PROVENANCE_CHECKS:
         empty = "IS NULL" if table == "vec_items" else "= ''"
+        if table == "memories" and "recorded_at" in _column_names(conn, table):
+            empty += " AND recorded_at IS NULL"
+        if table == "facts" and "source" in _column_names(conn, table):
+            empty += " AND source != 'unknown'"
         # `table` and `column` come only from `_PROVENANCE_CHECKS` above, never from a caller.
         row = conn.execute(
             f"SELECT COUNT(*) FROM {table} WHERE user_id = ? AND {column} {empty}",  # noqa: S608 # nosec B608

@@ -201,6 +201,10 @@ class MemoryModule:
         (``store/projects.py::register``), so a project first written to after migration step 7
         seeded the table has a row as well -- and a store that fails leaves none.
         """
+        original = memory.model_copy(deep=True)
+        if self._episodics.check_replay(original) is not None:
+            return original.id
+        memory = original.model_copy(deep=True)
         if memory.created_at is None:
             memory.created_at = self._clock()
         if not memory.entities:
@@ -218,6 +222,9 @@ class MemoryModule:
         # part-way left a memory stored in some indexes and missing from others. The vector
         # upsert is awaited but never suspends: it is SQL on this connection, nothing else.
         with write_transaction(self._conn):
+            if self._episodics.check_replay(original) is not None:
+                return original.id
+            memory.recorded_at = self._clock()
             projects.register(self._conn, memory.project, now=registered_at)
             self._episodics.put(memory)
             await self._vectors.upsert(
@@ -332,6 +339,8 @@ class MemoryModule:
                 kind=MemoryKind.SEMANTIC,
                 content=f"{f.subject} {f.predicate} {f.object}".replace("_", " "),
                 source=f.source,
+                author_id=f.author_id,
+                scope=f.scope,
             )
             for f in facts
         ]

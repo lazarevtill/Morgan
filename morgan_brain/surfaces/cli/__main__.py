@@ -22,7 +22,7 @@ from pathlib import Path
 from morgan_brain.app.chatgpt_import import ImportStopped
 from morgan_brain.config import Settings, settings_for
 from morgan_brain.logging_setup import configure_logging
-from morgan_brain.models import PERSONAL_PROJECT
+from morgan_brain.models import PERSONAL_PROJECT, MemorySource
 from morgan_brain.surfaces.cli.commands import (
     cmd_ask,
     cmd_consolidate,
@@ -110,6 +110,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_remember = sub.add_parser("remember", help="Store a memory.")
     p_remember.add_argument("text", help="What to remember.")
+    p_remember.add_argument(
+        "--source",
+        choices=[source.value for source in MemorySource],
+        default="unknown",
+        help="Reported evidence source; user_stated requires an actual user statement.",
+    )
+    p_remember.add_argument(
+        "--author-id", default="", help="Reported author; does not change ownership or access."
+    )
     _add_common(p_remember)
 
     p_recall = sub.add_parser("recall", help="Search memory by meaning and by keyword.")
@@ -126,6 +135,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_ask = sub.add_parser("ask", help="Ask the assistant (a chat turn; needs a reachable model).")
     p_ask.add_argument("text", help="Your message.")
+    p_ask.add_argument(
+        "--source",
+        choices=[source.value for source in MemorySource],
+        default="unknown",
+        help="Reported input source; user_stated requires an actual user statement.",
+    )
+    p_ask.add_argument("--author-id", default="", help="Reported input author, not ownership.")
     _add_common(p_ask)
 
     p_cons = sub.add_parser(
