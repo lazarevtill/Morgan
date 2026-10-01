@@ -30,7 +30,7 @@ from itertools import takewhile
 from typing import NamedTuple
 
 from morgan_brain.memory.knowledge.extract import extract_entity_names
-from morgan_brain.memory.store import projects, spaces, vectors
+from morgan_brain.memory.store import erasure, projects, spaces, vectors
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
@@ -380,6 +380,11 @@ def _add_fact_evidence(conn: sqlite3.Connection, _stores: Stores) -> None:
         conn.execute("ALTER TABLE facts ADD COLUMN support_event_ids TEXT NOT NULL DEFAULT '[]'")
 
 
+def _add_erasure_generation(conn: sqlite3.Connection, _stores: Stores) -> None:
+    """Add one global scalar without retaining erased owner/context data."""
+    erasure.create_schema(conn)
+
+
 _STEPS: tuple[Step, ...] = (
     # A capital counts as a name only where its position does not explain it.
     Step(1, "reextract entities", False, _reextract_entities),
@@ -391,6 +396,7 @@ _STEPS: tuple[Step, ...] = (
     Step(7, "seed projects", False, _seed_projects),
     Step(8, "event ingestion time", False, _add_recorded_time),
     Step(9, "fact evidence metadata", False, _add_fact_evidence),
+    Step(10, "prepared store erasure generation", False, _add_erasure_generation),
 )
 
 

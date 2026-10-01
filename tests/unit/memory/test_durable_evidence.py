@@ -316,7 +316,7 @@ async def test_version_eight_upgrade_preserves_legacy_facts_without_inventing_li
         assert result.records[0].recorded_at is None
         assert result.records[0].support_event_ids == []
         assert result.records[0].id == "fact"
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 10
     finally:
         conn.close()
 

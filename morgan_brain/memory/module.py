@@ -30,6 +30,7 @@ from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
+from morgan_brain.memory.store import erasure as erasure_store
 from morgan_brain.memory.store import projects
 from morgan_brain.memory.store import tables as registry
 from morgan_brain.memory.store.db import write_transaction
@@ -204,6 +205,7 @@ class MemoryModule:
         (``store/projects.py::register``), so a project first written to after migration step 7
         seeded the table has a row as well -- and a store that fails leaves none.
         """
+        prepared_generation = erasure_store.read_generation(self._conn)
         original = memory.model_copy(deep=True)
         if self._episodics.check_replay(original) is not None:
             return original.id
@@ -230,6 +232,7 @@ class MemoryModule:
         # part-way left a memory stored in some indexes and missing from others. The vector
         # upsert is awaited but never suspends: it is SQL on this connection, nothing else.
         with write_transaction(self._conn):
+            erasure_store.require_generation(self._conn, prepared_generation)
             if self._episodics.check_replay(original) is not None:
                 return original.id
             if self._conn.execute(
@@ -536,6 +539,7 @@ class MemoryModule:
 
         with write_transaction(conn):
             plan, skipped = _erasure_plan(conn)
+            erasure_store.advance_generation(conn)
             # The ids are selected inside the write transaction, which holds the lock from its
             # first statement. Selecting before the lock left a window in which another process
             # -- morgan-mcp storing a memory while `morgan forget` runs -- could insert a memory
