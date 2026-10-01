@@ -19,6 +19,7 @@ from morgan_brain.memory.checkpoints import (
     CHECKPOINT_PREDICATE,
     MAX_CHECKPOINT_BYTES,
     Checkpoint,
+    CheckpointContext,
     CheckpointResult,
     checkpoint_subject,
 )
@@ -31,7 +32,6 @@ from morgan_brain.models import (
     MemoryQuery,
     MemorySource,
     Message,
-    Scope,
     TemporalFact,
 )
 
@@ -234,12 +234,9 @@ class MemoryGate:
         state: Checkpoint,
         *,
         checkpoint_id: str,
-        user_id: str,
-        project: str = PERSONAL_PROJECT,
+        context: CheckpointContext,
         support_event_ids: list[str],
         expected_fact_id: str | None = None,
-        author_id: str = "",
-        scope: Scope = Scope.PRIVATE,
     ) -> str:
         """Persist an agent-inferred summary; absence of expected ID means create-only.
 
@@ -247,16 +244,16 @@ class MemoryGate:
         An explicit retry against the returned fact ID is required for updates.
         """
         self.require_writable()
-        self._require_scope(user_id, project)
+        self._require_scope(context.user_id, context.project)
         fact = TemporalFact(
-            user_id=user_id,
-            project=project,
+            user_id=context.user_id,
+            project=context.project,
             subject=checkpoint_subject(checkpoint_id),
             predicate=CHECKPOINT_PREDICATE,
             object=state.encode(support_event_ids),
             source=MemorySource.AGENT_INFERRED,
-            author_id=author_id,
-            scope=scope,
+            author_id=context.author_id,
+            scope=context.scope,
             support_event_ids=list(dict.fromkeys(support_event_ids)),
         )
         return await self._store.put_checkpoint_fact(fact, expected_fact_id=expected_fact_id)

@@ -23,7 +23,11 @@ from datetime import datetime
 import structlog
 
 from morgan_brain.memory.checked_embedder import CheckedEmbedder
-from morgan_brain.memory.checkpoints import CHECKPOINT_PREDICATE, StaleCheckpoint
+from morgan_brain.memory.checkpoints import (
+    CHECKPOINT_PREDICATE,
+    AmbiguousCheckpoint,
+    StaleCheckpoint,
+)
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.evidence import ScopedEvidenceReader, fact_memory
 from morgan_brain.memory.gate import EvidenceResult, ForgetReport, RecallOutcome, RecallReason
@@ -687,6 +691,8 @@ class MemoryModule:
             facts = [fact for fact in facts if fact.predicate == CHECKPOINT_PREDICATE]
             if not facts:
                 return None
+            if len(facts) != 1:
+                raise AmbiguousCheckpoint([fact.id for fact in facts])
             fact = facts[0]
             state = RevisionResolver(self._episodics, conn=self._conn, at=now).support_state(fact)
             return fact.model_copy(update={"support_state": state})

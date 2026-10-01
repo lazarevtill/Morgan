@@ -10,12 +10,22 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from morgan_brain.models import TemporalFact
+from morgan_brain.models import PERSONAL_PROJECT, Scope, TemporalFact
 
 CHECKPOINT_PREDICATE = "resumable_state_v1"
 MAX_CHECKPOINT_BYTES = 32768
 Identity = Annotated[str, Field(min_length=1, max_length=256, pattern=r"\S")]
 Text = Annotated[str, Field(min_length=1, max_length=240, pattern=r"\S")]
+
+
+class CheckpointContext(BaseModel):
+    """Reported ownership and provenance labels; these do not authorize access."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    user_id: str
+    project: str = PERSONAL_PROJECT
+    author_id: str = ""
+    scope: Scope = Scope.PRIVATE
 
 
 class CheckpointItem(BaseModel):
@@ -72,6 +82,14 @@ class CheckpointResult(BaseModel):
         if self.eligibility not in ("current", "unsupported") and self.state is not None:
             raise ValueError("ineligible checkpoint cannot expose resumable state")
         return self
+
+
+class AmbiguousCheckpoint(ValueError):
+    """Legacy overlapping intervals cannot select a resumable state by rank."""
+
+    def __init__(self, fact_ids: list[str]) -> None:
+        self.fact_ids = tuple(sorted(fact_ids))
+        super().__init__("multiple effective checkpoint facts; inspect scoped historical evidence")
 
 
 class StaleCheckpoint(ValueError):

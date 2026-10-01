@@ -7,7 +7,7 @@ service. Ownership/project and reported scope stay in the fact envelope; subject
 and applicability describe the work and grant no access. Planned steps grant no permission.
 
 ```python
-from morgan_brain.memory.checkpoints import Checkpoint, CheckpointItem
+from morgan_brain.memory.checkpoints import Checkpoint, CheckpointContext, CheckpointItem
 
 state = Checkpoint(
     kind="goal", title="Read German independently",
@@ -15,18 +15,19 @@ state = Checkpoint(
     next_steps=[CheckpointItem(text="Choose the next reading passage", evidence_ids=[source_id])],
 )
 fact_id = await gate.put_checkpoint(
-    state, checkpoint_id="german-reading", user_id=owner,
+    state, checkpoint_id="german-reading", context=CheckpointContext(user_id=owner),
     support_event_ids=[source_id],
 )
 result = await gate.get_checkpoint("german-reading", user_id=owner)
 # Prepare an update against this exact head; a stale writer raises StaleCheckpoint.
 updated_id = await gate.put_checkpoint(
-    state, checkpoint_id="german-reading", user_id=owner,
+    state, checkpoint_id="german-reading", context=CheckpointContext(user_id=owner),
     support_event_ids=[source_id], expected_fact_id=fact_id,
 )
 ```
 
-Default context is `personal`. A missing expected ID means create-only; replaying a
+`CheckpointContext` bundles owner, project, reported author and scope labels; it is immutable
+and rejects unknown fields. These labels do not authorize access. Default context is `personal`. A missing expected ID means create-only; replaying a
 completed create or update with its old basis is explicitly refused, not silently written
 again. Head comparison, source admission and persistence use one writer transaction and
 one cutoff. Historical facts remain available through scoped evidence. A stale support
@@ -34,6 +35,11 @@ revision or fork produces `needs_rebuild` without a resumable state; future corr
 leave support current until activation. New checkpoint writes retain ordinary refusal of
 conflicted, missing, quarantined or agent-authored support. Raw branch IDs may be inspected
 progressively through evidence; checkpoints do not resolve ambiguities by rank.
+
+The reserved checkpoint predicate is excluded from automatic consolidation prompts and
+surprise gating. ADD/UPDATE/DELETE proposals targeting it reject the entire batch before
+any write, including earlier ordinary operations. The complete fact inventory remains in
+the preparation digest so concurrent checkpoint changes still invalidate stale proposals.
 
 Agent-written checkpoints are always `agent_inferred`. Progress is explicitly
 `unverified_agent_report`; its `reference_ids` are history pointers, not trusted support.
@@ -44,6 +50,10 @@ Item `evidence_ids` must be a subset of at most sixteen fact-level support IDs. 
 support returns `unsupported`, never grounded. This typed surface does not adopt manually
 written user/tool checkpoint facts as trusted typed state: their intrinsic basis yields
 `needs_rebuild`, preserving source protection against inferred replacement.
+
+`get_checkpoint` raises `AmbiguousCheckpoint` with the competing fact IDs when legacy
+finite intervals overlap at the current cutoff. It returns no selected state; inspect those
+IDs through scoped evidence. No historical record is rewritten.
 
 Unknown versions return `unsupported_version`; malformed or oversized payloads return
 `invalid_state`. The original fact remains available for exact evidence access. No version

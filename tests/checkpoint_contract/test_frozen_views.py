@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from morgan_brain.composition import build_memory_module
-from morgan_brain.memory.checkpoints import Checkpoint, ReportedProgress
+from morgan_brain.memory.checkpoints import Checkpoint, CheckpointContext, ReportedProgress
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.store.db import open_db
@@ -57,7 +57,7 @@ async def test_frozen_checkpoint_lifecycle(case, tmp_path):
         identity = await gate.put_checkpoint(
             checkpoint,
             checkpoint_id=case["checkpoint_id"],
-            user_id="owner",
+            context=CheckpointContext(user_id="owner"),
             support_event_ids=support,
         )
         for event in case["events"]:

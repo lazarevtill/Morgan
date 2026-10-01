@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from morgan_brain.composition import build_memory_module
-from morgan_brain.memory.checkpoints import Checkpoint
+from morgan_brain.memory.checkpoints import Checkpoint, CheckpointContext
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.store.db import open_db
@@ -37,7 +37,10 @@ async def measure(db: Path, fixture_digest: str) -> dict:
         )
         timings = {"codec_ms": [], "read_ms": [], "cas_update_ms": []}
         identity = await gate.put_checkpoint(
-            state, checkpoint_id="reading", user_id="synthetic", support_event_ids=["source"]
+            state,
+            checkpoint_id="reading",
+            context=CheckpointContext(user_id="synthetic"),
+            support_event_ids=["source"],
         )
         for _ in range(100):
             start = time.perf_counter()
@@ -50,7 +53,7 @@ async def measure(db: Path, fixture_digest: str) -> dict:
             identity = await gate.put_checkpoint(
                 state,
                 checkpoint_id="reading",
-                user_id="synthetic",
+                context=CheckpointContext(user_id="synthetic"),
                 support_event_ids=["source"],
                 expected_fact_id=identity,
             )
