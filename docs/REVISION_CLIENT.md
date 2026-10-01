@@ -62,3 +62,9 @@ binaries. Do not downgrade in place. Preserve a full snapshot and raw lineage me
 in any export, then replay into a separate synthetic database and verify the result before
 cutover. Restore a snapshot with its matching build. Older binaries cannot be repaired
 retroactively by these contracts.
+
+This build rejects a database whose recorded `user_version` exceeds its supported schema
+before normal writable initialization, migration, or source-only evidence admission. The
+refusal preserves the source database and reports both versions. These are checks at open,
+migration, and admission; they do not continuously police already-open connections.
+Older running instances still require the operational rule against mixed-version writers.

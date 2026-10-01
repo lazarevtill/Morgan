@@ -36,8 +36,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from morgan_brain.memory.revisions import EventCandidates
-from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import Deleter, Erasure
+from morgan_brain.memory.store.transactions import write_transaction
 from morgan_brain.models import PERSONAL_PROJECT, MemoryStatus, Scope
 
 

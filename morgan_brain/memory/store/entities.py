@@ -10,8 +10,8 @@ import json
 import sqlite3
 from collections.abc import Iterable
 
-from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import Erasure
+from morgan_brain.memory.store.transactions import write_transaction
 from morgan_brain.models import PERSONAL_PROJECT
 
 

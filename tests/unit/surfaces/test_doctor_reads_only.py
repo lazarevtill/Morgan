@@ -8,6 +8,7 @@ table at whatever width was set that minute, before any embedding space was regi
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 import sqlite3
 from collections.abc import Iterator
@@ -22,6 +23,8 @@ from morgan_brain.config import Settings
 from morgan_brain.memory import migrations, snapshot
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.models import Memory
+from morgan_brain.providers.factory import Probe
+from morgan_brain.surfaces.cli import doctor
 from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.render import _render_doctor
 from tests.fakes import model_server
@@ -359,3 +362,40 @@ def test_the_env_files_render_one_per_line():
         "env_file: /home/you/.config/morgan/.env (present)",
         "env_file: /home/you/code/.env (absent)",
     ]
+
+
+async def test_future_schema_is_migration_probe_error_without_hiding_other_diagnostics(
+    tmp_path, monkeypatch
+):
+    settings = Settings(data_dir=str(tmp_path), embedding_backend="hash", embedding_dim=4)
+    ctx = build_memory_context(settings)
+    await ctx.gate.store(
+        Memory(
+            user_id=settings.owner_user_id,
+            project="personal",
+            content="Synthetic preserved doctor source",
+        )
+    )
+    ctx.conn.close()
+    path = Path(sqlite_path(settings.temporal_db_url))
+    conn = sqlite3.connect(path)
+    conn.execute("PRAGMA journal_mode=DELETE")
+    conn.execute("PRAGMA user_version=999")
+    conn.commit()
+    conn.close()
+    before = await asyncio.to_thread(path.read_bytes)
+
+    async def healthy_chat(_settings):
+        return Probe(seconds=0.01, status=200, error=None)
+
+    monkeypatch.setattr(doctor, "check_llm_reachable", healthy_chat)
+    report = await build_doctor_report(settings, project="personal", all_projects=False)
+    assert "user_version 999" in report["probe_errors"]["migration"]
+    assert report["migration"] is None
+    assert report["provider"] == "reachable"
+    assert report["embedding_provider"] == "not used"
+    assert report["fts5"] and report["sqlite_vec"]
+    assert report["rows"]["memories"] == 1
+    assert report["snapshots"] is not None
+    assert report["projects"] is not None
+    assert await asyncio.to_thread(path.read_bytes) == before
