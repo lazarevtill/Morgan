@@ -43,6 +43,7 @@ from morgan_brain.surfaces.cli.maintenance import (
 )
 from morgan_brain.surfaces.cli.project import Repository, detect_project, read_repository
 from morgan_brain.surfaces.cli.render import RENDERERS
+from morgan_brain.surfaces.cli.working_context import cmd_context
 
 
 def _positive_int(value: str) -> int:
@@ -58,6 +59,7 @@ def _positive_int(value: str) -> int:
 #: Every verb the CLI accepts, and the handler that answers it. The renderer for each
 #: lives in ``render.RENDERERS`` under the same key.
 HANDLERS = {
+    "context": cmd_context,
     "remember": cmd_remember,
     "recall": cmd_recall,
     "facts": cmd_facts,
@@ -74,7 +76,7 @@ HANDLERS = {
 
 # Commands where --all-projects is meaningless: a write or a single chat turn always
 # targets exactly one project.
-_SINGLE_PROJECT_ONLY = {"remember", "ask"}
+_SINGLE_PROJECT_ONLY = {"remember", "ask", "context"}
 
 #: The write commands that record what repository their project is (`_repository_to_record`).
 #: `forget` is a write and is deliberately absent: it erases a project rather than writing to
@@ -90,12 +92,16 @@ _RECORDS_THE_REPOSITORY = {"remember", "ask", "consolidate"}
 # ---------------------------------------------------------------------------
 
 
-def _add_common(sp: argparse.ArgumentParser) -> None:
+def _add_common(sp: argparse.ArgumentParser, *, personal_default: bool = False) -> None:
     sp.add_argument(
         "--project",
         default=None,
-        help="Project to scope this command to (default: the current git repository's "
-        "directory name; 'personal' outside a repo).",
+        help=(
+            "Optional project; default: personal, including inside a repository."
+            if personal_default
+            else "Project to scope this command to (default: the current git repository's "
+            "directory name; 'personal' outside a repo)."
+        ),
     )
     sp.add_argument(
         "--all-projects",
@@ -110,6 +116,37 @@ def _add_common(sp: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="morgan", description="Talk to your local Morgan brain.")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p_context = sub.add_parser("context", help="Resume personal work using a compact source view.")
+    context_sub = p_context.add_subparsers(dest="context_action", required=True)
+    for verb in ("list", "show", "propose", "apply", "resume"):
+        action = context_sub.add_parser(
+            verb,
+            epilog=(
+                "Find source IDs with morgan recall/evidence. Save a proposal with: "
+                "morgan context propose gift-zine --event-id ID --json > proposal.json. "
+                "Review it, then: morgan context apply proposal.json. "
+                "Repeat the same --project on both commands when naming a project."
+            ),
+        )
+        if verb in ("show", "propose", "resume"):
+            action.add_argument("context_id", help="Stable name of the work, such as 'gift-zine'.")
+        if verb == "propose":
+            action.add_argument("--event-id", dest="event_ids", action="append", required=True)
+            action.add_argument("--author-id", default="", help="Reported proposing agent.")
+            action.add_argument(
+                "--rebuild", action="store_true", help="Discard an invalid old view."
+            )
+        if verb == "apply":
+            action.add_argument("proposal_file", help="JSON produced by context propose --json.")
+        if verb == "resume":
+            action.add_argument("text", help="What to continue or draft next.")
+            action.add_argument("--session-id", required=True, help="Independent agent session ID.")
+            action.add_argument(
+                "--source", choices=[s.value for s in MemorySource], default="unknown"
+            )
+            action.add_argument("--author-id", default="", help="Reported input author.")
+        _add_common(action, personal_default=True)
 
     p_remember = sub.add_parser("remember", help="Store a memory.")
     p_remember.add_argument("text", help="What to remember.")
@@ -387,7 +424,7 @@ def main(argv: list[str] | None = None) -> int:
     # to be called that; unlike the old `project == PERSONAL_PROJECT` check this replaced,
     # a detected name is never mistaken for a default here, because `detect_project` returns
     # `None`, not the sentinel string, when there is no repository to detect.
-    project = named or detected or PERSONAL_PROJECT
+    project = named or (None if args.command == "context" else detected) or PERSONAL_PROJECT
     remember_project = named or detected
     return asyncio.run(
         _dispatch(

@@ -68,6 +68,17 @@ from morgan_brain.memory.store.vectors import (
     space_deleter,
     vector_rowids,
 )
+from morgan_brain.memory.working_context import (
+    MAX_CONTEXT_BYTES,
+    WORKING_CONTEXT_PREDICATE,
+    AttributedSpan,
+    WorkingContext,
+    WorkingContextEntry,
+    WorkingContextList,
+    WorkingContextResult,
+    validate_working_context,
+    working_subject,
+)
 from morgan_brain.models import (
     PERSONAL_PROJECT,
     Entity,
@@ -508,6 +519,8 @@ class MemoryModule:
             )
             fact_memories = []
             for fact in facts:
+                if fact.predicate == WORKING_CONTEXT_PREDICATE:
+                    continue
                 state = resolver.support_state(fact)
                 if state not in ("inactive_support", "conflicted_support"):
                     fact_memories.append(
@@ -717,19 +730,25 @@ class MemoryModule:
             projects.register(self._conn, fact.project, now=now)
             return await self._temporal.upsert_fact(fact, now=now)
 
-    async def put_checkpoint_fact(self, fact: TemporalFact, *, expected_fact_id: str | None) -> str:
+    async def put_checkpoint_fact(
+        self,
+        fact: TemporalFact,
+        *,
+        expected_fact_id: str | None,
+        predicate: str = CHECKPOINT_PREDICATE,
+    ) -> str:
         """Create-only or compare-and-swap the structural checkpoint head under lock."""
         with write_transaction(self._conn):
             now = self._clock()
             heads = await self._temporal.current_facts(
                 user_id=fact.user_id, project=fact.project, subject=fact.subject
             )
-            heads = [head for head in heads if head.predicate == CHECKPOINT_PREDICATE]
+            heads = [head for head in heads if head.predicate == predicate]
             if not heads:
                 effective = await self._temporal.current_facts(
                     user_id=fact.user_id, project=fact.project, subject=fact.subject, at=now
                 )
-                heads = [head for head in effective if head.predicate == CHECKPOINT_PREDICATE]
+                heads = [head for head in effective if head.predicate == predicate]
             if [head.id for head in heads] != (
                 [] if expected_fact_id is None else [expected_fact_id]
             ):
@@ -739,7 +758,12 @@ class MemoryModule:
             return await self.upsert_fact(fact, now=now)
 
     async def checkpoint_fact(
-        self, *, user_id: str, project: str, subject: str
+        self,
+        *,
+        user_id: str,
+        project: str,
+        subject: str,
+        predicate: str = CHECKPOINT_PREDICATE,
     ) -> TemporalFact | None:
         """Return the effective checkpoint even when its basis requires rebuilding."""
         with read_transaction(self._conn):
@@ -747,7 +771,7 @@ class MemoryModule:
             facts = await self._temporal.current_facts(
                 user_id=user_id, project=project, subject=subject, at=now
             )
-            facts = [fact for fact in facts if fact.predicate == CHECKPOINT_PREDICATE]
+            facts = [fact for fact in facts if fact.predicate == predicate]
             if not facts:
                 return None
             if len(facts) != 1:
@@ -755,6 +779,97 @@ class MemoryModule:
             fact = facts[0]
             state = RevisionResolver(self._episodics, conn=self._conn, at=now).support_state(fact)
             return fact.model_copy(update={"support_state": state})
+
+    async def put_working_context_fact(
+        self,
+        fact: TemporalFact,
+        *,
+        expected_fact_id: str | None,
+        expected_generation: int,
+        evidence_basis: list[Memory],
+    ) -> str:
+        with write_transaction(self._conn):
+            erasure_store.require_generation(self._conn, expected_generation)
+            await self._check_turn_evidence(
+                evidence_basis, owner=fact.user_id, project=fact.project
+            )
+            return await self.put_checkpoint_fact(
+                fact, expected_fact_id=expected_fact_id, predicate=WORKING_CONTEXT_PREDICATE
+            )
+
+    async def working_context_list(
+        self, *, user_id: str, project: str, limit: int
+    ) -> WorkingContextList:
+        # Structural discovery must precede support eligibility: stale views need rebuilding.
+        # Output is bounded; the existing temporal store scans effective facts within this scope.
+        with read_transaction(self._conn):
+            facts = await self._temporal.current_facts(
+                user_id=user_id, project=project, at=self._clock()
+            )
+            identities = set()
+            prefix = "working_checkpoint:"
+            for fact in facts:
+                if fact.predicate != WORKING_CONTEXT_PREDICATE:
+                    continue
+                if not fact.subject.startswith(prefix):
+                    raise ValueError("invalid working context subject")
+                identity = fact.subject[len(prefix) :]
+                if working_subject(identity) != fact.subject:
+                    raise ValueError("invalid working context subject")
+                identities.add(identity)
+            ordered = sorted(identities)
+            items = []
+            for identity in ordered[:limit]:
+                view = await self.working_context_view(
+                    user_id=user_id, project=project, subject=working_subject(identity)
+                )
+                if view is not None:
+                    items.append(WorkingContextEntry(context_id=identity, view=view))
+            return WorkingContextList(items=items, truncated=len(ordered) > limit)
+
+    async def working_context_view(
+        self, *, user_id: str, project: str, subject: str
+    ) -> WorkingContextResult | None:
+        with read_transaction(self._conn):
+            fact = await self.checkpoint_fact(
+                user_id=user_id,
+                project=project,
+                subject=subject,
+                predicate=WORKING_CONTEXT_PREDICATE,
+            )
+            if fact is None:
+                return None
+            invalid = WorkingContextResult(fact_id=fact.id, eligibility="invalid_state")
+            try:
+                if len(fact.object.encode("utf-8")) > MAX_CONTEXT_BYTES:
+                    return invalid
+                raw = json.loads(fact.object)
+                if isinstance(raw, dict) and raw.get("version") != "morgan.working_context.v1":
+                    return WorkingContextResult(fact_id=fact.id, eligibility="unsupported_version")
+                state = WorkingContext.model_validate(raw)
+            except (ValueError, RecursionError):
+                return invalid
+            resolved = await self.evidence(
+                user_id=user_id, project=project, evidence_ids=state.event_ids()
+            )
+            try:
+                validate_working_context(state, resolved.records)
+            except ValueError:
+                return WorkingContextResult(fact_id=fact.id, eligibility="needs_rebuild")
+            sources = {record.id: record for record in resolved.records}
+            return WorkingContextResult(
+                fact_id=fact.id,
+                eligibility="current",
+                state=state,
+                sources=[
+                    AttributedSpan(
+                        **span.model_dump(),
+                        source=sources[span.event_id].source,
+                        author_id=sources[span.event_id].author_id,
+                    )
+                    for span in state.spans()
+                ],
+            )
 
     async def evidence(
         self,

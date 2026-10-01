@@ -29,6 +29,7 @@ from morgan_brain.memory.knowledge.basis import (
 )
 from morgan_brain.memory.knowledge.fact_ops import FactOp, FactOpBatch, FactOpKind
 from morgan_brain.memory.knowledge.surprise import keep_surprising
+from morgan_brain.memory.working_context import WORKING_CONTEXT_PREDICATE
 from morgan_brain.models import (
     Memory,
     MemoryKind,
@@ -109,7 +110,7 @@ class MemoryConsolidator:
                     "confidence": fact.confidence,
                 }
                 for fact in existing_facts
-                if fact.predicate != CHECKPOINT_PREDICATE
+                if fact.predicate not in (CHECKPOINT_PREDICATE, WORKING_CONTEXT_PREDICATE)
             ],
             ensure_ascii=False,
         )
@@ -175,9 +176,12 @@ class MemoryConsolidator:
             raise UnsupportedConsolidationOperation("Automatic writes require their prepared basis")
         source_ids = {source.event_id for source in basis.sources}
         for op in batch.ops:
-            if op.op is not FactOpKind.NOOP and op.predicate == CHECKPOINT_PREDICATE:
+            if op.op is not FactOpKind.NOOP and op.predicate in (
+                CHECKPOINT_PREDICATE,
+                WORKING_CONTEXT_PREDICATE,
+            ):
                 raise UnsupportedConsolidationOperation(
-                    "Reserved checkpoint facts require their checkpoint compare-and-swap API"
+                    "Reserved checkpoint/working context facts require their compare-and-swap API"
                 )
             if op.op is not FactOpKind.NOOP and (
                 not op.support_event_ids or not set(op.support_event_ids) <= source_ids
@@ -290,7 +294,11 @@ class MemoryConsolidator:
             event_ids=[event.id for event in episodics],
             generation=generation,
         )
-        existing_facts = [fact for fact in inputs.facts if fact.predicate != CHECKPOINT_PREDICATE]
+        existing_facts = [
+            fact
+            for fact in inputs.facts
+            if fact.predicate not in (CHECKPOINT_PREDICATE, WORKING_CONTEXT_PREDICATE)
+        ]
         episodics = list(inputs.episodics)
 
         # Surprise-gate: consolidate what the current model did NOT already predict.

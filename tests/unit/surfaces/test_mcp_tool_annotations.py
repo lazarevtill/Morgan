@@ -25,7 +25,13 @@ async def test_only_recall_evidence_and_facts_declare_themselves_read_only(tmp_p
 
     read_only = {name for name, hints in declared.items() if hints and hints.readOnlyHint}
 
-    assert read_only == {"recall", "evidence", "facts"}
+    assert read_only == {
+        "recall",
+        "evidence",
+        "facts",
+        "working_context_read",
+        "working_context_propose",
+    }
 
 
 async def test_forget_is_the_one_destructive_tool(tmp_path, monkeypatch):

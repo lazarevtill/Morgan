@@ -26,6 +26,13 @@ from morgan_brain.memory.checkpoints import (
 from morgan_brain.memory.knowledge.basis import ConsolidationBasis, ConsolidationInput
 from morgan_brain.memory.migrations import DatabaseNeedsMigration
 from morgan_brain.memory.store.history import SessionHistoryStore
+from morgan_brain.memory.working_context import (
+    WorkingContextList,
+    WorkingContextPreview,
+    WorkingContextResult,
+    working_fact,
+    working_subject,
+)
 from morgan_brain.models import (
     PERSONAL_PROJECT,
     Memory,
@@ -291,6 +298,33 @@ class MemoryGate:
             "current" if fact.support_state == "current" else "unsupported"
         )
         return CheckpointResult(fact=fact, state=state, eligibility=eligibility)
+
+    async def put_working_context(self, preview: WorkingContextPreview) -> str:
+        self.require_writable()
+        preview = WorkingContextPreview.model_validate(preview.model_dump())
+        self._require_scope(preview.context.user_id, preview.context.project)
+        return await self._store.put_working_context_fact(
+            working_fact(preview),
+            expected_fact_id=preview.expected_fact_id,
+            expected_generation=preview.generation,
+            evidence_basis=preview.evidence_basis,
+        )
+
+    async def get_working_context(
+        self, context_id: str, *, user_id: str, project: str = PERSONAL_PROJECT
+    ) -> WorkingContextResult | None:
+        self._require_scope(user_id, project)
+        return await self._store.working_context_view(
+            user_id=user_id, project=project, subject=working_subject(context_id)
+        )
+
+    async def list_working_contexts(
+        self, *, user_id: str, project: str = PERSONAL_PROJECT, limit: int = 32
+    ) -> WorkingContextList:
+        self._require_scope(user_id, project)
+        if type(limit) is not int or not 1 <= limit <= 32:
+            raise ValueError("working context list limit must be an integer from 1 to 32")
+        return await self._store.working_context_list(user_id=user_id, project=project, limit=limit)
 
     async def record_project(
         self,
