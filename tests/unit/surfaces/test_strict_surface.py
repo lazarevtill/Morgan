@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
+from morgan_brain.app.chat import DefaultAnswerResult
 from morgan_brain.app.strict_context import AnswerBudget, AnswerResult, StrictContextError
 from morgan_brain.config import Settings
 from morgan_brain.surfaces.cli.__main__ import _dispatch, build_parser
@@ -91,9 +92,9 @@ async def test_ask_forwards_optional_strict_and_attribution(settings_for_tmp, mo
     captured = {}
 
     class Chat:
-        async def ask(self, **fields):
-            captured.update(fields)
-            return "Tea"
+        async def ask_with_provenance(self, request):
+            captured.update(asdict(request), strict_context=False)
+            return DefaultAnswerResult("Tea", "fake", "model:fake")
 
         async def ask_evidence(self, request):
             captured.update(asdict(request), strict_context=True)
@@ -143,10 +144,10 @@ async def test_ask_closes_optional_backend_and_db_on_success_or_failure(
     closed = []
 
     class Chat:
-        async def ask(self, **fields):
+        async def ask_with_provenance(self, request):
             if fail:
                 raise StrictContextError("citation_invalid")
-            return "Tea"
+            return DefaultAnswerResult("Tea", "fake", "model:fake")
 
         async def aclose(self):
             closed.append("backend")

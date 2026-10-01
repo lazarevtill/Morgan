@@ -32,11 +32,14 @@ from morgan_brain.app.strict_context import (
 )
 from morgan_brain.memory.errors import EvidenceChanged
 from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.recall.language import of as query_language
 from morgan_brain.memory.store.erasure import StoreInterruptedByForget
 from morgan_brain.memory.store.history import SessionHistoryStore, session_key
 from morgan_brain.models import Memory, MemoryQuery, MemorySource, Message, OriginKind, Role
 from morgan_brain.providers.context import StrictChatBackend, request_fingerprint
 from morgan_brain.providers.wire import ChatClient, ChatMessage
+
+_CONFLICT_GUARD_AUTHOR = "morgan:conflict-guard"
 
 _SYSTEM = (
     "You are Morgan, a personal assistant that knows the user well. "
@@ -74,10 +77,18 @@ class TurnRequest:
 
 
 @dataclass(frozen=True)
+class DefaultAnswerResult:
+    answer: str
+    model_used: str | None
+    response_author_id: str
+
+
+@dataclass(frozen=True)
 class TurnBasis:
     input_at: datetime
     generation: int
     evidence: list[Memory] | None
+    reply_author_id: str | None = None
 
 
 async def _no_backend_to_close() -> None:
@@ -124,7 +135,7 @@ class Chat:
         strict_context: bool = False,
     ) -> str:
         """Answer and atomically remember a turn; retains the legacy string result."""
-        reply, _ = await self._turn(
+        reply, _, _ = await self._turn(
             TurnRequest(
                 user_id=user_id,
                 project=project,
@@ -139,10 +150,19 @@ class Chat:
         )
         return reply
 
+    async def ask_with_provenance(self, request: TurnRequest) -> DefaultAnswerResult:
+        """Default answer attribution returned per call, without mutable shared state."""
+        reply, _, author = await self._turn(request)
+        return DefaultAnswerResult(
+            answer=reply,
+            model_used=None if author == _CONFLICT_GUARD_AUTHOR else self._model,
+            response_author_id=author,
+        )
+
     async def ask_evidence(self, request: TurnRequest) -> AnswerResult:
         """Return a strict cited answer and measured budget after atomic persistence."""
         try:
-            _, detailed = await self._turn(request, strict_context=True)
+            _, detailed, _ = await self._turn(request, strict_context=True)
         except EvidenceChanged as exc:
             raise StrictContextError(exc.reason) from exc
         except StoreInterruptedByForget as exc:
@@ -153,7 +173,7 @@ class Chat:
 
     async def _turn(
         self, turn: TurnRequest, *, strict_context: bool = False
-    ) -> tuple[str, AnswerResult | None]:
+    ) -> tuple[str, AnswerResult | None, str]:
         # Admission and erasure capture precede every asynchronous operation.
         MemorySource(turn.source)
         self._gate.require_writable()
@@ -166,20 +186,38 @@ class Chat:
             MemoryQuery(user_id=turn.user_id, project=turn.project, text=turn.text)
         )
         detailed = None
-        evidence_basis = None
+        evidence_basis = [record.model_copy(deep=True) for record in recalled.memories]
+        reply_author_id = None
         if counter is not None:
             packed = await self._pack_strict(turn, recalled.memories, history, counter)
             detailed = await self._answer_strict(turn, packed, counter)
             reply = detailed.answer
             evidence_basis = packed.records
+        elif any(memory.revision_state == "conflicted" for memory in recalled.memories):
+            # Default prose omits revision metadata. Do not let a model select a fork.
+            reply = (
+                "В найденной памяти есть неразрешённые версии. Используйте recall и evidence; "
+                "проверьте eligible_leaf_count и revision_truncated. Уточните версию "
+                "через remember "
+                "с revises_event_ids: не более 8 родителей за шаг; большие группы объединяйте "
+                "поэтапно, не пропуская оставшиеся ветви."
+                if query_language(turn.text) == "ru"
+                else "Recalled memories have unresolved versions. Use recall and evidence; "
+                "check eligible_leaf_count and revision_truncated. Clarify via remember with "
+                "revises_event_ids: at most 8 parents per step; join larger groups in stages "
+                "without omitting remaining branches."
+            )
+            reply_author_id = _CONFLICT_GUARD_AUTHOR
         else:
             result = await self._client.agenerate(
                 build_messages(memories=recalled.memories, history=history, text=turn.text),
                 model=self._model,
             )
             reply = result.text
-        await self._persist_turn(turn, reply, TurnBasis(input_at, generation, evidence_basis))
-        return reply, detailed
+        await self._persist_turn(
+            turn, reply, TurnBasis(input_at, generation, evidence_basis, reply_author_id)
+        )
+        return reply, detailed, reply_author_id or f"model:{self._model}"
 
     async def _prepare_strict(self, turn: TurnRequest) -> CountedRequest:
         backend = self._strict_backend
@@ -296,7 +334,12 @@ class Chat:
         memories = []
         for content, evidence_source, reported_author, effective_at in (
             (turn.text, MemorySource(turn.source), turn.author_id, basis.input_at),
-            (reply, MemorySource.AGENT_INFERRED, f"model:{self._model}", reply_at),
+            (
+                reply,
+                MemorySource.AGENT_INFERRED,
+                basis.reply_author_id or f"model:{self._model}",
+                reply_at,
+            ),
         ):
             memories.append(
                 Memory(
@@ -305,7 +348,11 @@ class Chat:
                     content=content,
                     source=evidence_source,
                     created_at=effective_at,
-                    origin_kind=OriginKind.ASK,
+                    origin_kind=(
+                        OriginKind.ASK_CONFLICT_GUARD
+                        if basis.reply_author_id == _CONFLICT_GUARD_AUTHOR
+                        else OriginKind.ASK
+                    ),
                     author_id=reported_author,
                     cwd=str(Path.cwd()),
                     client=turn.caller_client,

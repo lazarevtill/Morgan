@@ -47,7 +47,7 @@ from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
-from morgan_brain.memory.revisions import RevisionError, RevisionResolver, instant
+from morgan_brain.memory.revisions import EventCandidates, RevisionError, RevisionResolver, instant
 from morgan_brain.memory.store import erasure as erasure_store
 from morgan_brain.memory.store import projects
 from morgan_brain.memory.store import tables as registry
@@ -472,7 +472,7 @@ class MemoryModule:
             # The floor judges on vector evidence alone, so it rules before anything else is
             # gathered: a decline returns nothing, facts included. Judged after the fact merge, a
             # decline dropped the facts along with the memories and said nothing about why.
-            verdict = self._floor_verdict(query, project, vec_hits)
+            verdict = self._floor_verdict(query, project, vec_hits, candidates=candidates)
             if verdict == "declined":
                 return self._recall_done(
                     query, embed_elapsed, RecallOutcome([], abstained=True, reason="declined")
@@ -554,7 +554,12 @@ class MemoryModule:
         )
 
     def _floor_verdict(
-        self, query: MemoryQuery, project: str | None, vec_hits: list[VectorHit]
+        self,
+        query: MemoryQuery,
+        project: str | None,
+        vec_hits: list[VectorHit],
+        *,
+        candidates: EventCandidates,
     ) -> RecallReason | None:
         """The relevance floor's verdict: ``"declined"`` when this query found only the nearest
         of many unrelated things, ``None`` when it was judged and answered, or why it was not
@@ -584,6 +589,7 @@ class MemoryModule:
             user_id=query.user_id,
             top_k=query.top_k * 2,
             project=project,
+            candidates=candidates,
         )
         ranked = {h.id for h in vec_hits[: query.top_k]}
         answered = should_answer(

@@ -45,3 +45,14 @@ async def test_every_tool_states_every_hint(tmp_path, monkeypatch):
     }
 
     assert {name: missing for name, missing in unstated.items() if missing} == {}
+
+
+async def test_ask_description_discloses_program_notice_provenance(tmp_path, monkeypatch):
+    monkeypatch.setenv("MORGAN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MORGAN_EMBEDDING_BACKEND", "hash")
+    tools = {tool.name: tool for tool in await build_server().mcp.list_tools()}
+    description = tools["ask_morgan"].description
+    assert "morgan:conflict-guard" in description
+    assert "model_used" in description and "null" in description
+    assert "always agent_inferred with a model author" not in description
+    assert "requires a reachable LLM" not in description

@@ -57,6 +57,7 @@ class OriginKind(str, Enum):
 
     REMEMBER = "remember"
     ASK = "ask"
+    ASK_CONFLICT_GUARD = "ask_conflict_guard"
     IMPORT = "import"
     EXTRACTED = "extracted"
     UNKNOWN = "unknown"
