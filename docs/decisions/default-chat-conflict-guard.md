@@ -49,8 +49,9 @@ remember correction accepts at most **8 parent IDs**. For a larger family, make 
 join of up to 8 verified leaves, then join that new leaf with up to 7 remaining leaves; repeat
 until all branches are covered. Re-read current metadata after each step. A truncated inventory
 is not a complete family: retrieve the missing exact records before claiming resolution.
-Never silently omit a branch or fabricate a statement to bypass the parent limit. Once a supported join resolves the fork, the next default
-ask resumes ordinary generation. Reported owner/source/author labels do not establish
+Never silently omit a branch or fabricate a statement to bypass the parent limit. Once a
+supported join resolves the fork, the next default ask resumes ordinary generation. Reported
+owner/source/author labels do not establish
 authenticated per-agent isolation.
 
 Offline integration tests cover real Gate fork metadata, RU/EN clarification, unrelated-fork
