@@ -438,12 +438,12 @@ async def test_unexpected_value_error_still_rolls_back_consolidation_batch(monke
     original = gate.upsert_fact
     calls = 0
 
-    async def failing(fact):
+    async def failing(fact, *, now=None):
         nonlocal calls
         calls += 1
         if calls == 2:
             raise ValueError("Unexpected integrity failure")
-        return await original(fact)
+        return await original(fact, now=now)
 
     monkeypatch.setattr(gate, "upsert_fact", failing)
     batch = FactOpBatch(

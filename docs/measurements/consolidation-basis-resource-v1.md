@@ -6,10 +6,10 @@ Allocation peaks were measured separately using tracemalloc: these are Python al
 not total process RSS. No inference, network or actual personal data was used.
 
 | Current facts / source inputs | Scoped reads without CAS | Basis capture | Check under write lock |
-|---|---:|---:|---:|
-| 10 / 10 | 1.04-1.08 ms | 1.06-1.10 ms | 1.08-1.12 ms |
-| 100 / 20 | 3.77-3.99 ms | 4.23-4.69 ms | 4.40-5.14 ms |
-| 256 / 50 | 9.14-9.74 ms | 11.21-11.66 ms | 10.82-11.66 ms |
+| --- | ---: | ---: | ---: |
+| 10 / 10 | 1.05-1.08 ms | 1.09-1.09 ms | 1.03-1.18 ms |
+| 100 / 20 | 3.64-3.81 ms | 4.40-4.67 ms | 4.38-4.59 ms |
+| 256 / 50 | 9.27-9.65 ms | 11.30-11.74 ms | 11.06-11.64 ms |
 
 The baseline reads scoped current facts and evidence but provides no compare-and-swap
 guarantee, so it is a cost reference, not a semantically equivalent replacement. Capture
@@ -21,9 +21,9 @@ from an installed checkout. It only creates synthetic in-memory DBs and refuses 
 an output directory; it accepts no user database path.
 
 The final integrated run is preserved externally in
-`consolidation-resource-final-integrated-v3/results.json` in the development task evidence.
+`consolidation-resource-cutoff-fix-v4/results.json` in the development task evidence.
 Earlier source snapshots and harness-refactor runs are retained separately; the table reports
-all three repeats after the final revision eligibility and preparation-transaction guards,
+all three repeats after the revision eligibility, preparation-transaction and apply-cutoff guards,
 with matching production and harness before/after hashes.
 These numbers apply to the measured input ceiling, not to
 unbounded archives or model/end-to-end latency. The pending 256-fact scalability gate is

@@ -588,11 +588,12 @@ class MemoryModule:
             return ConsolidationInput(basis, tuple(event for event, _ in sources), tuple(facts))
 
     async def check_consolidation_basis(
-        self, basis: ConsolidationBasis, *, effective_at: datetime
-    ) -> None:
+        self, basis: ConsolidationBasis, *, effective_at: datetime | None = None
+    ) -> datetime:
         """Caller holds the apply write transaction; no I/O may suspend here."""
         if not self._conn.in_transaction:
             raise RuntimeError("Consolidation basis must be checked inside its write transaction")
+        effective_at = effective_at if effective_at is not None else self._clock()
         if erasure_store.read_generation(self._conn) != basis.generation:
             raise StaleConsolidationProposal("Consolidation proposal crossed a committed forget")
         resolver = RevisionResolver(self._episodics, conn=self._conn, at=effective_at)
@@ -607,6 +608,7 @@ class MemoryModule:
         facts = await self._consolidation_facts(basis.user_id, basis.project, resolver)
         if fact_fingerprint(facts) != basis.fact_fingerprint:
             raise StaleConsolidationProposal("Consolidation fact basis changed")
+        return effective_at
 
     async def _consolidation_facts(
         self, user_id: str, project: str, resolver: RevisionResolver
@@ -618,7 +620,7 @@ class MemoryModule:
             if resolver.support_state(fact) not in ("inactive_support", "conflicted_support")
         ]
 
-    async def upsert_fact(self, fact: TemporalFact) -> str:
+    async def upsert_fact(self, fact: TemporalFact, *, now: datetime | None = None) -> str:
         """Assert *fact*, registering its project in the same transaction.
 
         The registration is here rather than in the temporal store because ``projects`` is not
@@ -628,7 +630,7 @@ class MemoryModule:
         never suspends: it is SQL on this connection, nothing else, so nothing awaits real I/O
         while the write lock is held.
         """
-        now = self._clock()
+        now = now if now is not None else self._clock()
         with write_transaction(self._conn):
             if self._episodics.get(fact.id, user_id=fact.user_id, project=fact.project) is not None:
                 raise ValueError("fact ID is already used by an event")
@@ -692,10 +694,13 @@ class MemoryModule:
         subject: str | None = None,
         project: str | None = PERSONAL_PROJECT,
         all_projects: bool = False,
+        effective_at: datetime | None = None,
     ) -> list[TemporalFact]:
         resolved_project = None if all_projects else project
         with read_transaction(self._conn):
-            resolver = RevisionResolver(self._episodics, conn=self._conn, at=self._clock())
+            resolver = RevisionResolver(
+                self._episodics, conn=self._conn, at=effective_at or self._clock()
+            )
             facts = await self._temporal.current_facts(
                 user_id=user_id, subject=subject, project=resolved_project, at=resolver.at
             )

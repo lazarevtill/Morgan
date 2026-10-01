@@ -65,10 +65,12 @@ class PausedClient(FakeChatClient):
         self.entered = asyncio.Event()
         self.release = asyncio.Event()
 
-    async def agenerate(self, *args, **kwargs):
+    async def agenerate(self, messages, *, model, tools=None, response_format=None):
         self.entered.set()
         await self.release.wait()
-        return await super().agenerate(*args, **kwargs)
+        return await super().agenerate(
+            messages, model=model, tools=tools, response_format=response_format
+        )
 
 
 def source(identity="A", **changes):
@@ -330,18 +332,118 @@ async def test_clock_boundary_after_cas_cannot_retarget_future_fact(stack, monke
     await writer.upsert_fact(inference("future", valid_from=FUTURE, support_event_ids=["A"]))
     original = gate.check_consolidation_basis
 
-    async def crossing(basis, *, effective_at):
-        await original(basis, effective_at=effective_at)
+    async def crossing(basis, *, effective_at=None):
+        cutoff = await original(basis, effective_at=effective_at)
         clock["now"] = FUTURE
+        return cutoff
 
     monkeypatch.setattr(gate, "check_consolidation_basis", crossing)
+    applied = await worker(gate, clock, FakeChatClient(reply=response(op="DELETE"))).consolidate(
+        "owner", project="personal"
+    )
+    assert len(applied) == 1
+    assert (
+        conn.execute("SELECT valid_to FROM facts WHERE id='old'").fetchone()[0] == NOW.isoformat()
+    )
+    assert conn.execute("SELECT valid_to FROM facts WHERE id='future'").fetchone()[0] is None
+
+
+@pytest.mark.parametrize("earlier_op", [False, True])
+async def test_clock_boundary_after_inventory_cannot_supersede_unobserved_fact(
+    stack, monkeypatch, earlier_op
+):
+    conn, _, gate, writer, clock = stack
+    await writer.store(source())
+    await writer.upsert_fact(inference("old", support_event_ids=["A"]))
+    await writer.upsert_fact(inference("future", valid_from=FUTURE, support_event_ids=["A"]))
+    original = gate.current_facts
+
+    async def crossing(**kwargs):
+        facts = await original(**kwargs)
+        clock["now"] = FUTURE
+        return facts
+
+    monkeypatch.setattr(gate, "current_facts", crossing)
     before = conn.serialize()
-    with pytest.raises(StaleConsolidationProposal, match="effective fact"):
-        await worker(gate, clock, FakeChatClient(reply=response(op="DELETE"))).consolidate(
+    reply = json.loads(response(op="UPDATE"))
+    if earlier_op:
+        reply["ops"].insert(
+            0,
+            {
+                "op": "ADD",
+                "subject": "user",
+                "predicate": "other",
+                "object": "value",
+                "support_event_ids": ["A"],
+            },
+        )
+    with pytest.raises(ValueError, match="scheduled timeline head"):
+        await worker(gate, clock, FakeChatClient(reply=json.dumps(reply))).consolidate(
             "owner", project="personal"
         )
     assert conn.serialize() == before
     assert conn.execute("SELECT valid_to FROM facts WHERE id='future'").fetchone()[0] is None
+
+
+async def test_apply_cutoff_comes_from_module_clock_under_lock(stack):
+    _conn, _, gate, writer, clock = stack
+    await writer.store(source())
+    generation = gate.capture_erasure_generation()
+    inputs = await gate.capture_consolidation_basis(
+        user_id="owner", project="personal", event_ids=["A"], generation=generation
+    )
+    consolidator = worker(gate, {"now": FUTURE}, FakeChatClient())
+    await consolidator.apply(
+        "owner", FactOpBatch.model_validate_json(response()), project="personal", basis=inputs.basis
+    )
+    fact = (await gate.current_facts(user_id="owner", project="personal"))[0]
+    assert fact.valid_from == fact.last_confirmed == NOW
+    assert clock["now"] == NOW
+
+
+async def test_all_batch_effects_share_one_module_cutoff_under_lock():
+    conn = open_db(":memory:")
+    state = {"armed": False, "calls": 0}
+
+    def clock():
+        if state["armed"]:
+            assert conn.in_transaction
+            state["calls"] += 1
+            return NOW if state["calls"] == 1 else FUTURE
+        return NOW
+
+    gate = MemoryGate(build_memory_module(conn, embedder=FakeEmbedder(dim=4), dim=4, clock=clock))
+    try:
+        await gate.store(source())
+        inputs = await gate.capture_consolidation_basis(
+            user_id="owner",
+            project="personal",
+            event_ids=["A"],
+            generation=gate.capture_erasure_generation(),
+        )
+        batch = FactOpBatch(
+            ops=[
+                FactOp(
+                    op="ADD",
+                    subject="user",
+                    predicate=predicate,
+                    object="value",
+                    support_event_ids=["A"],
+                )
+                for predicate in ("first", "second")
+            ]
+        )
+        state["armed"] = True
+        await worker(gate, {"now": FUTURE}, FakeChatClient()).apply(
+            "owner", batch, project="personal", basis=inputs.basis
+        )
+        assert state["calls"] == 1
+        rows = conn.execute(
+            "SELECT valid_from,last_confirmed FROM facts ORDER BY predicate"
+        ).fetchall()
+        assert [tuple(row) for row in rows] == [(NOW.isoformat(), NOW.isoformat())] * 2
+    finally:
+        conn.close()
 
 
 async def test_capture_uses_one_clock_cutoff_for_sources_and_facts():

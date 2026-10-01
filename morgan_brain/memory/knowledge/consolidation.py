@@ -167,7 +167,6 @@ class MemoryConsolidator:
         Returns the list of ops that were actually applied (excludes NOOPs and
         deduped ADDs).
         """
-        now = self._clock()
         if all(op.op is FactOpKind.NOOP for op in batch.ops):
             return []
         if basis is None or (basis.user_id, basis.project) != (user_id, project):
@@ -186,7 +185,7 @@ class MemoryConsolidator:
         # fact that the other run had already replaced. Holding the lock makes the second run
         # see the first run's result.
         with self._gate.write_transaction():
-            await self._gate.check_consolidation_basis(basis, effective_at=now)
+            now = await self._gate.check_consolidation_basis(basis)
             return await self._apply(user_id, batch, project=project, now=now, basis=basis)
 
     async def _apply(
@@ -199,7 +198,7 @@ class MemoryConsolidator:
         basis: ConsolidationBasis,
     ) -> list[FactOp]:
         """``apply``'s body. The caller holds the write transaction."""
-        current = await self._gate.current_facts(user_id=user_id, project=project)
+        current = await self._gate.current_facts(user_id=user_id, project=project, effective_at=now)
         if fact_fingerprint(current) != basis.fact_fingerprint:
             raise StaleConsolidationProposal("Consolidation effective fact inputs changed")
         current_set = {(f.subject, f.predicate, f.object) for f in current}
@@ -227,7 +226,8 @@ class MemoryConsolidator:
                             author_id=f"model:{self._model}",
                             scope=Scope.PRIVATE,
                             support_event_ids=op.support_event_ids,
-                        )
+                        ),
+                        now=now,
                     )
                 except SourceProtectionError:
                     continue

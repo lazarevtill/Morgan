@@ -200,16 +200,16 @@ class MemoryGate:
         )
 
     async def check_consolidation_basis(
-        self, basis: ConsolidationBasis, *, effective_at: datetime
-    ) -> None:
+        self, basis: ConsolidationBasis, *, effective_at: datetime | None = None
+    ) -> datetime:
         self.require_writable()
         self._require_scope(basis.user_id, basis.project)
-        await self._store.check_consolidation_basis(basis, effective_at=effective_at)
+        return await self._store.check_consolidation_basis(basis, effective_at=effective_at)
 
-    async def upsert_fact(self, fact: TemporalFact) -> str:
+    async def upsert_fact(self, fact: TemporalFact, *, now: datetime | None = None) -> str:
         self.require_writable()
         self._require_scope(fact.user_id)
-        return await self._store.upsert_fact(fact)
+        return await self._store.upsert_fact(fact, now=now)
 
     async def record_project(
         self,
@@ -244,10 +244,15 @@ class MemoryGate:
         subject: str | None = None,
         project: str | None = PERSONAL_PROJECT,
         all_projects: bool = False,
+        effective_at: datetime | None = None,
     ) -> list[TemporalFact]:
         self._require_scope(user_id, None if all_projects else project)
         return await self._store.current_facts(
-            user_id=user_id, subject=subject, project=project, all_projects=all_projects
+            user_id=user_id,
+            subject=subject,
+            project=project,
+            all_projects=all_projects,
+            effective_at=effective_at,
         )
 
     async def close_fact(

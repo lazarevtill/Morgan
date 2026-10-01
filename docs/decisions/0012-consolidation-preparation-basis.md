@@ -20,8 +20,13 @@ Before any apply effect,
 the existing write transaction checks the generation, source eligibility, provenance,
 revision leaves and fact inventory again. A scheduled correction becoming effective
 during generation invalidates the basis without another DB write. The actual fact
-inventory is checked again before target selection, so a clock boundary between checks
-cannot retarget DELETE at a newly effective row; DELETE is restricted to captured IDs.
+inventory is checked again before target selection; DELETE is restricted to captured IDs.
+The model receives the earlier preparation snapshot. Apply rechecks it against a separate
+cutoff selected once from the module clock under the writer lock. Revision/support admission,
+fact inventory, all upserts and closures use that same cutoff, regardless of the consolidator's
+clock. A transition after it is later temporal state, so a later clock read cannot retarget an
+effect. An upsert blocked by an existing future schedule refuses and rolls back the entire
+batch, including earlier effects.
 Stale proposals are rejected explicitly. Only a fresh caller-requested preparation may
 retry; the old batch is never automatically retried.
 
