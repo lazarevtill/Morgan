@@ -41,12 +41,14 @@ request count; complete request at limit and one over; RU/EN and wrappers; syste
 demotion; provenance roundtrip; complete fact/root group; top-one fork/missing branch;
 bounded deep closure/truncation; fabricated/out-of-scope/unsupported citations; real
 two-connection correction during generation cancels atomically; forget and normal ask
-retain previous guarantees. Unit tests use a fake exact tokenizer. Frozen installed-backend calibration evidence is
+retain previous guarantees. Unit tests use a fake exact tokenizer. Frozen installed-backend
+calibration evidence is
 separate from these tests. Equal-budget held-out answer success and resource results remain
 separate release gates.
 
 Counter calls have a 10-second timeout; generation has a 60-second timeout. Reported
-output exceeding the reserved cap fails without persistence. Missing/zero input usage or disagreement with the count refuses persistence. Only
+output exceeding the reserved cap fails without persistence. Missing/zero input usage or
+disagreement with the count refuses persistence. Only
 finish_reason=stop without tool calls is accepted. The adapter must validate raw
 usage integers before coercion and enforce its advertised output cap.
 Full serialized request bytes (including history, metadata and wrappers) are bounded
@@ -79,7 +81,6 @@ and availability, not entailment. `Chat.ask()` retains its string result; SDK ca
 use `Chat.ask_evidence()` for the detailed contract, returned only after atomic commit.
 Results are per-call values; no shared last-response state. Assistant raw evidence remains
 plain answer text in this slice; the citation envelope is not persisted as source lineage.
-
 
 Strict native answers are experimental and disabled by default. The measured adapter
 calibration established agreement between whole-request counts and server prompt usage;
