@@ -39,6 +39,8 @@ from morgan_brain.models import Memory, MemoryQuery, MemorySource, Message, Orig
 from morgan_brain.providers.context import StrictChatBackend, request_fingerprint
 from morgan_brain.providers.wire import ChatClient, ChatMessage
 
+_CONFLICT_GUARD_AUTHOR = "morgan:conflict-guard"
+
 _SYSTEM = (
     "You are Morgan, a personal assistant that knows the user well. "
     "Use the provided memories when relevant. If a memory conflicts with general knowledge, "
@@ -153,7 +155,7 @@ class Chat:
         reply, _, author = await self._turn(request)
         return DefaultAnswerResult(
             answer=reply,
-            model_used=None if author == "morgan:conflict-guard" else self._model,
+            model_used=None if author == _CONFLICT_GUARD_AUTHOR else self._model,
             response_author_id=author,
         )
 
@@ -205,7 +207,7 @@ class Chat:
                 "revises_event_ids: at most 8 parents per step; join larger groups in stages "
                 "without omitting remaining branches."
             )
-            reply_author_id = "morgan:conflict-guard"
+            reply_author_id = _CONFLICT_GUARD_AUTHOR
         else:
             result = await self._client.agenerate(
                 build_messages(memories=recalled.memories, history=history, text=turn.text),
@@ -348,7 +350,7 @@ class Chat:
                     created_at=effective_at,
                     origin_kind=(
                         OriginKind.ASK_CONFLICT_GUARD
-                        if basis.reply_author_id == "morgan:conflict-guard"
+                        if basis.reply_author_id == _CONFLICT_GUARD_AUTHOR
                         else OriginKind.ASK
                     ),
                     author_id=reported_author,
