@@ -80,6 +80,7 @@ def test_the_cli_says_an_empty_project_is_empty(tmp_path):
         "abstained": True,
         "reason": "empty",
         "results": [],
+        "effective_at": None,
     }
 
     words = _run(["recall", "anything", "--project", "acme"], tmp_path)
