@@ -37,6 +37,9 @@ progressively through evidence; checkpoints do not resolve ambiguities by rank.
 
 Agent-written checkpoints are always `agent_inferred`. Progress is explicitly
 `unverified_agent_report`; its `reference_ids` are history pointers, not trusted support.
+`current` means the source basis is eligible, not that the JSON's claims are entailed or
+verified. Status, including `completed`, remains an inferred summary; it does not replace
+the original user/tool statements or establish permission to act.
 Item `evidence_ids` must be a subset of at most sixteen fact-level support IDs. Empty
 support returns `unsupported`, never grounded. This typed surface does not adopt manually
 written user/tool checkpoint facts as trusted typed state: their intrinsic basis yields
