@@ -25,6 +25,8 @@ def memory_to_dict(m: Memory) -> dict[str, Any]:
         "kind": m.kind.value,
         "content": m.content,
         "source": m.source.value,
+        "status": m.status.value,
+        "instruction_like": m.instruction_like,
         "author_id": m.author_id,
         "importance": m.importance,
         "confidence": m.confidence,

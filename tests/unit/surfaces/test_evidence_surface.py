@@ -10,7 +10,7 @@ import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
 
 from morgan_brain.composition import build_memory_context, sqlite_path
-from morgan_brain.models import Memory, MemorySource, Scope, TemporalFact
+from morgan_brain.models import Memory, MemorySource, MemoryStatus, Scope, TemporalFact
 from morgan_brain.surfaces.cli.__main__ import build_parser
 from morgan_brain.surfaces.cli.commands import cmd_evidence, cmd_facts
 from morgan_brain.surfaces.cli.payloads import memory_to_dict
@@ -97,6 +97,28 @@ async def test_facts_surface_preserves_durable_provenance_and_validity(settings_
     assert record["valid_from"] == effective.isoformat()
     assert record["valid_to"] is None and record["superseded_by"] is None
     assert record["confidence"] == 0.75
+
+
+async def test_exact_evidence_exposes_quarantine_and_instruction_metadata(settings_for_tmp):
+    ctx = build_memory_context(settings_for_tmp)
+    try:
+        await ctx.gate.store(
+            Memory(
+                id="quarantined",
+                user_id=settings_for_tmp.owner_user_id,
+                project="p",
+                content="Synthetic instruction-shaped source evidence",
+                status=MemoryStatus.QUARANTINED,
+                instruction_like=True,
+            )
+        )
+    finally:
+        ctx.conn.close()
+    payload = await cmd_evidence(argparse.Namespace(ids=["quarantined"]), settings_for_tmp, "p")
+    record = payload["results"][0]
+    assert record["id"] == "quarantined"
+    assert record["status"] == "quarantined"
+    assert record["instruction_like"] is True
 
 
 async def test_evidence_wire_contract_scope_and_model_independence(settings_for_tmp, monkeypatch):
