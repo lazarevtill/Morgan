@@ -63,9 +63,10 @@ class RevisionResolver:
             SELECT candidate.id FROM memories AS candidate
             WHERE candidate.user_id=? AND (? IS NULL OR candidate.project=?)
             AND (candidate.created_at IS NULL OR
-                morgan_effective_us(candidate.created_at)<=morgan_effective_us(?))
+                morgan_effective_us(candidate.created_at)<=?)
         """
-        params: tuple[object, ...] = (user_id, project, project, self.at.isoformat())
+        cutoff_us = (self.at - datetime(1970, 1, 1, tzinfo=UTC)) // timedelta(microseconds=1)
+        params: tuple[object, ...] = (user_id, project, project, cutoff_us)
         if "status" in self._columns:
             sql += " AND candidate.status='stored'"
         if "revision_root_id" in self._columns:
@@ -74,7 +75,7 @@ class RevisionResolver:
                     SELECT id,user_id,project,revision_root_id,revises_event_ids FROM memories
                     WHERE user_id=? AND (? IS NULL OR project=?) AND status='stored'
                     AND (created_at IS NULL OR
-                        morgan_effective_us(created_at)<=morgan_effective_us(?))
+                        morgan_effective_us(created_at)<=?)
                 ), suppressed AS MATERIALIZED (
                     SELECT child.user_id,child.project,child.revision_root_id,
                         link.value AS parent_id

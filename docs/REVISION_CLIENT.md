@@ -48,3 +48,8 @@ before their candidate limits and before the vector relevance floor. Superseded,
 and quarantined sources cannot occupy those slots. Eligible siblings still carry fork
 metadata. Each recall keeps one query embedding and two ranked SQL queries; the queries
 select source IDs and correction metadata in SQLite without hydrating the full history.
+
+The eligibility subquery touches in-scope source metadata, so its work grows with history
+size, not only `top_k`. It currently runs once for each ranked signal: two metadata passes
+per recall. The cutoff is bound as exact integer microseconds; stored event times still
+need normalization during each pass. No source text is fetched by those eligibility scans.

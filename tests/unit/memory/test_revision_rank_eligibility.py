@@ -1,6 +1,6 @@
 """Revision eligibility must precede real SQLite vector/FTS limits and the floor."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -153,5 +153,46 @@ async def test_empty_eligible_set_is_supported_by_real_vector_and_keyword_querie
         result = await gate.recall(MemoryQuery(user_id="owner", text="needle", top_k=1))
         assert result.memories == []
         assert result.abstained and result.reason == "empty"
+    finally:
+        conn.close()
+
+
+async def test_bound_integer_cutoff_preserves_microsecond_boundary_with_offset(tmp_path):
+    conn = open_db(str(tmp_path / "precise-cutoff.db"))
+    module = build_memory_module(conn, embedder=RankedEmbedder(), dim=4, clock=lambda: SEP)
+    gate = MemoryGate(module)
+    root_at = JAN + timedelta(microseconds=100)
+    child_at = root_at + timedelta(microseconds=1)
+    try:
+        for identity, at, parents in [("root", root_at, []), ("child", child_at, ["root"])]:
+            await gate.store(
+                Memory(
+                    id=identity,
+                    user_id="owner",
+                    content="needle",
+                    source=MemorySource.USER_STATED,
+                    author_id="person:owner",
+                    effective_at=at,
+                    revises_event_ids=parents,
+                )
+            )
+        offset_cutoff = root_at.astimezone(timezone(timedelta(hours=3)))
+        candidates = RevisionResolver(
+            module._episodics, conn=conn, at=offset_cutoff
+        ).ranked_candidates(user_id="owner", project="personal")
+        assert isinstance(candidates.params[-1], int)
+        before = await gate.recall(
+            MemoryQuery(user_id="owner", text="needle", top_k=1, effective_at=offset_cutoff)
+        )
+        after = await gate.recall(
+            MemoryQuery(
+                user_id="owner",
+                text="needle",
+                top_k=1,
+                effective_at=offset_cutoff + timedelta(microseconds=1),
+            )
+        )
+        assert [memory.id for memory in before.memories] == ["root"]
+        assert [memory.id for memory in after.memories] == ["child"]
     finally:
         conn.close()
