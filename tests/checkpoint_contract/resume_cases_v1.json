@@ -1,0 +1,78 @@
+{
+  "version": "morgan.checkpoint.acceptance.v1",
+  "scope": "Synthetic design acceptance, not production or model benchmark results",
+  "cases": [
+    {
+      "id": "travel.en",
+      "language": "en",
+      "checkpoint_id": "vienna-visit",
+      "subject_entity_id": "person:owner",
+      "applies_to": ["travel:vienna-2026"],
+      "events": [
+        {"id": "constraint", "text": "The hotel must have step-free access. Do not book anything yet."},
+        {"id": "shortlist", "text": "Agent prepared a shortlist; availability has not been checked.", "source": "agent_inferred"},
+        {"id": "date-a", "text": "Travel starts November 12.", "effective_at": "2026-09-01T00:00:00Z"},
+        {"id": "date-b", "text": "Correction: travel starts November 14.", "revises_event_ids": ["date-a"], "effective_at": "2026-10-01T00:00:00Z"},
+        {"id": "date-c", "text": "Correction: travel starts November 16.", "revises_event_ids": ["date-a"], "effective_at": "2026-10-01T00:00:00Z"},
+        {"id": "date-d", "text": "Resolve both date alternatives: November 16 is correct.", "revises_event_ids": ["date-b", "date-c"], "effective_at": "2026-10-03T00:00:00Z"}
+      ],
+      "resume_observations": [
+        {"as_of": "2026-10-02T00:00:00Z", "expected_next_step": "Ask which start date is correct; retain step-free access constraint.", "conflict_ids": ["date-b", "date-c"], "required_evidence_ids": ["constraint", "date-b", "date-c"], "forbidden_actions": ["book", "assert one date as settled"]},
+        {"as_of": "2026-10-04T00:00:00Z", "expected_next_step": "Check availability for November 16 subject to the access constraint; do not book.", "conflict_ids": [], "required_evidence_ids": ["constraint", "date-d"], "old_checkpoint_state": "needs_rebuild", "forbidden_actions": ["book", "use November 12 or 14"]}
+      ]
+    },
+    {
+      "id": "travel.ru",
+      "language": "ru",
+      "checkpoint_id": "vienna-visit",
+      "subject_entity_id": "person:owner",
+      "applies_to": ["travel:vienna-2026"],
+      "events": [
+        {"id": "constraint", "text": "В отеле должен быть доступ без ступеней. Пока ничего не бронируй."},
+        {"id": "shortlist", "text": "Агент подготовил список отелей; наличие мест не проверено.", "source": "agent_inferred"},
+        {"id": "date-a", "text": "Поездка начинается 12 ноября.", "effective_at": "2026-09-01T00:00:00Z"},
+        {"id": "date-b", "text": "Исправление: поездка начинается 14 ноября.", "revises_event_ids": ["date-a"], "effective_at": "2026-10-01T00:00:00Z"},
+        {"id": "date-c", "text": "Исправление: поездка начинается 16 ноября.", "revises_event_ids": ["date-a"], "effective_at": "2026-10-01T00:00:00Z"},
+        {"id": "date-d", "text": "Разрешаю обе версии даты: верно 16 ноября.", "revises_event_ids": ["date-b", "date-c"], "effective_at": "2026-10-03T00:00:00Z"}
+      ],
+      "resume_observations": [
+        {"as_of": "2026-10-02T00:00:00Z", "expected_next_step": "Уточнить дату начала; сохранить требование доступа без ступеней.", "conflict_ids": ["date-b", "date-c"], "required_evidence_ids": ["constraint", "date-b", "date-c"], "forbidden_actions": ["бронировать", "назвать одну дату установленной"]},
+        {"as_of": "2026-10-04T00:00:00Z", "expected_next_step": "Проверить наличие мест с 16 ноября с учетом доступности; не бронировать.", "conflict_ids": [], "required_evidence_ids": ["constraint", "date-d"], "old_checkpoint_state": "needs_rebuild", "forbidden_actions": ["бронировать", "использовать 12 или 14 ноября"]}
+      ]
+    },
+    {
+      "id": "language-goal.en",
+      "language": "en",
+      "checkpoint_id": "german-reading",
+      "subject_entity_id": "person:owner",
+      "applies_to": ["learning:german"],
+      "events": [
+        {"id": "goal", "text": "I want to read German independently by December; use short practice sessions."},
+        {"id": "minutes-a", "text": "Plan 20 minutes of reading each weekday.", "effective_at": "2026-09-01T00:00:00Z"},
+        {"id": "progress", "text": "Agent notes chapters 1 and 2 completed; chapter 3 has unfamiliar words.", "source": "agent_inferred"},
+        {"id": "minutes-b", "text": "Starting November 1, reduce reading to 10 minutes on weekdays.", "revises_event_ids": ["minutes-a"], "effective_at": "2026-11-01T00:00:00Z"}
+      ],
+      "resume_observations": [
+        {"as_of": "2026-10-15T00:00:00Z", "expected_next_step": "Resume chapter 3 for 20 minutes and review unfamiliar words.", "required_evidence_ids": ["goal", "minutes-a", "progress"], "future_evidence_ids": ["minutes-b"], "old_checkpoint_state": "current", "forbidden_actions": ["claim the goal completed", "reduce current session to 10 minutes", "schedule reminders without authorization"]},
+        {"as_of": "2026-11-02T00:00:00Z", "expected_next_step": "Rebuild the checkpoint, then resume chapter 3 for 10 minutes.", "required_evidence_ids": ["goal", "minutes-b", "progress"], "old_checkpoint_state": "needs_rebuild", "forbidden_actions": ["use superseded 20-minute plan", "claim agent progress is user-confirmed"]}
+      ]
+    },
+    {
+      "id": "language-goal.ru",
+      "language": "ru",
+      "checkpoint_id": "german-reading",
+      "subject_entity_id": "person:owner",
+      "applies_to": ["learning:german"],
+      "events": [
+        {"id": "goal", "text": "Хочу самостоятельно читать на немецком к декабрю; занятия должны быть короткими."},
+        {"id": "minutes-a", "text": "Планируй 20 минут чтения по будням.", "effective_at": "2026-09-01T00:00:00Z"},
+        {"id": "progress", "text": "Агент отметил, что главы 1 и 2 пройдены; в главе 3 есть незнакомые слова.", "source": "agent_inferred"},
+        {"id": "minutes-b", "text": "С 1 ноября сократи чтение до 10 минут по будням.", "revises_event_ids": ["minutes-a"], "effective_at": "2026-11-01T00:00:00Z"}
+      ],
+      "resume_observations": [
+        {"as_of": "2026-10-15T00:00:00Z", "expected_next_step": "Продолжить главу 3 в течение 20 минут и повторить незнакомые слова.", "required_evidence_ids": ["goal", "minutes-a", "progress"], "future_evidence_ids": ["minutes-b"], "old_checkpoint_state": "current", "forbidden_actions": ["считать цель достигнутой", "сократить текущее занятие до 10 минут", "назначить напоминания без разрешения"]},
+        {"as_of": "2026-11-02T00:00:00Z", "expected_next_step": "Обновить чекпоинт и продолжить главу 3 в течение 10 минут.", "required_evidence_ids": ["goal", "minutes-b", "progress"], "old_checkpoint_state": "needs_rebuild", "forbidden_actions": ["использовать старый план на 20 минут", "выдать оценку агента за подтверждение пользователя"]}
+      ]
+    }
+  ]
+}

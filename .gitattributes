@@ -8,3 +8,5 @@
 tests/revision_contract/revision_acceptance_v1.json -text
 tests/revision_contract/revision_acceptance_v1.sha256 -text
 tests/revision_contract/score_gold.py -text
+
+tests/checkpoint_contract/resume_cases_v1.json -text
