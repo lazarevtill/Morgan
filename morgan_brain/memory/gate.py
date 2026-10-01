@@ -123,10 +123,12 @@ class MemoryGate:
         """Why writes are refused, or ``None`` when they are not."""
         return self._read_only_reason
 
-    async def store(self, memory: Memory) -> str:
+    async def store(self, memory: Memory, *, expected_generation: int | None = None) -> str:
         self.require_writable()
         self._require_scope(memory.user_id)
-        return await self._store.store(memory)
+        if expected_generation is None:
+            return await self._store.store(memory)
+        return await self._store.store(memory, expected_generation=expected_generation)
 
     def capture_erasure_generation(self) -> int:
         self.require_writable()
