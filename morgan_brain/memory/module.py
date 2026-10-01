@@ -302,7 +302,11 @@ class MemoryModule:
         expected_generation: int,
     ) -> None:
         """Exactly two new events and history rows, prepared before one atomic write."""
-        if type(expected_generation) is not int or expected_generation < 0:
+        if (
+            not isinstance(expected_generation, int)
+            or isinstance(expected_generation, bool)
+            or expected_generation < 0
+        ):
             raise ValueError("Atomic turn requires a captured erasure generation")
         if len(memories) != 2 or len(history_entries) != 2:
             raise ValueError("Atomic turn requires exactly two events and history rows")
@@ -317,24 +321,22 @@ class MemoryModule:
             raise ValueError("Atomic turn history must share the memory connection")
         if memories[0].id == memories[1].id:
             raise ValueError("Atomic turn event IDs must be distinct")
-        owner, project = memories[0].user_id, memories[0].project
-        keys = set()
+        scope = (memories[0].user_id, memories[0].project)
         for memory, (key, context, message), role in zip(
             memories, history_entries, (Role.USER, Role.ASSISTANT), strict=True
         ):
-            if (memory.user_id, memory.project) != (owner, project) or (
+            if (memory.user_id, memory.project) != scope or (
                 message.user_id,
                 message.project,
                 context,
-            ) != (owner, project, project):
+            ) != (*scope, scope[1]):
                 raise ValueError("Atomic turn ownership and context must match")
             if message.role is not role or message.content != memory.content:
                 raise ValueError("Atomic turn history must match event content and roles")
-            if not isinstance(key, str) or not key.startswith(f"{owner}:"):
+            if not isinstance(key, str) or not key.startswith(f"{scope[0]}:"):
                 raise ValueError("Atomic turn session must match its owner")
-            keys.add(key)
-        if len(keys) != 1:
-            raise ValueError("Atomic turn history must share one session")
+            if key != history_entries[0][0]:
+                raise ValueError("Atomic turn history must share one session")
         erasure_store.require_generation(self._conn, expected_generation)
         prepared = [
             await self._prepare_event(
