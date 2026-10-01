@@ -149,6 +149,7 @@ class MemoryGate:
         history_entries: list[tuple[str, str, Message]],
         expected_generation: int,
         evidence_basis: list[Memory] | None = None,
+        fresh_session: bool = False,
     ) -> None:
         self.require_writable()
         for memory in memories:
@@ -159,6 +160,7 @@ class MemoryGate:
             history_entries=history_entries,
             expected_generation=expected_generation,
             evidence_basis=evidence_basis,
+            fresh_session=fresh_session,
         )
 
     async def get(self, memory_id: str, *, user_id: str) -> Memory | None:
@@ -322,7 +324,7 @@ class MemoryGate:
         self, *, user_id: str, project: str = PERSONAL_PROJECT, limit: int = 32
     ) -> WorkingContextList:
         self._require_scope(user_id, project)
-        if type(limit) is not int or not 1 <= limit <= 32:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 32:
             raise ValueError("working context list limit must be an integer from 1 to 32")
         return await self._store.working_context_list(user_id=user_id, project=project, limit=limit)
 

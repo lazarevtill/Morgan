@@ -187,6 +187,20 @@ def test_truncated_listing_explains_bound_and_direct_lookup():
     assert "read a known context by ID" in rendered
 
 
+def test_rendered_commands_quote_names_and_source_ids_as_literal_arguments():
+    rendered = render_context({"context_id": "gift zine", "project": "my repo", "view": None})
+    assert "'gift zine'" in rendered and "'my repo'" in rendered
+    draft = render_context(
+        {
+            "response": "Draft",
+            "context_id": "gift",
+            "project": "my repo",
+            "source_event_ids": ["source $(execute)"],
+        }
+    )
+    assert "'source $(execute)'" in draft and "'my repo'" in draft
+
+
 @pytest.mark.parametrize("operation", ["propose", "resume"])
 async def test_both_resource_closures_and_sqlite_close_run_after_chat_cleanup_error(
     local_settings, monkeypatch, operation

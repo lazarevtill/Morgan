@@ -143,7 +143,6 @@ def test_claude_code_may_run_exactly_the_read_only_tools_unprompted(tmp_path):
         "mcp__morgan__evidence",
         "mcp__morgan__facts",
         "mcp__morgan__working_context_read",
-        "mcp__morgan__working_context_propose",
     ]
 
 
@@ -158,7 +157,6 @@ def test_the_rules_follow_the_name_the_server_is_registered_under(tmp_path):
         "mcp__brain__evidence",
         "mcp__brain__facts",
         "mcp__brain__working_context_read",
-        "mcp__brain__working_context_propose",
     ]
 
 
@@ -204,7 +202,6 @@ def test_settings_edited_between_the_listing_and_the_yes_keep_the_edit(tmp_path)
         "mcp__morgan__evidence",
         "mcp__morgan__facts",
         "mcp__morgan__working_context_read",
-        "mcp__morgan__working_context_propose",
     ]
 
 

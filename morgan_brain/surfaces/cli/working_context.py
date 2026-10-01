@@ -5,10 +5,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
+import re
+import shlex
 from pathlib import Path
 from typing import Any
 
-from morgan_brain.app.continuation import resume_work
+from morgan_brain.app.continuation import ContinuationRequest, resume_work
 from morgan_brain.app.working_context import WorkingContextService
 from morgan_brain.composition import build_app_context, build_memory_context, utcnow
 from morgan_brain.config import Settings
@@ -70,7 +73,8 @@ async def read_context(
         ctx.conn.close()
 
 
-async def propose_context(
+# Explicit proposal options mirror the public tool schema without another wrapper type.
+async def propose_context(  # pylint: disable=too-many-arguments
     settings: Settings,
     context_id: str,
     event_ids: list[str],
@@ -141,7 +145,8 @@ async def apply_context(
         ctx.conn.close()
 
 
-async def continue_context(
+# Caller-reported identity stays explicit at the client boundary, separate from settings.
+async def continue_context(  # pylint: disable=too-many-arguments
     settings: Settings,
     context_id: str,
     text: str,
@@ -160,16 +165,18 @@ async def continue_context(
             gate=ctx.gate,
             history=ctx.history,
             client=ctx.client,
-            model=settings.llm_model,
             clock=utcnow,
-            context_id=context_id,
-            user_id=settings.owner_user_id,
-            project=resolved,
-            text=text,
-            session_id=session_id,
-            caller_client=client,
-            source=source,
-            author_id=author_id,
+            request=ContinuationRequest(
+                model=settings.llm_model,
+                context_id=context_id,
+                user_id=settings.owner_user_id,
+                project=resolved,
+                text=text,
+                session_id=session_id,
+                caller_client=client,
+                source=source,
+                author_id=author_id,
+            ),
         )
         return {
             **result.model_dump(mode="json"),
@@ -186,7 +193,9 @@ async def continue_context(
                 ctx.conn.close()
 
 
-async def cmd_context(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
+async def cmd_context(  # pylint: disable=unused-argument
+    args: argparse.Namespace, settings: Settings, project: str
+) -> dict[str, Any]:
     # This personal-memory verb deliberately does not infer a project from a repository.
     named = args.project
     if args.context_action in ("show", "list"):
@@ -214,13 +223,27 @@ async def cmd_context(args: argparse.Namespace, settings: Settings, project: str
     )
 
 
+def _command(*arguments: str) -> str:
+    """Display copyable literal arguments for the host shell; never execute them."""
+    if os.name == "nt":
+        return " ".join(
+            value
+            if re.fullmatch(r"[A-Za-z0-9_./:-]+", value)
+            else "'" + value.replace("'", "''") + "'"
+            for value in arguments
+        )
+    return shlex.join(arguments)
+
+
 def render_context(data: dict[str, Any]) -> str:
     if "response" in data:
-        source_args = " ".join(data["source_event_ids"])
+        command = _command(
+            "morgan", "evidence", *data["source_event_ids"], "--project", data["project"]
+        )
         return (
             str(data["response"])
             + f"\n\nWorking context: {data['context_id']} ({data['project']})."
-            + f"\nSource basis: morgan evidence {source_args} --project {data['project']}"
+            + f"\nSource basis: {command}"
         )
     if "proposal" in data:
         return json.dumps(data, ensure_ascii=False, indent=2)
@@ -241,11 +264,22 @@ def render_context(data: dict[str, Any]) -> str:
     view = data.get("view")
     if not view or view["eligibility"] != "current":
         status = view["eligibility"] if view else "missing"
-        rebuild = " --rebuild" if view else ""
+        rebuild = ["--rebuild"] if view else []
+        command = _command(
+            "morgan",
+            "context",
+            "propose",
+            data["context_id"],
+            *rebuild,
+            "--event-id",
+            "CURRENT_SOURCE_ID",
+            "--project",
+            data["project"],
+            "--json",
+        )
         return (
             f"Working context {data['context_id']}: {status}.\n"
-            f"morgan context propose {data['context_id']}{rebuild} "
-            f"--event-id CURRENT_SOURCE_ID --project {data['project']} --json\n"
+            f"{command}\n"
             "Review the proposal, then apply it explicitly."
         )
     state = view["state"]
@@ -261,5 +295,5 @@ def render_context(data: dict[str, Any]) -> str:
     ]:
         lines.extend(label + ": " + item["quote"] for item in state[field])
     ids = list(dict.fromkeys(item["event_id"] for item in view["sources"]))
-    lines.append("Details: morgan evidence " + " ".join(ids) + " --project " + data["project"])
+    lines.append("Details: " + _command("morgan", "evidence", *ids, "--project", data["project"]))
     return "\n".join(lines)

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from morgan_brain.app.continuation import resume_work
+from morgan_brain.app.continuation import ContinuationRequest, resume_work
 from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.checkpoints import CheckpointContext
 from morgan_brain.memory.embedder import FakeEmbedder
@@ -14,7 +14,7 @@ from morgan_brain.memory.store.db import open_db
 from morgan_brain.memory.store.erasure import StoreInterruptedByForget
 from morgan_brain.memory.store.history import SessionHistoryStore, session_key
 from morgan_brain.memory.working_context import WorkingContextDraft, WorkingContextPreview
-from morgan_brain.models import Memory, MemorySource
+from morgan_brain.models import Memory, MemorySource, Message, Role
 from morgan_brain.providers.wire import ChatResult
 
 NOW = datetime(2026, 10, 1, tzinfo=UTC)
@@ -73,16 +73,18 @@ async def run(gate, history, client, session="new-agent-session"):
         gate=gate,
         history=history,
         client=client,
-        model="synthetic",
         clock=lambda: NOW,
-        context_id="gift",
-        user_id="owner",
-        project="personal",
-        text="Continue our gift.",
-        session_id=session,
-        caller_client="independent-agent",
-        source=MemorySource.USER_STATED,
-        author_id="person:owner",
+        request=ContinuationRequest(
+            model="synthetic",
+            context_id="gift",
+            user_id="owner",
+            project="personal",
+            text="Continue our gift.",
+            session_id=session,
+            caller_client="independent-agent",
+            source=MemorySource.USER_STATED,
+            author_id="person:owner",
+        ),
     )
 
 
@@ -176,6 +178,62 @@ async def test_truncated_generation_is_not_committed_as_a_useful_draft():
             await run(gate, history, DraftClient(conn, finish="length"))
         assert not history.recent(
             session_key("owner", "new-agent-session"), project="personal", user_id="owner"
+        )
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("session", ["default", "occupied"])
+async def test_reserved_or_occupied_session_rejected_before_model(session):
+    conn = open_db(":memory:")
+    try:
+        gate, history, _ = await prepared(conn)
+        if session == "occupied":
+            history.append(
+                session_key("owner", session),
+                Message(
+                    user_id="owner",
+                    project="personal",
+                    role=Role.USER,
+                    content="Existing unrelated work",
+                ),
+                project="personal",
+            )
+        client = DraftClient(conn)
+        with pytest.raises(ValueError, match="session"):
+            await run(gate, history, client, session=session)
+        assert client.messages == []
+    finally:
+        conn.close()
+
+
+async def test_concurrent_session_occupancy_rejected_without_partial_draft():
+    conn = open_db(":memory:")
+    try:
+        gate, history, _ = await prepared(conn)
+
+        async def occupy():
+            history.append(
+                session_key("owner", "new-agent-session"),
+                Message(
+                    user_id="owner", project="personal", role=Role.USER, content="Other caller won"
+                ),
+                project="personal",
+            )
+
+        with pytest.raises(ValueError, match="already occupied"):
+            await run(gate, history, DraftClient(conn, hook=occupy))
+        assert [
+            m.content
+            for m in history.recent(
+                session_key("owner", "new-agent-session"), project="personal", user_id="owner"
+            )
+        ] == ["Other caller won"]
+        assert (
+            conn.execute(
+                "SELECT COUNT(*) FROM memories WHERE content=?", ("A usable four-panel draft.",)
+            ).fetchone()[0]
+            == 0
         )
     finally:
         conn.close()

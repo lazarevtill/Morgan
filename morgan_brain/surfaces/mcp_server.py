@@ -147,7 +147,10 @@ TOOL_ANNOTATIONS: dict[str, ToolAnnotations] = {
 
 #: The tools a client may run without asking, derived from the declarations above.
 READ_ONLY_TOOLS: tuple[str, ...] = tuple(
-    name for name in TOOL_NAMES if TOOL_ANNOTATIONS[name].readOnlyHint
+    # Installer auto-approval covers repeatable reads, not model-backed proposals.
+    name
+    for name in TOOL_NAMES
+    if TOOL_ANNOTATIONS[name].readOnlyHint and TOOL_ANNOTATIONS[name].idempotentHint
 )
 
 _ToolFn = Callable[..., Awaitable[dict[str, Any]]]
@@ -407,7 +410,8 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
         """
         return await apply_context(settings, proposal, project)
 
-    async def working_context_resume(
+    # Keep reported provenance as ordinary schema fields for existing MCP clients.
+    async def working_context_resume(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         context_id: str,
         text: str,
         session_id: str,

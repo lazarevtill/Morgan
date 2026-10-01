@@ -39,6 +39,21 @@ class ContinuationResult(BaseModel):
     actions_executed: Literal[False] = False
 
 
+class ContinuationRequest(BaseModel):
+    """One caller's scoped request and reported identity, never an authorization token."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    context_id: str
+    user_id: str
+    project: str
+    text: str
+    session_id: str
+    model: str
+    caller_client: str = ""
+    source: MemorySource = MemorySource.UNKNOWN
+    author_id: str = ""
+
+
 def continuation_messages(view: WorkingContextResult, text: str) -> list[ChatMessage]:
     """Keep selected quotes and reported actors as data, without role impersonation."""
     if view.eligibility != "current" or view.state is None:
@@ -67,62 +82,61 @@ async def resume_work(
     gate: MemoryGate,
     history: SessionHistoryStore,
     client: ChatClient,
-    model: str,
     clock: Callable[[], datetime],
-    context_id: str,
-    user_id: str,
-    project: str,
-    text: str,
-    session_id: str,
-    caller_client: str = "",
-    source: MemorySource = MemorySource.UNKNOWN,
-    author_id: str = "",
+    request: ContinuationRequest,
 ) -> ContinuationResult:
     """Capture the view head and raw basis before inference; atomically store the turn."""
     gate.require_writable()
-    source = MemorySource(source)
-    if not session_id.strip():
+    if not request.session_id.strip() or request.session_id.strip() == "default":
         raise ValueError("Continuation requires an explicit independent session ID")
     generation = gate.capture_erasure_generation()
     with gate.write_transaction():
-        view = await gate.get_working_context(context_id, user_id=user_id, project=project)
+        if history.recent(
+            session_key(request.user_id, request.session_id),
+            limit=1,
+            project=request.project,
+            user_id=request.user_id,
+        ):
+            raise ValueError("Fresh session is already occupied")
+        view = await gate.get_working_context(
+            request.context_id, user_id=request.user_id, project=request.project
+        )
         if view is None or view.eligibility != "current" or view.state is None:
             raise ValueError("No current working context; prepare and apply a fresh proposal")
         ids = view.state.event_ids()
         # Including the fact itself lets existing turn validation reject concurrent head
         # replacement as well as source revisions, even during asynchronous embedding.
         basis = await gate.evidence(
-            user_id=user_id, project=project, evidence_ids=[view.fact_id, *ids]
+            user_id=request.user_id, project=request.project, evidence_ids=[view.fact_id, *ids]
         )
         if basis.missing_ids:
             raise ValueError("Working context source unavailable")
-    messages = continuation_messages(view, text)
+    messages = continuation_messages(view, request.text)
     if sum(len(m.content.encode("utf-8")) for m in messages) > 49152:
         raise ValueError("Continuation request exceeds 49152 bytes")
     input_at = clock()
-    generated = await client.agenerate(messages, model=model)
+    generated = await client.agenerate(messages, model=request.model)
     if generated.finish_reason != "stop" or generated.tool_calls:
         raise ValueError("Continuation generation incomplete; no turn committed")
     reply = generated.text
     if not reply.strip() or len(reply.encode("utf-8")) > 16384:
         raise ValueError("Continuation draft empty or exceeds 16384 bytes")
     reply_at = clock()
-    key = session_key(user_id, session_id)
     records = [
         Memory(
-            user_id=user_id,
-            project=project,
+            user_id=request.user_id,
+            project=request.project,
             content=content,
             source=reported_source,
             author_id=actor,
             created_at=at,
             origin_kind=OriginKind.ASK,
-            client=caller_client,
-            session_id=session_id,
+            client=request.caller_client,
+            session_id=request.session_id,
         )
         for content, reported_source, actor, at in (
-            (text, source, author_id, input_at),
-            (reply, MemorySource.AGENT_INFERRED, f"model:{model}", reply_at),
+            (request.text, request.source, request.author_id, input_at),
+            (reply, MemorySource.AGENT_INFERRED, f"model:{request.model}", reply_at),
         )
     ]
     await gate.store_turn(
@@ -130,15 +144,22 @@ async def resume_work(
         history=history,
         expected_generation=generation,
         evidence_basis=basis.records,
+        fresh_session=True,
         history_entries=[
-            (key, project, Message(user_id=user_id, project=project, role=role, content=content))
-            for role, content in ((Role.USER, text), (Role.ASSISTANT, reply))
+            (
+                session_key(request.user_id, request.session_id),
+                request.project,
+                Message(
+                    user_id=request.user_id, project=request.project, role=role, content=content
+                ),
+            )
+            for role, content in ((Role.USER, request.text), (Role.ASSISTANT, reply))
         ],
     )
     return ContinuationResult(
-        context_id=context_id,
+        context_id=request.context_id,
         fact_id=view.fact_id,
         response=reply,
-        model_used=model,
+        model_used=request.model,
         source_event_ids=ids,
     )

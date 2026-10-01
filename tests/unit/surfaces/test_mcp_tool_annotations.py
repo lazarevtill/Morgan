@@ -8,9 +8,14 @@ judged by each client's own defaults, which is not a decision this server should
 
 from __future__ import annotations
 
-from morgan_brain.surfaces.mcp_server import build_server
+from morgan_brain.surfaces.mcp_server import READ_ONLY_TOOLS, build_server
 
 HINTS = ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")
+
+
+def test_model_backed_proposals_are_not_auto_approved():
+    assert "working_context_propose" not in READ_ONLY_TOOLS
+    assert "working_context_read" in READ_ONLY_TOOLS
 
 
 async def _declared(tmp_path, monkeypatch):

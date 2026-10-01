@@ -337,8 +337,11 @@ class MemoryModule:
         history_entries: list[tuple[str, str, Message]],
         expected_generation: int,
         evidence_basis: list[Memory] | None = None,
+        fresh_session: bool = False,
     ) -> None:
         """Exactly two new events and history rows, prepared before one atomic write."""
+        if not isinstance(fresh_session, bool):
+            raise TypeError("fresh_session must be an explicit boolean")
         if (
             not isinstance(expected_generation, int)
             or isinstance(expected_generation, bool)
@@ -391,6 +394,10 @@ class MemoryModule:
         ]
         with write_transaction(self._conn):
             erasure_store.require_generation(self._conn, expected_generation)
+            if fresh_session and history.recent(
+                history_entries[0][0], project=scope[1], user_id=scope[0], limit=1
+            ):
+                raise ValueError("Fresh session is already occupied")
             if evidence_basis:
                 await self._check_turn_evidence(evidence_basis, owner=scope[0], project=scope[1])
             for original, event, _generation in prepared:

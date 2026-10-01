@@ -8,10 +8,13 @@ from collections.abc import Awaitable, Callable
 from morgan_brain.memory.checkpoints import CheckpointContext
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.working_context import (
+    WorkingContext,
     WorkingContextDraft,
     WorkingContextPreview,
+    WorkingContextResult,
     current_source,
 )
+from morgan_brain.models import Memory
 from morgan_brain.providers.structured import JsonMode, generate_structured
 from morgan_brain.providers.wire import ChatClient, ChatMessage
 
@@ -66,6 +69,41 @@ class WorkingContextService:
             not current_source(r) or (r.id in event_ids and len(r.content) > 4096) for r in records
         ):
             raise ValueError("preview source unavailable or exceeds 4096 characters")
+        messages = self._proposal_messages(old, old_state, records, event_ids)
+        draft = (
+            await self._proposer(messages)
+            if self._proposer
+            else await generate_structured(
+                self._client,
+                messages,
+                model=self._model,
+                schema=WorkingContextDraft,
+                json_mode=self._json_mode,
+                max_reask=0,
+            )
+        )
+        state = draft.normalize(records)
+        return WorkingContextPreview(
+            context_id=context_id,
+            context=context,
+            expected_fact_id=old.fact_id if old else None,
+            generation=generation,
+            state=state,
+            evidence_basis=[
+                r.model_copy(deep=True, update={"embedding": None, "entities": []})
+                for r in records
+                if r.id in state.event_ids()
+            ],
+        )
+
+    @staticmethod
+    def _proposal_messages(
+        old: WorkingContextResult | None,
+        old_state: WorkingContext | None,
+        records: list[Memory],
+        event_ids: list[str],
+    ) -> list[ChatMessage]:
+        """Serialize the same bounded, attributed selection request."""
         messages = [
             ChatMessage(
                 role="system",
@@ -109,32 +147,7 @@ class WorkingContextService:
         size += len(json.dumps(WorkingContextDraft.model_json_schema()).encode("utf-8"))
         if size > 49152:
             raise ValueError("working context proposal input exceeds 49152 bytes")
-        draft = (
-            await self._proposer(messages)
-            if self._proposer
-            else await generate_structured(
-                self._client,
-                messages,
-                model=self._model,
-                schema=WorkingContextDraft,
-                json_mode=self._json_mode,
-                max_reask=0,
-            )
-        )
-        state = draft.normalize(records)
-        selected = [
-            r.model_copy(deep=True, update={"embedding": None, "entities": []})
-            for r in records
-            if r.id in state.event_ids()
-        ]
-        return WorkingContextPreview(
-            context_id=context_id,
-            context=context,
-            expected_fact_id=old.fact_id if old else None,
-            generation=generation,
-            state=state,
-            evidence_basis=selected,
-        )
+        return messages
 
     async def apply(self, preview: WorkingContextPreview) -> str:
         return await self._gate.put_working_context(preview)

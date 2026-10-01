@@ -23,6 +23,9 @@ spans of their original events; offsets and evidence snapshots are checked again
 apply time. A changed head, corrected source, or forget operation rejects an obsolete
 proposal. Proposed reason links and category choices remain unverified.
 
+Continuation requires an unused session ID; `default` is reserved. An occupied key is
+rejected again atomically at commit, including occupation during model or embedding
+work. Continue subsequent work with another fresh session and the same context ID.
 Continuation produces a draft and persists the user/agent turn atomically. It has no
 action tools. Its source-basis IDs identify the organizer's inputs, not independently
 validated citations for every sentence in the generated draft. Reported USER, AGENT,
@@ -39,7 +42,8 @@ morgan context apply proposal.json
 
 The MCP equivalents are `working_context_read`, `working_context_propose`,
 `working_context_apply`, and `working_context_resume`. Propose is read-only but uses
-the configured model; apply and resume write. Resume requires an explicit session ID.
+the configured model and is excluded from installer auto-approval; apply and resume
+write. Resume requires an explicit fresh session ID.
 Personal and project scopes are independent of the reported client or author.
 
 Versioned contracts use `morgan.working_context.v1`,
