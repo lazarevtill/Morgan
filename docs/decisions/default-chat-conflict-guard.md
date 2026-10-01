@@ -59,7 +59,6 @@ refusal, user/agent provenance, normal generation after an explicit join, unchan
 wire, embedding failure and concurrent erasure. Existing strict and atomic-chat tests remain
 required. No endpoint or live memory is used by these tests.
 
-
 Guard turns use the additive `origin_kind: ask_conflict_guard` on both input and notice.
 Repeated procedural questions and notices are excluded from competitive vector/keyword recall
 **before candidate limits** so they cannot displace the unresolved sources that prompted them.
@@ -74,3 +73,10 @@ additive contract value, requiring current Morgan to import/replay; older client
 validate origin enum values may refuse it and should update rather than silently rewrite it.
 Unrelated stored evidence can still crowd a fork outside recall; this change prevents the guard's
 own persisted turns from doing so and does not claim globally exhaustive conflict discovery.
+
+The configured relevance floor's exact-entity override uses the same eligible source IDs
+as vector and FTS ranking, before its own limit. Guard input names are automatically indexed
+by ordinary ingestion even when Chat starts with an empty entity list. Excluding procedural
+turns only from vector/FTS was insufficient: repeated names could crowd the genuine source
+out of the floor's entity candidates and trigger unguarded generation. The shared pre-limit
+eligibility predicate closes that path without changing floor thresholds or exact-match logic.

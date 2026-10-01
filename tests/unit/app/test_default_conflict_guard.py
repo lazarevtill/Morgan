@@ -463,3 +463,71 @@ async def test_guard_origin_is_scoped_durable_replayable_and_not_consolidated():
         )
     finally:
         conn.close()
+
+
+async def test_floor_entity_override_survives_autoindexed_guard_turns():
+    class FlatEmbedder(FakeEmbedder):
+        async def embed(self, text):
+            return [1.0, 0.0, 0.0, 0.0]
+
+    conn = open_db(":memory:")
+    gate = MemoryGate(
+        build_memory_module(
+            conn, embedder=FlatEmbedder(dim=4), dim=4, clock=lambda: NOW, floor_margin=0.1
+        )
+    )
+    client = Client()
+    chat = Chat(
+        gate=gate,
+        history=SessionHistoryStore(conn, clock=lambda: NOW),
+        client=client,
+        model="fake",
+        clock=lambda: NOW,
+    )
+    try:
+        for identity, parents in [
+            ("zz-root", []),
+            ("zz-left", ["zz-root"]),
+            ("zz-right", ["zz-root"]),
+        ]:
+            await gate.store(
+                Memory(
+                    id=identity,
+                    user_id="owner",
+                    project="personal",
+                    content="I chose Harbor glaze",
+                    source=MemorySource.USER_STATED,
+                    author_id="person",
+                    created_at=NOW - timedelta(days=1),
+                    revises_event_ids=parents,
+                )
+            )
+        for index in range(6):
+            await gate.store(
+                Memory(
+                    id=f"zz-noise-{index}",
+                    user_id="owner",
+                    project="personal",
+                    content="ordinary unrelated background",
+                    source=MemorySource.USER_STATED,
+                    author_id="person",
+                    created_at=NOW - timedelta(days=1),
+                )
+            )
+        for _ in range(20):
+            await chat.ask(user_id="owner", project="personal", text="What about Harbor?")
+        assert client.requests == []
+        assert (
+            conn.execute(
+                "SELECT count(*) FROM memory_entities JOIN memories ON memory_id=id "
+                "WHERE origin_kind='ask_conflict_guard' AND name='harbor'"
+            ).fetchone()[0]
+            == 20
+        )
+        recalled = await gate.recall(
+            MemoryQuery(user_id="owner", project="personal", text="What about Harbor?")
+        )
+        assert not recalled.abstained
+        assert any(record.revision_state == "conflicted" for record in recalled.memories)
+    finally:
+        conn.close()
