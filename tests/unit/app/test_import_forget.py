@@ -109,8 +109,11 @@ async def test_forget_during_archive_read_cancels_import_before_embedding(tmp_pa
         eraser_conn.close()
 
 
-async def test_forget_during_import_canary_cancels_later_archive_writes(tmp_path, monkeypatch):
-    path = _export(tmp_path / "synthetic.json", turns=2)
+@pytest.mark.parametrize("turns,canary_every", [(2, 1), (1, 1), (1, 100)])
+async def test_forget_during_import_canary_cancels_later_archive_writes(
+    tmp_path, monkeypatch, turns, canary_every
+):
+    path = _export(tmp_path / "synthetic.json", turns=turns)
     conn = open_db(str(tmp_path / "synthetic.db"))
     eraser_conn = open_db(str(tmp_path / "synthetic.db"))
     embedder = CountingEmbedder()
@@ -122,7 +125,9 @@ async def test_forget_during_import_canary_cancels_later_archive_writes(tmp_path
         await release.wait()
 
     monkeypatch.setattr(gate, "check_embedding_space", paused_canary)
-    pending = asyncio.create_task(import_chatgpt(path, gate=gate, user_id="owner", canary_every=1))
+    pending = asyncio.create_task(
+        import_chatgpt(path, gate=gate, user_id="owner", canary_every=canary_every)
+    )
     try:
         await asyncio.wait_for(entered.wait(), timeout=5)
         assert conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0] == 1

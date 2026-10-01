@@ -29,6 +29,7 @@ from typing import Any
 from morgan_brain.config import DEFAULT_IMPORT_CANARY_EVERY
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.store.episodic import EventIdentityConflict
+from morgan_brain.memory.store.erasure import StoreInterruptedByForget
 from morgan_brain.models import Memory, MemoryKind, MemorySource, OriginKind
 from morgan_brain.providers.wire import EmbeddingSpaceMismatch
 
@@ -338,6 +339,9 @@ async def import_chatgpt(
 
     if since_last_canary:
         await _run_canary(gate, stored, since_last_canary)
+
+    if gate.capture_erasure_generation() != generation:
+        raise StoreInterruptedByForget("Forget interrupted import; retry explicitly")
 
     return ImportReport(conversations=kept, held_out=held, memories=stored, skipped_turns=skipped)
 
