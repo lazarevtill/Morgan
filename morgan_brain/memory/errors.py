@@ -16,3 +16,12 @@ class DatabaseSchemaTooNew(ValueError):
             f"supported schema {supported_version}. Use a matching newer build; "
             "do not downgrade this database in place."
         )
+
+
+class EvidenceChanged(ValueError):
+    """Prepared answer evidence no longer describes the commit-time scoped state."""
+
+    reason = "evidence_changed"
+
+    def __init__(self) -> None:
+        super().__init__(self.reason)

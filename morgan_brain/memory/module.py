@@ -29,6 +29,7 @@ from morgan_brain.memory.checkpoints import (
     StaleCheckpoint,
 )
 from morgan_brain.memory.embedder import Embedder
+from morgan_brain.memory.errors import EvidenceChanged
 from morgan_brain.memory.evidence import ScopedEvidenceReader, fact_memory
 from morgan_brain.memory.gate import EvidenceResult, ForgetReport, RecallOutcome, RecallReason
 from morgan_brain.memory.knowledge.basis import (
@@ -46,7 +47,7 @@ from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
-from morgan_brain.memory.revisions import RevisionError, RevisionResolver
+from morgan_brain.memory.revisions import RevisionError, RevisionResolver, instant
 from morgan_brain.memory.store import erasure as erasure_store
 from morgan_brain.memory.store import projects
 from morgan_brain.memory.store import tables as registry
@@ -316,6 +317,7 @@ class MemoryModule:
         history: SessionHistoryStore,
         history_entries: list[tuple[str, str, Message]],
         expected_generation: int,
+        evidence_basis: list[Memory] | None = None,
     ) -> None:
         """Exactly two new events and history rows, prepared before one atomic write."""
         if (
@@ -333,6 +335,10 @@ class MemoryModule:
             (key, context, message.model_copy(deep=True))
             for key, context, message in history_entries
         ]
+        if evidence_basis is not None:
+            if len(evidence_basis) > 32:
+                raise ValueError("Atomic turn evidence basis is limited to 32 records")
+            evidence_basis = [record.model_copy(deep=True) for record in evidence_basis]
         if not history.shares_connection(self._conn):
             raise ValueError("Atomic turn history must share the memory connection")
         if memories[0].id == memories[1].id:
@@ -353,6 +359,10 @@ class MemoryModule:
                 raise ValueError("Atomic turn session must match its owner")
             if key != history_entries[0][0]:
                 raise ValueError("Atomic turn history must share one session")
+        if evidence_basis is not None and any(
+            (record.user_id, record.project) != scope for record in evidence_basis
+        ):
+            raise ValueError("Atomic turn evidence basis must match its owner and context")
         erasure_store.require_generation(self._conn, expected_generation)
         prepared = [
             await self._prepare_event(
@@ -362,12 +372,47 @@ class MemoryModule:
         ]
         with write_transaction(self._conn):
             erasure_store.require_generation(self._conn, expected_generation)
+            if evidence_basis:
+                await self._check_turn_evidence(evidence_basis, owner=scope[0], project=scope[1])
             for original, event, _generation in prepared:
                 if event is None:
                     raise ValueError("Atomic turn preparation requires new events")
                 await self._persist_prepared_event(original, event, allow_replay=False)
             for key, context, message in history_entries:
                 history.append(key, message, project=context)
+
+    async def _check_turn_evidence(
+        self, evidence_basis: list[Memory], *, owner: str, project: str
+    ) -> None:
+        """SQL-only validation inside the turn transaction; no provider I/O."""
+        if not self._conn.in_transaction:
+            raise ValueError("Turn evidence validation requires an active transaction")
+        basis_at = self._clock()
+        resolved = await self.evidence(
+            user_id=owner,
+            project=project,
+            evidence_ids=[record.id for record in evidence_basis],
+            effective_at=basis_at,
+        )
+        if any(
+            record.kind is MemoryKind.SEMANTIC
+            and (
+                (record.valid_from is not None and instant(record.valid_from) > instant(basis_at))
+                or (record.valid_to is not None and instant(record.valid_to) <= instant(basis_at))
+            )
+            for record in resolved.records
+        ):
+            raise EvidenceChanged()
+        excluded = {"embedding", "entities", "importance"}
+        expected = {
+            record.id: record.model_dump(mode="json", exclude=excluded) for record in evidence_basis
+        }
+        actual = {
+            record.id: record.model_dump(mode="json", exclude=excluded)
+            for record in resolved.records
+        }
+        if resolved.missing_ids or expected != actual:
+            raise EvidenceChanged()
 
     async def get(self, memory_id: str, *, user_id: str) -> Memory | None:
         """One memory by id, scoped to its owner.

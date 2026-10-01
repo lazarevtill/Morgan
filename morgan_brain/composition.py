@@ -18,6 +18,7 @@ from typing import Any
 import structlog
 
 from morgan_brain.app.chat import Chat
+from morgan_brain.app.strict_context import StrictContextConfig, strict_request
 from morgan_brain.config import Settings
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.evidence import ScopedEvidenceReader, validate_source_schema
@@ -42,7 +43,12 @@ from morgan_brain.memory.store.projects import ProjectStore
 from morgan_brain.memory.store.spaces import EmbeddingSpaceStore
 from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.memory.store.vectors import SqliteVectorIndex
-from morgan_brain.providers.factory import Budget, build_chat_client, build_embedder
+from morgan_brain.providers.factory import (
+    Budget,
+    build_chat_client,
+    build_embedder,
+    build_strict_chat_backend,
+)
 from morgan_brain.providers.openai_compat import OpenAICompatAdapter
 
 log = structlog.get_logger("composition")
@@ -277,8 +283,21 @@ def build_memory_context(settings: Settings, *, budget: Budget = "interactive") 
 
 
 def build_app_context(settings: Settings) -> AppContext:
+    strict_config = StrictContextConfig(
+        total_tokens=settings.strict_context_tokens,
+        output_tokens=settings.strict_context_output_tokens,
+        safety_tokens=settings.strict_context_safety_tokens,
+    )
     memory = build_memory_context(settings)
-    client = build_chat_client(settings)
+    try:
+        client = build_chat_client(settings)
+        strict_backend = build_strict_chat_backend(
+            settings,
+            response_format=strict_request(settings.llm_model, strict_config).response_format,
+        )
+    except BaseException:
+        memory.conn.close()
+        raise
     return AppContext(
         gate=memory.gate,
         conn=memory.conn,
@@ -292,6 +311,8 @@ def build_app_context(settings: Settings) -> AppContext:
             client=client,
             model=settings.llm_model,
             clock=utcnow,
+            strict_backend=strict_backend,
+            strict_config=strict_config,
         ),
         consolidator=MemoryConsolidator(
             gate=memory.gate,

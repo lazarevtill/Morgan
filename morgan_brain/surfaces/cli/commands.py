@@ -14,11 +14,13 @@ from typing import Any
 
 import structlog
 
+from morgan_brain.app.chat import TurnRequest
 from morgan_brain.app.chatgpt_import import (
     ARCHIVE_PROJECT,
     HOLDOUT_PROJECT,
     import_chatgpt,
 )
+from morgan_brain.app.strict_context import StrictContextError
 from morgan_brain.composition import (
     MemoryContext,
     build_app_context,
@@ -301,21 +303,48 @@ async def cmd_ask(
     convention ``cmd_remember`` uses, and so is *repository* (``_record_the_repository``)."""
     source = MemorySource(getattr(args, "source", "unknown"))
     author_id = getattr(args, "author_id", "")
+    strict_context = getattr(args, "strict_context", False)
+    strict_context_is_bool = isinstance(strict_context, bool)
+    if not strict_context_is_bool:
+        raise ValueError("strict_context must be a boolean")
+    if strict_context and settings.strict_context_backend == "disabled":
+        raise StrictContextError("token_counter_unavailable")
     ctx = build_app_context(settings)
     try:
-        reply = await ctx.chat.ask(
-            user_id=settings.owner_user_id,
-            project=project,
-            text=args.text,
-            caller_client=client,
-            caller_session_id=session_id,
-            source=source,
-            author_id=author_id,
-        )
+        detailed = None
+        if strict_context:
+            detailed = await ctx.chat.ask_evidence(
+                TurnRequest(
+                    user_id=settings.owner_user_id,
+                    project=project,
+                    text=args.text,
+                    caller_client=client,
+                    caller_session_id=session_id,
+                    source=source,
+                    author_id=author_id,
+                )
+            )
+            reply = detailed.answer
+        else:
+            reply = await ctx.chat.ask(
+                user_id=settings.owner_user_id,
+                project=project,
+                text=args.text,
+                caller_client=client,
+                caller_session_id=session_id,
+                source=source,
+                author_id=author_id,
+                strict_context=strict_context,
+            )
         await _record_the_repository(ctx, settings, project, repository)
     finally:
-        ctx.conn.close()
-    return {
+        try:
+            close = getattr(ctx.chat, "aclose", None)
+            if callable(close):
+                await close()
+        finally:
+            ctx.conn.close()
+    payload = {
         "project": project,
         "response": reply,
         "model_used": settings.llm_model,
@@ -324,6 +353,10 @@ async def cmd_ask(
         "response_source": MemorySource.AGENT_INFERRED.value,
         "response_author_id": f"model:{settings.llm_model}",
     }
+
+    if detailed is not None:
+        payload.update(detailed.model_dump(mode="json"))
+    return payload
 
 
 async def cmd_consolidate(
@@ -368,7 +401,10 @@ async def cmd_consolidate(
             ]
         await _record_the_repository(ctx, settings, project, repository)
     finally:
-        ctx.conn.close()
+        try:
+            await ctx.chat.aclose()
+        finally:
+            ctx.conn.close()
     return {"project": project, "all_projects": args.all_projects, "applied": applied}
 
 

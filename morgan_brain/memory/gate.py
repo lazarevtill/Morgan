@@ -139,6 +139,7 @@ class MemoryGate:
         history: SessionHistoryStore,
         history_entries: list[tuple[str, str, Message]],
         expected_generation: int,
+        evidence_basis: list[Memory] | None = None,
     ) -> None:
         self.require_writable()
         for memory in memories:
@@ -148,6 +149,7 @@ class MemoryGate:
             history=history,
             history_entries=history_entries,
             expected_generation=expected_generation,
+            evidence_basis=evidence_basis,
         )
 
     async def get(self, memory_id: str, *, user_id: str) -> Memory | None:
