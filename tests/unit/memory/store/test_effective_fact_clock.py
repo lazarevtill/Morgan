@@ -333,3 +333,59 @@ async def test_reschedule_after_cancellation_never_overlaps_or_extends_predecess
             assert await store.current_facts(user_id="u", at=original_end) == []
     finally:
         store._conn.close()
+
+
+@pytest.mark.parametrize("scheduled_predecessor", [False, True])
+async def test_reversed_writer_clock_after_schedule_cancellation_preserves_one_effective_fact(
+    scheduled_predecessor,
+):
+    store = SqliteTemporalStore()
+    captured = datetime(2026, 1, 1, tzinfo=UTC)
+    committed = captured + (
+        timedelta(days=1) if scheduled_predecessor else timedelta(microseconds=1)
+    )
+    future = captured + timedelta(days=2)
+    try:
+        await store.upsert_fact(
+            TemporalFact(
+                id="tea",
+                user_id="u",
+                subject="user",
+                predicate="drink",
+                object="tea",
+                valid_from=committed if scheduled_predecessor else None,
+            ),
+            now=captured if scheduled_predecessor else committed,
+        )
+        await store.upsert_fact(
+            TemporalFact(
+                id="water",
+                user_id="u",
+                subject="user",
+                predicate="drink",
+                object="water",
+                valid_from=future,
+            ),
+            now=committed,
+        )
+        await store.close_fact("water", user_id="u", project="personal", now=committed)
+        before = store._conn.serialize()
+        replacement = TemporalFact(
+            id="coffee", user_id="u", subject="user", predicate="drink", object="coffee"
+        )
+        if scheduled_predecessor:
+            with pytest.raises(ValueError, match="scheduled"):
+                await store.upsert_fact(replacement, now=captured)
+            assert store._conn.serialize() == before
+        else:
+            await store.upsert_fact(replacement, now=captured)
+            assert await store.current_facts(user_id="u", at=captured) == []
+            assert [f.id for f in await store.current_facts(user_id="u", at=committed)] == [
+                "coffee"
+            ]
+            rows = {
+                f.id: f for f in await store.history(user_id="u", subject="user", predicate="drink")
+            }
+            assert rows["coffee"].valid_from == rows["tea"].valid_to == committed
+    finally:
+        store._conn.close()

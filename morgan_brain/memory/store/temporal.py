@@ -188,9 +188,17 @@ class SqliteTemporalStore:
                 existing_rows = [
                     row
                     for row in bounded_rows
-                    if ((start := _dt(row["valid_from"])) is None or _instant(start) <= instant)
-                    and (end := _dt(row["valid_to"])) is not None
+                    if (end := _dt(row["valid_to"])) is not None
                     and instant < _instant(end)
+                    and (
+                        (start := _dt(row["valid_from"])) is None
+                        or _instant(start) <= instant
+                        # An implicit writer may have captured its clock before this
+                        # predecessor committed. The scheduled-start guard below
+                        # rejects real future schedules; ordinary starts are clamped.
+                        # Empty cancelled intervals must never become predecessors.
+                        or (fact.valid_from is None and _instant(start) < _instant(end))
+                    )
                 ]
             fact = fact.model_copy(deep=True)
             implicit_start = fact.valid_from is None
