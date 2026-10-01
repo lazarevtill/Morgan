@@ -165,13 +165,33 @@ class SqliteTemporalStore:
         # left with two currently-valid facts.
         with write_transaction(self._conn):
             cur = self._conn.execute(
-                "SELECT id, valid_from, last_confirmed FROM facts WHERE user_id=? AND project=? "
+                "SELECT id, valid_from, valid_to, last_confirmed FROM facts "
+                "WHERE user_id=? AND project=? "
                 "AND subject=? AND predicate=? "
                 "AND valid_to IS NULL",
                 (fact.user_id, fact.project, fact.subject, fact.predicate),
             )
             existing_rows = cur.fetchall()
-            existing = [r["id"] for r in existing_rows]
+            if not existing_rows and (
+                fact.valid_from is None or _instant(fact.valid_from) >= _instant(now)
+            ):
+                # Cancelling a scheduled head leaves its predecessor with a finite
+                # future end. A new present/future assertion closes that effective row too,
+                # without treating already-ended history as a current head.
+                bounded_rows = self._conn.execute(
+                    "SELECT id, valid_from, valid_to, last_confirmed FROM facts "
+                    "WHERE user_id=? AND project=? AND subject=? AND predicate=? "
+                    "AND valid_to IS NOT NULL",
+                    (fact.user_id, fact.project, fact.subject, fact.predicate),
+                ).fetchall()
+                instant = _instant(now)
+                existing_rows = [
+                    row
+                    for row in bounded_rows
+                    if ((start := _dt(row["valid_from"])) is None or _instant(start) <= instant)
+                    and (end := _dt(row["valid_to"])) is not None
+                    and instant < _instant(end)
+                ]
             fact = fact.model_copy(deep=True)
             implicit_start = fact.valid_from is None
             if fact.valid_from is None:
@@ -198,10 +218,16 @@ class SqliteTemporalStore:
             supersedes_at = fact.valid_from if _instant(fact.valid_from) > _instant(now) else now
             # Closed before the new fact is inserted: a key may hold one current fact at a time,
             # and the unique index checks that at each statement, not at commit.
-            for old_id in existing:
+            for row in existing_rows:
+                old_end = _dt(row["valid_to"])
+                closes_at = (
+                    old_end
+                    if old_end is not None and _instant(old_end) < _instant(supersedes_at)
+                    else supersedes_at
+                )
                 self._conn.execute(
                     "UPDATE facts SET valid_to=?, superseded_by=? WHERE id=?",
-                    (_iso(supersedes_at), fact.id, old_id),
+                    (_iso(closes_at), fact.id, row["id"]),
                 )
             self._conn.execute(
                 "INSERT INTO facts (id, user_id, project, subject, predicate, object, source, "
@@ -282,19 +308,28 @@ class SqliteTemporalStore:
         return [self._row_to_fact(r) for r in rows]
 
     async def close_fact(self, fact_id: str, *, user_id: str, project: str, now: datetime) -> None:
-        """Close a fact's validity interval by setting ``valid_to = now``.
+        """Shorten a fact's interval at *now*, retaining its history and successor.
 
-        This is the "soft delete" operation — the fact is retained in history
-        with its interval closed, but will no longer appear in ``current_facts``.
-        Scoped to *user_id* + *project*: a fact belonging to another user or another
-        project is left untouched even if its id is known, so this is a no-op (not an
-        error) both when *fact_id* doesn't exist and when it exists but is out of scope.
+        A predecessor may already have a scheduled future end, yet still be effective
+        now. Ended history is never extended. Cancelling a future fact closes it at its
+        start, giving an empty interval rather than a negative one; this does not reopen
+        its predecessor. Missing or out-of-scope identities are no-ops.
         """
         with write_transaction(self._conn):
+            row = self._conn.execute(
+                "SELECT valid_from, valid_to FROM facts WHERE id=? AND user_id=? AND project=?",
+                (fact_id, user_id, project),
+            ).fetchone()
+            if row is None:
+                return
+            start = _dt(row["valid_from"])
+            end = _dt(row["valid_to"])
+            closes_at = start if start is not None and _instant(start) > _instant(now) else now
+            if end is not None and _instant(end) <= _instant(closes_at):
+                return
             self._conn.execute(
-                "UPDATE facts SET valid_to=? WHERE id=? AND user_id=? AND project=? "
-                "AND valid_to IS NULL",
-                (_iso(now), fact_id, user_id, project),
+                "UPDATE facts SET valid_to=? WHERE id=? AND user_id=? AND project=?",
+                (_iso(closes_at), fact_id, user_id, project),
             )
 
     async def set_confidence(
