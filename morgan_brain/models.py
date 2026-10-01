@@ -112,7 +112,7 @@ class TemporalFact(UserScoped):
     subject: str  # usually an entity name or "user"
     predicate: str  # e.g. "lives_in", "works_at", "prefers"
     object: str  # the value
-    source: MemorySource = MemorySource.USER_STATED
+    source: MemorySource = MemorySource.UNKNOWN
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     valid_from: datetime | None = None
     valid_to: datetime | None = None  # None = currently valid

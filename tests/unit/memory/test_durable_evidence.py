@@ -27,9 +27,35 @@ def fact(identity="fact", **changes):
             "subject": "user",
             "predicate": "drink",
             "object": "tea",
+            "source": MemorySource.USER_STATED,
             **changes,
         }
     )
+
+
+async def test_fact_default_is_unknown_and_persisted_legacy_source_is_preserved(tmp_path):
+    path = str(tmp_path / "fact-attribution.db")
+    conn = open_db(path)
+    gate = build(conn)
+    unknown = TemporalFact(
+        id="unknown", user_id="owner", subject="agent", predicate="drink", object="tea"
+    )
+    assert unknown.source is MemorySource.UNKNOWN
+    await gate.upsert_fact(unknown)
+    await gate.upsert_fact(fact("legacy", source=MemorySource.USER_STATED))
+    conn.close()
+    conn = open_db(path)
+    try:
+        gate = build(conn)
+        result = await gate.evidence(
+            user_id="owner", project="personal", evidence_ids=["unknown", "legacy"]
+        )
+        assert [record.source for record in result.records] == [
+            MemorySource.UNKNOWN,
+            MemorySource.USER_STATED,
+        ]
+    finally:
+        conn.close()
 
 
 async def test_recall_and_progressive_evidence_preserve_identity_after_restart(
@@ -154,6 +180,123 @@ async def test_support_scope_type_and_current_user_protection_are_atomic():
         )
         assert [row.id for row in await gate.current_facts(user_id="owner")] == ["inferred"]
         historical = await gate.evidence(user_id="owner", project="personal", evidence_ids=["fact"])
+        assert historical.records[0].valid_to == NOW
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("incoming_start", [None, datetime(2026, 1, 1, tzinfo=UTC)])
+@pytest.mark.parametrize("source", [MemorySource.UNKNOWN, MemorySource.AGENT_INFERRED])
+async def test_cancelled_schedule_cannot_bypass_effective_user_statement_protection(
+    incoming_start, source
+):
+    conn = open_db(":memory:")
+    gate = build(conn)
+    future = datetime(2027, 1, 1, tzinfo=UTC)
+    try:
+        await gate.upsert_fact(fact("present", source=MemorySource.USER_STATED))
+        await gate.upsert_fact(fact("scheduled", object="water", valid_from=future))
+        await gate.close_fact("scheduled", user_id="owner", project="personal", now=NOW)
+        before = conn.serialize()
+        with pytest.raises(ValueError, match="user statement"):
+            await gate.upsert_fact(fact("inferred", source=source, valid_from=incoming_start))
+        assert conn.serialize() == before
+        effective = (await gate.recall(MemoryQuery(user_id="owner", text="drink"))).memories
+        assert [record.id for record in effective] == ["present"]
+        assert effective[0].valid_to == future
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("source", [MemorySource.UNKNOWN, MemorySource.AGENT_INFERRED])
+@pytest.mark.parametrize("incoming_end", [NOW, datetime(2026, 1, 1, tzinfo=UTC)])
+async def test_empty_or_negative_inference_cannot_close_user_predecessor(source, incoming_end):
+    conn = open_db(":memory:")
+    gate = build(conn)
+    try:
+        await gate.upsert_fact(fact("present", source=MemorySource.USER_STATED))
+        await gate.upsert_fact(fact("scheduled", valid_from=datetime(2027, 1, 1, tzinfo=UTC)))
+        await gate.close_fact("scheduled", user_id="owner", project="personal", now=NOW)
+        before = conn.serialize()
+        with pytest.raises(ValueError, match="user statement"):
+            await gate.upsert_fact(fact("invalid", source=source, valid_to=incoming_end))
+        assert conn.serialize() == before
+        effective = (await gate.recall(MemoryQuery(user_id="owner", text="drink"))).memories
+        assert [record.id for record in effective] == ["present"]
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize(
+    ("incoming_start", "incoming_end"),
+    [
+        (datetime(2026, 1, 1, tzinfo=UTC), None),
+        (datetime(2027, 5, 1, tzinfo=UTC), datetime(2027, 7, 1, tzinfo=UTC)),
+    ],
+)
+async def test_cancelled_future_head_preserves_finite_future_user_window(
+    incoming_start, incoming_end
+):
+    conn = open_db(":memory:")
+    gate = build(conn)
+    first_start = datetime(2027, 6, 1, tzinfo=UTC)
+    next_start = datetime(2027, 9, 1, tzinfo=UTC)
+    try:
+        await gate.upsert_fact(fact("future-user", valid_from=first_start))
+        await gate.upsert_fact(fact("next-user", object="water", valid_from=next_start))
+        await gate.close_fact("next-user", user_id="owner", project="personal", now=NOW)
+        before = conn.serialize()
+        with pytest.raises(ValueError, match="user statement"):
+            await gate.upsert_fact(
+                fact(
+                    "overlap",
+                    source=MemorySource.AGENT_INFERRED,
+                    valid_from=incoming_start,
+                    valid_to=incoming_end,
+                )
+            )
+        assert conn.serialize() == before
+    finally:
+        conn.close()
+
+
+async def test_explicit_past_inference_cannot_overlap_ended_user_history():
+    conn = open_db(":memory:")
+    gate = build(conn)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    end = datetime(2026, 6, 1, tzinfo=UTC)
+    try:
+        await gate.upsert_fact(fact("history", valid_from=start))
+        await gate.close_fact("history", user_id="owner", project="personal", now=end)
+        before = conn.serialize()
+        with pytest.raises(ValueError, match="user statement"):
+            await gate.upsert_fact(
+                fact(
+                    "overlap",
+                    source=MemorySource.AGENT_INFERRED,
+                    valid_from=datetime(2026, 5, 1, tzinfo=UTC),
+                    valid_to=end,
+                )
+            )
+        assert conn.serialize() == before
+        await gate.upsert_fact(fact("boundary", source=MemorySource.AGENT_INFERRED, valid_from=end))
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("source", [MemorySource.UNKNOWN, MemorySource.AGENT_INFERRED])
+async def test_ended_user_history_does_not_block_new_inferred_assertion(source):
+    conn = open_db(":memory:")
+    gate = build(conn)
+    try:
+        await gate.upsert_fact(fact("historical", source=MemorySource.USER_STATED))
+        await gate.close_fact("historical", user_id="owner", project="personal", now=NOW)
+        await gate.upsert_fact(fact("new", source=source))
+        effective = (await gate.recall(MemoryQuery(user_id="owner", text="drink"))).memories
+        assert [record.id for record in effective] == ["new"]
+        historical = await gate.evidence(
+            user_id="owner", project="personal", evidence_ids=["historical"]
+        )
         assert historical.records[0].valid_to == NOW
     finally:
         conn.close()

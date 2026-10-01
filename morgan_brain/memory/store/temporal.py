@@ -215,10 +215,47 @@ class SqliteTemporalStore:
                         or (fact.valid_from is None and _instant(start) < _instant(end))
                     )
                 ]
-            if fact.source is MemorySource.AGENT_INFERRED and any(
-                row["source"] == MemorySource.USER_STATED.value for row in existing_rows
-            ):
-                raise ValueError("An inference cannot supersede a current user statement")
+            if fact.source in (MemorySource.UNKNOWN, MemorySource.AGENT_INFERRED):
+                # Even an empty incoming interval would close these predecessors.
+                if any(row["source"] == MemorySource.USER_STATED.value for row in existing_rows):
+                    raise ValueError(
+                        "Unattributed or inferred fact cannot replace a user statement"
+                    )
+                # Protection is independent of the closure candidates: a backdated
+                # assertion skips the finite-predecessor fallback above, but must
+                # still not overlap a user's historical or future interval.
+                user_rows = self._conn.execute(
+                    "SELECT valid_from, valid_to FROM facts WHERE user_id=? AND project=? "
+                    "AND subject=? AND predicate=? AND source=?",
+                    (
+                        fact.user_id,
+                        fact.project,
+                        fact.subject,
+                        fact.predicate,
+                        MemorySource.USER_STATED.value,
+                    ),
+                ).fetchall()
+                incoming_start = _instant(fact.valid_from or now)
+                incoming_end = _instant(fact.valid_to) if fact.valid_to is not None else None
+                for row in user_rows:
+                    start_value, end_value = _dt(row["valid_from"]), _dt(row["valid_to"])
+                    user_start = _instant(start_value) if start_value is not None else None
+                    user_end = _instant(end_value) if end_value is not None else None
+                    # Structural user heads are also protected because legacy
+                    # historical closure semantics would mutate them regardless
+                    # of overlap. Empty cancelled intervals overlap nothing.
+                    overlap = (
+                        (incoming_end is None or incoming_start < incoming_end)
+                        and (user_end is None or user_start is None or user_start < user_end)
+                        and (user_end is None or incoming_start < user_end)
+                        and (
+                            incoming_end is None or user_start is None or user_start < incoming_end
+                        )
+                    )
+                    if user_end is None or overlap:
+                        raise ValueError(
+                            "Unattributed or inferred fact cannot replace a user statement"
+                        )
             fact = fact.model_copy(deep=True)
             implicit_start = fact.valid_from is None
             if fact.valid_from is None:

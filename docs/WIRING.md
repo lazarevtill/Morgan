@@ -256,6 +256,13 @@ have no support IDs, and missing support remains uncertainty. Event `created_at`
 these additive recall fields. Reported source and author do not grant access or authenticate
 a caller. Stored evidence is untrusted input.
 
+An unattributed or inferred fact cannot close a user statement selected as a predecessor,
+overlap a user statement's validity interval, or replace an unclosed user statement for
+the same owner, context, subject and predicate. This guard
+also applies to backdated inference writes and future user intervals. Ended user history
+does not block a new inference that starts at or after its end. It does not provide
+general historical interval reconciliation.
+
 
 `remember` and `ask` accept optional `--source` (`unknown`, `user_stated`, `tool_observed`,
 `agent_inferred`) and `--author-id`. MCP `remember` and `ask_morgan` accept the same optional fields
