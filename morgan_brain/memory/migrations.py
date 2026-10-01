@@ -369,7 +369,7 @@ def _add_recorded_time(conn: sqlite3.Connection, _stores: Stores) -> None:
         conn.execute("ALTER TABLE memories ADD COLUMN recorded_at TEXT")
 
 
-def _add_fact_evidence(conn: sqlite3.Connection, stores: Stores) -> None:
+def _add_fact_evidence(conn: sqlite3.Connection, _stores: Stores) -> None:
     """Add optional fact lineage without inventing legacy evidence or recorded time."""
     if not _table_exists(conn, "facts"):
         return

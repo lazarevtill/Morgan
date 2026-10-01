@@ -8,7 +8,7 @@ from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.store.db import open_db
-from morgan_brain.models import Memory, MemoryQuery, MemorySource, Scope, TemporalFact
+from morgan_brain.models import Memory, MemoryKind, MemoryQuery, MemorySource, Scope, TemporalFact
 
 NOW = datetime(2026, 10, 1, tzinfo=UTC)
 
@@ -423,5 +423,44 @@ async def test_legacy_duplicate_identity_fails_closed_only_inside_requested_scop
             assert result.records[0].content == "Scoped event"
             assert result.records[0].kind.value == "episodic"
             assert result.missing_ids == []
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("event_first", [False, True])
+@pytest.mark.parametrize(
+    "other_scope", [("owner", "personal"), ("other", "personal"), ("owner", "work")]
+)
+async def test_cross_table_ids_are_ambiguous_only_in_exact_owner_and_context(
+    event_first, other_scope
+):
+    conn = open_db(":memory:")
+    gate = build(conn)
+    event = Memory(id="shared", user_id="owner", project="personal", content="Synthetic event")
+    assertion = fact("shared", user_id=other_scope[0], project=other_scope[1])
+    try:
+        first, second = (event, assertion) if event_first else (assertion, event)
+
+        async def store(record):
+            if isinstance(record, Memory):
+                return await gate.store(record)
+            return await gate.upsert_fact(record)
+
+        await store(first)
+        if other_scope == ("owner", "personal"):
+            before = conn.serialize()
+            with pytest.raises(ValueError, match="ID is already used"):
+                await store(second)
+            assert conn.serialize() == before
+        else:
+            await store(second)
+            owner_result = await gate.evidence(
+                user_id="owner", project="personal", evidence_ids=["shared"]
+            )
+            foreign_result = await gate.evidence(
+                user_id=other_scope[0], project=other_scope[1], evidence_ids=["shared"]
+            )
+            assert owner_result.records[0].kind is MemoryKind.EPISODIC
+            assert foreign_result.records[0].kind is MemoryKind.SEMANTIC
     finally:
         conn.close()

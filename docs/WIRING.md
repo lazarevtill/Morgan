@@ -263,7 +263,6 @@ also applies to backdated inference writes and future user intervals. Ended user
 does not block a new inference that starts at or after its end. It does not provide
 general historical interval reconciliation.
 
-
 `remember` and `ask` accept optional `--source` (`unknown`, `user_stated`, `tool_observed`,
 `agent_inferred`) and `--author-id`. MCP `remember` and `ask_morgan` accept the same optional fields
 as `source` and `author_id`. Omitting them stores `unknown` and an empty author; old

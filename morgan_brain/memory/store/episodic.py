@@ -172,15 +172,11 @@ class EpisodicStore:
         those fields is taken from the row when present and left to ``Memory``'s default when
         not.
         """
-        sql = "SELECT * FROM memories WHERE id = ?"
-        params = [memory_id]
-        if user_id is not None:
-            sql += " AND user_id = ?"
-            params.append(user_id)
-        if project is not None:
-            sql += " AND project = ?"
-            params.append(project)
-        row = self._conn.execute(sql, params).fetchone()
+        row = self._conn.execute(
+            "SELECT * FROM memories WHERE id = ? "
+            "AND (? IS NULL OR user_id = ?) AND (? IS NULL OR project = ?)",
+            (memory_id, user_id, user_id, project, project),
+        ).fetchone()
         if row is None:
             return None
         # Membership in a Row tests its values, so the column names are taken out first.

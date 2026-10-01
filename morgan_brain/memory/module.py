@@ -207,7 +207,10 @@ class MemoryModule:
         original = memory.model_copy(deep=True)
         if self._episodics.check_replay(original) is not None:
             return original.id
-        if self._conn.execute("SELECT 1 FROM facts WHERE id=?", (original.id,)).fetchone():
+        if self._conn.execute(
+            "SELECT 1 FROM facts WHERE id=? AND user_id=? AND project=?",
+            (original.id, original.user_id, original.project),
+        ).fetchone():
             raise ValueError("event ID is already used by a fact")
         memory = original.model_copy(deep=True)
         if memory.created_at is None:
@@ -229,7 +232,10 @@ class MemoryModule:
         with write_transaction(self._conn):
             if self._episodics.check_replay(original) is not None:
                 return original.id
-            if self._conn.execute("SELECT 1 FROM facts WHERE id=?", (original.id,)).fetchone():
+            if self._conn.execute(
+                "SELECT 1 FROM facts WHERE id=? AND user_id=? AND project=?",
+                (original.id, original.user_id, original.project),
+            ).fetchone():
                 raise ValueError("event ID is already used by a fact")
             memory.recorded_at = self._clock()
             projects.register(self._conn, memory.project, now=registered_at)
@@ -432,7 +438,7 @@ class MemoryModule:
         """
         now = self._clock()
         with write_transaction(self._conn):
-            if self._episodics.get(fact.id) is not None:
+            if self._episodics.get(fact.id, user_id=fact.user_id, project=fact.project) is not None:
                 raise ValueError("fact ID is already used by an event")
             for event_id in fact.support_event_ids:
                 event = self._episodics.get(event_id)

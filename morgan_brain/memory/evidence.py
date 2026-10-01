@@ -60,9 +60,12 @@ def validate_source_schema(conn: sqlite3.Connection) -> None:
             "last_confirmed",
         },
     }
+    source_columns = {
+        "memories": {row["name"] for row in conn.execute("PRAGMA table_info(memories)")},
+        "facts": {row["name"] for row in conn.execute("PRAGMA table_info(facts)")},
+    }
     for table, fields in required.items():
-        # Fixed schema table names only, never caller-supplied identifiers.
-        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        columns = source_columns[table]
         if missing := fields - columns:
             raise ValueError(
                 f"Morgan evidence source schema is missing {table} columns: "

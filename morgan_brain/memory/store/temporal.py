@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from itertools import pairwise
 from typing import Any
 
+from morgan_brain.memory.errors import SourceProtectionError
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import Erasure
 from morgan_brain.models import PERSONAL_PROJECT, MemorySource, TemporalFact
@@ -218,7 +219,7 @@ class SqliteTemporalStore:
             if fact.source in (MemorySource.UNKNOWN, MemorySource.AGENT_INFERRED):
                 # Even an empty incoming interval would close these predecessors.
                 if any(row["source"] == MemorySource.USER_STATED.value for row in existing_rows):
-                    raise ValueError(
+                    raise SourceProtectionError(
                         "Unattributed or inferred fact cannot replace a user statement"
                     )
                 # Protection is independent of the closure candidates: a backdated
@@ -253,7 +254,7 @@ class SqliteTemporalStore:
                         )
                     )
                     if user_end is None or overlap:
-                        raise ValueError(
+                        raise SourceProtectionError(
                             "Unattributed or inferred fact cannot replace a user statement"
                         )
             fact = fact.model_copy(deep=True)
