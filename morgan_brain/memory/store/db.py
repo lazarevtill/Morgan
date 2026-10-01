@@ -91,6 +91,25 @@ def open_readonly(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connecti
 
 
 @contextmanager
+def read_transaction(conn: sqlite3.Connection) -> Iterator[None]:
+    """Keep multi-statement source reads on one snapshot, without a writer lock.
+
+    An existing caller-owned transaction is joined unchanged. No model or external
+    I/O may await inside this block; SQLite-only async methods do not suspend.
+    """
+    if conn.in_transaction:
+        yield
+        return
+    conn.execute("BEGIN")
+    try:
+        yield
+    except BaseException:
+        conn.rollback()
+        raise
+    conn.commit()
+
+
+@contextmanager
 def write_transaction(conn: sqlite3.Connection) -> Iterator[None]:
     """Run the block as one atomic write, holding the database write lock from the start.
 

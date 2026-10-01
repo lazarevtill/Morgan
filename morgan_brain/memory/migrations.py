@@ -385,6 +385,20 @@ def _add_erasure_generation(conn: sqlite3.Connection, _stores: Stores) -> None:
     erasure.create_schema(conn)
 
 
+def _add_event_revisions(conn: sqlite3.Connection, _stores: Stores) -> None:
+    if not _table_exists(conn, "memories"):
+        return
+    columns = _column_names(conn, "memories")
+    if "revises_event_ids" not in columns:
+        conn.execute("ALTER TABLE memories ADD COLUMN revises_event_ids TEXT NOT NULL DEFAULT '[]'")
+    if "revision_root_id" not in columns:
+        conn.execute("ALTER TABLE memories ADD COLUMN revision_root_id TEXT")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memories_revision_family "
+        "ON memories(user_id, project, revision_root_id)"
+    )
+
+
 _STEPS: tuple[Step, ...] = (
     # A capital counts as a name only where its position does not explain it.
     Step(1, "reextract entities", False, _reextract_entities),
@@ -397,6 +411,7 @@ _STEPS: tuple[Step, ...] = (
     Step(8, "event ingestion time", False, _add_recorded_time),
     Step(9, "fact evidence metadata", False, _add_fact_evidence),
     Step(10, "prepared store erasure generation", False, _add_erasure_generation),
+    Step(11, "explicit event revisions", False, _add_event_revisions),
 )
 
 

@@ -68,13 +68,21 @@ class EpisodicStore:
                 scope            TEXT NOT NULL DEFAULT 'private',
                 instruction_like INTEGER NOT NULL DEFAULT 0,
                 status           TEXT NOT NULL DEFAULT 'stored',
-                recorded_at      TEXT
+                recorded_at      TEXT,
+                revises_event_ids TEXT NOT NULL DEFAULT '[]',
+                revision_root_id  TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_memories_user ON memories (user_id);
             """
         )
         conn.commit()
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(memories)")}
+        if "revision_root_id" in cols:
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_memories_revision_family "
+                "ON memories(user_id, project, revision_root_id)"
+            )
+            conn.commit()
         if "project" not in cols:
             conn.execute(
                 "ALTER TABLE memories ADD COLUMN project TEXT NOT NULL "
@@ -102,6 +110,7 @@ class EpisodicStore:
                 "content",
                 "importance",
                 *_PROVENANCE,
+                "revises_event_ids",
             )
             if getattr(memory, name) != getattr(stored, name)
         ]
@@ -123,8 +132,8 @@ class EpisodicStore:
                 INSERT INTO memories
                     (id, user_id, project, kind, source, content, importance, entities, created_at,
                      origin_kind, client, session_id, cwd, author_id, scope, instruction_like,
-                     status, recorded_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     status, recorded_at, revises_event_ids, revision_root_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     memory.id,
@@ -145,6 +154,8 @@ class EpisodicStore:
                     int(memory.instruction_like),
                     memory.status.value,
                     memory.recorded_at.isoformat() if memory.recorded_at else None,
+                    json.dumps(memory.revises_event_ids),
+                    memory.revision_root_id,
                 ),
             )
             return True
@@ -186,6 +197,10 @@ class EpisodicStore:
             provenance["recorded_at"] = (
                 datetime.fromisoformat(row["recorded_at"]) if row["recorded_at"] else None
             )
+        if "revises_event_ids" in present:
+            provenance["revises_event_ids"] = json.loads(row["revises_event_ids"])
+        if "revision_root_id" in present:
+            provenance["revision_root_id"] = row["revision_root_id"]
         return Memory(
             id=row["id"],
             user_id=row["user_id"],

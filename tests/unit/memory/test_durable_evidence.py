@@ -7,6 +7,7 @@ import pytest
 from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.migrations import code_version
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.models import Memory, MemoryKind, MemoryQuery, MemorySource, Scope, TemporalFact
 
@@ -316,7 +317,7 @@ async def test_version_eight_upgrade_preserves_legacy_facts_without_inventing_li
         assert result.records[0].recorded_at is None
         assert result.records[0].support_event_ids == []
         assert result.records[0].id == "fact"
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 10
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == code_version()
     finally:
         conn.close()
 

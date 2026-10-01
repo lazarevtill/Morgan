@@ -21,13 +21,29 @@ _ABSTAINED = {
 }
 
 
+def _revision_note(record: dict[str, Any]) -> str:
+    notes = []
+    if record.get("revision_state") in ("inactive", "conflicted"):
+        notes.append("revision=" + record["revision_state"])
+    if record.get("support_state") in ("unsupported", "inactive_support", "conflicted_support"):
+        notes.append("support=" + record["support_state"])
+    if record.get("revision_state") == "conflicted" or record.get("revision_truncated"):
+        notes.append("eligible=" + ",".join(record.get("eligible_leaf_ids", [])))
+        if record.get("revision_truncated"):
+            notes.append(
+                f"showing {len(record.get('eligible_leaf_ids', []))} "
+                f"of {record['eligible_leaf_count']}"
+            )
+    return " (" + "; ".join(notes) + ")" if notes else ""
+
+
 def _render_recall(data: dict[str, Any]) -> str:
     if not data["results"]:
         scope = "any project" if data["all_projects"] else f"project {data['project']!r}"
         why = _ABSTAINED.get(data["reason"])
         return f"No memories found in {scope} ({why})." if why else f"No memories found in {scope}."
     return "\n".join(
-        f"{i + 1}. [{r['kind']}/{r['project']}] {r['content']}"
+        f"{i + 1}. [{r['kind']}/{r['project']}] {r['content']}{_revision_note(r)}"
         for i, r in enumerate(data["results"])
     )
 
@@ -40,7 +56,7 @@ def _render_facts(data: dict[str, Any]) -> str:
         )
     return "\n".join(
         f"{f['subject']} {f['predicate']} {f['object']} (confidence={f['confidence']:.2f}, "
-        f"project={f['project']})"
+        f"project={f['project']}){_revision_note(f)}"
         for f in data["facts"]
     )
 
@@ -313,7 +329,9 @@ def _space_line(space: dict[str, Any]) -> str:
 
 def _render_evidence(data: dict[str, Any]) -> str:
     lines = [f"Evidence in {data['project']} ({data['version']})"]
-    lines.extend(f"[{item['id']}] {item['content']}" for item in data["results"])
+    lines.extend(
+        f"[{item['id']}] {item['content']}{_revision_note(item)}" for item in data["results"]
+    )
     if data["missing_ids"]:
         lines.append("Missing IDs: " + ", ".join(data["missing_ids"]))
     return "\n".join(lines)

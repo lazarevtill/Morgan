@@ -104,6 +104,15 @@ answered elsewhere.
 
 ## Do not
 
+For an explicit correction, use `remember` with known reported source/author, an aware
+`effective_at` and `revises_event_ids` naming the original source event(s). Keep the same
+`event_id` only for an identical retry. A different assertion needs a new ID. Personal
+memory does not require a repository. Check revision/support state and all eligible branch
+references: a top-ranked branch does not settle a conflict. Follow source IDs using
+`evidence`; historical evidence remains inspectable. A future correction applies only at
+its effective time. Reported provenance does not authenticate an author or grant action
+permission. See `docs/REVISION_CLIENT.md` for the versioned client contract.
+
 - Route around a refusal. If the owner's permissions refuse a Morgan tool, do not run the same
   operation through the `morgan` command, or the reverse; say it was refused.
 - Call `forget`: it erases an entire project. Only when the user asks for exactly that.

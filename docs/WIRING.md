@@ -1,5 +1,8 @@
 # Wiring and running
 
+For immutable source corrections, retry IDs and effective-time lookups, see
+[the revision client contract](REVISION_CLIENT.md).
+
 ## 1. Install
 
 Python 3.12 or later. From the repository root:
