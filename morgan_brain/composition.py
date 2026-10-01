@@ -23,7 +23,14 @@ from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.evidence import ScopedEvidenceReader, validate_source_schema
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
-from morgan_brain.memory.migrations import Step, Stores, pending, stamp_if_new, upgrade
+from morgan_brain.memory.migrations import (
+    Step,
+    Stores,
+    pending,
+    require_supported_version,
+    stamp_if_new,
+    upgrade,
+)
 from morgan_brain.memory.module import MemoryModule
 from morgan_brain.memory.store import erasure, spaces, vectors
 from morgan_brain.memory.store.db import open_db, open_readonly, write_transaction
@@ -91,6 +98,7 @@ def build_evidence_context(settings: Settings) -> EvidenceContext:
         raise FileNotFoundError(f"Morgan evidence database does not exist: {path}")
     conn = open_readonly(path, busy_timeout_ms=settings.db_busy_timeout_ms)
     try:
+        require_supported_version(conn)
         validate_source_schema(conn)
         reader = ScopedEvidenceReader(
             EpisodicStore(conn, initialize=False),

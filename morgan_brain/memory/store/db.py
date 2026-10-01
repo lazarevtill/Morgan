@@ -26,6 +26,16 @@ def open_db(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connection:
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
 
+    # Lazy import: migrations shares these transaction helpers. Refuse before WAL can
+    # rewrite an older journal header, or any store/model configuration can be created.
+    from morgan_brain.memory.migrations import require_supported_version
+
+    try:
+        require_supported_version(conn)
+    except BaseException:
+        conn.close()
+        raise
+
     conn.enable_load_extension(True)
     try:
         sqlite_vec.load(conn)

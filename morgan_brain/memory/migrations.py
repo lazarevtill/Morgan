@@ -29,6 +29,7 @@ from datetime import UTC, datetime
 from itertools import takewhile
 from typing import NamedTuple
 
+from morgan_brain.memory.errors import DatabaseSchemaTooNew
 from morgan_brain.memory.knowledge.extract import extract_entity_names
 from morgan_brain.memory.store import erasure, projects, spaces, vectors
 from morgan_brain.memory.store.db import write_transaction
@@ -425,6 +426,16 @@ def _version(conn: sqlite3.Connection) -> int:
     return int(conn.execute("PRAGMA user_version").fetchone()[0])
 
 
+def require_supported_version(
+    conn: sqlite3.Connection, steps: Sequence[Step] | None = None
+) -> None:
+    """Reject a future schema before initialization, migration or writable-open pragmas."""
+    supported = code_version() if steps is None else max((step.number for step in steps), default=0)
+    current = _version(conn)
+    if current > supported:
+        raise DatabaseSchemaTooNew(current, supported)
+
+
 def _advance(conn: sqlite3.Connection, step: Step) -> None:
     # PRAGMA takes no bound parameters; the value is an int a Step carries.
     conn.execute(f"PRAGMA user_version = {int(step.number)}")
@@ -436,6 +447,7 @@ def pending(conn: sqlite3.Connection, steps: Sequence[Step] | None = None) -> tu
     *steps* defaults to ``_STEPS``, looked up when called rather than bound when defined, so
     opening, ``morgan migrate`` and ``restore``'s version check all read the one list.
     """
+    require_supported_version(conn, steps)
     done = _version(conn)
     return tuple(s for s in (_STEPS if steps is None else steps) if s.number > done)
 
@@ -456,11 +468,13 @@ def stamp_if_new(conn: sqlite3.Connection, steps: Sequence[Step] | None = None) 
     "new": a database written before step 1 existed reads 0 too, and holds tables. Call it
     before any store opens the connection.
     """
+    require_supported_version(conn, steps)
     if holds_morgan_tables(conn):
         return False
     resolved = _STEPS if steps is None else steps
     with write_transaction(conn):
         # Again under the lock: another process may have created the tables since.
+        require_supported_version(conn, steps)
         if holds_morgan_tables(conn):
             return False
         # PRAGMA takes no bound parameters; the value is a length this function took.
@@ -501,6 +515,7 @@ def migrate(
     Returns each step run with the rows it reported touching (``{}`` when it counts nothing).
     The caller takes the snapshot first -- ``VACUUM INTO`` cannot run inside a transaction.
     """
+    require_supported_version(conn, steps)
     applied: list[tuple[Step, dict[str, int]]] = []
     with write_transaction(conn):
         # Read under the lock, for the same reason as ``upgrade``.
