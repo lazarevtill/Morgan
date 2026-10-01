@@ -142,6 +142,7 @@ class SessionHistoryStore:
         Native chat supplies ``user_id``: owner filtering precedes the limit because the
         legacy colon-separated session keys can collide across distinct owner/session pairs.
         Omitting it retains the existing low-level caller behavior and persisted key format.
+        Returned messages retain the stored project as well as their scoped content.
 
         ``project`` is required, and filtering on it is not optional decoration. Rows carried
         a project already, but this read did not use it, and ``session_key`` falls back to a
@@ -153,8 +154,8 @@ class SessionHistoryStore:
         """
         rows = self._conn.execute(
             """
-            SELECT user_id, role, content FROM (
-                SELECT user_id, role, content, id
+            SELECT user_id, project, role, content FROM (
+                SELECT user_id, project, role, content, id
                 FROM session_history
                 WHERE session_id = ? AND project = ? AND (? IS NULL OR user_id = ?)
                 ORDER BY id DESC
@@ -164,7 +165,12 @@ class SessionHistoryStore:
             (session_id, project, user_id, user_id, limit),
         ).fetchall()
         return [
-            Message(user_id=row["user_id"], role=Role(row["role"]), content=row["content"])
+            Message(
+                user_id=row["user_id"],
+                project=row["project"],
+                role=Role(row["role"]),
+                content=row["content"],
+            )
             for row in rows
         ]
 
