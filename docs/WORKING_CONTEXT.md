@@ -56,3 +56,24 @@ Bounds: 20 new source IDs per proposal, 16 selected source IDs, four items per
 category, 240 characters per quote, 16 KiB serialized state, and 49 KiB model-input
 bytes. Listing returns at most 32 names with a truncation flag. These byte limits are
 not a tokenizer budget: real token cost and usefulness require measured evaluation.
+
+## Experimental evaluation status
+
+This opt-in prototype has no demonstrated continuation-quality advantage and is not
+approved for deployment or merge on that basis. A frozen synthetic comparison used
+four closed continuations per arm: ordinary retrieval was useful in 1/4, rolling
+summary in 1/4, and working context in 0/4. All failures stayed in the denominator;
+no failed slot was retried and no holdout prompts were tuned. Independent grading
+was not fully blind because context classifications leaked during packet extraction.
+
+Three candidate continuations were unavailable after rejected maintenance proposals
+(schema shape, exact quote, or malformed JSON). Its one persisted continuation omitted
+required older layout and measurement grounds. Exact-source validation establishes
+attribution of selected quotes, not completeness of the selected working context.
+The fixed all-four-useful acceptance gate failed. Missing usage from failed requests
+also prevents claiming an efficiency advantage.
+
+Correctness fixes for consolidation's structural-fact inventory and reported backend
+attribution are separate from product usefulness. The next design question is how a
+bounded update retains or recovers essential earlier source grounds after maintenance
+failure, rather than accepting invalid proposals or adding unbounded benchmark runs.

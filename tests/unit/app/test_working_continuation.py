@@ -237,3 +237,23 @@ async def test_concurrent_session_occupancy_rejected_without_partial_draft():
         )
     finally:
         conn.close()
+
+
+async def test_reported_backend_model_preserved_when_requested_alias_differs():
+    conn = open_db(":memory:")
+    try:
+        gate, history, _ = await prepared(conn)
+
+        class AliasedBackend(DraftClient):
+            async def agenerate(self, messages, *, model):
+                result = await super().agenerate(messages, model=model)
+                return result.model_copy(update={"model": "replacement-backend-model"})
+
+        result = await run(gate, history, AliasedBackend(conn))
+        assert result.model_used == "replacement-backend-model"
+        row = conn.execute(
+            "SELECT author_id FROM memories WHERE content=?", (result.response,)
+        ).fetchone()
+        assert row[0] == "model:replacement-backend-model"
+    finally:
+        conn.close()

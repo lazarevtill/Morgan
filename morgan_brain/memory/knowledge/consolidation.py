@@ -209,6 +209,12 @@ class MemoryConsolidator:
     ) -> list[FactOp]:
         """``apply``'s body. The caller holds the write transaction."""
         current = await self._gate.current_facts(user_id=user_id, project=project, effective_at=now)
+        # Match the prepared inventory: organizer heads have their own CAS APIs.
+        current = [
+            fact
+            for fact in current
+            if fact.predicate not in (CHECKPOINT_PREDICATE, WORKING_CONTEXT_PREDICATE)
+        ]
         if fact_fingerprint(current) != basis.fact_fingerprint:
             raise StaleConsolidationProposal("Consolidation effective fact inputs changed")
         current_set = {(f.subject, f.predicate, f.object) for f in current}

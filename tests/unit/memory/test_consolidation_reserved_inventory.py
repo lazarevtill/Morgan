@@ -11,7 +11,7 @@ from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.basis import ConsolidationInputLimit, StaleConsolidationProposal
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.memory.working_context import WORKING_CONTEXT_PREDICATE
-from morgan_brain.models import TemporalFact
+from morgan_brain.models import Memory, MemorySource, TemporalFact
 
 NOW = datetime(2026, 10, 1, tzinfo=UTC)
 
@@ -89,5 +89,69 @@ async def test_257_actual_regular_facts_still_refuse():
             await fact(gate, f"subject-{i}")
         with pytest.raises(ConsolidationInputLimit, match="256"):
             await capture(gate)
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("regular_changed", [False, True])
+async def test_actual_non_noop_apply_with_structural_heads(regular_changed):
+    from morgan_brain.memory.knowledge.consolidation import FactOp, FactOpBatch, MemoryConsolidator
+
+    class NoGeneration:
+        async def agenerate(self, *args, **kwargs):
+            raise AssertionError("Applying a prepared operation must not call a model")
+
+    conn, gate = setup()
+    try:
+        await gate.store(
+            Memory(
+                id="source",
+                user_id="owner",
+                content="Ceramic lasts.",
+                source=MemorySource.USER_STATED,
+                author_id="person:owner",
+                created_at=NOW,
+            )
+        )
+        await fact(gate, "existing")
+        await fact(gate, "working_checkpoint:gift", WORKING_CONTEXT_PREDICATE, "view")
+        await fact(gate, "checkpoint:task", CHECKPOINT_PREDICATE, "checkpoint")
+        prepared = await gate.capture_consolidation_basis(
+            user_id="owner",
+            project="personal",
+            event_ids=["source"],
+            generation=gate.capture_erasure_generation(),
+        )
+        await fact(gate, "working_checkpoint:gift", WORKING_CONTEXT_PREDICATE, "updated view")
+        await fact(gate, "checkpoint:task", CHECKPOINT_PREDICATE, "updated checkpoint")
+        if regular_changed:
+            await fact(gate, "existing", value="steel")
+        op = FactOp(
+            op="ADD",
+            subject="new preference",
+            predicate="material",
+            object="ceramic",
+            support_event_ids=["source"],
+        )
+        consolidator = MemoryConsolidator(
+            gate=gate, client=NoGeneration(), model="fake", clock=lambda: NOW
+        )
+        if regular_changed:
+            with pytest.raises(StaleConsolidationProposal, match="fact basis"):
+                await consolidator.apply(
+                    "owner", FactOpBatch(ops=[op]), project="personal", basis=prepared.basis
+                )
+        else:
+            assert await consolidator.apply(
+                "owner", FactOpBatch(ops=[op]), project="personal", basis=prepared.basis
+            ) == [op]
+        added = [
+            f
+            for f in await gate.current_facts(user_id="owner", project="personal")
+            if f.subject == "new preference"
+        ]
+        assert len(added) == (0 if regular_changed else 1)
+        if added:
+            assert added[0].support_event_ids == ["source"]
     finally:
         conn.close()

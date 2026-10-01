@@ -136,7 +136,7 @@ async def resume_work(
         )
         for content, reported_source, actor, at in (
             (request.text, request.source, request.author_id, input_at),
-            (reply, MemorySource.AGENT_INFERRED, f"model:{request.model}", reply_at),
+            (reply, MemorySource.AGENT_INFERRED, f"model:{generated.model}", reply_at),
         )
     ]
     await gate.store_turn(
@@ -160,6 +160,6 @@ async def resume_work(
         context_id=request.context_id,
         fact_id=view.fact_id,
         response=reply,
-        model_used=request.model,
+        model_used=generated.model,
         source_event_ids=ids,
     )
