@@ -14,6 +14,7 @@ from typing import Any
 
 import structlog
 
+from morgan_brain.app.chat import TurnRequest
 from morgan_brain.app.chatgpt_import import (
     ARCHIVE_PROJECT,
     HOLDOUT_PROJECT,
@@ -303,7 +304,8 @@ async def cmd_ask(
     source = MemorySource(getattr(args, "source", "unknown"))
     author_id = getattr(args, "author_id", "")
     strict_context = getattr(args, "strict_context", False)
-    if type(strict_context) is not bool:
+    strict_context_is_bool = isinstance(strict_context, bool)
+    if not strict_context_is_bool:
         raise ValueError("strict_context must be a boolean")
     if strict_context and settings.strict_context_backend == "disabled":
         raise StrictContextError("token_counter_unavailable")
@@ -312,13 +314,15 @@ async def cmd_ask(
         detailed = None
         if strict_context:
             detailed = await ctx.chat.ask_evidence(
-                user_id=settings.owner_user_id,
-                project=project,
-                text=args.text,
-                caller_client=client,
-                caller_session_id=session_id,
-                source=source,
-                author_id=author_id,
+                TurnRequest(
+                    user_id=settings.owner_user_id,
+                    project=project,
+                    text=args.text,
+                    caller_client=client,
+                    caller_session_id=session_id,
+                    source=source,
+                    author_id=author_id,
+                )
             )
             reply = detailed.answer
         else:

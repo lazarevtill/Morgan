@@ -171,7 +171,8 @@ async def count_request(
 ) -> RequestCount:
     fingerprint = request_fingerprint(messages, request)
     try:
-        count = await asyncio.wait_for(backend.count_request(messages, request=request), timeout=10)
+        # Leave one bounded second for the adapter's 10-second endpoint diagnostic.
+        count = await asyncio.wait_for(backend.count_request(messages, request=request), timeout=11)
     except (ProviderRefused, ProviderUnreachable):
         raise
     except Exception as exc:
@@ -209,6 +210,12 @@ class EvidenceClosure:
     abstention_reason: str | None
 
 
+@dataclass(frozen=True)
+class EvidenceScope:
+    user_id: str
+    project: str
+
+
 def outside_validity(record: Memory, effective_at: datetime | None) -> bool:
     if effective_at is None or record.kind is not MemoryKind.SEMANTIC:
         return False
@@ -219,17 +226,31 @@ def outside_validity(record: Memory, effective_at: datetime | None) -> bool:
     )
 
 
+def _can_ground_answer(record: Memory) -> bool:
+    if record.source in (MemorySource.USER_STATED, MemorySource.TOOL_OBSERVED):
+        return True
+    return (
+        record.source is MemorySource.AGENT_INFERRED
+        and record.kind is MemoryKind.SEMANTIC
+        and record.support_state == "current"
+        and bool(record.support_event_ids)
+    )
+
+
 async def resolve_closure(
     gate: MemoryGate,
     *,
-    user_id: str,
-    project: str,
+    scope: EvidenceScope,
     candidates: list[Memory],
     config: StrictContextConfig,
     effective_at: datetime | None = None,
 ) -> EvidenceClosure:
-    if any(record.user_id != user_id or record.project != project for record in candidates):
+    if any(
+        record.user_id != scope.user_id or record.project != scope.project for record in candidates
+    ):
         raise StrictContextError("evidence_scope_unsupported")
+    # Non-grounding episodes remain ordinary history, never evidence for later answers.
+    candidates = [record for record in candidates if _can_ground_answer(record)]
     pending = list(dict.fromkeys(record.id for record in candidates))
     records: dict[str, Memory] = {}
     reads = 0
@@ -241,7 +262,10 @@ async def resolve_closure(
                 list(records.values()), [], reads, fetched, "evidence_incomplete"
             )
         outcome = await gate.evidence(
-            user_id=user_id, project=project, evidence_ids=pending, effective_at=effective_at
+            user_id=scope.user_id,
+            project=scope.project,
+            evidence_ids=pending,
+            effective_at=effective_at,
         )
         reads += 1
         fetched.extend(pending)
@@ -267,6 +291,18 @@ async def resolve_closure(
         return EvidenceClosure(list(records.values()), [], reads, fetched, "evidence_incomplete")
     if any(record.revision_state == "conflicted" for record in records.values()):
         return EvidenceClosure(list(records.values()), [], reads, fetched, "evidence_conflicted")
+    return EvidenceClosure(
+        list(records.values()),
+        _evidence_groups(candidates, records, effective_at),
+        reads,
+        fetched,
+        None,
+    )
+
+
+def _evidence_groups(
+    candidates: list[Memory], records: dict[str, Memory], effective_at: datetime | None
+) -> list[list[str]]:
     groups: list[list[str]] = []
     for candidate in candidates:
         root = records.get(candidate.id)
@@ -281,7 +317,8 @@ async def resolve_closure(
                     group.add(identity)
                     todo.append(records[identity])
         if any(
-            records[identity].status is not MemoryStatus.STORED
+            not _can_ground_answer(records[identity])
+            or records[identity].status is not MemoryStatus.STORED
             or records[identity].revision_state == "inactive"
             or outside_validity(records[identity], effective_at)
             or records[identity].support_state
@@ -289,8 +326,14 @@ async def resolve_closure(
             for identity in group
         ):
             continue
+        if any(
+            records[support].source not in (MemorySource.USER_STATED, MemorySource.TOOL_OBSERVED)
+            for identity in group
+            for support in records[identity].support_event_ids
+        ):
+            continue
         groups.append(sorted(group))
-    return EvidenceClosure(list(records.values()), groups, reads, fetched, None)
+    return groups
 
 
 @dataclass(frozen=True)
@@ -301,14 +344,19 @@ class PackedContext:
     counter_calls: int
 
 
+@dataclass(frozen=True)
+class CountedRequest:
+    backend: StrictChatBackend
+    request: StrictRequest
+    base_count: RequestCount
+
+
 async def pack_context(
     closure: EvidenceClosure,
     *,
     history: list[Message],
     text: str,
-    backend: StrictChatBackend,
-    request: StrictRequest,
-    base_count: RequestCount,
+    counter: CountedRequest,
     config: StrictContextConfig,
 ) -> PackedContext:
     by_id = {record.id: record for record in closure.records}
@@ -316,11 +364,12 @@ async def pack_context(
     kept_history = list(history)
     calls = 1
     while calls < config.max_counter_calls:
-        ids = list(dict.fromkeys(identity for group in groups for identity in group))
-        selected = [by_id[identity] for identity in ids]
+        selected = [
+            by_id[identity]
+            for identity in dict.fromkeys(identity for group in groups for identity in group)
+        ]
         messages = render_messages(selected, kept_history, text)
-        serialized_bytes = serialized_request_bytes(messages, request)
-        if serialized_bytes > config.max_input_bytes:
+        if serialized_request_bytes(messages, counter.request) > config.max_input_bytes:
             if kept_history:
                 kept_history = []
             elif groups:
@@ -328,7 +377,9 @@ async def pack_context(
             else:
                 raise StrictContextError("input_budget_exceeded")
             continue
-        count = await count_request(backend, messages, request, base_count.template_id)
+        count = await count_request(
+            counter.backend, messages, counter.request, counter.base_count.template_id
+        )
         calls += 1
         if fits(count, config):
             return PackedContext(messages, selected, count, calls)

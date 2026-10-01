@@ -7,9 +7,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from morgan_brain.app.chat import Chat
+from morgan_brain.app.chat import Chat, TurnRequest
 from morgan_brain.app.strict_context import (
+    CountedRequest,
     EvidenceClosure,
+    EvidenceScope,
     StrictContextConfig,
     StrictContextError,
     count_request,
@@ -131,7 +133,7 @@ async def test_count_provider_diagnosis_survives_without_recall_or_persistence(
     try:
         before = conn.serialize()
         with pytest.raises(type(failure)) as caught:
-            await chat.ask_evidence(user_id="owner", project="personal", text="Tea?")
+            await chat.ask_evidence(TurnRequest(user_id="owner", project="personal", text="Tea?"))
         assert caught.value is failure
         assert conn.serialize() == before
         assert not backend.generated
@@ -225,22 +227,18 @@ async def test_whole_request_budget_at_limit_and_one_below_never_splits_group():
     exact = replace(config, total_tokens=full.input_tokens + 39)
     packed = await pack_context(
         closure,
+        counter=CountedRequest(backend, request, base),
         history=[],
         text="Tea?",
-        backend=backend,
-        request=request,
-        base_count=base,
         config=exact,
     )
     assert {record.id for record in packed.records} == {"source", "fact"}
     assert packed.count.input_tokens + 39 == exact.total_tokens
     under = await pack_context(
         closure,
+        counter=CountedRequest(backend, request, base),
         history=[],
         text="Tea?",
-        backend=backend,
-        request=request,
-        base_count=base,
         config=replace(exact, total_tokens=exact.total_tokens - 1),
     )
     assert under.records == []
@@ -342,6 +340,123 @@ async def test_correction_during_generation_rejects_under_atomic_writer_lock(tmp
         other.close()
 
 
+@pytest.mark.parametrize("mutation", ["correction", "forget"])
+async def test_detailed_answer_reports_atomic_refusal_without_persisting(tmp_path, mutation):
+    path = str(tmp_path / "synthetic.db")
+    conn, other = open_db(path), open_db(path)
+    other_gate, _, _ = stack(other)
+
+    async def change():
+        if mutation == "correction":
+            await source(other_gate, identity="correction", content="Coffee", parents=["source"])
+        else:
+            await other_gate.forget(user_id="owner", project="personal")
+
+    backend = FakeExactBackend(generation_hook=change)
+    gate, _, chat = stack(conn, backend)
+    try:
+        await source(gate)
+        reason = "evidence_changed" if mutation == "correction" else "store_interrupted_by_forget"
+        with pytest.raises(StrictContextError) as caught:
+            await chat.ask_evidence(TurnRequest(user_id="owner", project="personal", text="Tea?"))
+        assert caught.value.reason == reason
+        assert caught.value.evidence_ids == []
+        assert conn.execute("SELECT COUNT(*) FROM session_history").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0] == (
+            2 if mutation == "correction" else 0
+        )
+    finally:
+        conn.close()
+        other.close()
+
+
+@pytest.mark.parametrize("phase", ["count", "generation"])
+async def test_adapter_timeout_diagnosis_precedes_bounded_application_watchdog(monkeypatch, phase):
+    failure = ProviderUnreachable(
+        "http://synthetic.invalid/v1", "slow", setting="MORGAN_LLM_ENDPOINT"
+    )
+
+    class SlowAdapter(FakeExactBackend):
+        async def count_request(self, messages, *, request):
+            if phase == "count":
+                await asyncio.sleep(0.01)
+                raise failure
+            return await super().count_request(messages, request=request)
+
+        async def generate_counted(self, messages, *, request, count):
+            await asyncio.sleep(0.01)
+            raise failure
+
+    deadlines = []
+    original_wait_for = asyncio.wait_for
+
+    async def deadline_race(awaitable, **limits):
+        # Accelerate the deadline race: an equal outer deadline wins before diagnosis;
+        # the one-second production headroom lets the adapter's named refusal arrive.
+        timeout = limits["timeout"]
+        deadlines.append(timeout)
+        return await original_wait_for(awaitable, timeout=0.005 if timeout in (10, 60) else 0.05)
+
+    monkeypatch.setattr(asyncio, "wait_for", deadline_race)
+    conn = open_db(":memory:")
+    gate, _, chat = stack(conn, SlowAdapter())
+    try:
+        await source(gate)
+        before = conn.serialize()
+        with pytest.raises(ProviderUnreachable) as caught:
+            await chat.ask_evidence(TurnRequest(user_id="owner", project="personal", text="Tea?"))
+        assert caught.value is failure
+        assert deadlines == ([11] if phase == "count" else [11, 11, 61])
+        assert conn.serialize() == before
+    finally:
+        conn.close()
+
+
+async def test_repeated_strict_answers_exclude_prior_unattributed_and_inferred_episodes():
+    conn = open_db(":memory:")
+    backend = FakeExactBackend()
+    gate, _, chat = stack(conn, backend)
+    try:
+        await source(gate)
+        for _ in range(2):
+            await chat.ask_evidence(TurnRequest(user_id="owner", project="personal", text="Tea?"))
+        second = backend.generated[1][0]
+        evidence = json.loads(second[1].content)["untrusted_memory_evidence"]
+        assert [record["id"] for record in evidence] == ["source"]
+        assert evidence[0]["source"] == "user_stated"
+        assert json.loads(second[2].content)["untrusted_history"] == [
+            {"role": "user", "content": "Tea?"},
+            {"role": "assistant", "content": "Tea"},
+        ]
+        assert conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0] == 5
+    finally:
+        conn.close()
+
+
+async def test_non_grounding_candidates_do_not_consume_progressive_evidence_bound():
+    conn = open_db(":memory:")
+    gate, _, _ = stack(conn)
+    try:
+        await source(gate)
+        stored = await gate.evidence(user_id="owner", project="personal", evidence_ids=["source"])
+        candidates = [
+            Memory(id=f"unknown-{index}", user_id="owner", content="Unattributed text")
+            for index in range(33)
+        ] + stored.records
+        closure = await resolve_closure(
+            gate,
+            scope=EvidenceScope("owner", "personal"),
+            candidates=candidates,
+            config=StrictContextConfig(max_records=1),
+            effective_at=NOW,
+        )
+        assert closure.abstention_reason is None
+        assert closure.fetched_ids == ["source"]
+        assert closure.groups == [["source"]]
+    finally:
+        conn.close()
+
+
 def test_unknown_and_unsupported_agent_records_cannot_ground_positive_citations():
     for source_value in ("unknown", "agent_inferred"):
         with pytest.raises(StrictContextError, match="citation_invalid"):
@@ -412,11 +527,9 @@ async def test_oversized_history_drops_whole_history_before_counter():
     base = await count_request(backend, render_messages([], [], "Tea?"), request)
     packed = await pack_context(
         closure,
+        counter=CountedRequest(backend, request, base),
         history=[Message(user_id="owner", role=Role.USER, content="x" * 10000)],
         text="Tea?",
-        backend=backend,
-        request=request,
-        base_count=base,
         config=config,
     )
     assert len(backend.counted) == 2
@@ -445,8 +558,7 @@ async def test_fact_closed_before_evidence_lookup_is_dropped_before_generation()
         )
         closure = await resolve_closure(
             gate,
-            user_id="owner",
-            project="personal",
+            scope=EvidenceScope("owner", "personal"),
             candidates=recalled.records,
             config=StrictContextConfig(),
             effective_at=datetime(2026, 10, 2, tzinfo=UTC),
@@ -544,7 +656,9 @@ async def test_detailed_answer_exposes_citations_and_budget_after_commit(abstain
     gate, _, chat = stack(conn, backend)
     try:
         await source(gate)
-        detailed = await chat.ask_evidence(user_id="owner", project="personal", text="Tea?")
+        detailed = await chat.ask_evidence(
+            TurnRequest(user_id="owner", project="personal", text="Tea?")
+        )
         assert detailed.schema_version == "morgan.answer.v1"
         assert detailed.evidence_ids == answer["evidence_ids"] and detailed.abstained is abstained
         assert detailed.user_id == "owner" and detailed.project == "personal"
@@ -585,8 +699,8 @@ async def test_interleaved_detailed_answers_have_independent_result_metadata():
         await source(gate, identity="tea", content="Tea is a recorded option")
         await source(gate, identity="coffee", content="Coffee is a recorded option")
         tea, coffee = await asyncio.gather(
-            chat.ask_evidence(user_id="owner", project="personal", text="Tea?"),
-            chat.ask_evidence(user_id="owner", project="personal", text="Coffee?"),
+            chat.ask_evidence(TurnRequest(user_id="owner", project="personal", text="Tea?")),
+            chat.ask_evidence(TurnRequest(user_id="owner", project="personal", text="Coffee?")),
         )
         assert tea.answer == "Tea" and tea.evidence_ids == ["tea"]
         assert coffee.answer == "Coffee" and coffee.evidence_ids == ["coffee"]

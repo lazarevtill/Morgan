@@ -1,6 +1,8 @@
 """Strict ask is optional; unsupported capability refuses before opening the database."""
 
 import argparse
+import json
+from dataclasses import asdict
 from types import SimpleNamespace
 
 import pytest
@@ -8,7 +10,7 @@ from pydantic import ValidationError
 
 from morgan_brain.app.strict_context import AnswerBudget, AnswerResult, StrictContextError
 from morgan_brain.config import Settings
-from morgan_brain.surfaces.cli.__main__ import build_parser
+from morgan_brain.surfaces.cli.__main__ import _dispatch, build_parser
 from morgan_brain.surfaces.cli.commands import cmd_ask
 from morgan_brain.surfaces.mcp_server import build_server
 
@@ -55,6 +57,34 @@ async def test_disabled_mcp_strict_refuses_before_context(settings_for_tmp, monk
         )
 
 
+@pytest.mark.parametrize("reason", ["evidence_changed", "store_interrupted_by_forget"])
+async def test_strict_atomic_refusal_has_structured_cli_json(
+    settings_for_tmp, monkeypatch, capsys, reason
+):
+    settings = settings_for_tmp.model_copy(update={"strict_context_backend": "llamacpp"})
+    closed = []
+
+    class RefusedChat:
+        async def ask_evidence(self, request):
+            raise StrictContextError(reason)
+
+    ctx = SimpleNamespace(
+        chat=RefusedChat(), conn=SimpleNamespace(close=lambda: closed.append("db"))
+    )
+    monkeypatch.setattr(
+        "morgan_brain.surfaces.cli.commands.build_app_context", lambda settings: ctx
+    )
+    args = build_parser().parse_args(["ask", "Tea?", "--strict-context", "--json"])
+    code = await _dispatch(args, settings, "personal", remember_project=None, repository=None)
+    assert code == 1
+    assert json.loads(capsys.readouterr().out) == {
+        "error": reason,
+        "reason": reason,
+        "evidence_ids": [],
+    }
+    assert closed == ["db"]
+
+
 @pytest.mark.parametrize("strict", [False, True])
 async def test_ask_forwards_optional_strict_and_attribution(settings_for_tmp, monkeypatch, strict):
     settings = settings_for_tmp.model_copy(update={"strict_context_backend": "llamacpp"})
@@ -65,8 +95,8 @@ async def test_ask_forwards_optional_strict_and_attribution(settings_for_tmp, mo
             captured.update(fields)
             return "Tea"
 
-        async def ask_evidence(self, **fields):
-            captured.update(fields, strict_context=True)
+        async def ask_evidence(self, request):
+            captured.update(asdict(request), strict_context=True)
             return AnswerResult(
                 user_id="owner",
                 project="personal",

@@ -78,9 +78,17 @@ output tokens, total/output/safety reserves, template label and counter-call cou
 Human CLI output prints citation IDs or explicit abstention. Clients can pass those IDs
 to scoped evidence lookup for progressive verification. These checks establish identity
 and availability, not entailment. `Chat.ask()` retains its string result; SDK callers
-use `Chat.ask_evidence()` for the detailed contract, returned only after atomic commit.
+use `Chat.ask_evidence(TurnRequest(user_id=..., project=..., text=...))` for the detailed
+contract, returned only after atomic commit. `TurnRequest` is an immutable per-call input.
 Results are per-call values; no shared last-response state. Assistant raw evidence remains
 plain answer text in this slice; the citation envelope is not persisted as source lineage.
+
+The adapter classifies its count/generation deadlines at 10/60 seconds; the application
+watchdogs remain bounded at 11/61 seconds, allowing those endpoint diagnostics to arrive.
+Other counted backends still face these absolute watchdog bounds. The detailed SDK and
+strict surfaces report commit-time `evidence_changed` or `store_interrupted_by_forget`
+refusals with empty `evidence_ids`: no precise offending identity is available from the
+atomic guard. Ordinary `Chat.ask` keeps its existing typed memory exceptions.
 
 Strict native answers are experimental and disabled by default. The measured adapter
 calibration established agreement between whole-request counts and server prompt usage;
