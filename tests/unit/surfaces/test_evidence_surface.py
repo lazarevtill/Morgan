@@ -10,9 +10,9 @@ import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
 
 from morgan_brain.composition import build_memory_context, sqlite_path
-from morgan_brain.models import Memory, MemorySource, TemporalFact
+from morgan_brain.models import Memory, MemorySource, Scope, TemporalFact
 from morgan_brain.surfaces.cli.__main__ import build_parser
-from morgan_brain.surfaces.cli.commands import cmd_evidence
+from morgan_brain.surfaces.cli.commands import cmd_evidence, cmd_facts
 from morgan_brain.surfaces.cli.payloads import memory_to_dict
 from morgan_brain.surfaces.cli.render import RENDERERS
 from morgan_brain.surfaces.cli.validation import evidence_ids
@@ -50,6 +50,53 @@ def test_evidence_cli_parser_and_deduplication():
     args = build_parser().parse_args(["evidence", "a", "b", "a", "--project", "personal", "--json"])
     assert args.command == "evidence" and args.project == "personal"
     assert evidence_ids(args.ids) == ["a", "b"]
+
+
+async def test_facts_surface_preserves_durable_provenance_and_validity(settings_for_tmp):
+    ctx = build_memory_context(settings_for_tmp)
+    effective = datetime(2026, 1, 1, tzinfo=UTC)
+    try:
+        await ctx.gate.store(
+            Memory(
+                id="support",
+                user_id=settings_for_tmp.owner_user_id,
+                project="p",
+                content="Synthetic direct statement",
+                source=MemorySource.USER_STATED,
+            )
+        )
+        await ctx.gate.upsert_fact(
+            TemporalFact(
+                id="fact",
+                user_id=settings_for_tmp.owner_user_id,
+                project="p",
+                subject="user",
+                predicate="prefers",
+                object="tea",
+                source=MemorySource.AGENT_INFERRED,
+                author_id="consolidator",
+                scope=Scope.SHARED,
+                support_event_ids=["support"],
+                confidence=0.75,
+                valid_from=effective,
+            )
+        )
+        persisted = (
+            await ctx.gate.current_facts(user_id=settings_for_tmp.owner_user_id, project="p")
+        )[0]
+    finally:
+        ctx.conn.close()
+    payload = await cmd_facts(
+        argparse.Namespace(subject=None, all_projects=False), settings_for_tmp, "p"
+    )
+    record = payload["facts"][0]
+    assert record["id"] == "fact" and record["source"] == "agent_inferred"
+    assert record["author_id"] == "consolidator" and record["scope"] == "shared"
+    assert record["support_event_ids"] == ["support"]
+    assert record["recorded_at"] == persisted.recorded_at.isoformat()
+    assert record["valid_from"] == effective.isoformat()
+    assert record["valid_to"] is None and record["superseded_by"] is None
+    assert record["confidence"] == 0.75
 
 
 async def test_evidence_wire_contract_scope_and_model_independence(settings_for_tmp, monkeypatch):

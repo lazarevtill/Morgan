@@ -61,7 +61,13 @@ def fact_to_dict(f: TemporalFact) -> dict[str, Any]:
         "object": f.object,
         "confidence": f.confidence,
         "source": f.source.value,
+        "author_id": f.author_id,
+        "scope": f.scope.value,
+        "recorded_at": f.recorded_at.isoformat() if f.recorded_at else None,
+        "support_event_ids": list(f.support_event_ids),
         "valid_from": f.valid_from.isoformat() if f.valid_from else None,
+        "valid_to": f.valid_to.isoformat() if f.valid_to else None,
+        "superseded_by": f.superseded_by,
         "last_confirmed": f.last_confirmed.isoformat() if f.last_confirmed else None,
     }
 
