@@ -96,6 +96,13 @@ class Memory(UserScoped):
     status: MemoryStatus = MemoryStatus.STORED
     # Ingestion time belongs to Morgan; created_at remains the asserted event time.
     recorded_at: datetime | None = None
+    # Populated for semantic recall/evidence projections; raw events have no fact interval.
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+    superseded_by: str | None = None
+    last_confirmed: datetime | None = None
+    support_event_ids: list[str] = Field(default_factory=list, max_length=32)
 
 
 class TemporalFact(UserScoped):
@@ -105,7 +112,7 @@ class TemporalFact(UserScoped):
     subject: str  # usually an entity name or "user"
     predicate: str  # e.g. "lives_in", "works_at", "prefers"
     object: str  # the value
-    source: MemorySource = MemorySource.USER_STATED
+    source: MemorySource = MemorySource.UNKNOWN
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     valid_from: datetime | None = None
     valid_to: datetime | None = None  # None = currently valid
@@ -113,6 +120,8 @@ class TemporalFact(UserScoped):
     last_confirmed: datetime | None = None
     author_id: str = ""
     scope: Scope = Scope.PRIVATE
+    recorded_at: datetime | None = None
+    support_event_ids: list[str] = Field(default_factory=list, max_length=32)
 
 
 class MemoryQuery(BaseModel):

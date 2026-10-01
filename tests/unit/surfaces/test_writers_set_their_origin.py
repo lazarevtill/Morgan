@@ -251,7 +251,7 @@ async def test_an_import_stores_client_cli(settings_for_tmp: Settings, tmp_path:
 # ---------------------------------------------------------------------------
 
 
-async def test_consolidated_facts_carry_the_owners_authorship() -> None:
+async def test_consolidated_facts_report_the_model_authorship() -> None:
     """Consolidation's ``upsert_fact`` path must set
     ``author_id`` and ``scope`` too, or every fact written after ``migrate`` counts as
     missing provenance -- the temporal store round-trips whatever the caller gives it."""
@@ -268,7 +268,7 @@ async def test_consolidated_facts_carry_the_owners_authorship() -> None:
 
     current = await gate.current_facts(user_id="owner", project="p")
     assert len(current) == 1
-    assert current[0].author_id == "owner"
+    assert current[0].author_id == "model:test-model"
     assert current[0].scope == Scope.PRIVATE
 
 

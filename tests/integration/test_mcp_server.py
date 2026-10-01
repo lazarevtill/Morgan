@@ -14,8 +14,8 @@ from morgan_brain.surfaces.mcp_server import TOOL_NAMES, build_server
 from tests.fakes import model_server
 
 
-def test_exposes_exactly_the_five_tools():
-    assert sorted(TOOL_NAMES) == ["ask_morgan", "facts", "forget", "recall", "remember"]
+def test_exposes_exactly_the_six_tools():
+    assert sorted(TOOL_NAMES) == ["ask_morgan", "evidence", "facts", "forget", "recall", "remember"]
 
 
 async def test_remember_then_recall_through_the_server(tmp_path, monkeypatch):

@@ -12,7 +12,7 @@ def test_everything_is_user_scoped() -> None:
     fact = TemporalFact(user_id="u1", subject="user", predicate="lives_in", object="Berlin")
     assert fact.user_id == "u1"
     assert fact.valid_to is None  # currently valid
-    assert fact.source is MemorySource.USER_STATED
+    assert fact.source is MemorySource.UNKNOWN
 
 
 async def test_memory_gate_requires_user_id() -> None:

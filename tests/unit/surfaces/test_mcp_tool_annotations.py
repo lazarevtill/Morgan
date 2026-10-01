@@ -19,13 +19,13 @@ async def _declared(tmp_path, monkeypatch):
     return {tool.name: tool.annotations for tool in await build_server().mcp.list_tools()}
 
 
-async def test_only_recall_and_facts_declare_themselves_read_only(tmp_path, monkeypatch):
+async def test_only_recall_evidence_and_facts_declare_themselves_read_only(tmp_path, monkeypatch):
     """``ask_morgan`` reads like a question, but the turn stores both halves of the exchange."""
     declared = await _declared(tmp_path, monkeypatch)
 
     read_only = {name for name, hints in declared.items() if hints and hints.readOnlyHint}
 
-    assert read_only == {"recall", "facts"}
+    assert read_only == {"recall", "evidence", "facts"}
 
 
 async def test_forget_is_the_one_destructive_tool(tmp_path, monkeypatch):

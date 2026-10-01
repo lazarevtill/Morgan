@@ -43,8 +43,10 @@ class EventIdentityConflict(ValueError):
 
 
 class EpisodicStore:
-    def __init__(self, conn: sqlite3.Connection) -> None:
+    def __init__(self, conn: sqlite3.Connection, *, initialize: bool = True) -> None:
         self._conn = conn
+        if not initialize:
+            return
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS memories (
@@ -160,7 +162,9 @@ class EpisodicStore:
                 (_entities_json(entities), memory_id),
             )
 
-    def get(self, memory_id: str) -> Memory | None:
+    def get(
+        self, memory_id: str, *, user_id: str | None = None, project: str | None = None
+    ) -> Memory | None:
         """The memory stored under *memory_id*, or ``None``.
 
         Reads whatever columns the row has. A database still waiting for migration step 4 has
@@ -168,7 +172,11 @@ class EpisodicStore:
         those fields is taken from the row when present and left to ``Memory``'s default when
         not.
         """
-        row = self._conn.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
+        row = self._conn.execute(
+            "SELECT * FROM memories WHERE id = ? "
+            "AND (? IS NULL OR user_id = ?) AND (? IS NULL OR project = ?)",
+            (memory_id, user_id, user_id, project, project),
+        ).fetchone()
         if row is None:
             return None
         # Membership in a Row tests its values, so the column names are taken out first.

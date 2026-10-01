@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from morgan_brain.memory.errors import SourceProtectionError
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.fact_ops import FactOp, FactOpBatch, FactOpKind
 from morgan_brain.memory.knowledge.surprise import keep_surprising
@@ -153,42 +154,26 @@ class MemoryConsolidator:
             if op.op is FactOpKind.NOOP:
                 continue
 
-            if op.op is FactOpKind.ADD:
+            if op.op in (FactOpKind.ADD, FactOpKind.UPDATE):
                 key = (op.subject, op.predicate, op.object)
-                if key in current_set:
-                    # Dedup — already a current fact with the exact same triple.
+                if op.op is FactOpKind.ADD and key in current_set:
                     continue
-                await self._gate.upsert_fact(
-                    TemporalFact(
-                        user_id=user_id,
-                        project=project,
-                        subject=op.subject,
-                        predicate=op.predicate,
-                        object=op.object,
-                        confidence=op.confidence,
-                        source=MemorySource.AGENT_INFERRED,
-                        author_id=user_id,
-                        scope=Scope.PRIVATE,
+                try:
+                    await self._gate.upsert_fact(
+                        TemporalFact(
+                            user_id=user_id,
+                            project=project,
+                            subject=op.subject,
+                            predicate=op.predicate,
+                            object=op.object,
+                            confidence=op.confidence,
+                            source=MemorySource.AGENT_INFERRED,
+                            author_id=f"model:{self._model}",
+                            scope=Scope.PRIVATE,
+                        )
                     )
-                )
-                applied.append(op)
-
-            elif op.op is FactOpKind.UPDATE:
-                # upsert_fact closes any existing (subject, predicate) interval
-                # and opens a new one — this is the "supersede not delete" pattern.
-                await self._gate.upsert_fact(
-                    TemporalFact(
-                        user_id=user_id,
-                        project=project,
-                        subject=op.subject,
-                        predicate=op.predicate,
-                        object=op.object,
-                        confidence=op.confidence,
-                        source=MemorySource.AGENT_INFERRED,
-                        author_id=user_id,
-                        scope=Scope.PRIVATE,
-                    )
-                )
+                except SourceProtectionError:
+                    continue
                 applied.append(op)
 
             elif op.op is FactOpKind.DELETE:

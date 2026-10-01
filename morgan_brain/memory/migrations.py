@@ -369,6 +369,17 @@ def _add_recorded_time(conn: sqlite3.Connection, _stores: Stores) -> None:
         conn.execute("ALTER TABLE memories ADD COLUMN recorded_at TEXT")
 
 
+def _add_fact_evidence(conn: sqlite3.Connection, _stores: Stores) -> None:
+    """Add optional fact lineage without inventing legacy evidence or recorded time."""
+    if not _table_exists(conn, "facts"):
+        return
+    columns = _column_names(conn, "facts")
+    if "recorded_at" not in columns:
+        conn.execute("ALTER TABLE facts ADD COLUMN recorded_at TEXT")
+    if "support_event_ids" not in columns:
+        conn.execute("ALTER TABLE facts ADD COLUMN support_event_ids TEXT NOT NULL DEFAULT '[]'")
+
+
 _STEPS: tuple[Step, ...] = (
     # A capital counts as a name only where its position does not explain it.
     Step(1, "reextract entities", False, _reextract_entities),
@@ -379,6 +390,7 @@ _STEPS: tuple[Step, ...] = (
     Step(6, "rebuild vec0 and FTS5", True, _rebuild_vec0_and_fts5),
     Step(7, "seed projects", False, _seed_projects),
     Step(8, "event ingestion time", False, _add_recorded_time),
+    Step(9, "fact evidence metadata", False, _add_fact_evidence),
 )
 
 

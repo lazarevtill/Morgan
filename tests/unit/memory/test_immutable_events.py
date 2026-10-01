@@ -8,6 +8,7 @@ import pytest
 from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.migrations import code_version
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.memory.store.episodic import EventIdentityConflict
 from morgan_brain.models import Memory, MemorySource
@@ -130,7 +131,7 @@ async def test_version_seven_migration_preserves_legacy_provenance_and_unknown_i
     legacy = await reopened.get("stable", user_id="owner")
     assert legacy.source is MemorySource.USER_STATED
     assert legacy.recorded_at is None
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == code_version()
     await reopened.store(event(id="new"))
     assert (await reopened.get("new", user_id="owner")).recorded_at == now
 

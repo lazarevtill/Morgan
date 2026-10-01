@@ -25,9 +25,20 @@ def memory_to_dict(m: Memory) -> dict[str, Any]:
         "kind": m.kind.value,
         "content": m.content,
         "source": m.source.value,
+        "status": m.status.value,
+        "instruction_like": m.instruction_like,
         "author_id": m.author_id,
         "importance": m.importance,
+        "confidence": m.confidence,
         "created_at": m.created_at.isoformat() if m.created_at else None,
+        "recorded_at": m.recorded_at.isoformat() if m.recorded_at else None,
+        "origin_kind": m.origin_kind.value,
+        "scope": m.scope.value,
+        "support_event_ids": m.support_event_ids,
+        "valid_from": m.valid_from.isoformat() if m.valid_from else None,
+        "valid_to": m.valid_to.isoformat() if m.valid_to else None,
+        "superseded_by": m.superseded_by,
+        "last_confirmed": m.last_confirmed.isoformat() if m.last_confirmed else None,
     }
 
 
@@ -52,7 +63,13 @@ def fact_to_dict(f: TemporalFact) -> dict[str, Any]:
         "object": f.object,
         "confidence": f.confidence,
         "source": f.source.value,
+        "author_id": f.author_id,
+        "scope": f.scope.value,
+        "recorded_at": f.recorded_at.isoformat() if f.recorded_at else None,
+        "support_event_ids": list(f.support_event_ids),
         "valid_from": f.valid_from.isoformat() if f.valid_from else None,
+        "valid_to": f.valid_to.isoformat() if f.valid_to else None,
+        "superseded_by": f.superseded_by,
         "last_confirmed": f.last_confirmed.isoformat() if f.last_confirmed else None,
     }
 

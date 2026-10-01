@@ -20,12 +20,13 @@ import structlog
 from morgan_brain.app.chat import Chat
 from morgan_brain.config import Settings
 from morgan_brain.memory.embedder import Embedder
+from morgan_brain.memory.evidence import ScopedEvidenceReader, validate_source_schema
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
 from morgan_brain.memory.migrations import Step, Stores, pending, stamp_if_new, upgrade
 from morgan_brain.memory.module import MemoryModule
 from morgan_brain.memory.store import spaces, vectors
-from morgan_brain.memory.store.db import open_db, write_transaction
+from morgan_brain.memory.store.db import open_db, open_readonly, write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
 from morgan_brain.memory.store.fts import FtsIndex
@@ -71,6 +72,35 @@ class AppContext(MemoryContext):
     chat: Chat
     consolidator: MemoryConsolidator
     client: OpenAICompatAdapter
+
+
+@dataclass
+class EvidenceContext:
+    """Only the existing source database and its scoped evidence gate."""
+
+    gate: MemoryGate
+    conn: sqlite3.Connection
+
+
+def build_evidence_context(settings: Settings) -> EvidenceContext:
+    """Bind source readers without creating, migrating or configuring a model/index."""
+    path = sqlite_path(settings.temporal_db_url)
+    if path == ":memory:":
+        raise ValueError("Evidence reads require an existing database file")
+    if not pathlib.Path(path).is_file():
+        raise FileNotFoundError(f"Morgan evidence database does not exist: {path}")
+    conn = open_readonly(path, busy_timeout_ms=settings.db_busy_timeout_ms)
+    try:
+        validate_source_schema(conn)
+        reader = ScopedEvidenceReader(
+            EpisodicStore(conn, initialize=False),
+            SqliteTemporalStore(conn=conn, initialize=False),
+        )
+        gate = MemoryGate(evidence_reader=reader)
+    except BaseException:
+        conn.close()
+        raise
+    return EvidenceContext(gate=gate, conn=conn)
 
 
 def migration_stores(conn: sqlite3.Connection) -> Stores:

@@ -24,7 +24,8 @@ import structlog
 
 from morgan_brain.memory.checked_embedder import CheckedEmbedder
 from morgan_brain.memory.embedder import Embedder
-from morgan_brain.memory.gate import ForgetReport, RecallOutcome, RecallReason
+from morgan_brain.memory.evidence import ScopedEvidenceReader, fact_memory
+from morgan_brain.memory.gate import EvidenceResult, ForgetReport, RecallOutcome, RecallReason
 from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
@@ -54,6 +55,8 @@ from morgan_brain.models import (
     Memory,
     MemoryKind,
     MemoryQuery,
+    MemorySource,
+    MemoryStatus,
     TemporalFact,
 )
 from morgan_brain.providers.wire import EmbedOutcome, ProviderRefused, ProviderUnreachable
@@ -204,6 +207,11 @@ class MemoryModule:
         original = memory.model_copy(deep=True)
         if self._episodics.check_replay(original) is not None:
             return original.id
+        if self._conn.execute(
+            "SELECT 1 FROM facts WHERE id=? AND user_id=? AND project=?",
+            (original.id, original.user_id, original.project),
+        ).fetchone():
+            raise ValueError("event ID is already used by a fact")
         memory = original.model_copy(deep=True)
         if memory.created_at is None:
             memory.created_at = self._clock()
@@ -224,6 +232,11 @@ class MemoryModule:
         with write_transaction(self._conn):
             if self._episodics.check_replay(original) is not None:
                 return original.id
+            if self._conn.execute(
+                "SELECT 1 FROM facts WHERE id=? AND user_id=? AND project=?",
+                (original.id, original.user_id, original.project),
+            ).fetchone():
+                raise ValueError("event ID is already used by a fact")
             memory.recorded_at = self._clock()
             projects.register(self._conn, memory.project, now=registered_at)
             self._episodics.put(memory)
@@ -332,18 +345,7 @@ class MemoryModule:
         facts = await self._temporal.current_facts(
             user_id=query.user_id, project=project, at=self._clock()
         )
-        fact_memories = [
-            Memory(
-                user_id=query.user_id,
-                project=f.project,
-                kind=MemoryKind.SEMANTIC,
-                content=f"{f.subject} {f.predicate} {f.object}".replace("_", " "),
-                source=f.source,
-                author_id=f.author_id,
-                scope=f.scope,
-            )
-            for f in facts
-        ]
+        fact_memories = [fact_memory(fact) for fact in facts]
         merged = _merge_facts_and_episodics(fact_memories, episodic, query.text, query.top_k)
         # "empty" is decided on what comes back, facts included: a project holding only facts
         # answers with them, and "abstained" beside them would contradict the result.
@@ -436,8 +438,27 @@ class MemoryModule:
         """
         now = self._clock()
         with write_transaction(self._conn):
+            if self._episodics.get(fact.id, user_id=fact.user_id, project=fact.project) is not None:
+                raise ValueError("fact ID is already used by an event")
+            for event_id in fact.support_event_ids:
+                event = self._episodics.get(event_id)
+                if (
+                    event is None
+                    or (event.user_id, event.project) != (fact.user_id, fact.project)
+                    or event.kind is not MemoryKind.EPISODIC
+                    or event.status is not MemoryStatus.STORED
+                    or event.source not in (MemorySource.USER_STATED, MemorySource.TOOL_OBSERVED)
+                ):
+                    raise ValueError("fact support requires scoped source events")
             projects.register(self._conn, fact.project, now=now)
             return await self._temporal.upsert_fact(fact, now=now)
+
+    async def evidence(
+        self, *, user_id: str, project: str, evidence_ids: list[str]
+    ) -> EvidenceResult:
+        return await ScopedEvidenceReader(self._episodics, self._temporal).evidence(
+            user_id=user_id, project=project, evidence_ids=evidence_ids
+        )
 
     async def record_project(
         self, project: str, *, classification: str, remote: str | None, root: str | None

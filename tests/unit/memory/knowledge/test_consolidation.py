@@ -135,14 +135,14 @@ async def test_apply_add_creates_current_fact() -> None:
 async def test_apply_update_closes_old_fact_and_opens_new() -> None:
     consolidator, temporal, gate = _build_stack([], clock=lambda: T1)
 
-    # Seed an existing fact: Berlin
+    # Seed an existing inference: a model update must not supersede a user assertion.
     await gate.upsert_fact(
         TemporalFact(
             user_id="u1",
             subject="user",
             predicate="lives_in",
             object="Berlin",
-            source=MemorySource.USER_STATED,
+            source=MemorySource.AGENT_INFERRED,
         )
     )
 
@@ -376,3 +376,77 @@ async def test_decay_deterministic_given_same_clock() -> None:
     conf_b = (await temporal2.current_facts(user_id="u1"))[0].confidence
 
     assert conf_a == pytest.approx(conf_b)
+
+
+@pytest.mark.parametrize("protected_op", [FactOpKind.ADD, FactOpKind.UPDATE])
+@pytest.mark.parametrize("protected_first", [False, True])
+async def test_protected_source_op_does_not_abort_other_batch_updates(
+    protected_op, protected_first
+):
+    consolidator, temporal, gate = _build_stack([], clock=lambda: T1)
+    await gate.upsert_fact(
+        TemporalFact(
+            user_id="u1",
+            subject="user",
+            predicate="drink",
+            object="tea",
+            source=MemorySource.USER_STATED,
+        )
+    )
+    accepted = FactOp(op=FactOpKind.ADD, subject="user", predicate="color", object="blue")
+    protected = FactOp(op=protected_op, subject="user", predicate="drink", object="coffee")
+    operations = [protected, accepted] if protected_first else [accepted, protected]
+    result = await consolidator.apply("u1", FactOpBatch(ops=operations), project="personal")
+    assert result == [accepted]
+    current = await temporal.current_facts(user_id="u1")
+    assert {(f.predicate, f.object) for f in current} == {("drink", "tea"), ("color", "blue")}
+
+
+async def test_unexpected_value_error_still_rolls_back_consolidation_batch(monkeypatch):
+    consolidator, temporal, gate = _build_stack([], clock=lambda: T1)
+    original = gate.upsert_fact
+    calls = 0
+
+    async def failing(fact):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise ValueError("Unexpected integrity failure")
+        return await original(fact)
+
+    monkeypatch.setattr(gate, "upsert_fact", failing)
+    batch = FactOpBatch(
+        ops=[
+            FactOp(op=FactOpKind.ADD, subject="user", predicate=p, object="value")
+            for p in ("first", "second")
+        ]
+    )
+    with pytest.raises(ValueError, match="Unexpected integrity failure"):
+        await consolidator.apply("u1", batch, project="personal")
+    assert await temporal.current_facts(user_id="u1") == []
+
+
+@pytest.mark.parametrize("operation", [FactOpKind.ADD, FactOpKind.UPDATE])
+async def test_new_consolidated_fact_reports_model_author_and_keeps_legacy_author(operation):
+    consolidator, temporal, gate = _build_stack([], clock=lambda: T1)
+    await gate.upsert_fact(
+        TemporalFact(
+            id="legacy",
+            user_id="u1",
+            subject="legacy",
+            predicate="drink",
+            object="tea",
+            author_id="historic-author",
+            source=MemorySource.AGENT_INFERRED,
+        )
+    )
+    result = await consolidator.apply(
+        "u1",
+        FactOpBatch(ops=[FactOp(op=operation, subject="new", predicate="drink", object="coffee")]),
+        project="personal",
+    )
+    assert len(result) == 1
+    current = {f.subject: f for f in await temporal.current_facts(user_id="u1")}
+    assert current["new"].author_id == "model:test-model"
+    assert current["new"].source is MemorySource.AGENT_INFERRED
+    assert current["legacy"].author_id == "historic-author"

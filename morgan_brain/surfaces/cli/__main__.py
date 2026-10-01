@@ -27,6 +27,7 @@ from morgan_brain.surfaces.cli.commands import (
     cmd_ask,
     cmd_consolidate,
     cmd_doctor,
+    cmd_evidence,
     cmd_facts,
     cmd_forget,
     cmd_import,
@@ -59,6 +60,7 @@ HANDLERS = {
     "remember": cmd_remember,
     "recall": cmd_recall,
     "facts": cmd_facts,
+    "evidence": cmd_evidence,
     "forget": cmd_forget,
     "ask": cmd_ask,
     "consolidate": cmd_consolidate,
@@ -125,6 +127,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_recall.add_argument("query", help="Search text.")
     p_recall.add_argument("--top-k", type=int, default=8, help="Maximum results to return.")
     _add_common(p_recall)
+
+    p_evidence = sub.add_parser(
+        "evidence", help="Fetch durable IDs and source roots without models."
+    )
+    p_evidence.add_argument("ids", nargs="+", help="One to 32 IDs returned by recall.")
+    _add_common(p_evidence)
 
     p_facts = sub.add_parser("facts", help="List currently-valid facts.")
     p_facts.add_argument("--subject", default=None, help="Filter to facts about this subject.")
