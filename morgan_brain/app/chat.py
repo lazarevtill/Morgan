@@ -32,6 +32,7 @@ from morgan_brain.app.strict_context import (
 )
 from morgan_brain.memory.errors import EvidenceChanged
 from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.recall.language import of as query_language
 from morgan_brain.memory.store.erasure import StoreInterruptedByForget
 from morgan_brain.memory.store.history import SessionHistoryStore, session_key
 from morgan_brain.models import Memory, MemoryQuery, MemorySource, Message, OriginKind, Role
@@ -78,6 +79,7 @@ class TurnBasis:
     input_at: datetime
     generation: int
     evidence: list[Memory] | None
+    reply_author_id: str | None = None
 
 
 async def _no_backend_to_close() -> None:
@@ -167,18 +169,33 @@ class Chat:
         )
         detailed = None
         evidence_basis = None
+        reply_author_id = None
         if counter is not None:
             packed = await self._pack_strict(turn, recalled.memories, history, counter)
             detailed = await self._answer_strict(turn, packed, counter)
             reply = detailed.answer
             evidence_basis = packed.records
+        elif any(memory.revision_state == "conflicted" for memory in recalled.memories):
+            # Default prose omits revision metadata. Do not let a model select a fork.
+            reply = (
+                "В найденной памяти есть неразрешённые версии. Уточните верную версию; "
+                "используйте recall и evidence для проверки ID, затем remember с "
+                "revises_event_ids всех конфликтующих версий."
+                if query_language(turn.text) == "ru"
+                else "Recalled memories have unresolved versions. Clarify the correct version; "
+                "use recall and evidence to inspect their IDs, then remember a correction "
+                "with every conflicting leaf in revises_event_ids."
+            )
+            reply_author_id = "morgan:conflict-guard"
         else:
             result = await self._client.agenerate(
                 build_messages(memories=recalled.memories, history=history, text=turn.text),
                 model=self._model,
             )
             reply = result.text
-        await self._persist_turn(turn, reply, TurnBasis(input_at, generation, evidence_basis))
+        await self._persist_turn(
+            turn, reply, TurnBasis(input_at, generation, evidence_basis, reply_author_id)
+        )
         return reply, detailed
 
     async def _prepare_strict(self, turn: TurnRequest) -> CountedRequest:
@@ -296,7 +313,12 @@ class Chat:
         memories = []
         for content, evidence_source, reported_author, effective_at in (
             (turn.text, MemorySource(turn.source), turn.author_id, basis.input_at),
-            (reply, MemorySource.AGENT_INFERRED, f"model:{self._model}", reply_at),
+            (
+                reply,
+                MemorySource.AGENT_INFERRED,
+                basis.reply_author_id or f"model:{self._model}",
+                reply_at,
+            ),
         ):
             memories.append(
                 Memory(
