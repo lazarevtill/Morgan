@@ -155,3 +155,61 @@ async def test_actual_non_noop_apply_with_structural_heads(regular_changed):
             assert added[0].support_event_ids == ["source"]
     finally:
         conn.close()
+
+
+@pytest.mark.parametrize("predicate", [WORKING_CONTEXT_PREDICATE, CHECKPOINT_PREDICATE])
+async def test_legacy_predicate_fact_remains_recallable_consolidatable_and_not_a_context(predicate):
+    from morgan_brain.memory.knowledge.consolidation import FactOp, FactOpBatch, MemoryConsolidator
+    from morgan_brain.models import MemoryQuery
+
+    class NoGeneration:
+        async def agenerate(self, *args, **kwargs):
+            raise AssertionError("No model calls")
+
+    conn, gate = setup()
+    try:
+        legacy = await fact(gate, "legacy-person", predicate)
+        recalled = await gate.recall(
+            MemoryQuery(user_id="owner", project="personal", text="ceramic", top_k=10)
+        )
+        assert any(item.id == legacy for item in recalled.memories)
+        listed = await gate.list_working_contexts(user_id="owner", project="personal")
+        assert listed.items == []
+        prepared = await capture(gate)
+        assert prepared.basis.fact_ids == (legacy,)
+        await fact(gate, "legacy-person", predicate, "steel")
+        with gate.write_transaction(), pytest.raises(StaleConsolidationProposal):
+            await gate.check_consolidation_basis(prepared.basis)
+        await gate.store(
+            Memory(
+                id="legacy-source",
+                user_id="owner",
+                content="Titanium lasts.",
+                source=MemorySource.USER_STATED,
+                author_id="person:owner",
+                created_at=NOW,
+            )
+        )
+        prepared = await gate.capture_consolidation_basis(
+            user_id="owner",
+            project="personal",
+            event_ids=["legacy-source"],
+            generation=gate.capture_erasure_generation(),
+        )
+        op = FactOp(
+            op="UPDATE",
+            subject="legacy-person",
+            predicate=predicate,
+            object="titanium",
+            support_event_ids=["legacy-source"],
+        )
+        worker = MemoryConsolidator(
+            gate=gate, client=NoGeneration(), model="fake", clock=lambda: NOW
+        )
+        assert await worker.apply(
+            "owner", FactOpBatch(ops=[op]), project="personal", basis=prepared.basis
+        ) == [op]
+        current = await gate.current_facts(user_id="owner", project="personal")
+        assert len(current) == 1 and current[0].object == "titanium"
+    finally:
+        conn.close()

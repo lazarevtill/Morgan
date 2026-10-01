@@ -76,6 +76,7 @@ from morgan_brain.memory.working_context import (
     WorkingContextEntry,
     WorkingContextList,
     WorkingContextResult,
+    is_organizer_fact,
     validate_working_context,
     working_subject,
 )
@@ -526,7 +527,9 @@ class MemoryModule:
             )
             fact_memories = []
             for fact in facts:
-                if fact.predicate == WORKING_CONTEXT_PREDICATE:
+                if fact.predicate == WORKING_CONTEXT_PREDICATE and is_organizer_fact(
+                    fact.subject, fact.predicate
+                ):
                     continue
                 state = resolver.support_state(fact)
                 if state not in ("inactive_support", "conflicted_support"):
@@ -701,7 +704,7 @@ class MemoryModule:
         return [
             fact
             for fact in facts
-            if fact.predicate not in (CHECKPOINT_PREDICATE, WORKING_CONTEXT_PREDICATE)
+            if not is_organizer_fact(fact.subject, fact.predicate)
             and resolver.support_state(fact) not in ("inactive_support", "conflicted_support")
         ]
 
@@ -817,7 +820,9 @@ class MemoryModule:
             identities = set()
             prefix = "working_checkpoint:"
             for fact in facts:
-                if fact.predicate != WORKING_CONTEXT_PREDICATE:
+                if fact.predicate != WORKING_CONTEXT_PREDICATE or not is_organizer_fact(
+                    fact.subject, fact.predicate
+                ):
                     continue
                 if not fact.subject.startswith(prefix):
                     raise ValueError("invalid working context subject")

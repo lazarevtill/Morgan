@@ -18,7 +18,6 @@ import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from morgan_brain.memory.checkpoints import CHECKPOINT_PREDICATE
 from morgan_brain.memory.errors import SourceProtectionError
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.basis import (
@@ -29,7 +28,7 @@ from morgan_brain.memory.knowledge.basis import (
 )
 from morgan_brain.memory.knowledge.fact_ops import FactOp, FactOpBatch, FactOpKind
 from morgan_brain.memory.knowledge.surprise import keep_surprising
-from morgan_brain.memory.working_context import WORKING_CONTEXT_PREDICATE
+from morgan_brain.memory.working_context import is_organizer_fact
 from morgan_brain.models import (
     Memory,
     MemoryKind,
@@ -110,7 +109,7 @@ class MemoryConsolidator:
                     "confidence": fact.confidence,
                 }
                 for fact in existing_facts
-                if fact.predicate not in (CHECKPOINT_PREDICATE, WORKING_CONTEXT_PREDICATE)
+                if not is_organizer_fact(fact.subject, fact.predicate)
             ],
             ensure_ascii=False,
         )
@@ -176,10 +175,7 @@ class MemoryConsolidator:
             raise UnsupportedConsolidationOperation("Automatic writes require their prepared basis")
         source_ids = {source.event_id for source in basis.sources}
         for op in batch.ops:
-            if op.op is not FactOpKind.NOOP and op.predicate in (
-                CHECKPOINT_PREDICATE,
-                WORKING_CONTEXT_PREDICATE,
-            ):
+            if op.op is not FactOpKind.NOOP and is_organizer_fact(op.subject, op.predicate):
                 raise UnsupportedConsolidationOperation(
                     "Reserved checkpoint/working context facts require their compare-and-swap API"
                 )
@@ -210,11 +206,7 @@ class MemoryConsolidator:
         """``apply``'s body. The caller holds the write transaction."""
         current = await self._gate.current_facts(user_id=user_id, project=project, effective_at=now)
         # Match the prepared inventory: organizer heads have their own CAS APIs.
-        current = [
-            fact
-            for fact in current
-            if fact.predicate not in (CHECKPOINT_PREDICATE, WORKING_CONTEXT_PREDICATE)
-        ]
+        current = [fact for fact in current if not is_organizer_fact(fact.subject, fact.predicate)]
         if fact_fingerprint(current) != basis.fact_fingerprint:
             raise StaleConsolidationProposal("Consolidation effective fact inputs changed")
         current_set = {(f.subject, f.predicate, f.object) for f in current}
@@ -301,9 +293,7 @@ class MemoryConsolidator:
             generation=generation,
         )
         existing_facts = [
-            fact
-            for fact in inputs.facts
-            if fact.predicate not in (CHECKPOINT_PREDICATE, WORKING_CONTEXT_PREDICATE)
+            fact for fact in inputs.facts if not is_organizer_fact(fact.subject, fact.predicate)
         ]
         episodics = list(inputs.episodics)
 

@@ -132,7 +132,7 @@ class OpenAICompatAdapter:
 
         return ChatResult(
             text=text,
-            model=model,
+            model=response.model,
             tool_calls=tool_calls,
             usage=usage,
             finish_reason=finish_reason,

@@ -6,7 +6,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from morgan_brain.memory.checkpoints import CheckpointContext, checkpoint_subject
+from morgan_brain.memory.checkpoints import (
+    CHECKPOINT_PREDICATE,
+    CheckpointContext,
+    checkpoint_subject,
+)
 from morgan_brain.models import Memory, MemoryKind, MemorySource, MemoryStatus, TemporalFact
 
 WORKING_CONTEXT_PREDICATE = "working_context_v1"
@@ -190,3 +194,19 @@ def working_fact(preview: WorkingContextPreview) -> TemporalFact:
             and record.source in (MemorySource.USER_STATED, MemorySource.TOOL_OBSERVED)
         ],
     )
+
+
+def is_organizer_fact(subject: str, predicate: str) -> bool:
+    """Reserved predicates are structural only in their canonical subject namespace."""
+    if predicate == WORKING_CONTEXT_PREDICATE:
+        prefix, encode = "working_checkpoint:", working_subject
+    elif predicate == CHECKPOINT_PREDICATE:
+        prefix, encode = "checkpoint:", checkpoint_subject
+    else:
+        return False
+    if not subject.startswith(prefix):
+        return False
+    try:
+        return encode(subject[len(prefix) :]) == subject
+    except ValueError:
+        return False
