@@ -49,7 +49,7 @@ from starlette.responses import JSONResponse, Response
 
 from morgan_brain.config import Settings, settings_for
 from morgan_brain.logging_setup import configure_logging
-from morgan_brain.models import PERSONAL_PROJECT
+from morgan_brain.models import PERSONAL_PROJECT, MemorySource
 from morgan_brain.surfaces.cli.commands import (
     cmd_ask,
     cmd_facts,
@@ -207,14 +207,23 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
     session_id = uuid4().hex
 
     async def remember(
-        text: str, project: str | None = None, ctx: _ToolContext | None = None
+        text: str,
+        project: str | None = None,
+        ctx: _ToolContext | None = None,
+        source: MemorySource = MemorySource.UNKNOWN,
+        author_id: str = "",
     ) -> dict[str, Any]:
         """Store a memory in a project. *project* is passed through as given, ``None``
         included, so ``cmd_remember`` is the one place that resolves it to
         ``PERSONAL_PROJECT`` and reports whether it had to -- except an empty string, which a
         client sends the same as omitting the argument: ``Memory.project`` rejects it
-        (``min_length=1``) rather than defaulting it, so it is folded into ``None`` here."""
-        args = argparse.Namespace(text=text)
+        (``min_length=1``) rather than defaulting it, so it is folded into ``None`` here.
+
+        Source defaults to unknown. Use user_stated only for actual user statements,
+        tool_observed for tool results, agent_inferred for your inferences. Source and
+        author_id are reported provenance, not authenticated identity or access grants.
+        """
+        args = argparse.Namespace(text=text, source=source, author_id=author_id)
         return await cmd_remember(
             args,
             settings,
@@ -256,10 +265,19 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
         return await cmd_forget(args, settings, project or PERSONAL_PROJECT)
 
     async def ask_morgan(
-        text: str, project: str | None = None, ctx: _ToolContext | None = None
+        text: str,
+        project: str | None = None,
+        ctx: _ToolContext | None = None,
+        source: MemorySource = MemorySource.UNKNOWN,
+        author_id: str = "",
     ) -> dict[str, Any]:
-        """A full turn through the orchestrator (requires a reachable LLM)."""
-        args = argparse.Namespace(text=text)
+        """Answer and remember a turn (requires a reachable LLM).
+
+        Input source defaults to unknown. Use user_stated only for actual user words.
+        Source and author are reported provenance, not authentication or permissions.
+        The model reply is always agent_inferred with a model author label.
+        """
+        args = argparse.Namespace(text=text, source=source, author_id=author_id)
         return await cmd_ask(
             args,
             settings,

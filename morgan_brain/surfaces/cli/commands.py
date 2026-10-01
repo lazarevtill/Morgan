@@ -102,18 +102,19 @@ async def cmd_remember(
     """
     project_defaulted = project is None
     resolved_project = project if project is not None else PERSONAL_PROJECT
+    source = MemorySource(getattr(args, "source", "unknown"))
     ctx = build_memory_context(settings)
     try:
         memory = Memory(
             user_id=settings.owner_user_id,
             project=resolved_project,
             content=args.text,
-            source=MemorySource.USER_STATED,
+            source=source,
             origin_kind=OriginKind.REMEMBER,
             client=client,
             session_id=session_id,
             cwd=str(Path.cwd()),
-            author_id=settings.owner_user_id,
+            author_id=getattr(args, "author_id", ""),
         )
         memory_id = await ctx.gate.store(memory)
         await _record_the_repository(ctx, settings, resolved_project, repository)
@@ -125,6 +126,8 @@ async def cmd_remember(
         "project": resolved_project,
         "project_defaulted": project_defaulted,
         "content": args.text,
+        "source": memory.source.value,
+        "author_id": memory.author_id,
     }
 
 
@@ -213,6 +216,8 @@ async def cmd_ask(
     """*client* and *session_id* default to the CLI's own values; the MCP server passes its
     caller's ``clientInfo.name`` and its own per-process session id instead -- the same
     convention ``cmd_remember`` uses, and so is *repository* (``_record_the_repository``)."""
+    source = MemorySource(getattr(args, "source", "unknown"))
+    author_id = getattr(args, "author_id", "")
     ctx = build_app_context(settings)
     try:
         reply = await ctx.chat.ask(
@@ -221,11 +226,21 @@ async def cmd_ask(
             text=args.text,
             caller_client=client,
             caller_session_id=session_id,
+            source=source,
+            author_id=author_id,
         )
         await _record_the_repository(ctx, settings, project, repository)
     finally:
         ctx.conn.close()
-    return {"project": project, "response": reply, "model_used": settings.llm_model}
+    return {
+        "project": project,
+        "response": reply,
+        "model_used": settings.llm_model,
+        "source": source.value,
+        "author_id": author_id,
+        "response_source": MemorySource.AGENT_INFERRED.value,
+        "response_author_id": f"model:{settings.llm_model}",
+    }
 
 
 async def cmd_consolidate(

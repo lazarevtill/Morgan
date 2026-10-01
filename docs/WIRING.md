@@ -237,6 +237,26 @@ the embedding host is unreachable or refused, `vector_audit` reads `None` and
 
 ## 5. The CLI
 
+`remember` and `ask` accept optional `--source` (`unknown`, `user_stated`, `tool_observed`,
+`agent_inferred`) and `--author-id`. MCP `remember` and `ask_morgan` accept the same optional fields
+as `source` and `author_id`. Omitting them stores `unknown` and an empty author; old
+commands still work. Existing stored attribution is preserved. Use `user_stated` only
+when recording an actual user statement; tool results and agent proposals must be
+labelled accordingly. These labels report provenance; they do not authenticate a
+caller or change the configured owner's access. Results include the recorded labels. `ask` replies are always `agent_inferred`, with
+`model:<configured model>` as the reported author; the chat wire role does not establish
+who authored the input.
+
+ChatGPT imports keep stable source event IDs. An edited export that reuses a source
+message ID with changed text, source role, explicit event time or project is refused with an event identity conflict before
+embedding or overwriting that event. Until explicit import revisions are supported,
+corrections require a new source event identity; Morgan does not generate fork IDs.
+An import is resumable per event, rather than atomic across the whole export.
+
+For example: `morgan remember "I prefer short answers" --project personal
+--source user_stated --author-id owner`.
+
+
 Every command takes `--json`. `remember`, `recall`, `facts`, `forget`, `ask`, `consolidate`
 and `doctor` also take `--project` (default: the current git repository's name; a linked
 worktree counts as the repository it came from; outside a repository, `personal`) and, where

@@ -52,10 +52,20 @@ Store one or two self-contained sentences that will still make sense months from
 - a convention the code does not make obvious;
 - a conclusion from a measurement, with its evidence (see below).
 
-`morgan remember "<sentences>"` or `remember(text, project)`.
+Use `morgan remember "<sentences>" --source user_stated --author-id "<author>"`
+or `remember(text, project, source="user_stated", author_id="<author>")` for an actual
+user statement. Use `tool_observed` for tool results and `agent_inferred` for your
+inferences or proposals. Omitted source is `unknown`; never label your own suggestion
+`user_stated`. Author and source are reported provenance, not authentication, ownership
+or permission. Leave author empty when it is unknown.
 
-Never store secrets, credentials or tokens, personal details about other people, what the code
-or git history already records, or the state of the task in hand.
+General preferences, goals, and relationships the owner chooses to share belong in
+`personal`: pass `--project personal` or `project="personal"`. A concise work checkpoint
+may record verified progress, a next step, blockers, and artifact references; verify mutable
+state before resuming. This is remembered text, not a task execution engine.
+
+Never store secrets, credentials or tokens, unnecessary sensitive details about other people,
+or duplicate what the code or git history already records.
 
 ## Runs and experiments
 

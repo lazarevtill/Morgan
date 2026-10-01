@@ -363,6 +363,12 @@ def _seed_projects(conn: sqlite3.Connection, stores: Stores) -> dict[str, int]:
 #: In order. Step *n* brings a database from ``user_version`` *n - 1* to *n*; append only.
 #: Steps 1 and 2 rewrite and drop, yet stay light: they predate the split, and every Morgan
 #: that shipped them already ran them on open.
+def _add_recorded_time(conn: sqlite3.Connection, stores: Stores) -> None:
+    """Add ingestion metadata without inventing legacy timestamps or changing assertions."""
+    if _table_exists(conn, "memories") and "recorded_at" not in _column_names(conn, "memories"):
+        conn.execute("ALTER TABLE memories ADD COLUMN recorded_at TEXT")
+
+
 _STEPS: tuple[Step, ...] = (
     # A capital counts as a name only where its position does not explain it.
     Step(1, "reextract entities", False, _reextract_entities),
@@ -372,6 +378,7 @@ _STEPS: tuple[Step, ...] = (
     Step(5, "rename default to personal", True, _rename_default_project),
     Step(6, "rebuild vec0 and FTS5", True, _rebuild_vec0_and_fts5),
     Step(7, "seed projects", False, _seed_projects),
+    Step(8, "event ingestion time", False, _add_recorded_time),
 )
 
 

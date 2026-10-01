@@ -62,6 +62,8 @@ class Chat:
         session_id: str | None = None,
         caller_client: str = "",
         caller_session_id: str = "",
+        source: MemorySource = MemorySource.UNKNOWN,
+        author_id: str = "",
     ) -> str:
         """Answer *text* for *user_id* in *project*, and remember the exchange.
 
@@ -74,6 +76,7 @@ class Chat:
         ``client`` (the ``ChatClient`` this instance calls the model through) on purpose, so
         neither collides with an existing parameter of a different kind.
         """
+        source = MemorySource(source)
         self._gate.require_writable()
         hkey = session_key(user_id, session_id)
         history = self._history.recent(hkey, project=project)
@@ -90,23 +93,21 @@ class Chat:
         self._history.append(
             hkey, Message(user_id=user_id, role=Role.ASSISTANT, content=reply), project=project
         )
-        # Both halves are remembered, attributed to who said them: the user's words are a
-        # statement, the reply is an inference and must never be mistaken for one. Both rows
-        # came from the same ask turn, so both carry origin_kind=ASK -- source is what tells
-        # them apart, not origin.
-        for content, source in (
-            (text, MemorySource.USER_STATED),
-            (reply, MemorySource.AGENT_INFERRED),
+        # Source is reported evidence provenance, independent of the chat wire role.
+        # Client-authored input never becomes a user statement merely by using ask.
+        for content, evidence_source, reported_author in (
+            (text, source, author_id),
+            (reply, MemorySource.AGENT_INFERRED, f"model:{self._model}"),
         ):
             await self._gate.store(
                 Memory(
                     user_id=user_id,
                     project=project,
                     content=content,
-                    source=source,
+                    source=evidence_source,
                     created_at=self._clock(),
                     origin_kind=OriginKind.ASK,
-                    author_id=user_id,
+                    author_id=reported_author,
                     cwd=str(Path.cwd()),
                     client=caller_client,
                     session_id=caller_session_id,

@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import pytest
 from mcp import types
 from mcp.client.session import ClientSession
 from mcp.shared.memory import create_connected_server_and_client_session
@@ -184,6 +185,9 @@ async def test_an_answer_is_stored_as_agent_inferred_and_origin_ask(
     stored = _memory_row_by_source(settings_for_tmp, MemorySource.AGENT_INFERRED.value)
     assert stored["source"] == MemorySource.AGENT_INFERRED.value
     assert stored["origin_kind"] == OriginKind.ASK.value
+    assert stored["author_id"] == "model:test-model"
+    unattributed = _memory_row_by_source(settings_for_tmp, MemorySource.UNKNOWN.value)
+    assert unattributed["author_id"] == ""
 
 
 async def test_an_ask_through_the_cli_stores_client_cli(
@@ -260,3 +264,132 @@ async def test_consolidated_facts_carry_the_owners_authorship() -> None:
     assert len(current) == 1
     assert current[0].author_id == "owner"
     assert current[0].scope == Scope.PRIVATE
+
+
+@pytest.mark.parametrize("source", list(MemorySource))
+async def test_remember_preserves_explicit_source_and_author(
+    settings_for_tmp: Settings, source: MemorySource
+) -> None:
+    result = await cmd_remember(
+        argparse.Namespace(
+            text="An attributed observation", source=source.value, author_id="reporter"
+        ),
+        settings_for_tmp,
+        "p",
+    )
+    stored = _memory_row(settings_for_tmp, result["id"])
+    assert stored["source"] == result["source"] == source.value
+    assert stored["author_id"] == result["author_id"] == "reporter"
+    assert stored["user_id"] == settings_for_tmp.owner_user_id
+
+
+async def test_remember_without_attribution_does_not_claim_owner_statement(
+    settings_for_tmp: Settings,
+) -> None:
+    result = await cmd_remember(
+        argparse.Namespace(text="A client proposal"), settings_for_tmp, None
+    )
+    stored = _memory_row(settings_for_tmp, result["id"])
+    assert stored["source"] == result["source"] == "unknown"
+    assert stored["author_id"] == result["author_id"] == ""
+    assert result["project"] == "personal" and result["project_defaulted"]
+
+
+async def test_mcp_remember_transports_explicit_attribution(tmp_path: Path) -> None:
+    async with _mcp_client(tmp_path, client_name="test-agent") as client:
+        result = await client.call_tool(
+            "remember",
+            {
+                "text": "Agent proposal",
+                "source": "agent_inferred",
+                "author_id": "test-agent",
+            },
+        )
+    stored = _memory_row(_settings(tmp_path), result["id"])
+    assert stored["source"] == "agent_inferred"
+    assert stored["author_id"] == "test-agent"
+    assert result["source"] == "agent_inferred"
+
+
+async def test_mcp_remember_without_attribution_stays_unknown(tmp_path: Path) -> None:
+    async with _mcp_client(tmp_path, client_name="test-agent") as client:
+        result = await client.call_tool("remember", {"text": "Unattributed client input"})
+        recalled = await client.call_tool("recall", {"query": "Unattributed client input"})
+    stored = _memory_row(_settings(tmp_path), result["id"])
+    assert stored["source"] == "unknown" and stored["author_id"] == ""
+    assert recalled["results"][0]["author_id"] == ""
+
+
+def test_cli_remember_attribution_arguments_are_optional() -> None:
+    from morgan_brain.surfaces.cli.__main__ import build_parser
+
+    args = build_parser().parse_args(["remember", "An observation"])
+    assert args.source == "unknown" and args.author_id == ""
+    explicit = build_parser().parse_args(
+        [
+            "remember",
+            "A user statement",
+            "--source",
+            "user_stated",
+            "--author-id",
+            "speaker",
+        ]
+    )
+    assert explicit.source == "user_stated" and explicit.author_id == "speaker"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        MemorySource.UNKNOWN,
+        MemorySource.USER_STATED,
+        MemorySource.AGENT_INFERRED,
+        MemorySource.TOOL_OBSERVED,
+    ],
+)
+async def test_ask_records_input_source_independently_of_model_reply(
+    settings_for_tmp: Settings, monkeypatch: Any, source: MemorySource
+) -> None:
+    monkeypatch.setattr(composition, "build_chat_client", lambda settings: FakeChatClient())
+    result = await cmd_ask(
+        argparse.Namespace(text="Input words", source=source, author_id="reported-speaker"),
+        settings_for_tmp,
+        "p",
+    )
+    conn = sqlite3.connect(sqlite_path(settings_for_tmp.temporal_db_url))
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("SELECT * FROM memories ORDER BY rowid").fetchall()
+    finally:
+        conn.close()
+    assert rows[0]["source"] == source.value
+    assert rows[0]["author_id"] == "reported-speaker"
+    assert rows[1]["source"] == "agent_inferred"
+    assert rows[1]["author_id"] == f"model:{settings_for_tmp.llm_model}"
+    assert all(row["user_id"] == settings_for_tmp.owner_user_id for row in rows)
+    assert result["source"] == source.value
+    assert result["response_author_id"] == rows[1]["author_id"]
+
+
+async def test_mcp_ask_default_does_not_claim_agent_query_is_user_statement(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(composition, "build_chat_client", lambda settings: FakeChatClient())
+    async with _mcp_client(tmp_path, client_name="test-agent") as client:
+        result = await client.call_tool("ask_morgan", {"text": "Agent-authored query"})
+    stored = _memory_row_by_source(_settings(tmp_path), "unknown")
+    assert stored["author_id"] == ""
+    assert result["source"] == "unknown" and result["author_id"] == ""
+
+
+async def test_invalid_ask_source_refuses_before_building_context(
+    settings_for_tmp: Settings, monkeypatch: Any
+) -> None:
+    def unexpected_context(settings):
+        raise AssertionError("Invalid source opened application context")
+
+    monkeypatch.setattr("morgan_brain.surfaces.cli.commands.build_app_context", unexpected_context)
+    with pytest.raises(ValueError):
+        await cmd_ask(
+            argparse.Namespace(text="Invalid", source="fabricated"), settings_for_tmp, "p"
+        )

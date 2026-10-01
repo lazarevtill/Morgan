@@ -46,6 +46,7 @@ class Entity(BaseModel):
 
 
 class MemorySource(str, Enum):
+    UNKNOWN = "unknown"
     USER_STATED = "user_stated"
     AGENT_INFERRED = "agent_inferred"
     TOOL_OBSERVED = "tool_observed"
@@ -80,7 +81,7 @@ class Memory(UserScoped):
     project: str = Field(default=PERSONAL_PROJECT, min_length=1)
     kind: MemoryKind = MemoryKind.EPISODIC
     content: str
-    source: MemorySource = MemorySource.USER_STATED
+    source: MemorySource = MemorySource.UNKNOWN
     entities: list[Entity] = Field(default_factory=list)
     importance: float = Field(default=0.5, ge=0.0, le=1.0)
     embedding: list[float] | None = None
@@ -93,6 +94,8 @@ class Memory(UserScoped):
     scope: Scope = Scope.PRIVATE
     instruction_like: bool = False
     status: MemoryStatus = MemoryStatus.STORED
+    # Ingestion time belongs to Morgan; created_at remains the asserted event time.
+    recorded_at: datetime | None = None
 
 
 class TemporalFact(UserScoped):

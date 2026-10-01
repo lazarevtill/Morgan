@@ -8,14 +8,17 @@ gets interrupted, which this one did three times.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 
 import pytest
 
-from morgan_brain.app.chatgpt_import import ARCHIVE_PROJECT, import_chatgpt
+from morgan_brain.app.chatgpt_import import ARCHIVE_PROJECT, _memory_id, import_chatgpt
 from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store.episodic import EventIdentityConflict
+from morgan_brain.models import Memory, MemorySource, OriginKind
 
 
 class CountingEmbedder(Embedder):
@@ -75,18 +78,90 @@ async def test_a_second_run_does_not_re_embed_what_is_already_stored(gate_and_em
     assert second.skipped_turns >= 2
 
 
-async def test_an_edited_turn_is_rewritten_rather_than_skipped(gate_and_embedder, tmp_path):
-    """Skipping by id alone would freeze a correction out of the brain for good."""
-    gate, _ = gate_and_embedder
+async def test_an_edited_turn_refuses_overwrite_and_preserves_original(gate_and_embedder, tmp_path):
+    """Changed source payloads need explicit new identity; existing assertions stay immutable."""
+    gate, embedder = gate_and_embedder
     path = _export(tmp_path / "c.json", ["the original wording"])
     await import_chatgpt(path, gate=gate, user_id="owner")
+    before_calls = embedder.calls
+    conn = gate._store._conn
+    before_db = conn.serialize()
 
     _export(path, ["the corrected wording"])
-    await import_chatgpt(path, gate=gate, user_id="owner")
+    with pytest.raises(EventIdentityConflict, match="content"):
+        await import_chatgpt(path, gate=gate, user_id="owner")
+    assert embedder.calls == before_calls
+    assert conn.serialize() == before_db
 
     found = await gate.recall(
         __import__("morgan_brain.models", fromlist=["MemoryQuery"]).MemoryQuery(
             user_id="owner", project=ARCHIVE_PROJECT, text="wording", top_k=5
         )
     )
-    assert [m.content for m in found.memories] == ["the corrected wording"]
+    assert [m.content for m in found.memories] == ["the original wording"]
+
+
+async def test_new_assistant_import_reports_assistant_author(gate_and_embedder, tmp_path):
+    gate, _ = gate_and_embedder
+    path = _export(tmp_path / "assistant.json", ["Synthetic assistant claim"])
+    export = json.loads(path.read_text(encoding="utf-8"))
+    export[0]["mapping"]["m0"]["message"]["author"]["role"] = "assistant"
+    path.write_text(json.dumps(export), encoding="utf-8")
+    await import_chatgpt(path, gate=gate, user_id="owner")
+    stored = await gate.get(_memory_id("m0", 0), user_id="owner")
+    assert stored.source is MemorySource.AGENT_INFERRED
+    assert stored.author_id == "chatgpt:assistant"
+
+
+async def test_legacy_assistant_exact_replay_keeps_historical_author(gate_and_embedder, tmp_path):
+    gate, embedder = gate_and_embedder
+    path = _export(tmp_path / "assistant.json", ["Legacy assistant claim"])
+    export = json.loads(path.read_text(encoding="utf-8"))
+    export[0]["mapping"]["m0"]["message"]["author"]["role"] = "assistant"
+    path.write_text(json.dumps(export), encoding="utf-8")
+    identity = _memory_id("m0", 0)
+    await gate.store(
+        Memory(
+            id=identity,
+            user_id="owner",
+            project=ARCHIVE_PROJECT,
+            content="Legacy assistant claim",
+            source=MemorySource.AGENT_INFERRED,
+            author_id="owner",
+            origin_kind=OriginKind.IMPORT,
+            client="cli",
+            cwd="old location",
+            created_at=datetime.fromtimestamp(1700000000.0, tz=UTC),
+        )
+    )
+    conn = gate._store._conn
+    before_db = conn.serialize()
+    before_calls = embedder.calls
+    report = await import_chatgpt(path, gate=gate, user_id="owner")
+    assert report.skipped_turns == 1 and report.memories == 0
+    assert embedder.calls == before_calls
+    assert conn.serialize() == before_db
+    assert (await gate.get(identity, user_id="owner")).author_id == "owner"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "conflict_field"),
+    [("author", {"role": "assistant"}, "source"), ("create_time", 1800000000.0, "created_at")],
+)
+async def test_same_text_changed_source_identity_refuses_before_embedding(
+    gate_and_embedder, tmp_path, field, value, conflict_field
+):
+    gate, embedder = gate_and_embedder
+    path = _export(tmp_path / "c.json", ["unchanged words"])
+    await import_chatgpt(path, gate=gate, user_id="owner")
+    before_calls = embedder.calls
+    conn = gate._store._conn
+    before_db = conn.serialize()
+    export = json.loads(path.read_text(encoding="utf-8"))
+    export[0]["mapping"]["m0"]["message"][field] = value
+    path.write_text(json.dumps(export), encoding="utf-8")
+    with pytest.raises(EventIdentityConflict) as exc:
+        await import_chatgpt(path, gate=gate, user_id="owner")
+    assert conflict_field in exc.value.fields
+    assert embedder.calls == before_calls
+    assert conn.serialize() == before_db

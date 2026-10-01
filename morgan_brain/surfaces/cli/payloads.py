@@ -25,6 +25,7 @@ def memory_to_dict(m: Memory) -> dict[str, Any]:
         "kind": m.kind.value,
         "content": m.content,
         "source": m.source.value,
+        "author_id": m.author_id,
         "importance": m.importance,
         "created_at": m.created_at.isoformat() if m.created_at else None,
     }
