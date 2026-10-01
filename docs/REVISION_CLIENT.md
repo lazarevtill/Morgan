@@ -53,3 +53,12 @@ The eligibility subquery touches in-scope source metadata, so its work grows wit
 size, not only `top_k`. It currently runs once for each ranked signal: two metadata passes
 per recall. The cutoff is bound as exact integer microseconds; stored event times still
 need normalization during each pass. No source text is fetched by those eligibility scans.
+
+All writers sharing a database must implement schema 11 revision, erasure, and evidence
+semantics. Do not run pre-revision or pre-erasure writers concurrently against it.
+Compatibility with additive read fields does not imply compatibility with this lifecycle.
+This is an operational requirement: Morgan does not credential-enforce a block on older
+binaries. Do not downgrade in place. Preserve a full snapshot and raw lineage metadata
+in any export, then replay into a separate synthetic database and verify the result before
+cutover. Restore a snapshot with its matching build. Older binaries cannot be repaired
+retroactively by these contracts.
