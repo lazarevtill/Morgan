@@ -3,3 +3,8 @@
 *.jpg binary
 *.ico binary
 *.db binary
+
+# Frozen acceptance inputs and scorer retain their supplied digest-verified bytes.
+tests/revision_contract/revision_acceptance_v1.json -text
+tests/revision_contract/revision_acceptance_v1.sha256 -text
+tests/revision_contract/score_gold.py -text

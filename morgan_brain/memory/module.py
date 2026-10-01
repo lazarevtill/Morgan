@@ -30,10 +30,11 @@ from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
+from morgan_brain.memory.revisions import RevisionError, RevisionResolver
 from morgan_brain.memory.store import erasure as erasure_store
 from morgan_brain.memory.store import projects
 from morgan_brain.memory.store import tables as registry
-from morgan_brain.memory.store.db import write_transaction
+from morgan_brain.memory.store.db import read_transaction, write_transaction
 from morgan_brain.memory.store.entities import EntityIndex, delete_entities
 from morgan_brain.memory.store.episodic import EpisodicStore, delete_memories
 from morgan_brain.memory.store.fts import FtsIndex, delete_keywords
@@ -205,15 +206,20 @@ class MemoryModule:
         (``store/projects.py::register``), so a project first written to after migration step 7
         seeded the table has a row as well -- and a store that fails leaves none.
         """
-        prepared_generation = erasure_store.read_generation(self._conn)
-        original = memory.model_copy(deep=True)
-        if self._episodics.check_replay(original) is not None:
-            return original.id
-        if self._conn.execute(
-            "SELECT 1 FROM facts WHERE id=? AND user_id=? AND project=?",
-            (original.id, original.user_id, original.project),
-        ).fetchone():
-            raise ValueError("event ID is already used by a fact")
+        with read_transaction(self._conn):
+            prepared_generation = erasure_store.read_generation(self._conn)
+            original = memory.model_copy(deep=True)
+            original.revises_event_ids = sorted(original.revises_event_ids)
+            original.revision_root_id = RevisionResolver(
+                self._episodics, conn=self._conn, at=self._clock()
+            ).validate_parents(original)
+            if self._episodics.check_replay(original) is not None:
+                return original.id
+            if self._conn.execute(
+                "SELECT 1 FROM facts WHERE id=? AND user_id=? AND project=?",
+                (original.id, original.user_id, original.project),
+            ).fetchone():
+                raise ValueError("event ID is already used by a fact")
         memory = original.model_copy(deep=True)
         if memory.created_at is None:
             memory.created_at = self._clock()
@@ -233,6 +239,9 @@ class MemoryModule:
         # upsert is awaited but never suspends: it is SQL on this connection, nothing else.
         with write_transaction(self._conn):
             erasure_store.require_generation(self._conn, prepared_generation)
+            memory.revision_root_id = RevisionResolver(
+                self._episodics, conn=self._conn, at=self._clock()
+            ).validate_parents(original)
             if self._episodics.check_replay(original) is not None:
                 return original.id
             if self._conn.execute(
@@ -307,56 +316,70 @@ class MemoryModule:
             self._log_recall_done(query, time.monotonic() - embed_started, "error", reason=None)
             raise
         embed_elapsed = time.monotonic() - embed_started
-        vec_hits = await self._vectors.search(
-            user_id=query.user_id,
-            vector=q_vector,
-            top_k=query.top_k * 2,
-            project=project,
-        )
-        # The floor judges on vector evidence alone, so it rules before anything else is
-        # gathered: a decline returns nothing, facts included. Judged after the fact merge, a
-        # decline dropped the facts along with the memories and said nothing about why.
-        verdict = self._floor_verdict(query, project, vec_hits)
-        if verdict == "declined":
-            return self._recall_done(
-                query, embed_elapsed, RecallOutcome([], abstained=True, reason="declined")
+        with read_transaction(self._conn):
+            resolver = RevisionResolver(
+                self._episodics, conn=self._conn, at=query.effective_at or self._clock()
             )
-        vector_ranking = [h.id for h in vec_hits]
-        fts_ranking = self._fts.search(
-            query.text,
-            user_id=query.user_id,
-            top_k=query.top_k * 2,
-            project=project,
-        )
-        # The entity ranking is not fused. A stored name is in the memory's text, so the keyword
-        # search already counts it; a third vote for the same evidence pushed paraphrased
-        # answers down on a real archive (recall@8 0.83 fused, 0.90 not).
-        fused_ids = reciprocal_rank_fusion([vector_ranking, fts_ranking])
-        episodic = [m for m in (self._episodics.get(mid) for mid in fused_ids) if m is not None]
-        # Defense in depth: every signal above is already project-scoped, but fusion resolves
-        # ids through episodic rehydration, which isn't -- drop anything that slipped through.
-        if not query.all_projects:
-            episodic = [m for m in episodic if m.project == query.project]
+            candidates = resolver.ranked_candidates(user_id=query.user_id, project=project)
+            vec_hits = await self._vectors.search(
+                user_id=query.user_id,
+                vector=q_vector,
+                top_k=query.top_k * 2,
+                project=project,
+                candidates=candidates,
+            )
+            # The floor judges on vector evidence alone, so it rules before anything else is
+            # gathered: a decline returns nothing, facts included. Judged after the fact merge, a
+            # decline dropped the facts along with the memories and said nothing about why.
+            verdict = self._floor_verdict(query, project, vec_hits)
+            if verdict == "declined":
+                return self._recall_done(
+                    query, embed_elapsed, RecallOutcome([], abstained=True, reason="declined")
+                )
+            vector_ranking = [h.id for h in vec_hits]
+            fts_ranking = self._fts.search(
+                query.text,
+                user_id=query.user_id,
+                top_k=query.top_k * 2,
+                project=project,
+                candidates=candidates,
+            )
+            # The entity ranking is not fused. A stored name is in the memory's text, so the keyword
+            # search already counts it; a third vote for the same evidence pushed paraphrased
+            # answers down on a real archive (recall@8 0.83 fused, 0.90 not).
+            fused_ids = reciprocal_rank_fusion([vector_ranking, fts_ranking])
+            episodic = [m for m in (self._episodics.get(mid) for mid in fused_ids) if m is not None]
+            # Defense in depth: every signal above is already project-scoped, but fusion resolves
+            # ids through episodic rehydration, which isn't -- drop anything that slipped through.
+            if not query.all_projects:
+                episodic = [m for m in episodic if m.project == query.project]
+            episodic = [resolver.annotate(event) for event in episodic if resolver.is_leaf(event)]
 
-        # Currently-valid facts are authoritative, so they are surfaced alongside episodic
-        # recall -- but alongside, never instead of. This used to prepend every fact and then
-        # truncate, so once a project held top_k facts no episodic memory could be returned
-        # at all, however exactly it matched. current_facts has no limit, so that threshold
-        # is crossed silently as consolidation runs, and the probe harness stores no facts
-        # and could never see it. Verbatim memories also measure better than extracted
-        # artifacts on the published comparisons, so crowding them out loses twice.
-        facts = await self._temporal.current_facts(
-            user_id=query.user_id, project=project, at=self._clock()
-        )
-        fact_memories = [fact_memory(fact) for fact in facts]
-        merged = _merge_facts_and_episodics(fact_memories, episodic, query.text, query.top_k)
-        # "empty" is decided on what comes back, facts included: a project holding only facts
-        # answers with them, and "abstained" beside them would contradict the result.
-        if not merged:
-            outcome = RecallOutcome([], abstained=True, reason="empty")
-        else:
-            outcome = RecallOutcome(merged, abstained=False, reason=verdict)
-        return self._recall_done(query, embed_elapsed, outcome)
+            # Currently-valid facts are authoritative, so they are surfaced alongside episodic
+            # recall -- but alongside, never instead of. This used to prepend every fact and then
+            # truncate, so once a project held top_k facts no episodic memory could be returned
+            # at all, however exactly it matched. current_facts has no limit, so that threshold
+            # is crossed silently as consolidation runs, and the probe harness stores no facts
+            # and could never see it. Verbatim memories also measure better than extracted
+            # artifacts on the published comparisons, so crowding them out loses twice.
+            facts = await self._temporal.current_facts(
+                user_id=query.user_id, project=project, at=resolver.at
+            )
+            fact_memories = []
+            for fact in facts:
+                state = resolver.support_state(fact)
+                if state not in ("inactive_support", "conflicted_support"):
+                    fact_memories.append(
+                        fact_memory(fact).model_copy(update={"support_state": state})
+                    )
+            merged = _merge_facts_and_episodics(fact_memories, episodic, query.text, query.top_k)
+            # "empty" is decided on what comes back, facts included: a project holding only facts
+            # answers with them, and "abstained" beside them would contradict the result.
+            if not merged:
+                outcome = RecallOutcome([], abstained=True, reason="empty")
+            else:
+                outcome = RecallOutcome(merged, abstained=False, reason=verdict)
+            return self._recall_done(query, embed_elapsed, outcome)
 
     def _recall_done(
         self, query: MemoryQuery, embed_elapsed_seconds: float, outcome: RecallOutcome
@@ -444,7 +467,7 @@ class MemoryModule:
             if self._episodics.get(fact.id, user_id=fact.user_id, project=fact.project) is not None:
                 raise ValueError("fact ID is already used by an event")
             for event_id in fact.support_event_ids:
-                event = self._episodics.get(event_id)
+                event = self._episodics.get(event_id, user_id=fact.user_id, project=fact.project)
                 if (
                     event is None
                     or (event.user_id, event.project) != (fact.user_id, fact.project)
@@ -453,14 +476,30 @@ class MemoryModule:
                     or event.source not in (MemorySource.USER_STATED, MemorySource.TOOL_OBSERVED)
                 ):
                     raise ValueError("fact support requires scoped source events")
+            if (
+                fact.support_event_ids
+                and RevisionResolver(self._episodics, conn=self._conn, at=now).support_state(fact)
+                != "current"
+            ):
+                raise RevisionError("stale_revision_basis")
             projects.register(self._conn, fact.project, now=now)
             return await self._temporal.upsert_fact(fact, now=now)
 
     async def evidence(
-        self, *, user_id: str, project: str, evidence_ids: list[str]
+        self,
+        *,
+        user_id: str,
+        project: str,
+        evidence_ids: list[str],
+        effective_at: datetime | None = None,
     ) -> EvidenceResult:
-        return await ScopedEvidenceReader(self._episodics, self._temporal).evidence(
-            user_id=user_id, project=project, evidence_ids=evidence_ids
+        return await ScopedEvidenceReader(
+            self._episodics, self._temporal, conn=self._conn
+        ).evidence(
+            user_id=user_id,
+            project=project,
+            evidence_ids=evidence_ids,
+            effective_at=effective_at or self._clock(),
         )
 
     async def record_project(
@@ -489,9 +528,17 @@ class MemoryModule:
         all_projects: bool = False,
     ) -> list[TemporalFact]:
         resolved_project = None if all_projects else project
-        return await self._temporal.current_facts(
-            user_id=user_id, subject=subject, project=resolved_project
-        )
+        with read_transaction(self._conn):
+            resolver = RevisionResolver(self._episodics, conn=self._conn, at=self._clock())
+            facts = await self._temporal.current_facts(
+                user_id=user_id, subject=subject, project=resolved_project, at=resolver.at
+            )
+            result = []
+            for fact in facts:
+                state = resolver.support_state(fact)
+                if state not in ("inactive_support", "conflicted_support"):
+                    result.append(fact.model_copy(update={"support_state": state}))
+            return result
 
     async def close_fact(
         self, fact_id: str, *, user_id: str, project: str, now: datetime | None = None

@@ -17,7 +17,7 @@ from datetime import datetime
 from enum import Enum
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
 #: The project a write lands in when the caller names none: outside a repository on the CLI,
 #: or an MCP call with no ``project`` argument. There is no silent default -- both surfaces
@@ -78,6 +78,9 @@ class MemoryKind(str, Enum):
 
 
 class Memory(UserScoped):
+    created_at: datetime | None = Field(
+        default=None, validation_alias=AliasChoices("created_at", "effective_at")
+    )
     project: str = Field(default=PERSONAL_PROJECT, min_length=1)
     kind: MemoryKind = MemoryKind.EPISODIC
     content: str
@@ -103,6 +106,56 @@ class Memory(UserScoped):
     superseded_by: str | None = None
     last_confirmed: datetime | None = None
     support_event_ids: list[str] = Field(default_factory=list, max_length=32)
+    revises_event_ids: list[str] = Field(default_factory=list, max_length=8)
+    revision_root_id: str | None = None
+    revision_state: str | None = None
+    eligible_leaf_ids: list[str] = Field(default_factory=list, max_length=32)
+    eligible_leaf_count: int = 0
+    revision_truncated: bool = False
+    support_state: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def consistent_time_alias(cls, value: object) -> object:
+        if isinstance(value, dict) and "created_at" in value and "effective_at" in value:
+            left = value["created_at"]
+            right = value["effective_at"]
+            if isinstance(left, str):
+                left = datetime.fromisoformat(left)
+            if isinstance(right, str):
+                right = datetime.fromisoformat(right)
+            if left != right:
+                raise ValueError("revision_effective_time: conflicting event time aliases")
+        return value
+
+    @field_validator("revises_event_ids", mode="before")
+    @classmethod
+    def canonical_parents(cls, value: object) -> list[str]:
+        if not isinstance(value, list) or len(value) > 8:
+            raise ValueError("revision_parent_limit: expected up to 8 parent IDs")
+        if any(
+            not isinstance(identity, str) or not identity.strip() or len(identity) > 256
+            for identity in value
+        ):
+            raise ValueError("revision_parent_limit: malformed parent ID")
+        if len(set(value)) != len(value):
+            raise ValueError("revision_parent_limit: parent IDs must be distinct")
+        return sorted(value)
+
+    @model_validator(mode="after")
+    def correction_shape(self) -> Memory:
+        if self.revises_event_ids:
+            if self.source is MemorySource.UNKNOWN or not self.author_id.strip():
+                raise ValueError(
+                    "revision_actor_boundary: known source and reported author required"
+                )
+            if self.created_at is None or self.created_at.utcoffset() is None:
+                raise ValueError("revision_effective_time: aware correction time required")
+        return self
+
+    @property
+    def effective_at(self) -> datetime | None:
+        return self.created_at
 
 
 class TemporalFact(UserScoped):
@@ -122,6 +175,7 @@ class TemporalFact(UserScoped):
     scope: Scope = Scope.PRIVATE
     recorded_at: datetime | None = None
     support_event_ids: list[str] = Field(default_factory=list, max_length=32)
+    support_state: str | None = None
 
 
 class MemoryQuery(BaseModel):
@@ -137,6 +191,14 @@ class MemoryQuery(BaseModel):
     top_k: int = 8
     kinds: list[MemoryKind] | None = None
     include_superseded: bool = False
+    effective_at: datetime | None = None
+
+    @field_validator("effective_at")
+    @classmethod
+    def aware_cutoff(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.utcoffset() is None:
+            raise ValueError("effective_at must include a timezone")
+        return value
 
 
 class Role(str, Enum):

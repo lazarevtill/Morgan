@@ -112,6 +112,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_remember = sub.add_parser("remember", help="Store a memory.")
     p_remember.add_argument("text", help="What to remember.")
+    p_remember.add_argument("--event-id", help="Stable ID for an immutable retry.")
+    p_remember.add_argument("--effective-at", help="Timezone-aware ISO event time.")
+    p_remember.add_argument(
+        "--revises-event-id",
+        dest="revises_event_ids",
+        action="append",
+        help="Parent event ID; repeat for an explicit resolution (at most eight).",
+    )
     p_remember.add_argument(
         "--source",
         choices=[source.value for source in MemorySource],
@@ -126,12 +134,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_recall = sub.add_parser("recall", help="Search memory by meaning and by keyword.")
     p_recall.add_argument("query", help="Search text.")
     p_recall.add_argument("--top-k", type=int, default=8, help="Maximum results to return.")
+    p_recall.add_argument("--effective-at", help="Timezone-aware ISO effective-time cutoff.")
     _add_common(p_recall)
 
     p_evidence = sub.add_parser(
         "evidence", help="Fetch durable IDs and source roots without models."
     )
     p_evidence.add_argument("ids", nargs="+", help="One to 32 IDs returned by recall.")
+    p_evidence.add_argument("--effective-at", help="Timezone-aware ISO effective-time cutoff.")
     _add_common(p_evidence)
 
     p_facts = sub.add_parser("facts", help="List currently-valid facts.")

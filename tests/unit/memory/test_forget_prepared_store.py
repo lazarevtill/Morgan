@@ -9,9 +9,10 @@ from morgan_brain.composition import build_memory_module
 from morgan_brain.memory import module as module_impl
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.migrations import code_version
 from morgan_brain.memory.store import erasure
 from morgan_brain.memory.store.db import open_db
-from morgan_brain.models import Entity, Memory, TemporalFact
+from morgan_brain.models import Entity, Memory, MemorySource, TemporalFact
 
 
 class PausedEmbedder(FakeEmbedder):
@@ -160,7 +161,7 @@ async def test_light_generation_migration_preserves_legacy_assertions(tmp_path):
         assert dict(conn.execute("SELECT * FROM memories WHERE id='legacy'").fetchone()) == event
         assert dict(conn.execute("SELECT * FROM facts WHERE id='fact'").fetchone()) == fact
         assert erasure.read_generation(conn) == 0
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 10
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == code_version()
         await reopened.forget(user_id="owner", project="personal")
         assert erasure.read_generation(conn) == 1
         assert [row["name"] for row in conn.execute("PRAGMA table_info(erasure_state)")] == [
@@ -169,3 +170,50 @@ async def test_light_generation_migration_preserves_legacy_assertions(tmp_path):
         ]
     finally:
         conn.close()
+
+
+async def test_forget_cancels_prepared_revision_before_missing_parent_validation(tmp_path):
+    path = str(tmp_path / "revision-erasure.db")
+    writer_conn, eraser_conn = open_db(path), open_db(path)
+    embedder = PausedEmbedder()
+    writer, eraser = gate(writer_conn, embedder), gate(eraser_conn, FakeEmbedder(dim=4))
+    await eraser.store(
+        Memory(
+            id="root",
+            user_id="owner",
+            content="synthetic original",
+            source=MemorySource.USER_STATED,
+            author_id="owner",
+            created_at=datetime(2026, 9, 30, tzinfo=UTC),
+        )
+    )
+    pending = asyncio.create_task(
+        writer.store(
+            Memory(
+                id="correction",
+                user_id="owner",
+                content="synthetic correction",
+                source=MemorySource.USER_STATED,
+                author_id="owner",
+                created_at=datetime(2026, 10, 1, tzinfo=UTC),
+                revises_event_ids=["root"],
+            )
+        )
+    )
+    try:
+        await asyncio.wait_for(embedder.entered.wait(), timeout=5)
+        await eraser.forget(user_id="owner", project="personal")
+        erased = eraser_conn.serialize()
+        embedder.release.set()
+        with pytest.raises(erasure.StoreInterruptedByForget):
+            await asyncio.wait_for(pending, timeout=5)
+        assert writer_conn.serialize() == erased
+        assert writer_conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0] == 0
+        assert erasure.read_generation(writer_conn) == 1
+    finally:
+        embedder.release.set()
+        if not pending.done():
+            pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+        writer_conn.close()
+        eraser_conn.close()

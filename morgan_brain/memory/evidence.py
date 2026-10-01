@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import UTC, datetime
 
 from morgan_brain.memory.gate import EvidenceResult
+from morgan_brain.memory.revisions import RevisionResolver
+from morgan_brain.memory.store.db import read_transaction
 from morgan_brain.memory.store.episodic import EpisodicStore
 from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.models import Memory, MemoryKind, TemporalFact
@@ -76,27 +79,45 @@ def validate_source_schema(conn: sqlite3.Connection) -> None:
 class ScopedEvidenceReader:
     """Read source records; MemoryGate owns request validation and caller boundaries."""
 
-    def __init__(self, episodics: EpisodicStore, temporal: SqliteTemporalStore) -> None:
+    def __init__(
+        self, episodics: EpisodicStore, temporal: SqliteTemporalStore, *, conn: sqlite3.Connection
+    ) -> None:
+        self._conn = conn
         self._episodics = episodics
         self._temporal = temporal
 
     async def evidence(
-        self, *, user_id: str, project: str, evidence_ids: list[str]
+        self,
+        *,
+        user_id: str,
+        project: str,
+        evidence_ids: list[str],
+        effective_at: datetime | None = None,
     ) -> EvidenceResult:
         records: list[Memory] = []
         missing: list[str] = []
-        for identity in evidence_ids:
-            event = self._episodics.get(identity, user_id=user_id, project=project)
-            fact = await self._temporal.get_fact(identity, user_id=user_id, project=project)
-            if event is not None and fact is not None:
-                raise ValueError("Ambiguous evidence identity: event and fact exist in named scope")
-            if event is not None:
-                records.append(event)
-                continue
-            if fact is not None:
-                records.append(fact_memory(fact))
-            else:
-                missing.append(identity)
+        with read_transaction(self._conn):
+            resolver = RevisionResolver(
+                self._episodics, conn=self._conn, at=effective_at or datetime.now(UTC)
+            )
+            for identity in evidence_ids:
+                event = self._episodics.get(identity, user_id=user_id, project=project)
+                fact = await self._temporal.get_fact(identity, user_id=user_id, project=project)
+                if event is not None and fact is not None:
+                    raise ValueError(
+                        "Ambiguous evidence identity: event and fact exist in named scope"
+                    )
+                if event is not None:
+                    records.append(resolver.annotate(event))
+                    continue
+                if fact is not None:
+                    records.append(
+                        fact_memory(fact).model_copy(
+                            update={"support_state": resolver.support_state(fact)}
+                        )
+                    )
+                else:
+                    missing.append(identity)
         return EvidenceResult(
             user_id=user_id,
             project=project,

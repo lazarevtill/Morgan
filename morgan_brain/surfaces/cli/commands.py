@@ -39,7 +39,12 @@ from morgan_brain.surfaces.cli.payloads import (
     recall_result,
 )
 from morgan_brain.surfaces.cli.project import Repository, classify
-from morgan_brain.surfaces.cli.validation import evidence_ids
+from morgan_brain.surfaces.cli.validation import (
+    effective_time,
+    event_identity,
+    evidence_ids,
+    revision_parents,
+)
 
 #: Warnings the owner should see beside a command that otherwise succeeded. stderr, through
 #: the one logging configuration, because stdout carries ``--json``.
@@ -106,6 +111,22 @@ async def cmd_remember(
     project_defaulted = project is None
     resolved_project = project if project is not None else PERSONAL_PROJECT
     source = MemorySource(getattr(args, "source", "unknown"))
+    author_id = getattr(args, "author_id", "")
+    identity = event_identity(getattr(args, "event_id", None))
+    effective_at = effective_time(getattr(args, "effective_at", None))
+    parents = revision_parents(getattr(args, "revises_event_ids", None))
+    if parents and (
+        source is MemorySource.UNKNOWN
+        or not isinstance(author_id, str)
+        or not author_id.strip()
+        or effective_at is None
+    ):
+        raise ValueError("Corrections require known source, reported author and effective_at")
+    event_fields: dict[str, Any] = {"revises_event_ids": parents}
+    if identity is not None:
+        event_fields["id"] = identity
+    if effective_at is not None:
+        event_fields["created_at"] = effective_at
     ctx = build_memory_context(settings)
     try:
         memory = Memory(
@@ -117,9 +138,24 @@ async def cmd_remember(
             client=client,
             session_id=session_id,
             cwd=str(Path.cwd()),
-            author_id=getattr(args, "author_id", ""),
+            author_id=author_id,
+            **event_fields,
         )
+        if identity is not None:
+            existing = await ctx.gate.evidence(
+                user_id=settings.owner_user_id,
+                project=resolved_project,
+                evidence_ids=[identity],
+            )
+            if existing.records:
+                captured = existing.records[0]
+                if captured.origin_kind is OriginKind.REMEMBER and captured.client == client:
+                    # Retry capture context is historical metadata, not caller identity.
+                    # The core still checks every assertion field before accepting replay.
+                    memory.session_id = captured.session_id
+                    memory.cwd = captured.cwd
         memory_id = await ctx.gate.store(memory)
+        stored_memory = await ctx.gate.get(memory_id, user_id=settings.owner_user_id)
         await _record_the_repository(ctx, settings, resolved_project, repository)
     finally:
         ctx.conn.close()
@@ -131,10 +167,23 @@ async def cmd_remember(
         "content": args.text,
         "source": memory.source.value,
         "author_id": memory.author_id,
+        "effective_at": (
+            stored_memory.created_at.isoformat()
+            if stored_memory is not None and stored_memory.created_at is not None
+            else None
+        ),
+        "recorded_at": (
+            stored_memory.recorded_at.isoformat()
+            if stored_memory is not None and stored_memory.recorded_at is not None
+            else None
+        ),
+        "revision_root_id": stored_memory.revision_root_id if stored_memory else None,
+        "revises_event_ids": parents,
     }
 
 
 async def cmd_recall(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:
+    effective_at = effective_time(getattr(args, "effective_at", None))
     ctx = build_memory_context(settings)
     try:
         outcome = await ctx.gate.recall(
@@ -144,11 +193,14 @@ async def cmd_recall(args: argparse.Namespace, settings: Settings, project: str)
                 all_projects=args.all_projects,
                 text=args.query,
                 top_k=args.top_k,
+                effective_at=effective_at,
             )
         )
     finally:
         ctx.conn.close()
-    return recall_result(outcome, project=project, all_projects=args.all_projects)
+    result = recall_result(outcome, project=project, all_projects=args.all_projects)
+    result["effective_at"] = effective_at.isoformat() if effective_at else None
+    return result
 
 
 async def cmd_evidence(
@@ -156,16 +208,21 @@ async def cmd_evidence(
 ) -> dict[str, Any]:
     """Fetch bounded durable evidence in one named scope, without any model call."""
     requested = evidence_ids(args.ids)
+    effective_at = effective_time(getattr(args, "effective_at", None))
     if getattr(args, "all_projects", False):
         raise ValueError("evidence requires one project; --all-projects is not supported")
     ctx = build_evidence_context(settings)
     try:
         resolved = await ctx.gate.evidence(
-            user_id=settings.owner_user_id, project=project, evidence_ids=requested
+            user_id=settings.owner_user_id,
+            project=project,
+            evidence_ids=requested,
+            effective_at=effective_at,
         )
         return {
             "version": resolved.schema_version,
             "project": project,
+            "effective_at": effective_at.isoformat() if effective_at else None,
             "requested_ids": resolved.requested_ids,
             "missing_ids": resolved.missing_ids,
             "results": [memory_to_dict(memory) for memory in resolved.records],

@@ -6,6 +6,7 @@ from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store.temporal import SqliteTemporalStore
 from morgan_brain.models import MemoryQuery, TemporalFact
 
 
@@ -40,7 +41,9 @@ async def test_recall_respects_effective_boundary_and_scope():
                     valid_from=datetime(2026, 1, 1, tzinfo=UTC),
                 )
             )
-        assert [fact.object for fact in await gate.current_facts(user_id="owner")] == ["water"]
+        assert [fact.object for fact in await gate.current_facts(user_id="owner")] == ["tea"]
+        primitive = SqliteTemporalStore(conn=conn, initialize=False)
+        assert [fact.object for fact in await primitive.current_facts(user_id="owner")] == ["water"]
         query = MemoryQuery(user_id="owner", text="user drink")
         now = datetime(2026, 9, 1, tzinfo=UTC)
         assert [memory.content for memory in (await gate.recall(query)).memories] == [

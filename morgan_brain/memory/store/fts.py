@@ -16,6 +16,7 @@ import json
 import re
 import sqlite3
 
+from morgan_brain.memory.revisions import EventCandidates
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import Erasure
 from morgan_brain.models import PERSONAL_PROJECT, MemoryStatus, Scope
@@ -124,6 +125,7 @@ class FtsIndex:
         user_id: str,
         top_k: int,
         project: str | None = PERSONAL_PROJECT,
+        candidates: EventCandidates | None = None,
     ) -> list[str]:
         """Rank memories by keyword match."""
         match = to_match_query(text)
@@ -134,6 +136,11 @@ class FtsIndex:
         if project is not None:
             sql += " AND project = ?"
             params.append(project)
+        if candidates is not None:
+            sql += " AND memory_id IN ("
+            sql += candidates.sql
+            sql += ")"
+            params.extend(candidates.params)
         sql += " ORDER BY rank LIMIT ?"
         params.append(top_k)
         rows = self._conn.execute(sql, params).fetchall()

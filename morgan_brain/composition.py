@@ -95,6 +95,7 @@ def build_evidence_context(settings: Settings) -> EvidenceContext:
         reader = ScopedEvidenceReader(
             EpisodicStore(conn, initialize=False),
             SqliteTemporalStore(conn=conn, initialize=False),
+            conn=conn,
         )
         gate = MemoryGate(evidence_reader=reader)
     except BaseException:

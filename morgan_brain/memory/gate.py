@@ -122,7 +122,12 @@ class MemoryGate:
         return await self._store.recall(query)
 
     async def evidence(
-        self, *, user_id: str, project: str, evidence_ids: list[str]
+        self,
+        *,
+        user_id: str,
+        project: str,
+        evidence_ids: list[str],
+        effective_at: datetime | None = None,
     ) -> EvidenceResult:
         """Read at most 32 identities in one named context, without model calls.
 
@@ -130,6 +135,8 @@ class MemoryGate:
         Caller-supplied ownership is an attribution boundary, not authentication.
         """
         self._require_scope(user_id, project)
+        if effective_at is not None and effective_at.utcoffset() is None:
+            raise ValueError("effective_at must include a timezone")
         if not project.strip():
             raise ValueError("evidence requires a named project")
         if not 1 <= len(evidence_ids) <= 32 or any(
@@ -139,7 +146,10 @@ class MemoryGate:
             raise ValueError("evidence requires 1 to 32 nonempty IDs of at most 256 characters")
         reader = self._evidence_reader if self._evidence_reader is not None else self._store
         return await reader.evidence(
-            user_id=user_id, project=project, evidence_ids=list(dict.fromkeys(evidence_ids))
+            user_id=user_id,
+            project=project,
+            evidence_ids=list(dict.fromkeys(evidence_ids)),
+            effective_at=effective_at,
         )
 
     async def check_embedding_space(self) -> None:

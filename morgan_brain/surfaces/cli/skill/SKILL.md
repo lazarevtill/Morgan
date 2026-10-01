@@ -82,6 +82,17 @@ state before resuming. This is remembered text, not a task execution engine.
 Never store secrets, credentials or tokens, unnecessary sensitive details about other people,
 or duplicate what the code or git history already records.
 
+## Record corrections
+
+For an explicit correction, use `remember` with known reported source/author, an aware
+`effective_at` and `revises_event_ids` naming the original source event(s). Keep the same
+`event_id` only for an identical retry. A different assertion needs a new ID. Personal
+memory does not require a repository. Check revision/support state and all eligible branch
+references: a top-ranked branch does not settle a conflict. Follow source IDs using
+`evidence`; historical evidence remains inspectable. A future correction applies only at
+its effective time. Reported provenance does not authenticate an author or grant action
+permission. See the [versioned client contract][revision-contract].
+
 ## Runs and experiments
 
 When a run answers a question, an OpenResearch experiment included, remember the conclusion
@@ -109,3 +120,5 @@ answered elsewhere.
 - Call `forget`: it erases an entire project. Only when the user asks for exactly that.
 - Use `ask_morgan` or `morgan ask` for a lookup: it runs a model and stores the exchange.
   Use recall.
+
+[revision-contract]: https://github.com/lazarevtill/Morgan/blob/main/docs/REVISION_CLIENT.md
