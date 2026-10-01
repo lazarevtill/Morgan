@@ -339,6 +339,8 @@ class MemoryModule:
                 kind=MemoryKind.SEMANTIC,
                 content=f"{f.subject} {f.predicate} {f.object}".replace("_", " "),
                 source=f.source,
+                author_id=f.author_id,
+                scope=f.scope,
             )
             for f in facts
         ]

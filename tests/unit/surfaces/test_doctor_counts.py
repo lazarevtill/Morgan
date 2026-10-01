@@ -11,7 +11,7 @@ from pathlib import Path
 from morgan_brain.composition import build_memory_context, sqlite_path
 from morgan_brain.config import Settings
 from morgan_brain.memory.store.db import open_db
-from morgan_brain.models import Memory
+from morgan_brain.models import Memory, MemorySource, TemporalFact
 from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.render import _render_doctor
 
@@ -74,7 +74,7 @@ def _blank_the_author(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     conn = open_db(sqlite_path(settings.temporal_db_url))
     try:
-        conn.execute("UPDATE memories SET author_id = ''")
+        conn.execute("UPDATE memories SET author_id = '', recorded_at = NULL")
         conn.commit()
     finally:
         conn.close()
@@ -190,3 +190,33 @@ async def test_the_scoped_line_renders_with_its_total(tmp_path):
     rendered = _render_doctor(report)
 
     assert "memories: 3 in project 'personal' (5 across all projects)" in rendered.splitlines()
+
+
+async def test_current_unknown_author_is_not_missing_provenance(tmp_path):
+    settings = _settings(tmp_path)
+    ctx = build_memory_context(settings)
+    try:
+        await ctx.gate.store(Memory(user_id=settings.owner_user_id, project="p", content="unknown"))
+    finally:
+        ctx.conn.close()
+    assert (await _report(tmp_path, project="p"))["rows_missing_provenance"] == 0
+
+
+async def test_unknown_fact_author_is_valid_but_known_source_missing_author_is_counted(tmp_path):
+    settings = _settings(tmp_path)
+    ctx = build_memory_context(settings)
+    try:
+        for source in (MemorySource.UNKNOWN, MemorySource.USER_STATED):
+            await ctx.gate.upsert_fact(
+                TemporalFact(
+                    user_id=settings.owner_user_id,
+                    project="p",
+                    subject=source.value,
+                    predicate="has",
+                    object="synthetic value",
+                    source=source,
+                )
+            )
+    finally:
+        ctx.conn.close()
+    assert (await _report(tmp_path, project="p"))["rows_missing_provenance"] == 1

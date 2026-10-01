@@ -363,7 +363,7 @@ def _seed_projects(conn: sqlite3.Connection, stores: Stores) -> dict[str, int]:
 #: In order. Step *n* brings a database from ``user_version`` *n - 1* to *n*; append only.
 #: Steps 1 and 2 rewrite and drop, yet stay light: they predate the split, and every Morgan
 #: that shipped them already ran them on open.
-def _add_recorded_time(conn: sqlite3.Connection, stores: Stores) -> None:
+def _add_recorded_time(conn: sqlite3.Connection, _stores: Stores) -> None:
     """Add ingestion metadata without inventing legacy timestamps or changing assertions."""
     if _table_exists(conn, "memories") and "recorded_at" not in _column_names(conn, "memories"):
         conn.execute("ALTER TABLE memories ADD COLUMN recorded_at TEXT")

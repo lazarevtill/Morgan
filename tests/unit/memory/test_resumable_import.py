@@ -165,3 +165,35 @@ async def test_same_text_changed_source_identity_refuses_before_embedding(
     assert conflict_field in exc.value.fields
     assert embedder.calls == before_calls
     assert conn.serialize() == before_db
+
+
+@pytest.mark.parametrize("role", ["user", "assistant"])
+async def test_version_three_import_replay_after_migration_keeps_evidence(tmp_path, role):
+    from morgan_brain.composition import migration_stores
+    from morgan_brain.memory import migrations
+    from tests.unit.memory.test_provenance_columns import _a_version_three_database_with
+
+    conn = _a_version_three_database_with(tmp_path, projects=[ARCHIVE_PROJECT])
+    identity = _memory_id("m0", 0)
+    source = "user_stated" if role == "user" else "agent_inferred"
+    timestamp = datetime.fromtimestamp(1700000000.0, tz=UTC).isoformat()
+    conn.execute(
+        "UPDATE memories SET id = ?, source = ?, content = ?, created_at = ?",
+        (identity, source, "Legacy imported claim", timestamp),
+    )
+    conn.commit()
+    migrations.migrate(conn, migration_stores(conn))
+    embedder = CountingEmbedder()
+    gate = MemoryGate(build_memory_module(conn=conn, embedder=embedder, dim=4))
+    path = _export(tmp_path / "legacy.json", ["Legacy imported claim"])
+    export = json.loads(path.read_text(encoding="utf-8"))
+    export[0]["mapping"]["m0"]["message"]["author"]["role"] = role
+    path.write_text(json.dumps(export), encoding="utf-8")
+    before = conn.serialize()
+    result = await import_chatgpt(path, gate=gate, user_id="u")
+    assert result.memories == 0 and result.skipped_turns == 1
+    assert embedder.calls == 0
+    assert conn.serialize() == before
+    stored = await gate.get(identity, user_id="u")
+    assert stored.author_id == "u" and stored.client == ""
+    assert stored.recorded_at is None

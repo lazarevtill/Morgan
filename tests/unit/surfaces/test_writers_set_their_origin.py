@@ -33,8 +33,9 @@ from morgan_brain.memory.knowledge.consolidation import (
     MemoryConsolidator,
 )
 from morgan_brain.memory.store.db import open_db
-from morgan_brain.models import MemorySource, OriginKind, Scope
-from morgan_brain.surfaces.cli.commands import cmd_ask, cmd_import, cmd_remember
+from morgan_brain.models import MemoryQuery, MemorySource, OriginKind, Scope, TemporalFact
+from morgan_brain.surfaces.cli.commands import cmd_ask, cmd_import, cmd_recall, cmd_remember
+from morgan_brain.surfaces.cli.doctor import _missing_provenance
 from morgan_brain.surfaces.mcp_server import build_server
 from tests.fakes import FakeChatClient
 
@@ -188,6 +189,11 @@ async def test_an_answer_is_stored_as_agent_inferred_and_origin_ask(
     assert stored["author_id"] == "model:test-model"
     unattributed = _memory_row_by_source(settings_for_tmp, MemorySource.UNKNOWN.value)
     assert unattributed["author_id"] == ""
+    conn = open_db(sqlite_path(settings_for_tmp.temporal_db_url))
+    try:
+        assert _missing_provenance(conn, user_id=settings_for_tmp.owner_user_id) == (0, None)
+    finally:
+        conn.close()
 
 
 async def test_an_ask_through_the_cli_stores_client_cli(
@@ -293,6 +299,11 @@ async def test_remember_without_attribution_does_not_claim_owner_statement(
     assert stored["source"] == result["source"] == "unknown"
     assert stored["author_id"] == result["author_id"] == ""
     assert result["project"] == "personal" and result["project_defaulted"]
+    conn = open_db(sqlite_path(settings_for_tmp.temporal_db_url))
+    try:
+        assert _missing_provenance(conn, user_id=settings_for_tmp.owner_user_id) == (0, None)
+    finally:
+        conn.close()
 
 
 async def test_mcp_remember_transports_explicit_attribution(tmp_path: Path) -> None:
@@ -393,3 +404,41 @@ async def test_invalid_ask_source_refuses_before_building_context(
         await cmd_ask(
             argparse.Namespace(text="Invalid", source="fabricated"), settings_for_tmp, "p"
         )
+
+
+@pytest.mark.parametrize("surface", ["cli", "mcp"])
+async def test_recall_reports_persisted_fact_author_and_scope(tmp_path, surface):
+    settings = _settings(tmp_path)
+    ctx = build_memory_context(settings)
+    try:
+        await ctx.gate.upsert_fact(
+            TemporalFact(
+                user_id=settings.owner_user_id,
+                project="p",
+                subject="Synthetic",
+                predicate="prefers",
+                object="tea",
+                source=MemorySource.AGENT_INFERRED,
+                author_id="model:synthetic",
+                scope=Scope.SHARED,
+            )
+        )
+    finally:
+        ctx.conn.close()
+    if surface == "cli":
+        result = await cmd_recall(
+            argparse.Namespace(query="tea", all_projects=False, top_k=8), settings, "p"
+        )
+    else:
+        async with _mcp_client(tmp_path, client_name="test") as client:
+            result = await client.call_tool("recall", {"query": "tea", "project": "p"})
+    [fact] = result["results"]
+    assert fact["author_id"] == "model:synthetic"
+    ctx = build_memory_context(settings)
+    try:
+        outcome = await ctx.gate.recall(
+            MemoryQuery(user_id=settings.owner_user_id, project="p", text="tea")
+        )
+        assert outcome.memories[0].scope is Scope.SHARED
+    finally:
+        ctx.conn.close()

@@ -270,7 +270,7 @@ async def import_chatgpt(
                         source is MemorySource.AGENT_INFERRED
                         and existing.source is MemorySource.AGENT_INFERRED
                         and existing.origin_kind is OriginKind.IMPORT
-                        and existing.client == "cli"
+                        and existing.client in ("", "cli")
                         and existing.author_id == user_id
                     )
                     changed = [
@@ -281,7 +281,12 @@ async def import_chatgpt(
                             ("kind", MemoryKind.EPISODIC),
                             ("author_id", user_id if legacy_assistant else author_id),
                             ("origin_kind", OriginKind.IMPORT),
-                            ("client", "cli"),
+                            (
+                                "client",
+                                ""
+                                if existing.client == "" and existing.recorded_at is None
+                                else "cli",
+                            ),
                         )
                         if getattr(existing, name) != value
                     ]
