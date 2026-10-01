@@ -43,6 +43,7 @@ from urllib.parse import urlsplit
 from morgan_brain.composition import space_width_mismatch, sqlite_path
 from morgan_brain.config import Settings
 from morgan_brain.memory import fingerprint, migrations, snapshot
+from morgan_brain.memory.errors import DatabaseSchemaTooNew
 from morgan_brain.memory.store import projects, spaces
 from morgan_brain.memory.store import vectors as vectors_store
 from morgan_brain.memory.store.db import open_db, open_readonly
@@ -361,6 +362,7 @@ def _probe_migration(conn: sqlite3.Connection, report: dict[str, Any]) -> None:
     """The database's ``user_version`` against the steps this build knows -- or, on a file that
     holds no Morgan table yet, why there is no migration state to read."""
     try:
+        migrations.require_supported_version(conn)
         if migrations.holds_morgan_tables(conn):
             report["migration"] = migration_status_to_dict(
                 user_version=int(conn.execute("PRAGMA user_version").fetchone()[0]),
@@ -372,7 +374,7 @@ def _probe_migration(conn: sqlite3.Connection, report: dict[str, Any]) -> None:
                 "the database holds no Morgan tables yet; the first command that opens it "
                 "writes the latest schema"
             )
-    except sqlite3.Error as exc:
+    except (sqlite3.Error, DatabaseSchemaTooNew) as exc:
         report.setdefault("probe_errors", {})["migration"] = str(exc)
 
 

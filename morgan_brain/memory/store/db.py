@@ -13,8 +13,9 @@ from pathlib import Path
 import sqlite_vec  # type: ignore[import-untyped]
 
 from morgan_brain.memory.migrations import require_supported_version
-from morgan_brain.memory.store.transactions import read_transaction as read_transaction
-from morgan_brain.memory.store.transactions import write_transaction as write_transaction
+from morgan_brain.memory.store.transactions import read_transaction, write_transaction
+
+__all__ = ["open_db", "open_readonly", "read_transaction", "readonly_uri", "write_transaction"]
 
 
 def open_db(path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connection:
