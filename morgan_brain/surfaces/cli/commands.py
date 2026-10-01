@@ -22,6 +22,7 @@ from morgan_brain.app.chatgpt_import import (
 from morgan_brain.composition import (
     MemoryContext,
     build_app_context,
+    build_evidence_context,
     build_memory_context,
     sqlite_path,
     utcnow,
@@ -33,10 +34,12 @@ from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.payloads import (
     fact_to_dict,
     forget_result,
+    memory_to_dict,
     merge_forget_reports,
     recall_result,
 )
 from morgan_brain.surfaces.cli.project import Repository, classify
+from morgan_brain.surfaces.cli.validation import evidence_ids
 
 #: Warnings the owner should see beside a command that otherwise succeeded. stderr, through
 #: the one logging configuration, because stdout carries ``--json``.
@@ -146,6 +149,29 @@ async def cmd_recall(args: argparse.Namespace, settings: Settings, project: str)
     finally:
         ctx.conn.close()
     return recall_result(outcome, project=project, all_projects=args.all_projects)
+
+
+async def cmd_evidence(
+    args: argparse.Namespace, settings: Settings, project: str
+) -> dict[str, Any]:
+    """Fetch bounded durable evidence in one named scope, without any model call."""
+    requested = evidence_ids(args.ids)
+    if getattr(args, "all_projects", False):
+        raise ValueError("evidence requires one project; --all-projects is not supported")
+    ctx = build_evidence_context(settings)
+    try:
+        resolved = await ctx.gate.evidence(
+            user_id=settings.owner_user_id, project=project, evidence_ids=requested
+        )
+        return {
+            "version": resolved.schema_version,
+            "project": project,
+            "requested_ids": resolved.requested_ids,
+            "missing_ids": resolved.missing_ids,
+            "results": [memory_to_dict(memory) for memory in resolved.records],
+        }
+    finally:
+        ctx.conn.close()
 
 
 async def cmd_facts(args: argparse.Namespace, settings: Settings, project: str) -> dict[str, Any]:

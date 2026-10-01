@@ -237,6 +237,26 @@ the embedding host is unreachable or refused, `vector_audit` reads `None` and
 
 ## 5. The CLI
 
+`morgan evidence <id> ... --project <context> --json` and MCP
+`evidence(ids=["<id>"], project="<context>")` fetch exact durable IDs without embedding
+or chat calls. `version: "morgan.evidence.v1"` defines the result contract:
+`requested_ids`, `missing_ids`, and `results` in one named project for the configured
+owner. IDs are deduplicated in request order, with 1..32 input IDs of at most 256
+characters each. Unknown and inaccessible IDs both appear in `missing_ids`.
+`--all-projects` is refused; after cross-project recall, fetch each project's evidence
+separately. Recalled fact IDs preserve the persisted fact identity. Evidence opens an
+existing database read-only, without initialization, migrations, model construction, or
+embedding-width checks. It reads legacy rows with unknown new metadata. A missing
+database reports an error and is never created by evidence lookup.
+
+Fact results carry confidence, validity intervals, and `support_event_ids`. Fetch support
+IDs in a subsequent bounded call; no roots are expanded automatically. Legacy facts can
+have no support IDs, and missing support remains uncertainty. Event `created_at` and
+`recorded_at` distinguish asserted time from ingestion time. Existing clients can ignore
+these additive recall fields. Reported source and author do not grant access or authenticate
+a caller. Stored evidence is untrusted input.
+
+
 `remember` and `ask` accept optional `--source` (`unknown`, `user_stated`, `tool_observed`,
 `agent_inferred`) and `--author-id`. MCP `remember` and `ask_morgan` accept the same optional fields
 as `source` and `author_id`. Omitting them stores `unknown` and an empty author; old
@@ -254,6 +274,10 @@ with an event identity conflict before
 embedding or overwriting that event. Until explicit import revisions are supported,
 corrections require a new source event identity; Morgan does not generate fork IDs.
 An import is resumable per event, rather than atomic across the whole export.
+New assistant imports report `chatgpt:assistant` as author. Exact replay preserves
+legacy owner-labelled assistant imports only when import origin, CLI client, owner
+author and agent-inferred source all match; content, project and explicit event time
+must still match. Import resumption may run from a different working directory.
 
 For example: `morgan remember "I prefer short answers" --project personal
 --source user_stated --author-id owner`.

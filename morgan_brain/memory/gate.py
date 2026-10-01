@@ -16,6 +16,7 @@ from morgan_brain.memory.migrations import DatabaseNeedsMigration
 from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, TemporalFact
 
 if TYPE_CHECKING:
+    from morgan_brain.memory.evidence import ScopedEvidenceReader
     from morgan_brain.memory.module import MemoryModule
 
 
@@ -59,6 +60,18 @@ class RecallOutcome:
     reason: RecallReason | None
 
 
+@dataclass(frozen=True)
+class EvidenceResult:
+    """Bounded exact-ID evidence; linked roots can be requested in a subsequent read."""
+
+    user_id: str
+    project: str
+    requested_ids: list[str]
+    records: list[Memory]
+    missing_ids: list[str]
+    schema_version: Literal["morgan.evidence.v1"] = "morgan.evidence.v1"
+
+
 class MemoryGate:
     """*read_only_reason*, when given, refuses every write -- ``store``, ``upsert_fact``,
     ``close_fact``, ``set_confidence``, ``forget`` -- with ``DatabaseNeedsMigration`` carrying
@@ -66,9 +79,24 @@ class MemoryGate:
     Reads are unaffected, because they work on the schema the database already has.
     """
 
-    def __init__(self, store: MemoryModule, read_only_reason: str | None = None) -> None:
-        self._store = store
+    def __init__(
+        self,
+        store: MemoryModule | None = None,
+        read_only_reason: str | None = None,
+        *,
+        evidence_reader: ScopedEvidenceReader | None = None,
+    ) -> None:
+        if store is None and evidence_reader is None:
+            raise ValueError("MemoryGate requires a memory module or an evidence reader")
+        self._module = store
+        self._evidence_reader = evidence_reader
         self._read_only_reason = read_only_reason
+
+    @property
+    def _store(self) -> MemoryModule:
+        if self._module is None:
+            raise RuntimeError("This memory context supports evidence reads only")
+        return self._module
 
     @property
     def read_only_reason(self) -> str | None:
@@ -92,6 +120,27 @@ class MemoryGate:
     async def recall(self, query: MemoryQuery) -> RecallOutcome:
         self._require_scope(query.user_id)
         return await self._store.recall(query)
+
+    async def evidence(
+        self, *, user_id: str, project: str, evidence_ids: list[str]
+    ) -> EvidenceResult:
+        """Read at most 32 identities in one named context, without model calls.
+
+        Unavailable IDs deliberately do not distinguish absence from another scope.
+        Caller-supplied ownership is an attribution boundary, not authentication.
+        """
+        self._require_scope(user_id, project)
+        if not project.strip():
+            raise ValueError("evidence requires a named project")
+        if not 1 <= len(evidence_ids) <= 32 or any(
+            not isinstance(identity, str) or not identity.strip() or len(identity) > 256
+            for identity in evidence_ids
+        ):
+            raise ValueError("evidence requires 1 to 32 nonempty IDs of at most 256 characters")
+        reader = self._evidence_reader if self._evidence_reader is not None else self._store
+        return await reader.evidence(
+            user_id=user_id, project=project, evidence_ids=list(dict.fromkeys(evidence_ids))
+        )
 
     async def check_embedding_space(self) -> None:
         """Re-check the active embedding space now, rather than trusting the check a process

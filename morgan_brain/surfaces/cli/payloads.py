@@ -27,7 +27,16 @@ def memory_to_dict(m: Memory) -> dict[str, Any]:
         "source": m.source.value,
         "author_id": m.author_id,
         "importance": m.importance,
+        "confidence": m.confidence,
         "created_at": m.created_at.isoformat() if m.created_at else None,
+        "recorded_at": m.recorded_at.isoformat() if m.recorded_at else None,
+        "origin_kind": m.origin_kind.value,
+        "scope": m.scope.value,
+        "support_event_ids": m.support_event_ids,
+        "valid_from": m.valid_from.isoformat() if m.valid_from else None,
+        "valid_to": m.valid_to.isoformat() if m.valid_to else None,
+        "superseded_by": m.superseded_by,
+        "last_confirmed": m.last_confirmed.isoformat() if m.last_confirmed else None,
     }
 
 

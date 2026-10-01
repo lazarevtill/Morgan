@@ -311,10 +311,19 @@ def _space_line(space: dict[str, Any]) -> str:
     )
 
 
+def _render_evidence(data: dict[str, Any]) -> str:
+    lines = [f"Evidence in {data['project']} ({data['version']})"]
+    lines.extend(f"[{item['id']}] {item['content']}" for item in data["results"])
+    if data["missing_ids"]:
+        lines.append("Missing IDs: " + ", ".join(data["missing_ids"]))
+    return "\n".join(lines)
+
+
 RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "remember": _render_remember,
     "recall": _render_recall,
     "facts": _render_facts,
+    "evidence": _render_evidence,
     "forget": _render_forget,
     "ask": _render_ask,
     "consolidate": _render_consolidate,

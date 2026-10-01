@@ -135,14 +135,14 @@ async def test_apply_add_creates_current_fact() -> None:
 async def test_apply_update_closes_old_fact_and_opens_new() -> None:
     consolidator, temporal, gate = _build_stack([], clock=lambda: T1)
 
-    # Seed an existing fact: Berlin
+    # Seed an existing inference: a model update must not supersede a user assertion.
     await gate.upsert_fact(
         TemporalFact(
             user_id="u1",
             subject="user",
             predicate="lives_in",
             object="Berlin",
-            source=MemorySource.USER_STATED,
+            source=MemorySource.AGENT_INFERRED,
         )
     )
 
