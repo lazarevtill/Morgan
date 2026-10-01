@@ -29,6 +29,7 @@ from typing import Any
 from morgan_brain.config import DEFAULT_IMPORT_CANARY_EVERY
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.store.episodic import EventIdentityConflict
+from morgan_brain.memory.store.erasure import StoreInterruptedByForget
 from morgan_brain.models import Memory, MemoryKind, MemorySource, OriginKind
 from morgan_brain.providers.wire import EmbeddingSpaceMismatch
 
@@ -225,9 +226,16 @@ async def import_chatgpt(
 
     Raises ``ValueError`` by name if *canary_every* is below 1 -- a caller bypassing
     ``Settings``'s own ``ge=1`` validation would otherwise divide by zero.
+
+    A committed forget invalidates the whole import's preparation, including its initial
+    file read and later canary waits. No later source piece is written after that erasure;
+    ``StoreInterruptedByForget`` requires an explicit new import if it is still intended.
     """
     if canary_every < 1:
         raise ValueError(f"canary_every must be at least 1, got {canary_every}")
+    # An import is one preparation lifecycle, including reading and canary calls.
+    # Keep its original erasure guard: a later piece cannot adopt a post-forget epoch.
+    generation = gate.capture_erasure_generation()
     # to_thread: a real export is tens of megabytes, and reading it inline would block the
     # loop the embedding calls below run on.
     raw = await asyncio.to_thread(path.read_text, encoding="utf-8")
@@ -294,6 +302,9 @@ async def import_chatgpt(
                         changed.append("created_at")
                     if changed:
                         raise EventIdentityConflict(changed)
+                    # Use the canonical replay path even when this import skips the
+                    # embedding: forget may have committed during the evidence read.
+                    await gate.store(existing, expected_generation=generation)
                     skipped += 1
                     wrote_any = True
                     continue
@@ -310,7 +321,8 @@ async def import_chatgpt(
                         client="cli",
                         cwd=str(Path.cwd()),
                         author_id=author_id,
-                    )
+                    ),
+                    expected_generation=generation,
                 )
                 stored += 1
                 since_last_canary.append(memory_id)
@@ -327,6 +339,9 @@ async def import_chatgpt(
 
     if since_last_canary:
         await _run_canary(gate, stored, since_last_canary)
+
+    if gate.capture_erasure_generation() != generation:
+        raise StoreInterruptedByForget("Forget interrupted import; retry explicitly")
 
     return ImportReport(conversations=kept, held_out=held, memories=stored, skipped_turns=skipped)
 

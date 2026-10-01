@@ -300,9 +300,17 @@ class MemoryModule:
             project=memory.project,
         )
 
-    async def store(self, memory: Memory) -> str:
+    async def store(self, memory: Memory, *, expected_generation: int | None = None) -> str:
         """Prepare outside the lock, then atomically persist every index."""
-        original, prepared, generation = await self._prepare_event(memory, allow_replay=True)
+        if expected_generation is not None and (
+            not isinstance(expected_generation, int)
+            or isinstance(expected_generation, bool)
+            or expected_generation < 0
+        ):
+            raise ValueError("Store requires a captured erasure generation")
+        original, prepared, generation = await self._prepare_event(
+            memory, allow_replay=True, expected_generation=expected_generation
+        )
         if prepared is None:
             return original.id
         with write_transaction(self._conn):
