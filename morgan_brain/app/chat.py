@@ -78,34 +78,32 @@ class Chat:
         """
         source = MemorySource(source)
         self._gate.require_writable()
+        generation = self._gate.capture_erasure_generation()
+        input_at = self._clock()
         hkey = session_key(user_id, session_id)
-        history = self._history.recent(hkey, project=project)
+        history = self._history.recent(hkey, project=project, user_id=user_id)
         recalled = await self._gate.recall(MemoryQuery(user_id=user_id, project=project, text=text))
         result = await self._client.agenerate(
             build_messages(memories=recalled.memories, history=history, text=text),
             model=self._model,
         )
         reply = result.text
+        reply_at = self._clock()
 
-        self._history.append(
-            hkey, Message(user_id=user_id, role=Role.USER, content=text), project=project
-        )
-        self._history.append(
-            hkey, Message(user_id=user_id, role=Role.ASSISTANT, content=reply), project=project
-        )
         # Source is reported evidence provenance, independent of the chat wire role.
         # Client-authored input never becomes a user statement merely by using ask.
-        for content, evidence_source, reported_author in (
-            (text, source, author_id),
-            (reply, MemorySource.AGENT_INFERRED, f"model:{self._model}"),
+        memories = []
+        for content, evidence_source, reported_author, effective_at in (
+            (text, source, author_id, input_at),
+            (reply, MemorySource.AGENT_INFERRED, f"model:{self._model}", reply_at),
         ):
-            await self._gate.store(
+            memories.append(
                 Memory(
                     user_id=user_id,
                     project=project,
                     content=content,
                     source=evidence_source,
-                    created_at=self._clock(),
+                    created_at=effective_at,
                     origin_kind=OriginKind.ASK,
                     author_id=reported_author,
                     cwd=str(Path.cwd()),
@@ -113,4 +111,21 @@ class Chat:
                     session_id=caller_session_id,
                 )
             )
+        await self._gate.store_turn(
+            memories,
+            history=self._history,
+            expected_generation=generation,
+            history_entries=[
+                (
+                    hkey,
+                    project,
+                    Message(user_id=user_id, project=project, role=Role.USER, content=text),
+                ),
+                (
+                    hkey,
+                    project,
+                    Message(user_id=user_id, project=project, role=Role.ASSISTANT, content=reply),
+                ),
+            ],
+        )
         return reply

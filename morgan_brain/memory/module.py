@@ -38,7 +38,7 @@ from morgan_brain.memory.store.db import read_transaction, write_transaction
 from morgan_brain.memory.store.entities import EntityIndex, delete_entities
 from morgan_brain.memory.store.episodic import EpisodicStore, delete_memories
 from morgan_brain.memory.store.fts import FtsIndex, delete_keywords
-from morgan_brain.memory.store.history import delete_history
+from morgan_brain.memory.store.history import SessionHistoryStore, delete_history
 from morgan_brain.memory.store.projects import delete_project
 from morgan_brain.memory.store.tables import Deleter, Erasure
 from morgan_brain.memory.store.temporal import SqliteTemporalStore, delete_facts
@@ -59,6 +59,8 @@ from morgan_brain.models import (
     MemoryQuery,
     MemorySource,
     MemoryStatus,
+    Message,
+    Role,
     TemporalFact,
 )
 from morgan_brain.providers.wire import EmbedOutcome, ProviderRefused, ProviderUnreachable
@@ -195,91 +197,161 @@ class MemoryModule:
         """One atomic write across every call made inside the block. See ``store.db``."""
         return write_transaction(self._conn)
 
-    async def store(self, memory: Memory) -> str:
-        """Write *memory* to every index at once, as one transaction.
+    def capture_erasure_generation(self) -> int:
+        if self._conn.in_transaction:
+            raise ValueError("Preparation requires no active transaction")
+        return erasure_store.read_generation(self._conn)
 
-        Entities are extracted here when the caller supplied none. There is exactly one write
-        path on purpose: a memory indexed by one signal and invisible to another is found by a
-        search that should not find it, or missed by one that should.
-
-        The project's ``projects`` row is registered in the same transaction
-        (``store/projects.py::register``), so a project first written to after migration step 7
-        seeded the table has a row as well -- and a store that fails leaves none.
-        """
+    async def _prepare_event(
+        self, memory: Memory, *, allow_replay: bool, expected_generation: int | None = None
+    ) -> tuple[Memory, Memory | None, int]:
+        if self._conn.in_transaction:
+            raise ValueError("Event preparation requires no active transaction")
         with read_transaction(self._conn):
-            prepared_generation = erasure_store.read_generation(self._conn)
+            generation = erasure_store.read_generation(self._conn)
+            if expected_generation is not None:
+                erasure_store.require_generation(self._conn, expected_generation)
             original = memory.model_copy(deep=True)
             original.revises_event_ids = sorted(original.revises_event_ids)
             original.revision_root_id = RevisionResolver(
                 self._episodics, conn=self._conn, at=self._clock()
             ).validate_parents(original)
             if self._episodics.check_replay(original) is not None:
-                return original.id
-            if self._conn.execute(
-                "SELECT 1 FROM facts WHERE id=? AND user_id=? AND project=?",
-                (original.id, original.user_id, original.project),
-            ).fetchone():
-                raise ValueError("event ID is already used by a fact")
-        memory = original.model_copy(deep=True)
-        if memory.created_at is None:
-            memory.created_at = self._clock()
-        if not memory.entities:
-            memory.entities = [Entity(name=n) for n in extract_entity_names(memory.content)]
-        # The embedding awaits a model server, so it happens before the write lock is taken: the
-        # lock is never held across a model call.
-        vector = await self._embedder.embed(memory.content)
-        memory.embedding = vector
-        # Now, not `memory.created_at`: the row records when Morgan first wrote to the project,
-        # and an import carries the timestamps of conversations years old.
+                if not allow_replay:
+                    raise ValueError("Atomic turn events must be new; turn replay is not supported")
+                return original, None, generation
+            self._check_fact_identity(original)
+        prepared = original.model_copy(deep=True)
+        if prepared.created_at is None:
+            prepared.created_at = self._clock()
+        if not prepared.entities:
+            prepared.entities = [Entity(name=n) for n in extract_entity_names(prepared.content)]
+        prepared.embedding = await self._embedder.embed(prepared.content)
+        return original, prepared, generation
+
+    def _check_fact_identity(self, memory: Memory) -> None:
+        if self._conn.execute(
+            "SELECT 1 FROM facts WHERE id=? AND user_id=? AND project=?",
+            (memory.id, memory.user_id, memory.project),
+        ).fetchone():
+            raise ValueError("event ID is already used by a fact")
+
+    async def _persist_prepared_event(
+        self, original: Memory, memory: Memory, *, allow_replay: bool
+    ) -> None:
+        """SQLite-only calls; the caller owns the write transaction, with no external await."""
+        memory.revision_root_id = RevisionResolver(
+            self._episodics, conn=self._conn, at=self._clock()
+        ).validate_parents(original)
+        if self._episodics.check_replay(original) is not None:
+            if not allow_replay:
+                raise ValueError("Atomic turn events must be new; turn replay is not supported")
+            return
+        self._check_fact_identity(original)
+        vector = memory.embedding
+        if vector is None:
+            raise ValueError("Prepared memory requires an embedding")
         registered_at = self._clock()
-        # One transaction for all four indexes. Written one at a time, an erasure of the
-        # project from another process could land between two of them and leave the rest --
-        # with the memory's text -- behind for a memory that no longer exists; and a failure
-        # part-way left a memory stored in some indexes and missing from others. The vector
-        # upsert is awaited but never suspends: it is SQL on this connection, nothing else.
-        with write_transaction(self._conn):
-            erasure_store.require_generation(self._conn, prepared_generation)
-            memory.revision_root_id = RevisionResolver(
-                self._episodics, conn=self._conn, at=self._clock()
-            ).validate_parents(original)
-            if self._episodics.check_replay(original) is not None:
-                return original.id
-            if self._conn.execute(
-                "SELECT 1 FROM facts WHERE id=? AND user_id=? AND project=?",
-                (original.id, original.user_id, original.project),
-            ).fetchone():
-                raise ValueError("event ID is already used by a fact")
-            memory.recorded_at = self._clock()
-            projects.register(self._conn, memory.project, now=registered_at)
-            self._episodics.put(memory)
-            await self._vectors.upsert(
-                VectorRecord(
-                    id=memory.id,
-                    user_id=memory.user_id,
-                    project=memory.project,
-                    vector=vector,
-                    payload={"content": memory.content, "user_id": memory.user_id},
-                    status=memory.status,
-                    scope=memory.scope,
-                    author_id=memory.author_id,
-                )
-            )
-            self._fts.add(
-                memory.id,
-                memory.content,
+        memory.recorded_at = self._clock()
+        projects.register(self._conn, memory.project, now=registered_at)
+        self._episodics.put(memory)
+        await self._vectors.upsert(
+            VectorRecord(
+                id=memory.id,
                 user_id=memory.user_id,
                 project=memory.project,
+                vector=vector,
+                payload={"content": memory.content, "user_id": memory.user_id},
                 status=memory.status,
                 scope=memory.scope,
                 author_id=memory.author_id,
             )
-            self._entities.add(
-                memory.id,
-                [e.name for e in memory.entities],
-                user_id=memory.user_id,
-                project=memory.project,
+        )
+        self._fts.add(
+            memory.id,
+            memory.content,
+            user_id=memory.user_id,
+            project=memory.project,
+            status=memory.status,
+            scope=memory.scope,
+            author_id=memory.author_id,
+        )
+        self._entities.add(
+            memory.id,
+            [e.name for e in memory.entities],
+            user_id=memory.user_id,
+            project=memory.project,
+        )
+
+    async def store(self, memory: Memory) -> str:
+        """Prepare outside the lock, then atomically persist every index."""
+        original, prepared, generation = await self._prepare_event(memory, allow_replay=True)
+        if prepared is None:
+            return original.id
+        with write_transaction(self._conn):
+            erasure_store.require_generation(self._conn, generation)
+            await self._persist_prepared_event(original, prepared, allow_replay=True)
+        return original.id
+
+    async def store_turn(
+        self,
+        memories: list[Memory],
+        *,
+        history: SessionHistoryStore,
+        history_entries: list[tuple[str, str, Message]],
+        expected_generation: int,
+    ) -> None:
+        """Exactly two new events and history rows, prepared before one atomic write."""
+        if (
+            not isinstance(expected_generation, int)
+            or isinstance(expected_generation, bool)
+            or expected_generation < 0
+        ):
+            raise ValueError("Atomic turn requires a captured erasure generation")
+        if len(memories) != 2 or len(history_entries) != 2:
+            raise ValueError("Atomic turn requires exactly two events and history rows")
+        if self._conn.in_transaction:
+            raise ValueError("Atomic turn preparation requires no active transaction")
+        memories = [memory.model_copy(deep=True) for memory in memories]
+        history_entries = [
+            (key, context, message.model_copy(deep=True))
+            for key, context, message in history_entries
+        ]
+        if not history.shares_connection(self._conn):
+            raise ValueError("Atomic turn history must share the memory connection")
+        if memories[0].id == memories[1].id:
+            raise ValueError("Atomic turn event IDs must be distinct")
+        scope = (memories[0].user_id, memories[0].project)
+        for memory, (key, context, message), role in zip(
+            memories, history_entries, (Role.USER, Role.ASSISTANT), strict=True
+        ):
+            if (memory.user_id, memory.project) != scope or (
+                message.user_id,
+                message.project,
+                context,
+            ) != (*scope, scope[1]):
+                raise ValueError("Atomic turn ownership and context must match")
+            if message.role is not role or message.content != memory.content:
+                raise ValueError("Atomic turn history must match event content and roles")
+            if not isinstance(key, str) or not key.startswith(f"{scope[0]}:"):
+                raise ValueError("Atomic turn session must match its owner")
+            if key != history_entries[0][0]:
+                raise ValueError("Atomic turn history must share one session")
+        erasure_store.require_generation(self._conn, expected_generation)
+        prepared = [
+            await self._prepare_event(
+                memory, allow_replay=False, expected_generation=expected_generation
             )
-        return memory.id
+            for memory in memories
+        ]
+        with write_transaction(self._conn):
+            erasure_store.require_generation(self._conn, expected_generation)
+            for original, event, _generation in prepared:
+                if event is None:
+                    raise ValueError("Atomic turn preparation requires new events")
+                await self._persist_prepared_event(original, event, allow_replay=False)
+            for key, context, message in history_entries:
+                history.append(key, message, project=context)
 
     async def get(self, memory_id: str, *, user_id: str) -> Memory | None:
         """One memory by id, scoped to its owner.

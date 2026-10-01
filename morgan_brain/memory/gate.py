@@ -13,7 +13,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
 from morgan_brain.memory.migrations import DatabaseNeedsMigration
-from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, TemporalFact
+from morgan_brain.memory.store.history import SessionHistoryStore
+from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, Message, TemporalFact
 
 if TYPE_CHECKING:
     from morgan_brain.memory.evidence import ScopedEvidenceReader
@@ -107,6 +108,28 @@ class MemoryGate:
         self.require_writable()
         self._require_scope(memory.user_id)
         return await self._store.store(memory)
+
+    def capture_erasure_generation(self) -> int:
+        self.require_writable()
+        return self._store.capture_erasure_generation()
+
+    async def store_turn(
+        self,
+        memories: list[Memory],
+        *,
+        history: SessionHistoryStore,
+        history_entries: list[tuple[str, str, Message]],
+        expected_generation: int,
+    ) -> None:
+        self.require_writable()
+        for memory in memories:
+            self._require_scope(memory.user_id, memory.project)
+        await self._store.store_turn(
+            memories,
+            history=history,
+            history_entries=history_entries,
+            expected_generation=expected_generation,
+        )
 
     async def get(self, memory_id: str, *, user_id: str) -> Memory | None:
         """One memory by id, or ``None`` if this owner has no such memory.
