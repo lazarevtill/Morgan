@@ -18,6 +18,7 @@ import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from morgan_brain.memory.checkpoints import CHECKPOINT_PREDICATE
 from morgan_brain.memory.errors import SourceProtectionError
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.basis import (
@@ -108,6 +109,7 @@ class MemoryConsolidator:
                     "confidence": fact.confidence,
                 }
                 for fact in existing_facts
+                if fact.predicate != CHECKPOINT_PREDICATE
             ],
             ensure_ascii=False,
         )
@@ -173,6 +175,10 @@ class MemoryConsolidator:
             raise UnsupportedConsolidationOperation("Automatic writes require their prepared basis")
         source_ids = {source.event_id for source in basis.sources}
         for op in batch.ops:
+            if op.op is not FactOpKind.NOOP and op.predicate == CHECKPOINT_PREDICATE:
+                raise UnsupportedConsolidationOperation(
+                    "Reserved checkpoint facts require their checkpoint compare-and-swap API"
+                )
             if op.op is not FactOpKind.NOOP and (
                 not op.support_event_ids or not set(op.support_event_ids) <= source_ids
             ):
@@ -284,7 +290,7 @@ class MemoryConsolidator:
             event_ids=[event.id for event in episodics],
             generation=generation,
         )
-        existing_facts = list(inputs.facts)
+        existing_facts = [fact for fact in inputs.facts if fact.predicate != CHECKPOINT_PREDICATE]
         episodics = list(inputs.episodics)
 
         # Surprise-gate: consolidate what the current model did NOT already predict.

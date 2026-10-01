@@ -7,15 +7,33 @@ later. No caller holds the ``MemoryModule`` directly.
 
 from __future__ import annotations
 
+import json
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
+from pydantic import ValidationError
+
+from morgan_brain.memory.checkpoints import (
+    CHECKPOINT_PREDICATE,
+    MAX_CHECKPOINT_BYTES,
+    Checkpoint,
+    CheckpointContext,
+    CheckpointResult,
+    checkpoint_subject,
+)
 from morgan_brain.memory.knowledge.basis import ConsolidationBasis, ConsolidationInput
 from morgan_brain.memory.migrations import DatabaseNeedsMigration
 from morgan_brain.memory.store.history import SessionHistoryStore
-from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, Message, TemporalFact
+from morgan_brain.models import (
+    PERSONAL_PROJECT,
+    Memory,
+    MemoryQuery,
+    MemorySource,
+    Message,
+    TemporalFact,
+)
 
 if TYPE_CHECKING:
     from morgan_brain.memory.evidence import ScopedEvidenceReader
@@ -210,6 +228,65 @@ class MemoryGate:
         self.require_writable()
         self._require_scope(fact.user_id)
         return await self._store.upsert_fact(fact, now=now)
+
+    async def put_checkpoint(
+        self,
+        state: Checkpoint,
+        *,
+        checkpoint_id: str,
+        context: CheckpointContext,
+        support_event_ids: list[str],
+        expected_fact_id: str | None = None,
+    ) -> str:
+        """Persist an agent-inferred summary; absence of expected ID means create-only.
+
+        This performs no embedding or model call. Planned steps grant no permissions.
+        An explicit retry against the returned fact ID is required for updates.
+        """
+        self.require_writable()
+        self._require_scope(context.user_id, context.project)
+        fact = TemporalFact(
+            user_id=context.user_id,
+            project=context.project,
+            subject=checkpoint_subject(checkpoint_id),
+            predicate=CHECKPOINT_PREDICATE,
+            object=state.encode(support_event_ids),
+            source=MemorySource.AGENT_INFERRED,
+            author_id=context.author_id,
+            scope=context.scope,
+            support_event_ids=list(dict.fromkeys(support_event_ids)),
+        )
+        return await self._store.put_checkpoint_fact(fact, expected_fact_id=expected_fact_id)
+
+    async def get_checkpoint(
+        self, checkpoint_id: str, *, user_id: str, project: str = PERSONAL_PROJECT
+    ) -> CheckpointResult | None:
+        """Resolve compact state or a diagnostic with exact historical evidence retained."""
+        self._require_scope(user_id, project)
+        fact = await self._store.checkpoint_fact(
+            user_id=user_id, project=project, subject=checkpoint_subject(checkpoint_id)
+        )
+        if fact is None:
+            return None
+        if len(fact.object.encode("utf-8")) > MAX_CHECKPOINT_BYTES:
+            return CheckpointResult(fact=fact, eligibility="invalid_state")
+        try:
+            raw = json.loads(fact.object)
+        except (ValueError, RecursionError):
+            return CheckpointResult(fact=fact, eligibility="invalid_state")
+        if isinstance(raw, dict) and raw.get("version") != "morgan.checkpoint.v1":
+            return CheckpointResult(fact=fact, eligibility="unsupported_version")
+        if fact.support_state not in ("current", "unsupported"):
+            return CheckpointResult(fact=fact, eligibility="needs_rebuild")
+        try:
+            state = Checkpoint.model_validate(raw)
+            state.encode(fact.support_event_ids)
+        except (ValidationError, ValueError):
+            return CheckpointResult(fact=fact, eligibility="invalid_state")
+        eligibility: Literal["current", "unsupported"] = (
+            "current" if fact.support_state == "current" else "unsupported"
+        )
+        return CheckpointResult(fact=fact, state=state, eligibility=eligibility)
 
     async def record_project(
         self,

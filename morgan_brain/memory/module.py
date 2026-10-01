@@ -23,6 +23,11 @@ from datetime import datetime
 import structlog
 
 from morgan_brain.memory.checked_embedder import CheckedEmbedder
+from morgan_brain.memory.checkpoints import (
+    CHECKPOINT_PREDICATE,
+    AmbiguousCheckpoint,
+    StaleCheckpoint,
+)
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.evidence import ScopedEvidenceReader, fact_memory
 from morgan_brain.memory.gate import EvidenceResult, ForgetReport, RecallOutcome, RecallReason
@@ -652,6 +657,45 @@ class MemoryModule:
                 raise RevisionError("stale_revision_basis")
             projects.register(self._conn, fact.project, now=now)
             return await self._temporal.upsert_fact(fact, now=now)
+
+    async def put_checkpoint_fact(self, fact: TemporalFact, *, expected_fact_id: str | None) -> str:
+        """Create-only or compare-and-swap the structural checkpoint head under lock."""
+        with write_transaction(self._conn):
+            now = self._clock()
+            heads = await self._temporal.current_facts(
+                user_id=fact.user_id, project=fact.project, subject=fact.subject
+            )
+            heads = [head for head in heads if head.predicate == CHECKPOINT_PREDICATE]
+            if not heads:
+                effective = await self._temporal.current_facts(
+                    user_id=fact.user_id, project=fact.project, subject=fact.subject, at=now
+                )
+                heads = [head for head in effective if head.predicate == CHECKPOINT_PREDICATE]
+            if [head.id for head in heads] != (
+                [] if expected_fact_id is None else [expected_fact_id]
+            ):
+                raise StaleCheckpoint(
+                    "checkpoint head changed; prepare against the current fact ID"
+                )
+            return await self.upsert_fact(fact, now=now)
+
+    async def checkpoint_fact(
+        self, *, user_id: str, project: str, subject: str
+    ) -> TemporalFact | None:
+        """Return the effective checkpoint even when its basis requires rebuilding."""
+        with read_transaction(self._conn):
+            now = self._clock()
+            facts = await self._temporal.current_facts(
+                user_id=user_id, project=project, subject=subject, at=now
+            )
+            facts = [fact for fact in facts if fact.predicate == CHECKPOINT_PREDICATE]
+            if not facts:
+                return None
+            if len(facts) != 1:
+                raise AmbiguousCheckpoint([fact.id for fact in facts])
+            fact = facts[0]
+            state = RevisionResolver(self._episodics, conn=self._conn, at=now).support_state(fact)
+            return fact.model_copy(update={"support_state": state})
 
     async def evidence(
         self,
