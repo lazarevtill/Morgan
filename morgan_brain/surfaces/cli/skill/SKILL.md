@@ -1,18 +1,21 @@
 ---
 name: morgan
-description: "Use Morgan, the owner's long-term memory of their projects: recall what was decided, learned or corrected before starting work, and remember decisions, preferences, conventions and measured conclusions as they happen. Use at the start of a task, before a design decision, when the user corrects you or states a preference, and when a run or experiment answers a question."
+description: "Use Morgan for personal and project memory: people, relationships, goals and decisions."
 ---
 <!-- Written by `morgan install-skill`; run it again to update. -->
 
 # Morgan memory
 
-Morgan keeps memories per project and recalls them by meaning and by keyword. Use its MCP
+Morgan keeps personal and project memories and recalls them by meaning and keyword. Use its MCP
 tools (`recall`, `evidence`, `facts`, `remember`) when this session has them; otherwise use the `morgan`
 command in a shell. Both reach the same memory.
 
-## Which project
+## Choose a memory context
 
-A project is a git repository, named by its directory. The `morgan` command works it out from
+The `project` argument chooses a memory context. Use `personal` for general preferences,
+people, relationships and goals, including when working inside a repository.
+
+For repository work, use its directory name. The `morgan` command works it out from
 the current directory, a linked worktree included. The MCP tools take it as the `project`
 argument: pass the repository's name. In a linked worktree that is the main repository's
 directory, not the worktree folder: `git rev-parse --path-format=absolute --git-common-dir`
