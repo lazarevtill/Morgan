@@ -326,16 +326,18 @@ async def cmd_ask(
             )
             reply = detailed.answer
         else:
-            reply = await ctx.chat.ask(
-                user_id=settings.owner_user_id,
-                project=project,
-                text=args.text,
-                caller_client=client,
-                caller_session_id=session_id,
-                source=source,
-                author_id=author_id,
-                strict_context=strict_context,
+            default_result = await ctx.chat.ask_with_provenance(
+                TurnRequest(
+                    user_id=settings.owner_user_id,
+                    project=project,
+                    text=args.text,
+                    caller_client=client,
+                    caller_session_id=session_id,
+                    source=source,
+                    author_id=author_id,
+                )
             )
+            reply = default_result.answer
         await _record_the_repository(ctx, settings, project, repository)
     finally:
         try:
@@ -347,11 +349,13 @@ async def cmd_ask(
     payload = {
         "project": project,
         "response": reply,
-        "model_used": settings.llm_model,
+        "model_used": settings.llm_model if strict_context else default_result.model_used,
         "source": source.value,
         "author_id": author_id,
         "response_source": MemorySource.AGENT_INFERRED.value,
-        "response_author_id": f"model:{settings.llm_model}",
+        "response_author_id": (
+            f"model:{settings.llm_model}" if strict_context else default_result.response_author_id
+        ),
     }
 
     if detailed is not None:

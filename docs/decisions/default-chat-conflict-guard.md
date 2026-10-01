@@ -12,9 +12,13 @@ recall/evidence/remember route. Russian queries use the existing script-based la
 other queries receive the English notice. No extra retrieval, counter, schema, service or
 relevance heuristic is introduced.
 
-The clarification goes through the normal atomic turn write and erasure-generation check. Its
+The clarification goes through the normal atomic turn write, erasure-generation check and commit-time
+revision-basis validation. Every recalled default record is revalidated inside the write
+transaction: a concurrent fork or resolution refuses the stale turn without partial persistence. Its
 assistant memory is `agent_inferred` with reported author `morgan:conflict-guard`, because no
 model generated it. Normal generated answers retain `model:<configured model>` attribution.
+`Chat.ask` retains its string return. The per-call immutable `ask_with_provenance` result
+lets CLI/MCP report the program author and `model_used: null` for notices without shared state.
 Default nonconflict prompts/options and the strict answer contract retain their existing
 behavior.
 
@@ -40,8 +44,12 @@ Here `amber` and `cobalt` stand for the actual current conflicting leaf IDs retu
 recall/evidence. The correction must preserve the actual source/author lineage; `user_stated`
 requires an actual user statement. MCP clients use the existing `recall`, `evidence`, and
 `remember` tools with the same explicit project and `revises_event_ids` list. Check every
-eligible leaf and truncation diagnostic before resolving; respect the existing bounded revision
-API rather than silently omit parents. Once a supported join resolves the fork, the next default
+eligible leaf using `eligible_leaf_count` and `revision_truncated` before resolving. Each
+remember correction accepts at most **8 parent IDs**. For a larger family, make a supported
+join of up to 8 verified leaves, then join that new leaf with up to 7 remaining leaves; repeat
+until all branches are covered. Re-read current metadata after each step. A truncated inventory
+is not a complete family: retrieve the missing exact records before claiming resolution.
+Never silently omit a branch or fabricate a statement to bypass the parent limit. Once a supported join resolves the fork, the next default
 ask resumes ordinary generation. Reported owner/source/author labels do not establish
 authenticated per-agent isolation.
 

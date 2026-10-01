@@ -75,6 +75,13 @@ class TurnRequest:
 
 
 @dataclass(frozen=True)
+class DefaultAnswerResult:
+    answer: str
+    model_used: str | None
+    response_author_id: str
+
+
+@dataclass(frozen=True)
 class TurnBasis:
     input_at: datetime
     generation: int
@@ -126,7 +133,7 @@ class Chat:
         strict_context: bool = False,
     ) -> str:
         """Answer and atomically remember a turn; retains the legacy string result."""
-        reply, _ = await self._turn(
+        reply, _, _ = await self._turn(
             TurnRequest(
                 user_id=user_id,
                 project=project,
@@ -141,10 +148,19 @@ class Chat:
         )
         return reply
 
+    async def ask_with_provenance(self, request: TurnRequest) -> DefaultAnswerResult:
+        """Default answer attribution returned per call, without mutable shared state."""
+        reply, _, author = await self._turn(request)
+        return DefaultAnswerResult(
+            answer=reply,
+            model_used=None if author == "morgan:conflict-guard" else self._model,
+            response_author_id=author,
+        )
+
     async def ask_evidence(self, request: TurnRequest) -> AnswerResult:
         """Return a strict cited answer and measured budget after atomic persistence."""
         try:
-            _, detailed = await self._turn(request, strict_context=True)
+            _, detailed, _ = await self._turn(request, strict_context=True)
         except EvidenceChanged as exc:
             raise StrictContextError(exc.reason) from exc
         except StoreInterruptedByForget as exc:
@@ -155,7 +171,7 @@ class Chat:
 
     async def _turn(
         self, turn: TurnRequest, *, strict_context: bool = False
-    ) -> tuple[str, AnswerResult | None]:
+    ) -> tuple[str, AnswerResult | None, str]:
         # Admission and erasure capture precede every asynchronous operation.
         MemorySource(turn.source)
         self._gate.require_writable()
@@ -168,7 +184,7 @@ class Chat:
             MemoryQuery(user_id=turn.user_id, project=turn.project, text=turn.text)
         )
         detailed = None
-        evidence_basis = None
+        evidence_basis = [record.model_copy(deep=True) for record in recalled.memories]
         reply_author_id = None
         if counter is not None:
             packed = await self._pack_strict(turn, recalled.memories, history, counter)
@@ -178,13 +194,16 @@ class Chat:
         elif any(memory.revision_state == "conflicted" for memory in recalled.memories):
             # Default prose omits revision metadata. Do not let a model select a fork.
             reply = (
-                "В найденной памяти есть неразрешённые версии. Уточните верную версию; "
-                "используйте recall и evidence для проверки ID, затем remember с "
-                "revises_event_ids всех конфликтующих версий."
+                "В найденной памяти есть неразрешённые версии. Используйте recall и evidence; "
+                "проверьте eligible_leaf_count и revision_truncated. Уточните версию "
+                "через remember "
+                "с revises_event_ids: не более 8 родителей за шаг; большие группы объединяйте "
+                "поэтапно, не пропуская оставшиеся ветви."
                 if query_language(turn.text) == "ru"
-                else "Recalled memories have unresolved versions. Clarify the correct version; "
-                "use recall and evidence to inspect their IDs, then remember a correction "
-                "with every conflicting leaf in revises_event_ids."
+                else "Recalled memories have unresolved versions. Use recall and evidence; "
+                "check eligible_leaf_count and revision_truncated. Clarify via remember with "
+                "revises_event_ids: at most 8 parents per step; join larger groups in stages "
+                "without omitting remaining branches."
             )
             reply_author_id = "morgan:conflict-guard"
         else:
@@ -196,7 +215,7 @@ class Chat:
         await self._persist_turn(
             turn, reply, TurnBasis(input_at, generation, evidence_basis, reply_author_id)
         )
-        return reply, detailed
+        return reply, detailed, reply_author_id or f"model:{self._model}"
 
     async def _prepare_strict(self, turn: TurnRequest) -> CountedRequest:
         backend = self._strict_backend

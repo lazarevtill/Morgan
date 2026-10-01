@@ -465,3 +465,51 @@ async def test_recall_reports_persisted_fact_author_and_scope(tmp_path, surface)
         assert outcome.memories[0].scope is Scope.SHARED
     finally:
         ctx.conn.close()
+
+
+@pytest.mark.parametrize("surface", ["cli", "mcp"])
+async def test_conflict_notice_reports_program_author_on_both_surfaces(
+    tmp_path, monkeypatch, surface
+):
+    from datetime import UTC, datetime, timedelta
+
+    class NeverGenerate:
+        async def agenerate(self, *args, **kwargs):
+            raise AssertionError("Conflict notice must not call a model")
+
+    monkeypatch.setattr(composition, "build_chat_client", lambda settings: NeverGenerate())
+    settings = _settings(tmp_path)
+    now = datetime.now(UTC)
+    ctx = build_memory_context(settings)
+    try:
+        for identity, parents in [("root", []), ("left", ["root"]), ("right", ["root"])]:
+            await ctx.gate.store(
+                Memory(
+                    id=identity,
+                    user_id=settings.owner_user_id,
+                    project="personal",
+                    content="Synthetic glaze " + identity,
+                    source=MemorySource.USER_STATED,
+                    author_id="person",
+                    created_at=now - timedelta(days=1),
+                    revises_event_ids=parents,
+                )
+            )
+    finally:
+        ctx.conn.close()
+    if surface == "cli":
+        result = await cmd_ask(argparse.Namespace(text="Which glaze?"), settings, "personal")
+    else:
+        async with _mcp_client(tmp_path, client_name="test") as client:
+            result = await client.call_tool("ask_morgan", {"text": "Which glaze?"})
+    assert result["model_used"] is None
+    assert result["response_author_id"] == "morgan:conflict-guard"
+    assert result["response_source"] == "agent_inferred"
+    ctx = build_memory_context(settings)
+    try:
+        rows = ctx.conn.execute(
+            "SELECT author_id FROM memories WHERE origin_kind='ask' AND source='agent_inferred'"
+        ).fetchall()
+        assert [row[0] for row in rows] == [result["response_author_id"]]
+    finally:
+        ctx.conn.close()
