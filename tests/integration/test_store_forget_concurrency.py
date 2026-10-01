@@ -12,7 +12,8 @@ holding the write lock would fail too: the erasure could never get the lock, and
 times out.
 
 Whatever is left must be whole: every index row belongs to a stored memory, every stored
-memory is in every index, and the memory stored after the last erasure is there.
+memory is in every index. Interrupted preparation stays erased, and an explicit fresh
+store after the erasures can write new input.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from typing import TYPE_CHECKING
 from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.store.db import open_db
+from morgan_brain.memory.store.erasure import StoreInterruptedByForget, read_generation
 from morgan_brain.models import Memory, MemoryKind
 
 if TYPE_CHECKING:
@@ -95,25 +97,33 @@ def _storer(
             clock=lambda: datetime.now(UTC),
         )
 
-        async def store_every_step() -> None:
+        async def store_every_step() -> int:
+            cancelled = 0
             for i in range(_STEPS):
-                await module.store(
-                    Memory(
-                        user_id="u",
-                        project="p",
-                        content=f"note {i}: the Harbor mirror blocked the Kafka deploy",
-                        kind=MemoryKind.EPISODIC,
+                try:
+                    await module.store(
+                        Memory(
+                            id=f"pending-{i}",
+                            user_id="u",
+                            project="p",
+                            content=f"note {i}: the Harbor mirror blocked the Kafka deploy",
+                            kind=MemoryKind.EPISODIC,
+                        )
                     )
-                )
+                except StoreInterruptedByForget:
+                    cancelled += 1
+                else:
+                    raise AssertionError("Prepared store resumed after a committed forget")
+            return cancelled
 
-        asyncio.run(store_every_step())
+        cancelled = asyncio.run(store_every_step())
         conn.close()
     except BaseException as exc:
         outcomes.put(f"storer: {type(exc).__name__}: {exc}")
         raise
     finally:
         finished.set()
-    outcomes.put("storer: ok")
+    outcomes.put(f"storer: {cancelled} cancelled")
 
 
 def _forgetter(
@@ -173,14 +183,33 @@ def test_a_project_erased_mid_store_leaves_only_whole_memories(tmp_path: Path) -
                 p.terminate()
 
     # Every step's store was interrupted by an erasure, so every step tested the gap.
-    assert reported == [f"forgetter: {_STEPS} erasures", "storer: ok"]
+    assert reported == [f"forgetter: {_STEPS} erasures", f"storer: {_STEPS} cancelled"]
     assert [p.exitcode for p in workers] == [0, 0]
 
     conn = open_db(path)
     try:
-        broken = {name: conn.execute(sql).fetchone()[0] for name, sql in _BROKEN.items()}
-        memories = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+
+        def assert_whole() -> None:
+            broken = {name: conn.execute(sql).fetchone()[0] for name, sql in _BROKEN.items()}
+            assert {name: n for name, n in broken.items() if n} == {}
+
+        assert read_generation(conn) == _STEPS
+        assert_whole()
+        for query in (
+            "SELECT COUNT(*) FROM memories",
+            "SELECT COUNT(*) FROM vec_meta",
+            "SELECT COUNT(*) FROM vec_items",
+            "SELECT COUNT(*) FROM fts_memories",
+            "SELECT COUNT(*) FROM memory_entities",
+        ):
+            assert conn.execute(query).fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 0
+        module = build_memory_module(conn, embedder=FakeEmbedder(dim=_DIM), dim=_DIM)
+        asyncio.run(
+            module.store(Memory(id="fresh", user_id="u", project="p", content="Fresh Harbor input"))
+        )
+        assert_whole()
+        assert [row[0] for row in conn.execute("SELECT id FROM memories")] == ["fresh"]
+        assert read_generation(conn) == _STEPS
     finally:
         conn.close()
-    assert {name: n for name, n in broken.items() if n} == {}
-    assert memories == 1, "the memory stored after the last erasure should be there, whole"

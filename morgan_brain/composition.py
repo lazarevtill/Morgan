@@ -25,7 +25,7 @@ from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
 from morgan_brain.memory.migrations import Step, Stores, pending, stamp_if_new, upgrade
 from morgan_brain.memory.module import MemoryModule
-from morgan_brain.memory.store import spaces, vectors
+from morgan_brain.memory.store import erasure, spaces, vectors
 from morgan_brain.memory.store.db import open_db, open_readonly, write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
@@ -126,7 +126,10 @@ def build_memory_module(
     ``morgan migrate``; ``build_memory_context`` then opens the gate read-only. Also the seam
     tests use with a small fake embedder.
     """
-    stamp_if_new(conn)
+    is_new = stamp_if_new(conn)
+    if is_new:
+        with write_transaction(conn):
+            erasure.create_schema(conn)
     stores = migration_stores(conn)
     EmbeddingSpaceStore(conn)
     ProjectStore(conn)
