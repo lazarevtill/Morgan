@@ -27,7 +27,8 @@ updated_id = await gate.put_checkpoint(
 ```
 
 `CheckpointContext` bundles owner, project, reported author and scope labels; it is immutable
-and rejects unknown fields. These labels do not authorize access. Default context is `personal`. A missing expected ID means create-only; replaying a
+and rejects unknown fields. These labels do not authorize access. Default context is `personal`.
+A missing expected ID means create-only; replaying a
 completed create or update with its old basis is explicitly refused, not silently written
 again. Head comparison, source admission and persistence use one writer transaction and
 one cutoff. Historical facts remain available through scoped evidence. A stale support
