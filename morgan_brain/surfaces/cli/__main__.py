@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 from morgan_brain.app.chatgpt_import import ImportStopped
+from morgan_brain.app.strict_context import StrictContextError
 from morgan_brain.config import Settings, settings_for
 from morgan_brain.logging_setup import configure_logging
 from morgan_brain.models import PERSONAL_PROJECT, MemorySource
@@ -160,6 +161,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Reported input source; user_stated requires an actual user statement.",
     )
     p_ask.add_argument("--author-id", default="", help="Reported input author, not ownership.")
+    p_ask.add_argument(
+        "--strict-context",
+        action="store_true",
+        help="Require an exact whole-request token counter and current cited evidence.",
+    )
     _add_common(p_ask)
 
     p_cons = sub.add_parser(
@@ -313,6 +319,17 @@ async def _dispatch(
             data = await cmd_consolidate(args, settings, project, repository=repository)
         else:
             data = await handler(args, settings, project)
+    except StrictContextError as exc:
+        if args.json:
+            print(
+                json.dumps(
+                    {"error": str(exc), "reason": exc.reason, "evidence_ids": exc.evidence_ids},
+                    ensure_ascii=False,
+                )
+            )
+        else:
+            print(f"error: {exc}", file=sys.stderr)
+        return 1
     except ImportStopped as exc:
         # Same shape as the generic handler below, plus the one field it has no place for: the
         # suspect ids. A long list belongs on stderr in text mode, not crammed into one line.

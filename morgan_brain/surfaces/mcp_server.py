@@ -314,6 +314,7 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
         ctx: _ToolContext | None = None,
         source: MemorySource = MemorySource.UNKNOWN,
         author_id: str = "",
+        strict_context: bool = False,
     ) -> dict[str, Any]:
         """Answer and remember a turn (requires a reachable LLM).
 
@@ -321,7 +322,9 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
         Source and author are reported provenance, not authentication or permissions.
         The model reply is always agent_inferred with a model author label.
         """
-        args = argparse.Namespace(text=text, source=source, author_id=author_id)
+        args = argparse.Namespace(
+            text=text, source=source, author_id=author_id, strict_context=strict_context
+        )
         return await cmd_ask(
             args,
             settings,
