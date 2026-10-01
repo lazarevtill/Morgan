@@ -308,6 +308,7 @@ async def test_incremental_unicode_proposals_remain_applicable_or_refuse_before_
             applied = await apply_context(local_settings, loaded)
             previous_fact = applied["fact_id"]
 
+
 async def test_proposal_lf_below_cap_refuses_when_windows_output_exceeds_cap(
     local_settings, monkeypatch
 ):
