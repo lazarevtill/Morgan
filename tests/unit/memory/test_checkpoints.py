@@ -285,3 +285,42 @@ async def test_malformed_legacy_state_refuses_without_rewrite(tmp_path, raw):
         assert result.fact.object == raw
     finally:
         conn.close()
+
+
+async def test_cancelled_schedule_retains_predecessor_cas(tmp_path):
+    conn = open_db(str(tmp_path / "cancelled.db"))
+    gate = build(conn)
+    try:
+        await source(gate)
+        predecessor = await gate.put_checkpoint(
+            state(), checkpoint_id="scheduled", user_id="owner", support_event_ids=["A"]
+        )
+        scheduled = await gate.upsert_fact(
+            TemporalFact(
+                user_id="owner",
+                subject="checkpoint:scheduled",
+                predicate="resumable_state_v1",
+                object=state(status="paused").encode(["A"]),
+                source=MemorySource.AGENT_INFERRED,
+                support_event_ids=["A"],
+                valid_from=JUN,
+            )
+        )
+        await gate.close_fact(scheduled, user_id="owner", project="personal", now=JAN)
+        assert (await gate.get_checkpoint("scheduled", user_id="owner")).fact.id == predecessor
+        before = conn.serialize()
+        with pytest.raises(StaleCheckpoint):
+            await gate.put_checkpoint(
+                state(), checkpoint_id="scheduled", user_id="owner", support_event_ids=["A"]
+            )
+        assert conn.serialize() == before
+        updated = await gate.put_checkpoint(
+            state(status="blocked"),
+            checkpoint_id="scheduled",
+            user_id="owner",
+            support_event_ids=["A"],
+            expected_fact_id=predecessor,
+        )
+        assert (await gate.get_checkpoint("scheduled", user_id="owner")).fact.id == updated
+    finally:
+        conn.close()

@@ -662,6 +662,11 @@ class MemoryModule:
                 user_id=fact.user_id, project=fact.project, subject=fact.subject
             )
             heads = [head for head in heads if head.predicate == CHECKPOINT_PREDICATE]
+            if not heads:
+                effective = await self._temporal.current_facts(
+                    user_id=fact.user_id, project=fact.project, subject=fact.subject, at=now
+                )
+                heads = [head for head in effective if head.predicate == CHECKPOINT_PREDICATE]
             if [head.id for head in heads] != (
                 [] if expected_fact_id is None else [expected_fact_id]
             ):
