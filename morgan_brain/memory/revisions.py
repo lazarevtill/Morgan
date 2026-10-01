@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -37,17 +38,56 @@ class FamilyState:
         return self.leaf_count > 1
 
 
+@dataclass(frozen=True)
+class EventCandidates:
+    """Trusted metadata-only SQL selection shared by both ranked indexes."""
+
+    sql: str
+    params: tuple[object, ...]
+
+
 class RevisionResolver:
-    def __init__(self, episodics: EpisodicStore, *, at: datetime) -> None:
+    def __init__(self, episodics: EpisodicStore, *, conn: sqlite3.Connection, at: datetime) -> None:
         self._episodics = episodics
+        self._conn = conn
         self.at = instant(at)
         self._cache: dict[tuple[str, str, str], FamilyState] = {}
         # SQLite's built-in date functions round submillisecond times. This pure
         # connection-local function keeps exact UTC comparisons without source rewrites.
-        episodics._conn.create_function("morgan_effective_us", 1, _effective_us, deterministic=True)
-        self._columns = {
-            row["name"] for row in episodics._conn.execute("PRAGMA table_info(memories)")
-        }
+        conn.create_function("morgan_effective_us", 1, _effective_us, deterministic=True)
+        self._columns = {row["name"] for row in conn.execute("PRAGMA table_info(memories)")}
+
+    def ranked_candidates(self, *, user_id: str, project: str | None) -> EventCandidates:
+        """Select eligible IDs inside SQLite before KNN/FTS limits, never source text."""
+        sql = """
+            SELECT candidate.id FROM memories AS candidate
+            WHERE candidate.user_id=? AND (? IS NULL OR candidate.project=?)
+            AND (candidate.created_at IS NULL OR
+                morgan_effective_us(candidate.created_at)<=morgan_effective_us(?))
+        """
+        params: tuple[object, ...] = (user_id, project, project, self.at.isoformat())
+        if "status" in self._columns:
+            sql += " AND candidate.status='stored'"
+        if "revision_root_id" in self._columns:
+            sql = """
+                WITH activated AS MATERIALIZED (
+                    SELECT id,user_id,project,revision_root_id,revises_event_ids FROM memories
+                    WHERE user_id=? AND (? IS NULL OR project=?) AND status='stored'
+                    AND (created_at IS NULL OR
+                        morgan_effective_us(created_at)<=morgan_effective_us(?))
+                ), suppressed AS MATERIALIZED (
+                    SELECT child.user_id,child.project,child.revision_root_id,
+                        link.value AS parent_id
+                    FROM activated AS child, json_each(child.revises_event_ids) AS link
+                )
+                SELECT candidate.id FROM activated AS candidate
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM suppressed AS child WHERE child.user_id=candidate.user_id
+                    AND child.project=candidate.project AND child.parent_id=candidate.id
+                    AND child.revision_root_id=COALESCE(candidate.revision_root_id,candidate.id)
+                )
+            """
+        return EventCandidates(sql, params)
 
     def validate_parents(self, memory: Memory) -> str:
         if memory.created_at is not None and memory.created_at.utcoffset() is None:
@@ -103,7 +143,7 @@ class RevisionResolver:
         key = (event.user_id, event.project, root)
         if key in self._cache:
             return self._cache[key]
-        conn = self._episodics._conn
+        conn = self._conn
         if "revision_root_id" not in self._columns:
             eligible = event.status is MemoryStatus.STORED and (
                 event.created_at is None or instant(event.created_at) <= self.at
@@ -147,7 +187,7 @@ class RevisionResolver:
         ):
             return False
         root = event.revision_root_id or event.id
-        child = self._episodics._conn.execute(
+        child = self._conn.execute(
             "SELECT 1 FROM memories AS child, json_each(child.revises_event_ids) AS link "
             "WHERE child.user_id=? AND child.project=? AND child.revision_root_id=? "
             "AND child.status='stored' AND link.value=? "

@@ -211,7 +211,7 @@ class MemoryModule:
             original = memory.model_copy(deep=True)
             original.revises_event_ids = sorted(original.revises_event_ids)
             original.revision_root_id = RevisionResolver(
-                self._episodics, at=self._clock()
+                self._episodics, conn=self._conn, at=self._clock()
             ).validate_parents(original)
             if self._episodics.check_replay(original) is not None:
                 return original.id
@@ -240,7 +240,7 @@ class MemoryModule:
         with write_transaction(self._conn):
             erasure_store.require_generation(self._conn, prepared_generation)
             memory.revision_root_id = RevisionResolver(
-                self._episodics, at=self._clock()
+                self._episodics, conn=self._conn, at=self._clock()
             ).validate_parents(original)
             if self._episodics.check_replay(original) is not None:
                 return original.id
@@ -317,11 +317,16 @@ class MemoryModule:
             raise
         embed_elapsed = time.monotonic() - embed_started
         with read_transaction(self._conn):
+            resolver = RevisionResolver(
+                self._episodics, conn=self._conn, at=query.effective_at or self._clock()
+            )
+            candidates = resolver.ranked_candidates(user_id=query.user_id, project=project)
             vec_hits = await self._vectors.search(
                 user_id=query.user_id,
                 vector=q_vector,
                 top_k=query.top_k * 2,
                 project=project,
+                candidates=candidates,
             )
             # The floor judges on vector evidence alone, so it rules before anything else is
             # gathered: a decline returns nothing, facts included. Judged after the fact merge, a
@@ -337,6 +342,7 @@ class MemoryModule:
                 user_id=query.user_id,
                 top_k=query.top_k * 2,
                 project=project,
+                candidates=candidates,
             )
             # The entity ranking is not fused. A stored name is in the memory's text, so the keyword
             # search already counts it; a third vote for the same evidence pushed paraphrased
@@ -347,7 +353,6 @@ class MemoryModule:
             # ids through episodic rehydration, which isn't -- drop anything that slipped through.
             if not query.all_projects:
                 episodic = [m for m in episodic if m.project == query.project]
-            resolver = RevisionResolver(self._episodics, at=query.effective_at or self._clock())
             episodic = [resolver.annotate(event) for event in episodic if resolver.is_leaf(event)]
 
             # Currently-valid facts are authoritative, so they are surfaced alongside episodic
@@ -473,7 +478,8 @@ class MemoryModule:
                     raise ValueError("fact support requires scoped source events")
             if (
                 fact.support_event_ids
-                and RevisionResolver(self._episodics, at=now).support_state(fact) != "current"
+                and RevisionResolver(self._episodics, conn=self._conn, at=now).support_state(fact)
+                != "current"
             ):
                 raise RevisionError("stale_revision_basis")
             projects.register(self._conn, fact.project, now=now)
@@ -487,7 +493,9 @@ class MemoryModule:
         evidence_ids: list[str],
         effective_at: datetime | None = None,
     ) -> EvidenceResult:
-        return await ScopedEvidenceReader(self._episodics, self._temporal).evidence(
+        return await ScopedEvidenceReader(
+            self._episodics, self._temporal, conn=self._conn
+        ).evidence(
             user_id=user_id,
             project=project,
             evidence_ids=evidence_ids,
@@ -521,7 +529,7 @@ class MemoryModule:
     ) -> list[TemporalFact]:
         resolved_project = None if all_projects else project
         with read_transaction(self._conn):
-            resolver = RevisionResolver(self._episodics, at=self._clock())
+            resolver = RevisionResolver(self._episodics, conn=self._conn, at=self._clock())
             facts = await self._temporal.current_facts(
                 user_id=user_id, subject=subject, project=resolved_project, at=resolver.at
             )

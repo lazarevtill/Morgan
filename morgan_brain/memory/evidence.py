@@ -79,7 +79,10 @@ def validate_source_schema(conn: sqlite3.Connection) -> None:
 class ScopedEvidenceReader:
     """Read source records; MemoryGate owns request validation and caller boundaries."""
 
-    def __init__(self, episodics: EpisodicStore, temporal: SqliteTemporalStore) -> None:
+    def __init__(
+        self, episodics: EpisodicStore, temporal: SqliteTemporalStore, *, conn: sqlite3.Connection
+    ) -> None:
+        self._conn = conn
         self._episodics = episodics
         self._temporal = temporal
 
@@ -93,8 +96,10 @@ class ScopedEvidenceReader:
     ) -> EvidenceResult:
         records: list[Memory] = []
         missing: list[str] = []
-        with read_transaction(self._episodics._conn):
-            resolver = RevisionResolver(self._episodics, at=effective_at or datetime.now(UTC))
+        with read_transaction(self._conn):
+            resolver = RevisionResolver(
+                self._episodics, conn=self._conn, at=effective_at or datetime.now(UTC)
+            )
             for identity in evidence_ids:
                 event = self._episodics.get(identity, user_id=user_id, project=project)
                 fact = await self._temporal.get_fact(identity, user_id=user_id, project=project)

@@ -35,6 +35,7 @@ import struct
 from dataclasses import dataclass, field
 from typing import Any
 
+from morgan_brain.memory.revisions import EventCandidates
 from morgan_brain.memory.store.db import write_transaction
 from morgan_brain.memory.store.tables import Deleter, Erasure
 from morgan_brain.models import PERSONAL_PROJECT, MemoryStatus, Scope
@@ -197,6 +198,7 @@ class SqliteVectorIndex:
         vector: list[float],
         top_k: int,
         project: str | None = PERSONAL_PROJECT,
+        candidates: EventCandidates | None = None,
     ) -> list[VectorHit]:
         # user_id and project are both vec0 metadata columns, so the filter applies INSIDE the
         # KNN -- see the module docstring for why post-filtering would silently drop results.
@@ -210,6 +212,11 @@ class SqliteVectorIndex:
         if project is not None:
             sql += " AND v.project = ?"
             params.append(project)
+        if candidates is not None:
+            sql += " AND v.rowid IN (SELECT rowid FROM vec_meta WHERE id IN ("
+            sql += candidates.sql
+            sql += "))"
+            params.extend(candidates.params)
         sql += " ORDER BY v.distance"
         rows = self._conn.execute(sql, params).fetchall()
         # vec0's cosine distance is (1 - cosine_similarity), on 0..2. Convert back to

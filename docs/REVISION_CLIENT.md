@@ -42,3 +42,9 @@ as a current grounded fact. Unsupported legacy facts have no invented provenance
 The `facts` CLI/MCP view also omits inactive/conflicted supported derivations and labels
 remaining records with `support_state`. Unsupported legacy facts remain visible with
 that label. Exact scoped evidence still returns the historical fact and its support state.
+
+Recall applies scoped effective leaf eligibility inside both SQLite ranked searches,
+before their candidate limits and before the vector relevance floor. Superseded, future,
+and quarantined sources cannot occupy those slots. Eligible siblings still carry fork
+metadata. Each recall keeps one query embedding and two ranked SQL queries; the queries
+select source IDs and correction metadata in SQLite without hydrating the full history.
