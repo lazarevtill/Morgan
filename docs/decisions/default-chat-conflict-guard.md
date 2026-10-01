@@ -58,3 +58,19 @@ Offline integration tests cover real Gate fork metadata, RU/EN clarification, un
 refusal, user/agent provenance, normal generation after an explicit join, unchanged nonconflict
 wire, embedding failure and concurrent erasure. Existing strict and atomic-chat tests remain
 required. No endpoint or live memory is used by these tests.
+
+
+Guard turns use the additive `origin_kind: ask_conflict_guard` on both input and notice.
+Repeated procedural questions and notices are excluded from competitive vector/keyword recall
+**before candidate limits** so they cannot displace the unresolved sources that prompted them.
+The input's source, author, text and history remain durable; exact get/evidence, export and replay
+retain both records. Consolidation recalls through the same eligibility filter and does not turn
+these procedural turns into semantic facts. Ordinary ask/remember origins retain their behavior.
+
+This deliberately excludes even a substantive user assertion inside a guarded turn from ranked
+recall. Use explicit `remember` to record such an assertion as competitive evidence, preserving
+its true source and actor. No input is erased or relabeled as agent-authored. This origin is an
+additive contract value, requiring current Morgan to import/replay; older clients that exhaustively
+validate origin enum values may refuse it and should update rather than silently rewrite it.
+Unrelated stored evidence can still crowd a fork outside recall; this change prevents the guard's
+own persisted turns from doing so and does not claim globally exhaustive conflict discovery.

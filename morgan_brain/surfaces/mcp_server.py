@@ -316,11 +316,13 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
         author_id: str = "",
         strict_context: bool = False,
     ) -> dict[str, Any]:
-        """Answer and remember a turn (requires a reachable LLM).
+        """Answer and remember a turn; generated answers require a reachable LLM.
 
         Input source defaults to unknown. Use user_stated only for actual user words.
         Source and author are reported provenance, not authentication or permissions.
-        The model reply is always agent_inferred with a model author label.
+        Replies are agent_inferred. Generated replies carry a model author label;
+        in default mode, unresolved recalled versions return a program notice authored by
+        morgan:conflict-guard with model_used null, without chat generation.
         """
         args = argparse.Namespace(
             text=text, source=source, author_id=author_id, strict_context=strict_context

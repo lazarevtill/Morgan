@@ -508,7 +508,8 @@ async def test_conflict_notice_reports_program_author_on_both_surfaces(
     ctx = build_memory_context(settings)
     try:
         rows = ctx.conn.execute(
-            "SELECT author_id FROM memories WHERE origin_kind='ask' AND source='agent_inferred'"
+            "SELECT author_id FROM memories WHERE origin_kind='ask_conflict_guard' "
+            "AND source='agent_inferred'"
         ).fetchall()
         assert [row[0] for row in rows] == [result["response_author_id"]]
     finally:

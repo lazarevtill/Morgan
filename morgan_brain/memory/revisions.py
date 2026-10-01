@@ -88,6 +88,14 @@ class RevisionResolver:
                     AND child.revision_root_id=COALESCE(candidate.revision_root_id,candidate.id)
                 )
             """
+        if "origin_kind" in self._columns:
+            # Procedural clarification turns remain durable exact evidence/history,
+            # but must not crowd their unresolved source family out of ranked recall.
+            sql += (
+                " AND NOT EXISTS (SELECT 1 FROM memories AS procedural "
+                "WHERE procedural.id=candidate.id "
+                "AND procedural.origin_kind='ask_conflict_guard')"
+            )
         return EventCandidates(sql, params)
 
     def validate_parents(self, memory: Memory) -> str:

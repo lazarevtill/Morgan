@@ -114,7 +114,8 @@ async def test_conflict_clarification_skips_model_and_preserves_true_author(
         rows = history.recent(session_key("owner", "s"), user_id="owner", project="personal")
         assert [row.content for row in rows] == [question, reply]
         result = conn.execute(
-            "SELECT id FROM memories WHERE origin_kind='ask' ORDER BY rowid"
+            "SELECT id FROM memories WHERE origin_kind IN ('ask','ask_conflict_guard') "
+            "ORDER BY rowid"
         ).fetchall()
         assert len(result) == 2
         stored = [await gate.get(row["id"], user_id="owner") for row in result]
@@ -178,7 +179,10 @@ async def test_guard_keeps_atomic_failure_and_erasure_checks(failure):
         assert client.requests == []
         assert history.recent(session_key("owner", "s"), project="personal", user_id="owner") == []
         assert (
-            conn.execute("SELECT count(*) FROM memories WHERE origin_kind='ask'").fetchone()[0] == 0
+            conn.execute(
+                "SELECT count(*) FROM memories WHERE origin_kind IN ('ask','ask_conflict_guard')"
+            ).fetchone()[0]
+            == 0
         )
     finally:
         conn.close()
@@ -191,7 +195,8 @@ async def test_guard_does_not_upgrade_unknown_caller_input():
         await chat.ask(user_id="owner", project="personal", text="Which glaze?", session_id="s")
         assert client.requests == []
         rows = conn.execute(
-            "SELECT id FROM memories WHERE origin_kind='ask' ORDER BY rowid"
+            "SELECT id FROM memories WHERE origin_kind IN ('ask','ask_conflict_guard') "
+            "ORDER BY rowid"
         ).fetchall()
         stored = [await gate.get(row["id"], user_id="owner") for row in rows]
         assert stored[0].source is MemorySource.UNKNOWN
@@ -259,7 +264,10 @@ async def test_revision_change_between_recall_and_commit_refuses_atomically(chan
             await chat.ask(user_id="owner", project="personal", text="Which glaze?", session_id="s")
         assert history.recent(session_key("owner", "s"), project="personal", user_id="owner") == []
         assert (
-            conn.execute("SELECT count(*) FROM memories WHERE origin_kind='ask'").fetchone()[0] == 0
+            conn.execute(
+                "SELECT count(*) FROM memories WHERE origin_kind IN ('ask','ask_conflict_guard')"
+            ).fetchone()[0]
+            == 0
         )
     finally:
         conn.close()
@@ -337,5 +345,121 @@ async def test_large_fork_can_be_resolved_in_bounded_stages():
             == "Synthetic generated answer"
         )
         assert len(client.requests) == 1
+    finally:
+        conn.close()
+
+
+async def test_repeated_guard_turns_cannot_crowd_out_unresolved_fork():
+    conn, _, gate, _, client, chat = stack()
+    try:
+        await fork(gate)
+        for _ in range(20):
+            await chat.ask(
+                user_id="owner",
+                project="personal",
+                text="Which glaze?",
+                session_id="s",
+                source=MemorySource.USER_STATED,
+                author_id="owner",
+            )
+        assert client.requests == []
+        assert (
+            conn.execute(
+                "SELECT count(*) FROM memories WHERE source='user_stated' AND author_id='owner'"
+            ).fetchone()[0]
+            == 20
+        )
+        assert conn.execute("SELECT count(*) FROM session_history").fetchone()[0] == 40
+        rows = conn.execute("SELECT id FROM memories WHERE author_id='owner'").fetchall()
+        exact = await gate.evidence(
+            user_id="owner", project="personal", evidence_ids=[row[0] for row in rows]
+        )
+        assert len(exact.records) == 20 and not exact.missing_ids
+        await gate.store(
+            Memory(
+                id="resolved-after-repeats",
+                user_id="owner",
+                project="personal",
+                content="Glaze confirmed jade",
+                source="user_stated",
+                author_id="person",
+                created_at=NOW,
+                revises_event_ids=["amber", "cobalt"],
+            )
+        )
+        assert (
+            await chat.ask(user_id="owner", project="personal", text="Which glaze?")
+            == "Synthetic generated answer"
+        )
+        assert len(client.requests) == 1
+    finally:
+        conn.close()
+
+
+async def test_guard_origin_is_scoped_durable_replayable_and_not_consolidated():
+    from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
+    from morgan_brain.models import OriginKind
+
+    conn, _, gate, _, client, chat = stack()
+    try:
+        await fork(gate)
+        await chat.ask(
+            user_id="owner",
+            project="personal",
+            text="I now prefer jade glaze",
+            source=MemorySource.USER_STATED,
+            author_id="owner",
+        )
+        rows = conn.execute(
+            "SELECT id FROM memories WHERE origin_kind='ask_conflict_guard'"
+        ).fetchall()
+        assert len(rows) == 2
+        for row in rows:
+            record = await gate.get(row[0], user_id="owner")
+            assert record.origin_kind is OriginKind.ASK_CONFLICT_GUARD
+            replay = Memory.model_validate_json(record.model_dump_json())
+            await gate.store(replay)
+            exact = await gate.evidence(user_id="owner", project="personal", evidence_ids=[row[0]])
+            assert exact.records[0].origin_kind is OriginKind.ASK_CONFLICT_GUARD
+            assert await gate.get(row[0], user_id="foreign") is None
+        assert (
+            conn.execute(
+                "SELECT count(*) FROM memories WHERE origin_kind='ask_conflict_guard'"
+            ).fetchone()[0]
+            == 2
+        )
+        assert (
+            await MemoryConsolidator(
+                gate=gate, client=client, model="fake", clock=lambda: NOW
+            ).consolidate("owner", project="personal")
+            == []
+        )
+        assert client.requests == []
+        assert conn.execute("SELECT count(*) FROM facts").fetchone()[0] == 0
+        for identity, owner, project in [
+            ("foreign-owner", "foreign", "personal"),
+            ("foreign-project", "owner", "elsewhere"),
+            ("remembered", "owner", "personal"),
+        ]:
+            await gate.store(
+                Memory(
+                    id=identity,
+                    user_id=owner,
+                    project=project,
+                    content="I now prefer jade glaze",
+                    source=MemorySource.USER_STATED,
+                    author_id=owner,
+                    origin_kind=OriginKind.REMEMBER,
+                    created_at=NOW,
+                )
+            )
+        recalled = await gate.recall(
+            MemoryQuery(user_id="owner", project="personal", text="I now prefer jade glaze")
+        )
+        identities = {record.id for record in recalled.memories}
+        assert "remembered" in identities
+        assert not identities.intersection(
+            {"foreign-owner", "foreign-project", *[row[0] for row in rows]}
+        )
     finally:
         conn.close()

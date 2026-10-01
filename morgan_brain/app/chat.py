@@ -346,7 +346,11 @@ class Chat:
                     content=content,
                     source=evidence_source,
                     created_at=effective_at,
-                    origin_kind=OriginKind.ASK,
+                    origin_kind=(
+                        OriginKind.ASK_CONFLICT_GUARD
+                        if basis.reply_author_id == "morgan:conflict-guard"
+                        else OriginKind.ASK
+                    ),
                     author_id=reported_author,
                     cwd=str(Path.cwd()),
                     client=turn.caller_client,
