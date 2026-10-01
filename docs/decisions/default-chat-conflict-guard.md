@@ -12,8 +12,8 @@ recall/evidence/remember route. Russian queries use the existing script-based la
 other queries receive the English notice. No extra retrieval, counter, schema, service or
 relevance heuristic is introduced.
 
-The clarification goes through the normal atomic turn write, erasure-generation check and commit-time
-revision-basis validation. Every recalled default record is revalidated inside the write
+The clarification goes through the normal atomic turn write, erasure-generation check and
+commit-time revision-basis validation. Every recalled default record is revalidated inside the write
 transaction: a concurrent fork or resolution refuses the stale turn without partial persistence. Its
 assistant memory is `agent_inferred` with reported author `morgan:conflict-guard`, because no
 model generated it. Normal generated answers retain `model:<configured model>` attribution.
