@@ -26,6 +26,17 @@ from morgan_brain.memory.checked_embedder import CheckedEmbedder
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.evidence import ScopedEvidenceReader, fact_memory
 from morgan_brain.memory.gate import EvidenceResult, ForgetReport, RecallOutcome, RecallReason
+from morgan_brain.memory.knowledge.basis import (
+    MAX_FACT_INPUTS,
+    MAX_SOURCE_INPUTS,
+    ConsolidationBasis,
+    ConsolidationInput,
+    ConsolidationInputLimit,
+    SourceBasis,
+    StaleConsolidationProposal,
+    event_fingerprint,
+    fact_fingerprint,
+)
 from morgan_brain.memory.knowledge.extract import extract_entity_names, words
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
@@ -523,6 +534,89 @@ class MemoryModule:
             has_exact_match=any(memory_id in ranked for memory_id in entity_ranking),
         )
         return None if answered else "declined"
+
+    def _source_basis(
+        self, event_id: str, *, user_id: str, project: str, resolver: RevisionResolver
+    ) -> tuple[Memory, SourceBasis]:
+        event = self._episodics.get(event_id, user_id=user_id, project=project)
+        if (
+            event is None
+            or event.kind is not MemoryKind.EPISODIC
+            or event.status is not MemoryStatus.STORED
+            or event.source not in (MemorySource.USER_STATED, MemorySource.TOOL_OBSERVED)
+            or not resolver.is_leaf(event)
+        ):
+            raise StaleConsolidationProposal("Consolidation source is missing or inactive")
+        family = resolver.family(event)
+        if family.conflicted:
+            raise StaleConsolidationProposal("Consolidation source has an unresolved conflict")
+        return event, SourceBasis(
+            event.id, event.revision_root_id or event.id, family.leaf_ids, event_fingerprint(event)
+        )
+
+    async def capture_consolidation_basis(
+        self, *, user_id: str, project: str, event_ids: list[str], generation: int
+    ) -> ConsolidationInput:
+        """Capture exact prompt inputs after recall, before external generation."""
+        if len(event_ids) > MAX_SOURCE_INPUTS or len(set(event_ids)) != len(event_ids):
+            raise ConsolidationInputLimit("Consolidation needs at most 50 distinct source IDs")
+        with read_transaction(self._conn):
+            if erasure_store.read_generation(self._conn) != generation:
+                raise StaleConsolidationProposal(
+                    "Consolidation preparation crossed a committed forget"
+                )
+            prepared_at = self._clock()
+            resolver = RevisionResolver(self._episodics, conn=self._conn, at=prepared_at)
+            sources = [
+                self._source_basis(identity, user_id=user_id, project=project, resolver=resolver)
+                for identity in event_ids
+            ]
+            facts = await self._consolidation_facts(user_id, project, resolver)
+            if len(facts) > MAX_FACT_INPUTS:
+                raise ConsolidationInputLimit(
+                    "Consolidation fact inputs exceed the explicit 256 limit"
+                )
+            basis = ConsolidationBasis(
+                user_id,
+                project,
+                generation,
+                prepared_at,
+                tuple(source for _, source in sources),
+                fact_fingerprint(facts),
+                tuple(sorted(fact.id for fact in facts)),
+            )
+            return ConsolidationInput(basis, tuple(event for event, _ in sources), tuple(facts))
+
+    async def check_consolidation_basis(
+        self, basis: ConsolidationBasis, *, effective_at: datetime
+    ) -> None:
+        """Caller holds the apply write transaction; no I/O may suspend here."""
+        if not self._conn.in_transaction:
+            raise RuntimeError("Consolidation basis must be checked inside its write transaction")
+        if erasure_store.read_generation(self._conn) != basis.generation:
+            raise StaleConsolidationProposal("Consolidation proposal crossed a committed forget")
+        resolver = RevisionResolver(self._episodics, conn=self._conn, at=effective_at)
+        for expected in basis.sources:
+            _, actual = self._source_basis(
+                expected.event_id, user_id=basis.user_id, project=basis.project, resolver=resolver
+            )
+            if actual != expected:
+                raise StaleConsolidationProposal("Consolidation source basis changed")
+        # The complete current prompt inventory is compared, not only target IDs:
+        # a new key or same-ID confidence/confirmation change can alter a proposal.
+        facts = await self._consolidation_facts(basis.user_id, basis.project, resolver)
+        if fact_fingerprint(facts) != basis.fact_fingerprint:
+            raise StaleConsolidationProposal("Consolidation fact basis changed")
+
+    async def _consolidation_facts(
+        self, user_id: str, project: str, resolver: RevisionResolver
+    ) -> list[TemporalFact]:
+        facts = await self._temporal.current_facts(user_id=user_id, project=project, at=resolver.at)
+        return [
+            fact
+            for fact in facts
+            if resolver.support_state(fact) not in ("inactive_support", "conflicted_support")
+        ]
 
     async def upsert_fact(self, fact: TemporalFact) -> str:
         """Assert *fact*, registering its project in the same transaction.

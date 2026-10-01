@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 from morgan_brain.composition import build_memory_module
 from morgan_brain.memory.embedder import FakeEmbedder
 from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.knowledge.basis import StaleConsolidationProposal
 from morgan_brain.memory.knowledge.consolidation import (
     FactOp,
     FactOpBatch,
@@ -27,6 +28,7 @@ from morgan_brain.memory.knowledge.consolidation import (
     MemoryConsolidator,
 )
 from morgan_brain.memory.store.db import open_db
+from morgan_brain.models import Memory, MemorySource
 from tests.fakes import FakeChatClient
 
 if TYPE_CHECKING:
@@ -40,7 +42,13 @@ _TIMEOUT_S = 120
 
 _BATCH = FactOpBatch(
     ops=[
-        FactOp(op=FactOpKind.ADD, subject=f"s{i}", predicate="lives_in", object="Berlin")
+        FactOp(
+            op=FactOpKind.ADD,
+            subject=f"s{i}",
+            predicate="lives_in",
+            object="Berlin",
+            support_event_ids=["source"],
+        )
         for i in range(_KEYS)
     ]
 )
@@ -57,19 +65,43 @@ def _apply(path: str, start: Barrier, outcomes: Queue[str]) -> None:
             model="unused: apply() never calls the model",
             clock=lambda: datetime.now(UTC),
         )
+        inputs = asyncio.run(
+            gate.capture_consolidation_basis(
+                user_id="u",
+                project="p",
+                event_ids=["source"],
+                generation=gate.capture_erasure_generation(),
+            )
+        )
         start.wait(timeout=_TIMEOUT_S)
-        applied = asyncio.run(consolidator.apply("u", _BATCH, project="p"))
+        try:
+            applied = asyncio.run(consolidator.apply("u", _BATCH, project="p", basis=inputs.basis))
+            result = str(len(applied))
+        except StaleConsolidationProposal:
+            result = "stale"
         conn.close()
     except BaseException as exc:
         outcomes.put(f"error: {type(exc).__name__}: {exc}")
         raise
-    outcomes.put(str(len(applied)))
+    outcomes.put(result)
 
 
 def test_two_runs_applying_the_same_facts_add_each_once(tmp_path: Path) -> None:
     path = str(tmp_path / "morgan.db")
     setup = open_db(path)
-    build_memory_module(setup, embedder=FakeEmbedder(dim=_DIM), dim=_DIM)
+    gate = MemoryGate(build_memory_module(setup, embedder=FakeEmbedder(dim=_DIM), dim=_DIM))
+    asyncio.run(
+        gate.store(
+            Memory(
+                id="source",
+                user_id="u",
+                project="p",
+                content="Synthetic authored contract: the 200 subjects live in Berlin",
+                source=MemorySource.USER_STATED,
+                author_id="person:u",
+            )
+        )
+    )
     setup.close()
 
     ctx = mp.get_context("spawn")
@@ -101,4 +133,24 @@ def test_two_runs_applying_the_same_facts_add_each_once(tmp_path: Path) -> None:
     assert len(per_key) == _KEYS
     duplicated = [r["subject"] for r in per_key if r["n"] != 1]
     assert duplicated == [], f"{len(duplicated)} of {_KEYS} facts were added twice"
-    assert sum(int(r) for r in reported) == _KEYS
+    assert sorted(reported) == [str(_KEYS), "stale"]
+    # Fresh explicit preparation sees the winning state and deduplicates without a write.
+    conn = open_db(path)
+    try:
+        gate = MemoryGate(build_memory_module(conn, embedder=FakeEmbedder(dim=_DIM), dim=_DIM))
+        inputs = asyncio.run(
+            gate.capture_consolidation_basis(
+                user_id="u",
+                project="p",
+                event_ids=["source"],
+                generation=gate.capture_erasure_generation(),
+            )
+        )
+        consolidator = MemoryConsolidator(
+            gate=gate, client=FakeChatClient(), model="unused", clock=lambda: datetime.now(UTC)
+        )
+        before = conn.serialize()
+        assert asyncio.run(consolidator.apply("u", _BATCH, project="p", basis=inputs.basis)) == []
+        assert conn.serialize() == before
+    finally:
+        conn.close()

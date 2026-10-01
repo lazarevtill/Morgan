@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
+from morgan_brain.memory.knowledge.basis import ConsolidationBasis, ConsolidationInput
 from morgan_brain.memory.migrations import DatabaseNeedsMigration
 from morgan_brain.memory.store.history import SessionHistoryStore
 from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, Message, TemporalFact
@@ -188,6 +189,22 @@ class MemoryGate:
         failure; a no-op on an embedder that does none of this checking (the hash backend).
         """
         await self._store.check_embedding_space()
+
+    async def capture_consolidation_basis(
+        self, *, user_id: str, project: str, event_ids: list[str], generation: int
+    ) -> ConsolidationInput:
+        self.require_writable()
+        self._require_scope(user_id, project)
+        return await self._store.capture_consolidation_basis(
+            user_id=user_id, project=project, event_ids=event_ids, generation=generation
+        )
+
+    async def check_consolidation_basis(
+        self, basis: ConsolidationBasis, *, effective_at: datetime
+    ) -> None:
+        self.require_writable()
+        self._require_scope(basis.user_id, basis.project)
+        await self._store.check_consolidation_basis(basis, effective_at=effective_at)
 
     async def upsert_fact(self, fact: TemporalFact) -> str:
         self.require_writable()
