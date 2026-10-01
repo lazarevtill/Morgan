@@ -103,12 +103,21 @@ async def propose_context(  # pylint: disable=too-many-arguments
             event_ids=event_ids,
             rebuild=rebuild,
         )
-        return {
+        result = {
             "project": resolved,
             "project_defaulted": project is None,
             "proposal": preview.model_dump(mode="json"),
             "applied": False,
         }
+        # Include the wrapper, pretty CLI formatting and Windows CRLF output.
+        # Old selected source bodies accumulate even when the new model feed fits.
+        if len(
+            (json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+            .replace("\n", "\r\n")
+            .encode("utf-8")
+        ) > (MAX_PROPOSAL_BYTES):
+            raise ValueError("Working proposal exceeds 131072 bytes; select fewer sources")
+        return result
     finally:
         try:
             await ctx.chat.aclose()

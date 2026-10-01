@@ -240,3 +240,124 @@ async def test_both_resource_closures_and_sqlite_close_run_after_chat_cleanup_er
     assert closed == ["chat", "client"]
     with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
         ctx.conn.execute("SELECT 1")
+
+
+async def test_incremental_unicode_proposals_remain_applicable_or_refuse_before_return(
+    local_settings, tmp_path, monkeypatch
+):
+    import json
+
+    from morgan_brain.app.working_context import WorkingContextService
+    from morgan_brain.surfaces.cli import working_context as adapter
+
+    selected = []
+
+    async def proposer(messages):
+        return WorkingContextDraft.model_validate(
+            {"title": "Bounded selection", "intentions": selected[:4], "progress": selected[4:]}
+        )
+
+    async def close():
+        pass
+
+    def app_context(settings):
+        ctx = build_memory_context(settings)
+        return SimpleNamespace(
+            conn=ctx.conn,
+            gate=ctx.gate,
+            chat=SimpleNamespace(aclose=close),
+            client=SimpleNamespace(aclose=close),
+        )
+
+    monkeypatch.setattr(adapter, "build_app_context", app_context)
+    monkeypatch.setattr(
+        adapter,
+        "WorkingContextService",
+        lambda **kwargs: WorkingContextService(**kwargs, proposer=proposer),
+    )
+    previous_fact = None
+    for index in range(8):
+        identity = f"unicode-{index}"
+        quote = f"Event {index} "
+        content = quote + chr(0x1F600) * (4096 - len(quote))
+        ctx = build_memory_context(local_settings)
+        try:
+            await ctx.gate.store(
+                Memory(
+                    id=identity,
+                    user_id=local_settings.owner_user_id,
+                    content=content,
+                    source=MemorySource.USER_STATED,
+                    author_id="person:synthetic",
+                )
+            )
+        finally:
+            ctx.conn.close()
+        selected.append({"event_id": identity, "quote": quote})
+        if index == 7:
+            with pytest.raises(ValueError, match="select fewer sources"):
+                await propose_context(local_settings, "unicode", [identity])
+            view = await read_context(local_settings, "unicode")
+            assert view["view"]["fact_id"] == previous_fact
+        else:
+            result = await propose_context(local_settings, "unicode", [identity])
+            raw = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+            path = tmp_path / "proposal.json"
+            path.write_bytes(raw.replace("\n", "\r\n").encode("utf-8"))
+            loaded = adapter.load_proposal(str(path))
+            applied = await apply_context(local_settings, loaded)
+            previous_fact = applied["fact_id"]
+
+async def test_proposal_lf_below_cap_refuses_when_windows_output_exceeds_cap(
+    local_settings, monkeypatch
+):
+    import json
+
+    from morgan_brain.surfaces.cli import working_context as adapter
+
+    preview = await prepare(local_settings)
+    payload = preview.model_dump(mode="json")
+    result = {
+        "project": "personal",
+        "project_defaulted": True,
+        "proposal": payload,
+        "applied": False,
+    }
+    raw = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+    # A long evidence body approaches the physical-file bound without adding
+    # formatting lines. LF fits exactly; Windows CRLF must be refused.
+    payload["evidence_basis"][0]["content"] += "x" * (
+        adapter.MAX_PROPOSAL_BYTES - len(raw.encode("utf-8"))
+    )
+    raw = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+    assert len(raw.encode("utf-8")) == adapter.MAX_PROPOSAL_BYTES
+    assert len(raw.replace("\n", "\r\n").encode("utf-8")) > adapter.MAX_PROPOSAL_BYTES
+
+    closed = []
+
+    async def close():
+        closed.append("resource")
+
+    class PreviewService:
+        def __init__(self, **kwargs):
+            pass
+
+        async def preview(self, *args, **kwargs):
+            return SimpleNamespace(model_dump=lambda **kwargs: payload)
+
+    def app_context(settings):
+        ctx = build_memory_context(settings)
+        return SimpleNamespace(
+            conn=ctx.conn,
+            gate=ctx.gate,
+            chat=SimpleNamespace(aclose=close),
+            client=SimpleNamespace(aclose=close),
+        )
+
+    monkeypatch.setattr(adapter, "build_app_context", app_context)
+    monkeypatch.setattr(adapter, "WorkingContextService", PreviewService)
+    with pytest.raises(ValueError, match="select fewer sources"):
+        await propose_context(local_settings, "gift", ["choice"])
+    assert closed == ["resource", "resource"]
+    view = await read_context(local_settings, "gift")
+    assert view["view"] is None
