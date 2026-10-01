@@ -3,7 +3,8 @@
 The existing ChatClient API is unchanged. StrictChatBackend adds an explicit capability:
 count_request(messages, request=StrictRequest) returns RequestCount; generate_counted
 accepts that receipt and returns the existing ChatResult. The fingerprint binds the
-complete messages, model, schema and options. Counting includes the generation prefix. Changing the request requires
+complete messages, model, schema and options. Counting includes the generation prefix.
+Changing the request requires
 a fresh count. Unknown capabilities refuse; no character-based estimate is advertised
 as an exact count.
 
@@ -40,3 +41,8 @@ write authorization. Adapter contract tests cover malformed counts/usage, reques
 mutation across suspension, expired receipts, wrong model, output/finish errors and
 cleanup without contacting a model.
 
+
+Direct adapter construction takes a frozen LlamaStrictConfig and an optional test
+transport. The config names the endpoint, calibrated identity, schema and request
+bound; credentials are excluded from its repr. Schema bytes are captured at
+construction, so later caller mutation cannot change the calibrated contract.

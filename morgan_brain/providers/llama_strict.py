@@ -10,14 +10,21 @@ import asyncio
 import json
 import time
 from collections import OrderedDict
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from typing import Any, TypeGuard
 from urllib.parse import urlsplit
 
 import httpx
 
 from morgan_brain.providers.context import RequestCount, StrictRequest, request_fingerprint
-from morgan_brain.providers.wire import ChatMessage, ChatResult, Usage
+from morgan_brain.providers.wire import (
+    ChatMessage,
+    ChatResult,
+    ProviderRefused,
+    ProviderUnreachable,
+    Usage,
+    is_refusal,
+)
 
 
 class StrictBackendUnavailable(RuntimeError):
@@ -28,52 +35,53 @@ def _integer(value: Any) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-class LlamaStrictBackend:
-    def __init__(
-        self,
-        *,
-        base_url: str,
-        model: str,
-        template_id: str,
-        response_format: dict[str, Any],
-        provider: str = "llamacpp",
-        api_key: str | None = None,
-        max_request_bytes: int = 262144,
-        transport: httpx.AsyncBaseTransport | None = None,
-    ) -> None:
-        parsed = urlsplit(base_url)
-        if (
-            provider != "llamacpp"
-            or parsed.scheme not in {"http", "https"}
-            or not parsed.netloc
-            or parsed.username
-            or parsed.password
-            or parsed.query
-            or parsed.fragment
-        ):
+@dataclass(frozen=True)
+class LlamaStrictConfig:
+    """Explicit calibrated identity and transport bounds; construction performs no I/O."""
+
+    base_url: str
+    model: str
+    template_id: str
+    response_format: dict[str, Any]
+    provider: str = "llamacpp"
+    api_key: str | None = field(default=None, repr=False)
+    max_request_bytes: int = 262144
+
+    def validate(self) -> None:
+        parsed = urlsplit(self.base_url)
+        endpoint_invalid = parsed.scheme not in {"http", "https"} or not parsed.netloc
+        embedded_identity = bool(parsed.username or parsed.password)
+        endpoint_extras = bool(parsed.query or parsed.fragment)
+        if self.provider != "llamacpp" or endpoint_invalid or embedded_identity or endpoint_extras:
             raise ValueError("An explicit llama-compatible HTTP endpoint is required")
-        if (
-            not model.strip()
-            or not template_id.strip()
-            or not _integer(max_request_bytes)
-            or not 1 <= max_request_bytes <= 262144
-        ):
+        identity_invalid = not self.model.strip() or not self.template_id.strip()
+        bound_invalid = (
+            not _integer(self.max_request_bytes) or not 1 <= self.max_request_bytes <= 262144
+        )
+        if identity_invalid or bound_invalid:
             raise ValueError("Invalid calibrated identity or request bound")
         if (
-            not isinstance(response_format, dict)
-            or response_format.get("type") != "json_schema"
-            or not isinstance(response_format.get("json_schema"), dict)
+            not isinstance(self.response_format, dict)
+            or self.response_format.get("type") != "json_schema"
+            or not isinstance(self.response_format.get("json_schema"), dict)
         ):
             raise ValueError("A calibrated JSON schema response format is required")
-        self._base_url = base_url.rstrip("/").removesuffix("/v1")
-        self._model = model
-        self._template_id = template_id
-        self._schema = self._encode(response_format)
-        self._max_request_bytes = max_request_bytes
+
+
+class LlamaStrictBackend:
+    def __init__(
+        self, config: LlamaStrictConfig, *, transport: httpx.AsyncBaseTransport | None = None
+    ) -> None:
+        config.validate()
+        self._base_url = config.base_url.rstrip("/").removesuffix("/v1")
+        self._model = config.model
+        self._template_id = config.template_id
+        self._schema = self._encode(config.response_format)
+        self._max_request_bytes = config.max_request_bytes
         self._client = httpx.AsyncClient(
             transport=transport,
             trust_env=False,
-            headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
+            headers={"Authorization": f"Bearer {config.api_key}"} if config.api_key else {},
         )
         self._lock = asyncio.Lock()
         self._verified_model = False
@@ -103,18 +111,21 @@ class LlamaStrictBackend:
         return copied_messages, copied_request
 
     def _validate(self, messages: list[ChatMessage], request: StrictRequest) -> None:
-        if (
-            request.model != self._model
-            or not _integer(request.output_tokens)
-            or not 1 <= request.output_tokens <= 4096
-            or not isinstance(request.temperature, (int, float))
+        output_invalid = (
+            not _integer(request.output_tokens) or not 1 <= request.output_tokens <= 4096
+        )
+        temperature_invalid = (
+            not isinstance(request.temperature, (int, float))
             or isinstance(request.temperature, bool)
             or request.temperature != 0
-            or not _integer(request.seed)
-            or request.seed != 42
-            or request.enable_thinking is not False
-            or self._encode(request.response_format) != self._schema
-        ):
+        )
+        sampling_invalid = (
+            not _integer(request.seed) or request.seed != 42 or request.enable_thinking is not False
+        )
+        identity_invalid = (
+            request.model != self._model or self._encode(request.response_format) != self._schema
+        )
+        if output_invalid or temperature_invalid or sampling_invalid or identity_invalid:
             raise StrictBackendUnavailable(
                 "Uncalibrated request model, schema or generation options"
             )
@@ -152,10 +163,27 @@ class LlamaStrictBackend:
 
         try:
             return await asyncio.wait_for(receive(), timeout=request_seconds)
-        except StrictBackendUnavailable:
-            raise
-        except (httpx.HTTPError, TimeoutError, ValueError) as error:
-            raise StrictBackendUnavailable("Counted backend request failed") from error
+        except httpx.HTTPStatusError as error:
+            status = error.response.status_code
+            if is_refusal(status):
+                setting = "MORGAN_LLM_API_KEY" if status in {401, 403} else "MORGAN_LLM_ENDPOINT"
+                raise ProviderRefused(self._base_url, status, setting) from error
+            raise self._unreachable(f"HTTP {status}", slow=True) from error
+        except (httpx.ConnectError, httpx.ConnectTimeout) as error:
+            raise self._unreachable(type(error).__name__, slow=False) from error
+        except (httpx.HTTPError, TimeoutError) as error:
+            raise self._unreachable(type(error).__name__, slow=True) from error
+        except ValueError as error:
+            raise StrictBackendUnavailable("Counted backend response was malformed") from error
+
+    def _unreachable(self, detail: str, *, slow: bool) -> ProviderUnreachable:
+        return ProviderUnreachable(
+            self._base_url,
+            detail,
+            setting="MORGAN_LLM_ENDPOINT",
+            outcome="slow" if slow else "unreachable",
+            verdict=f"answered too slowly or dropped ({detail})" if slow else None,
+        )
 
     async def count_request(
         self, messages: list[ChatMessage], *, request: StrictRequest
@@ -166,7 +194,7 @@ class LlamaStrictBackend:
                 self._count_request(messages, request=request), timeout=10
             )
         except TimeoutError as error:
-            raise StrictBackendUnavailable("Whole-request counting timed out") from error
+            raise self._unreachable("Whole-request counting timed out", slow=True) from error
 
     async def _count_request(
         self, messages: list[ChatMessage], *, request: StrictRequest
@@ -227,7 +255,7 @@ class LlamaStrictBackend:
                 self._generate_counted(messages, request=request, count=count), timeout=60
             )
         except TimeoutError as error:
-            raise StrictBackendUnavailable("Bounded generation timed out") from error
+            raise self._unreachable("Bounded generation timed out", slow=True) from error
 
     async def _generate_counted(
         self, messages: list[ChatMessage], *, request: StrictRequest, count: RequestCount
@@ -235,15 +263,16 @@ class LlamaStrictBackend:
         self._validate(messages, request)
         fingerprint = request_fingerprint(messages, request)
         async with self._lock:
-            if (
-                not isinstance(count, RequestCount)
-                or count.exact is not True
-                or not _integer(count.input_tokens)
-                or count.input_tokens <= 0
-                or count.request_fingerprint != fingerprint
-                or count != self._issued.get(fingerprint)
-                or time.monotonic() - self._issued_at.get(fingerprint, float("-inf")) > 300
-            ):
+            if not isinstance(count, RequestCount):
+                raise StrictBackendUnavailable(
+                    "Generation requires this backend's matching issued count"
+                )
+            invalid_tokens = not _integer(count.input_tokens) or count.input_tokens <= 0
+            wrong_receipt = count.request_fingerprint != fingerprint or count != self._issued.get(
+                fingerprint
+            )
+            expired = time.monotonic() - self._issued_at.get(fingerprint, float("-inf")) > 300
+            if count.exact is not True or invalid_tokens or wrong_receipt or expired:
                 raise StrictBackendUnavailable(
                     "Generation requires this backend's matching issued count"
                 )

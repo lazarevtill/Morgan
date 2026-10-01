@@ -8,7 +8,11 @@ import pytest
 from morgan_brain.config import Settings
 from morgan_brain.providers.context import StrictRequest, request_fingerprint
 from morgan_brain.providers.factory import build_strict_chat_backend
-from morgan_brain.providers.llama_strict import LlamaStrictBackend, StrictBackendUnavailable
+from morgan_brain.providers.llama_strict import (
+    LlamaStrictBackend,
+    LlamaStrictConfig,
+    StrictBackendUnavailable,
+)
 from morgan_brain.providers.wire import ChatMessage
 
 FORMAT = {
@@ -21,12 +25,14 @@ REQUEST = StrictRequest("ornith15", 32, FORMAT)
 
 def backend(handler, **kwargs):
     return LlamaStrictBackend(
-        base_url="http://fixture/v1",
-        model="ornith15",
-        template_id="calibration-v1",
-        response_format=FORMAT,
+        LlamaStrictConfig(
+            base_url="http://fixture/v1",
+            model="ornith15",
+            template_id="calibration-v1",
+            response_format=FORMAT,
+            **kwargs,
+        ),
         transport=httpx.MockTransport(handler),
-        **kwargs,
     )
 
 
@@ -198,11 +204,13 @@ def test_sampling_options_are_part_of_full_request_identity():
 def test_unknown_generic_backend_cannot_advertise_exact_capability():
     with pytest.raises(ValueError):
         LlamaStrictBackend(
-            base_url="https://fixture/v1",
-            model="ornith15",
-            template_id="v1",
-            response_format=FORMAT,
-            provider="openai",
+            LlamaStrictConfig(
+                base_url="https://fixture/v1",
+                model="ornith15",
+                template_id="v1",
+                response_format=FORMAT,
+                provider="openai",
+            )
         )
 
 
@@ -276,4 +284,123 @@ async def test_generation_snapshots_before_lock_wait():
     finally:
         if adapter._lock.locked():
             adapter._lock.release()
+        await adapter.aclose()
+
+
+@pytest.mark.parametrize("status", [401, 403, 400, 307, 503])
+@pytest.mark.asyncio
+async def test_http_failures_name_endpoint_and_setting_without_secret(status):
+    from morgan_brain.providers.wire import ProviderRefused, ProviderUnreachable
+
+    calls = []
+    secret = "synthetic-private-key"
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(status, text=secret, headers={"Location": "https://other/"})
+
+    adapter = backend(handler, api_key=secret)
+    try:
+        expected = ProviderUnreachable if status == 503 else ProviderRefused
+        with pytest.raises(expected) as caught:
+            await adapter.count_request(MESSAGES, request=REQUEST)
+        assert len(calls) == 1
+        assert caught.value.endpoint == "http://fixture"
+        setting = "MORGAN_LLM_API_KEY" if status in {401, 403} else "MORGAN_LLM_ENDPOINT"
+        assert caught.value.setting == setting
+        assert secret not in str(caught.value)
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.parametrize(
+    "error_type,outcome", [(httpx.ConnectError, "unreachable"), (httpx.ReadTimeout, "slow")]
+)
+@pytest.mark.asyncio
+async def test_transport_failure_preserves_named_provider_error(error_type, outcome):
+    from morgan_brain.providers.wire import ProviderUnreachable
+
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        raise error_type("synthetic-private-key", request=request)
+
+    adapter = backend(handler)
+    try:
+        with pytest.raises(ProviderUnreachable) as caught:
+            await adapter.count_request(MESSAGES, request=REQUEST)
+        assert len(calls) == 1
+        assert caught.value.outcome == outcome
+        assert caught.value.setting == "MORGAN_LLM_ENDPOINT"
+        assert "synthetic-private-key" not in str(caught.value)
+    finally:
+        await adapter.aclose()
+
+
+def test_output_setting_matches_calibrated_adapter_limit():
+    assert (
+        Settings(
+            strict_context_tokens=8192, strict_context_output_tokens=4096
+        ).strict_context_output_tokens
+        == 4096
+    )
+    with pytest.raises(ValueError):
+        Settings(strict_context_tokens=8192, strict_context_output_tokens=4097)
+
+
+def test_config_excludes_credentials_from_repr():
+    config = LlamaStrictConfig(
+        "http://fixture/v1", "ornith15", "v1", FORMAT, api_key="synthetic-private-key"
+    )
+    assert "synthetic-private-key" not in repr(config)
+
+
+@pytest.mark.parametrize("status", [401, 403, 400, 307, 503])
+@pytest.mark.asyncio
+async def test_generation_failure_preserves_named_error(status):
+    from morgan_brain.providers.wire import ProviderRefused, ProviderUnreachable
+
+    ordinary, calls = handler_factory()
+
+    def handler(request):
+        if request.url.path == "/v1/chat/completions":
+            calls.append((request.url.path, None))
+            return httpx.Response(status, text="synthetic-private-key")
+        return ordinary(request)
+
+    adapter = backend(handler)
+    try:
+        count = await adapter.count_request(MESSAGES, request=REQUEST)
+        expected = ProviderUnreachable if status == 503 else ProviderRefused
+        with pytest.raises(expected):
+            await adapter.generate_counted(MESSAGES, request=REQUEST, count=count)
+        assert len(calls) == 4
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.asyncio
+async def test_bundled_configuration_preserves_exact_http_payload_and_identity():
+    handler, calls = handler_factory()
+    adapter = backend(handler)
+    try:
+        count = await adapter.count_request(MESSAGES, request=REQUEST)
+        assert count.model == "ornith15"
+        assert count.template_id == "calibration-v1"
+        assert count.request_fingerprint == request_fingerprint(MESSAGES, REQUEST)
+        await adapter.generate_counted(MESSAGES, request=REQUEST, count=count)
+        assert calls[-1] == (
+            "/v1/chat/completions",
+            {
+                "model": "ornith15",
+                "messages": [m.to_openai() for m in MESSAGES],
+                "max_tokens": 32,
+                "temperature": 0.0,
+                "seed": 42,
+                "chat_template_kwargs": {"enable_thinking": False},
+                "response_format": FORMAT,
+            },
+        )
+    finally:
         await adapter.aclose()

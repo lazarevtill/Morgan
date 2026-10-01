@@ -23,7 +23,7 @@ from morgan_brain.providers.embeddings import (
     OpenAICompatEmbedder,
     RetryBudget,
 )
-from morgan_brain.providers.llama_strict import LlamaStrictBackend
+from morgan_brain.providers.llama_strict import LlamaStrictBackend, LlamaStrictConfig
 from morgan_brain.providers.openai_compat import OpenAICompatAdapter
 from morgan_brain.providers.wire import is_refusal
 
@@ -100,11 +100,13 @@ def build_strict_chat_backend(
     if backend != "llamacpp" or settings.llm_model != "ornith15" or response_format is None:
         raise ValueError("Strict backend requires a calibrated llama model and output schema")
     return LlamaStrictBackend(
-        base_url=settings.llm_endpoint,
-        model=settings.llm_model,
-        template_id="llamacpp:ornith15:whole-template-v1",
-        response_format=response_format,
-        api_key=settings.llm_api_key or None,
+        LlamaStrictConfig(
+            base_url=settings.llm_endpoint,
+            model=settings.llm_model,
+            template_id="llamacpp:ornith15:whole-template-v1",
+            response_format=response_format,
+            api_key=settings.llm_api_key or None,
+        )
     )
 
 

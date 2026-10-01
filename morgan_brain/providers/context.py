@@ -47,10 +47,10 @@ class RequestCount:
 class StrictChatBackend(Protocol):
     async def count_request(
         self, messages: list[ChatMessage], *, request: StrictRequest
-    ) -> RequestCount: ...
+    ) -> RequestCount:
+        """Count the complete calibrated request including the generation prefix."""
 
     async def generate_counted(
         self, messages: list[ChatMessage], *, request: StrictRequest, count: RequestCount
     ) -> ChatResult:
         """Generate with exactly the counted model/template/options and output cap."""
-        ...

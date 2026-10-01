@@ -95,7 +95,7 @@ class Settings(BaseSettings):
     # Explicit capability selection; construction makes no model/counter requests.
     strict_context_backend: Literal["disabled", "llamacpp"] = "disabled"
     strict_context_tokens: int = Field(default=4096, gt=0, le=1048576)
-    strict_context_output_tokens: int = Field(default=256, gt=0, le=65536)
+    strict_context_output_tokens: int = Field(default=256, gt=0, le=4096)
     strict_context_safety_tokens: int = Field(default=32, ge=0, le=65536)
 
     @model_validator(mode="after")
