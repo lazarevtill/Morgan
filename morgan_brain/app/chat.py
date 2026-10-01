@@ -8,11 +8,10 @@ as episodic memory so the next turn -- and the next consolidation -- can find th
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import cast
 
 from morgan_brain.app.strict_context import (
     AnswerBudget,
@@ -81,6 +80,10 @@ class TurnBasis:
     evidence: list[Memory] | None
 
 
+async def _no_backend_to_close() -> None:
+    """A counted capability may have no transport to release."""
+
+
 class Chat:
     def __init__(
         self,
@@ -103,9 +106,9 @@ class Chat:
 
     async def aclose(self) -> None:
         """Release the optional counted backend's per-context HTTP client."""
-        close = getattr(self._strict_backend, "aclose", None)
+        close = getattr(self._strict_backend, "aclose", _no_backend_to_close)
         if callable(close):
-            await cast(Callable[[], Awaitable[None]], close)()
+            await close()
 
     async def ask(
         self,
