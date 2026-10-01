@@ -17,11 +17,13 @@ from morgan_brain.config import Settings
 from morgan_brain.memory import fingerprint
 from morgan_brain.memory.checked_embedder import CheckedEmbedder
 from morgan_brain.memory.embedder import Embedder, FakeEmbedder
+from morgan_brain.providers.context import StrictChatBackend
 from morgan_brain.providers.embeddings import (
     BOUND_GRACE_SECONDS,
     OpenAICompatEmbedder,
     RetryBudget,
 )
+from morgan_brain.providers.llama_strict import LlamaStrictBackend, LlamaStrictConfig
 from morgan_brain.providers.openai_compat import OpenAICompatAdapter
 from morgan_brain.providers.wire import is_refusal
 
@@ -81,6 +83,30 @@ def build_chat_client(settings: Settings) -> OpenAICompatAdapter:
         provider="llamacpp",
         timeout=settings.llm_timeout_seconds,
         setting=endpoint.setting,
+    )
+
+
+def build_strict_chat_backend(
+    settings: Settings, *, response_format: dict[str, Any] | None = None
+) -> StrictChatBackend | None:
+    """Opt-in counted capability; construction performs no endpoint probes.
+
+    Unknown backends/models refuse rather than advertising an exact counter. The app
+    supplies its own output schema so provider wiring does not duplicate that contract.
+    """
+    backend = getattr(settings, "strict_context_backend", "disabled")
+    if backend == "disabled":
+        return None
+    if backend != "llamacpp" or settings.llm_model != "ornith15" or response_format is None:
+        raise ValueError("Strict backend requires a calibrated llama model and output schema")
+    return LlamaStrictBackend(
+        LlamaStrictConfig(
+            base_url=settings.llm_endpoint,
+            model=settings.llm_model,
+            template_id="llamacpp:ornith15:whole-template-v1",
+            response_format=response_format,
+            api_key=settings.llm_api_key or None,
+        )
     )
 
 

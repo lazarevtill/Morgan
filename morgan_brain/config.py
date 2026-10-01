@@ -92,6 +92,21 @@ class Settings(BaseSettings):
     # a remote llama-server on a GPU box reached over an overlay network from every client.
     llm_endpoint: str = "http://localhost:8081/v1"
     llm_model: str = "qwen2.5:7b"
+    # Explicit capability selection; construction makes no model/counter requests.
+    strict_context_backend: Literal["disabled", "llamacpp"] = "disabled"
+    strict_context_tokens: int = Field(default=4096, gt=0, le=1048576)
+    strict_context_output_tokens: int = Field(default=256, gt=0, le=4096)
+    strict_context_safety_tokens: int = Field(default=32, ge=0, le=65536)
+
+    @model_validator(mode="after")
+    def strict_context_reserves(self) -> Settings:
+        if (
+            self.strict_context_tokens
+            <= self.strict_context_output_tokens + self.strict_context_safety_tokens
+        ):
+            raise ValueError("Strict context budget must exceed output and safety reserves")
+        return self
+
     embedding_model: str = "mxbai-embed-large"
     #: Where embeddings are requested. Empty means the chat endpoint above serves both,
     #: which is the common single-server case. Set it when the chat server has embeddings
