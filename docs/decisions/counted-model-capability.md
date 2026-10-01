@@ -41,7 +41,6 @@ write authorization. Adapter contract tests cover malformed counts/usage, reques
 mutation across suspension, expired receipts, wrong model, output/finish errors and
 cleanup without contacting a model.
 
-
 Direct adapter construction takes a frozen LlamaStrictConfig and an optional test
 transport. The config names the endpoint, calibrated identity, schema and request
 bound; credentials are excluded from its repr. Schema bytes are captured at
