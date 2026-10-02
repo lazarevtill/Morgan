@@ -820,12 +820,14 @@ class MemoryModule:
                 raise ValueError("working context needs rebuilding before continuation")
             old_state = old.state if old and not rebuild else None
             ids = list(dict.fromkeys([*(old_state.event_ids() if old_state else []), *event_ids]))
+            basis_at = self._clock()
             records = []
             for offset in range(0, len(ids), 32):
                 resolved = await self.evidence(
                     user_id=context.user_id,
                     project=context.project,
                     evidence_ids=ids[offset : offset + 32],
+                    effective_at=basis_at,
                 )
                 if resolved.missing_ids:
                     raise ValueError("preview source unavailable")

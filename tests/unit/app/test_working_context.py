@@ -369,6 +369,105 @@ async def test_twenty_new_sources_and_sixteen_old_ids_use_only_two_bounded_reads
 @pytest.mark.parametrize(
     "active_at_cutoff", [False, True], ids=["activates-later", "already-active"]
 )
+async def test_proposal_preparation_sources_share_cutoff_before_model(
+    tmp_path, corrected_index, active_at_cutoff
+):
+    conn, gate, client, service = stack(tmp_path / "preparation-cutoff.db")
+    try:
+        for index in range(36):
+            await event(gate, f"source-{index}", f"Exact source {index}")
+        client.draft = {
+            "title": "Sixteen source view",
+            "decisions": [
+                {"choice": {"event_id": f"source-{i}", "quote": f"Exact source {i}"}}
+                for i in range(4)
+            ],
+            "open_questions": [
+                {"event_id": f"source-{i}", "quote": f"Exact source {i}"} for i in range(4, 8)
+            ],
+            "intentions": [
+                {"event_id": f"source-{i}", "quote": f"Exact source {i}"} for i in range(8, 12)
+            ],
+            "progress": [
+                {"event_id": f"source-{i}", "quote": f"Exact source {i}"} for i in range(12, 16)
+            ],
+        }
+        context = CheckpointContext(user_id="owner")
+        first = await service.preview(
+            "ctx", context=context, event_ids=[f"source-{i}" for i in range(16)]
+        )
+        await service.apply(first)
+        await gate.store(
+            Memory(
+                id="scheduled-correction",
+                user_id="owner",
+                project="personal",
+                content="Corrected measurement",
+                source=MemorySource.USER_STATED,
+                author_id="person",
+                created_at=NOW + timedelta(seconds=2),
+                revises_event_ids=[f"source-{corrected_index}"],
+            )
+        )
+        cutoff = NOW + timedelta(seconds=3 if active_at_cutoff else 1)
+        clock_reads = []
+
+        def advancing_clock():
+            value = cutoff if not clock_reads else NOW + timedelta(seconds=4)
+            clock_reads.append(value)
+            return value
+
+        original_view = gate._store.working_context_view
+
+        async def advance_after_view(**fields):
+            view = await original_view(**fields)
+            assert view.eligibility == "current"
+            gate._store._clock = advancing_clock
+            return view
+
+        gate._store.working_context_view = advance_after_view
+        reads = []
+        original_evidence = gate._store.evidence
+
+        async def recorded(**fields):
+            resolved = await original_evidence(**fields)
+            if len(fields["evidence_ids"]) != 16:
+                reads.append((len(fields["evidence_ids"]), fields.get("effective_at")))
+            return resolved
+
+        gate._store.evidence = recorded
+        client.draft = draft("source-35", "Exact source 35")
+        calls_before = len(client.calls)
+        before = conn.serialize()
+        if active_at_cutoff:
+            with pytest.raises(ValueError, match="preview source unavailable"):
+                await service.preview(
+                    "ctx", context=context, event_ids=[f"source-{i}" for i in range(16, 36)]
+                )
+            assert len(client.calls) == calls_before
+        else:
+            preview = await service.preview(
+                "ctx", context=context, event_ids=[f"source-{i}" for i in range(16, 36)]
+            )
+            assert len(client.calls) == calls_before + 1
+            assert len(preview.evidence_basis) == 36 and preview.input_seal
+            assert preview.state.event_ids() == ["source-35"]
+        assert conn.serialize() == before
+        assert clock_reads == [cutoff]
+        assert reads == [(32, cutoff), (4, cutoff)]
+        if not active_at_cutoff:
+            # Preparation is consistent at its early cutoff; apply rechecks the later instant.
+            with pytest.raises(EvidenceChanged):
+                await service.apply(preview)
+            assert conn.serialize() == before
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("corrected_index", [16, 34], ids=["first-chunk", "second-chunk"])
+@pytest.mark.parametrize(
+    "active_at_cutoff", [False, True], ids=["activates-later", "already-active"]
+)
 async def test_complete_proposal_basis_and_fact_share_apply_cutoff(
     tmp_path, corrected_index, active_at_cutoff
 ):
