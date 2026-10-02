@@ -34,9 +34,13 @@ tokens. This paired count excludes generated output, retries and maintenance and
 does not establish lower total realized cost or an improvement in usefulness.
 
 The complete run took 1,405.13 seconds, with 204 physical HTTP attempts including
-135 counting requests, 68 physical generation attempts and fourteen unknown-usage
-attempts. Known usage was 43,086 input and 17,233 output tokens. Unknown usage was
-excluded from known totals, never treated as zero. Resource retries were bounded
+135 counting requests, 67 actual chat requests and two metadata requests. The
+original ledger recorded 68 attempts, including one counting failure before chat.
+A later wire reconciliation found usage on 55 chat responses: 43,871 input and
+18,257 output tokens, including 785 input and 1,024 output omitted from the original
+ledger after a strict truncation rejection. Twelve actual chat attempts have unknown
+usage, excluded from known totals and never treated as zero. Frozen reports remain
+unchanged; these figures correct their physical accounting. Resource retries were bounded
 to transport failures, with no semantic retries. Only the working-view arm used
 model maintenance. Each arm used isolated storage and fresh continuation history;
 storage used the deterministic hash embedder, so this run measured no LAN embedding
@@ -55,3 +59,15 @@ extractions to source spans, and the [Hermes grounded-citations workflow](https:
 uses a citation ledger with literal evidence checks. Neither technique proves that
 a paraphrased claim follows from its quote. No external code was copied or installed;
 any candidate must be preregistered and tested on genuinely fresh cases.
+
+
+A later independent component audit examined all sixteen cases and forty-eight
+outputs without changing strict scores: four complete, two useful requested-draft
+components with other failures, three interpretation-sensitive, twenty-six partially
+useful but materially flawed, four wrong-task/deferred and nine unavailable. No
+pure citation/schema-only rejection, impossible prior-artifact reconstruction or
+external-execution expectation explained the result. The dominant errors were
+unsupported source-dependent claims, missed current or retained constraints and
+omitted requested components. The next frozen V5 experiment therefore tested a
+simple concise solution-first instruction with the unchanged one-string schema,
+rather than implementing the more complex quotation-block proposal above.
