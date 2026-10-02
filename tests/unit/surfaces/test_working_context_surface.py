@@ -1,5 +1,6 @@
 """Real local working-context adapters: scoped reads/writes, no model or endpoints."""
 
+import shlex
 import sqlite3
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -92,7 +93,13 @@ async def test_personal_default_ignores_repository_cwd_and_dispatch_scope(
     rendered = render_context(shown)
     assert "Reason: because the paper folds neatly" in rendered
     assert "unverified" in rendered
-    assert "morgan evidence '--project=personal' -- choice" in rendered
+    assert shlex.split(rendered.split("Details: ")[1]) == [
+        "morgan",
+        "evidence",
+        "--project=personal",
+        "--",
+        "choice",
+    ]
 
 
 async def test_corrected_source_remains_discoverable_and_renders_rebuild(local_settings):
@@ -173,7 +180,14 @@ def test_continuation_renderer_keeps_evidence_access_and_project_visible():
     )
     assert rendered.startswith("Draft: fold the sheet.")
     assert "Working context: gift (orchid)" in rendered
-    assert "morgan evidence '--project=orchid' -- source-one source-two" in rendered
+    assert shlex.split(rendered.split("Source basis: ")[1]) == [
+        "morgan",
+        "evidence",
+        "--project=orchid",
+        "--",
+        "source-one",
+        "source-two",
+    ]
 
 
 def test_truncated_listing_explains_bound_and_direct_lookup():
