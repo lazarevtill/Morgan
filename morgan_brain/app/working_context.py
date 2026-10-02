@@ -75,11 +75,7 @@ class WorkingContextService:
         ):
             raise ValueError("preview source unavailable or exceeds 4096 characters")
         messages = self._proposal_messages(old, old_state, records, event_ids)
-        prepared, response_format = structured_request(
-            messages, schema=WorkingContextDraft, json_mode=self._json_mode
-        )
-        if structured_input_size(prepared, response_format, model=self._model) > 49152:
-            raise ValueError("working context proposal input exceeds 49152 bytes")
+        self._check_proposal_size(messages)
         draft = (
             await self._proposer(messages)
             if self._proposer
@@ -106,6 +102,13 @@ class WorkingContextService:
                 if r.id in state.event_ids()
             ],
         )
+
+    def _check_proposal_size(self, messages: list[ChatMessage]) -> None:
+        prepared, response_format = structured_request(
+            messages, schema=WorkingContextDraft, json_mode=self._json_mode
+        )
+        if structured_input_size(prepared, response_format, model=self._model) > 49152:
+            raise ValueError("working context proposal input exceeds 49152 bytes")
 
     @staticmethod
     def _proposal_messages(

@@ -78,7 +78,11 @@ async def generate_structured[M: BaseModel](
     max_input_bytes: int | None = None,
 ) -> M:
     working, response_format = structured_request(messages, schema=schema, json_mode=json_mode)
-    if max_input_bytes is not None and (type(max_input_bytes) is not int or max_input_bytes <= 0):
+    if max_input_bytes is not None and (
+        isinstance(max_input_bytes, bool)
+        or not isinstance(max_input_bytes, int)
+        or max_input_bytes <= 0
+    ):
         raise ValueError("max_input_bytes must be a positive integer")
 
     last_error = ""

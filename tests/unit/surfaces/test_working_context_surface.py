@@ -379,10 +379,6 @@ async def test_proposal_lf_below_cap_refuses_when_windows_output_exceeds_cap(
 
 
 def test_rendered_option_like_identifiers_round_trip_real_parser():
-    import shlex
-
-    from morgan_brain.surfaces.cli.__main__ import build_parser
-
     rendered = render_context(
         {
             "response": "Draft",
