@@ -99,7 +99,6 @@ class WorkingContextService:
             evidence_basis=[
                 r.model_copy(deep=True, update={"embedding": None, "entities": []})
                 for r in records
-                if r.id in state.event_ids()
             ],
         )
 

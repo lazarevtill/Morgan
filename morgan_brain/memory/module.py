@@ -799,9 +799,10 @@ class MemoryModule:
     ) -> str:
         with write_transaction(self._conn):
             erasure_store.require_generation(self._conn, expected_generation)
-            await self._check_turn_evidence(
-                evidence_basis, owner=fact.user_id, project=fact.project
-            )
+            for offset in range(0, len(evidence_basis), 32):
+                await self._check_turn_evidence(
+                    evidence_basis[offset : offset + 32], owner=fact.user_id, project=fact.project
+                )
             return await self.put_checkpoint_fact(
                 fact, expected_fact_id=expected_fact_id, predicate=WORKING_CONTEXT_PREDICATE
             )

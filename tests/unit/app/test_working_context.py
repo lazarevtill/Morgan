@@ -344,21 +344,23 @@ async def test_twenty_new_sources_and_sixteen_old_ids_use_only_two_bounded_reads
         )
         await service.apply(first)
         reads = []
-        original = gate.evidence
+        original = gate._store.evidence
 
         async def recorded(**fields):
             reads.append(fields["evidence_ids"])
             return await original(**fields)
 
-        gate.evidence = recorded
+        gate._store.evidence = recorded
         client.draft = draft("source-35", "Exact source 35")
         second = await service.preview(
             "ctx", context=context, event_ids=[f"source-{i}" for i in range(16, 36)]
         )
         assert [len(ids) for ids in reads] == [32, 4]
         assert len(json.loads(client.calls[-1][0][-1].content)["sources"]) == 20
+        assert len(second.evidence_basis) == 36
         assert second.evidence_basis[0].embedding is None
         await service.apply(second)
+        assert [len(ids) for ids in reads] == [32, 4, 32, 4]
     finally:
         conn.close()
 
@@ -438,5 +440,28 @@ async def test_empty_persisted_context_is_invalid_in_show_and_list():
         assert view.state is None and view.sources == []
         listed = await gate.list_working_contexts(user_id="owner", project="personal")
         assert listed.items[0].view.eligibility == "invalid_state"
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("change", ["correction", "fork"])
+async def test_unselected_model_input_change_refuses_apply_atomically(change):
+    conn, gate, _, service = stack()
+    try:
+        await event(gate)
+        await event(gate, "candidate", "Measured width is 44 cm")
+        preview = await service.preview(
+            "context",
+            context=CheckpointContext(user_id="owner"),
+            event_ids=["decision", "candidate"],
+        )
+        assert preview.state.event_ids() == ["decision"]
+        assert {r.id for r in preview.evidence_basis} == {"decision", "candidate"}
+        await event(gate, "updated", "Measured width is 77 cm", revises_event_ids=["candidate"])
+        if change == "fork":
+            await event(gate, "other", "Measured width is 88 cm", revises_event_ids=["candidate"])
+        with pytest.raises(EvidenceChanged):
+            await service.apply(preview)
+        assert await gate.get_working_context("context", user_id="owner") is None
     finally:
         conn.close()

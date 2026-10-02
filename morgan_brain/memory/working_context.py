@@ -136,7 +136,7 @@ class WorkingContextPreview(BaseModel):
     expected_fact_id: str | None
     generation: int = Field(ge=0, strict=True)
     state: WorkingContext
-    evidence_basis: list[Memory] = Field(max_length=16)
+    evidence_basis: list[Memory] = Field(max_length=36)
 
 
 def working_subject(identity: str) -> str:
