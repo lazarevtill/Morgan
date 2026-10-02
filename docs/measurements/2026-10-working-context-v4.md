@@ -60,7 +60,6 @@ uses a citation ledger with literal evidence checks. Neither technique proves th
 a paraphrased claim follows from its quote. No external code was copied or installed;
 any candidate must be preregistered and tested on genuinely fresh cases.
 
-
 A later independent component audit examined all sixteen cases and forty-eight
 outputs without changing strict scores: four complete, two useful requested-draft
 components with other failures, three interpretation-sensitive, twenty-six partially
