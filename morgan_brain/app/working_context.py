@@ -97,8 +97,7 @@ class WorkingContextService:
             generation=generation,
             state=state,
             evidence_basis=[
-                r.model_copy(deep=True, update={"embedding": None, "entities": []})
-                for r in records
+                r.model_copy(deep=True, update={"embedding": None, "entities": []}) for r in records
             ],
         )
 
