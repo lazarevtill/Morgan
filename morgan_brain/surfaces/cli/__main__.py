@@ -416,7 +416,7 @@ def main(argv: list[str] | None = None) -> int:
     # getattr: not every verb takes --project. `import` decides the destination from the
     # holdout rule, so it deliberately has no such flag to read.
     named = getattr(args, "project", None)
-    detected = detect_project(Path.cwd())
+    detected = None if args.command == "context" else detect_project(Path.cwd())
     # The one place a `None` project resolves to `PERSONAL_PROJECT`, for every verb but
     # `remember`: it needs the unresolved value -- `None` exactly when the caller named
     # nothing and no repository was detected -- to report `project_defaulted` correctly.
@@ -424,7 +424,7 @@ def main(argv: list[str] | None = None) -> int:
     # to be called that; unlike the old `project == PERSONAL_PROJECT` check this replaced,
     # a detected name is never mistaken for a default here, because `detect_project` returns
     # `None`, not the sentinel string, when there is no repository to detect.
-    project = named or (None if args.command == "context" else detected) or PERSONAL_PROJECT
+    project = named or detected or PERSONAL_PROJECT
     remember_project = named or detected
     return asyncio.run(
         _dispatch(
