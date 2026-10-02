@@ -79,6 +79,15 @@ def continuation_messages(view: WorkingContextResult, text: str) -> list[ChatMes
     ]
 
 
+def _require_current_organizer(records: list[Memory], fact_id: str, basis_at: datetime) -> None:
+    organizer = next(record for record in records if record.id == fact_id)
+    if organizer.kind is not MemoryKind.SEMANTIC or (
+        (organizer.valid_from is not None and instant(organizer.valid_from) > instant(basis_at))
+        or (organizer.valid_to is not None and instant(organizer.valid_to) <= instant(basis_at))
+    ):
+        raise ValueError("Working context head is no longer current; prepare a fresh proposal")
+
+
 async def resume_work(
     *,
     gate: MemoryGate,
@@ -105,24 +114,18 @@ async def resume_work(
         )
         if view is None or view.eligibility != "current" or view.state is None:
             raise ValueError("No current working context; prepare and apply a fresh proposal")
-        ids = view.state.event_ids()
         # Including the fact itself lets existing turn validation reject concurrent head
         # replacement as well as source revisions, even during asynchronous embedding.
         basis_at = clock()
         basis = await gate.evidence(
             user_id=request.user_id,
             project=request.project,
-            evidence_ids=[view.fact_id, *ids],
+            evidence_ids=[view.fact_id, *view.state.event_ids()],
             effective_at=basis_at,
         )
         if basis.missing_ids:
             raise ValueError("Working context source unavailable")
-        organizer = next(record for record in basis.records if record.id == view.fact_id)
-        if organizer.kind is not MemoryKind.SEMANTIC or (
-            (organizer.valid_from is not None and instant(organizer.valid_from) > instant(basis_at))
-            or (organizer.valid_to is not None and instant(organizer.valid_to) <= instant(basis_at))
-        ):
-            raise ValueError("Working context head is no longer current; prepare a fresh proposal")
+        _require_current_organizer(basis.records, view.fact_id, basis_at)
         # Recheck exact spans and current source eligibility against the captured basis.
         # A scheduled correction can activate after the view was validated.
         validate_working_context(view.state, basis.records)
@@ -176,5 +179,5 @@ async def resume_work(
         fact_id=view.fact_id,
         response=reply,
         model_used=generated.model,
-        source_event_ids=ids,
+        source_event_ids=view.state.event_ids(),
     )
