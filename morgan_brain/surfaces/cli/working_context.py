@@ -247,7 +247,7 @@ def _command(*arguments: str) -> str:
 def render_context(data: dict[str, Any]) -> str:
     if "response" in data:
         command = _command(
-            "morgan", "evidence", *data["source_event_ids"], "--project", data["project"]
+            "morgan", "evidence", "--project=" + data["project"], "--", *data["source_event_ids"]
         )
         return (
             str(data["response"])
@@ -278,13 +278,13 @@ def render_context(data: dict[str, Any]) -> str:
             "morgan",
             "context",
             "propose",
-            data["context_id"],
             *rebuild,
             "--event-id",
             "CURRENT_SOURCE_ID",
-            "--project",
-            data["project"],
+            "--project=" + data["project"],
             "--json",
+            "--",
+            data["context_id"],
         )
         return (
             f"Working context {data['context_id']}: {status}.\n"
@@ -304,5 +304,7 @@ def render_context(data: dict[str, Any]) -> str:
     ]:
         lines.extend(label + ": " + item["quote"] for item in state[field])
     ids = list(dict.fromkeys(item["event_id"] for item in view["sources"]))
-    lines.append("Details: " + _command("morgan", "evidence", *ids, "--project", data["project"]))
+    lines.append(
+        "Details: " + _command("morgan", "evidence", "--project=" + data["project"], "--", *ids)
+    )
     return "\n".join(lines)

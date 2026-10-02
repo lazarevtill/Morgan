@@ -862,9 +862,10 @@ class MemoryModule:
                 state = WorkingContext.model_validate(raw)
             except (ValueError, RecursionError):
                 return invalid
-            resolved = await self.evidence(
-                user_id=user_id, project=project, evidence_ids=state.event_ids()
-            )
+            ids = state.event_ids()
+            if not ids:
+                return invalid
+            resolved = await self.evidence(user_id=user_id, project=project, evidence_ids=ids)
             try:
                 validate_working_context(state, resolved.records)
             except ValueError:

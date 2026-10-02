@@ -92,7 +92,7 @@ async def test_personal_default_ignores_repository_cwd_and_dispatch_scope(
     rendered = render_context(shown)
     assert "Reason: because the paper folds neatly" in rendered
     assert "unverified" in rendered
-    assert "morgan evidence choice --project personal" in rendered
+    assert "morgan evidence '--project=personal' -- choice" in rendered
 
 
 async def test_corrected_source_remains_discoverable_and_renders_rebuild(local_settings):
@@ -126,7 +126,7 @@ async def test_corrected_source_remains_discoverable_and_renders_rebuild(local_s
     shown = await read_context(local_settings, "gift")
     assert shown["view"]["state"] is None and shown["view"]["sources"] == []
     rendered = render_context(shown)
-    assert "context propose gift --rebuild --event-id CURRENT_SOURCE_ID" in rendered
+    assert "context propose --rebuild --event-id CURRENT_SOURCE_ID" in rendered
     assert "Review the proposal, then apply it explicitly" in rendered
     assert "four panels" not in rendered
 
@@ -173,7 +173,7 @@ def test_continuation_renderer_keeps_evidence_access_and_project_visible():
     )
     assert rendered.startswith("Draft: fold the sheet.")
     assert "Working context: gift (orchid)" in rendered
-    assert "morgan evidence source-one source-two --project orchid" in rendered
+    assert "morgan evidence '--project=orchid' -- source-one source-two" in rendered
 
 
 def test_truncated_listing_explains_bound_and_direct_lookup():
@@ -189,7 +189,7 @@ def test_truncated_listing_explains_bound_and_direct_lookup():
 
 def test_rendered_commands_quote_names_and_source_ids_as_literal_arguments():
     rendered = render_context({"context_id": "gift zine", "project": "my repo", "view": None})
-    assert "'gift zine'" in rendered and "'my repo'" in rendered
+    assert "'gift zine'" in rendered and "--project=my repo" in rendered
     draft = render_context(
         {
             "response": "Draft",
@@ -198,7 +198,7 @@ def test_rendered_commands_quote_names_and_source_ids_as_literal_arguments():
             "source_event_ids": ["source $(execute)"],
         }
     )
-    assert "'source $(execute)'" in draft and "'my repo'" in draft
+    assert "'source $(execute)'" in draft and "--project=my repo" in draft
 
 
 @pytest.mark.parametrize("operation", ["propose", "resume"])
@@ -362,3 +362,25 @@ async def test_proposal_lf_below_cap_refuses_when_windows_output_exceeds_cap(
     assert closed == ["resource", "resource"]
     view = await read_context(local_settings, "gift")
     assert view["view"] is None
+
+
+def test_rendered_option_like_identifiers_round_trip_real_parser():
+    import shlex
+
+    from morgan_brain.surfaces.cli.__main__ import build_parser
+
+    rendered = render_context(
+        {
+            "response": "Draft",
+            "context_id": "--context",
+            "project": "-repo",
+            "source_event_ids": ["--all-projects", "-source"],
+        }
+    )
+    command = rendered.split("Source basis: ")[1].strip()
+    args = build_parser().parse_args(shlex.split(command)[1:])
+    assert args.ids == ["--all-projects", "-source"] and args.project == "-repo"
+    rebuild = render_context({"context_id": "--context", "project": "-repo", "view": None})
+    command = next(line for line in rebuild.splitlines() if line.startswith("morgan "))
+    args = build_parser().parse_args(shlex.split(command)[1:])
+    assert args.context_id == "--context" and args.project == "-repo"

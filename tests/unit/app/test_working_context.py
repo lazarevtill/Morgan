@@ -414,3 +414,29 @@ async def test_structural_list_bounds_sorting_and_read_only_behavior():
                 await gate.list_working_contexts(user_id="owner", limit=invalid)
     finally:
         conn.close()
+
+
+async def test_empty_persisted_context_is_invalid_in_show_and_list():
+    from morgan_brain.memory.working_context import WORKING_CONTEXT_PREDICATE, WorkingContext
+    from morgan_brain.models import TemporalFact
+
+    conn, gate, _, _ = stack()
+    try:
+        identity = await gate.upsert_fact(
+            TemporalFact(
+                user_id="owner",
+                project="personal",
+                subject="working_checkpoint:empty",
+                predicate=WORKING_CONTEXT_PREDICATE,
+                object=WorkingContext(title="Empty legacy head").model_dump_json(),
+                valid_from=NOW,
+            ),
+            now=NOW,
+        )
+        view = await gate.get_working_context("empty", user_id="owner", project="personal")
+        assert view.fact_id == identity and view.eligibility == "invalid_state"
+        assert view.state is None and view.sources == []
+        listed = await gate.list_working_contexts(user_id="owner", project="personal")
+        assert listed.items[0].view.eligibility == "invalid_state"
+    finally:
+        conn.close()
