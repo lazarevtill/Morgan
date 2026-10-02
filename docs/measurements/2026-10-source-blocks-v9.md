@@ -33,10 +33,10 @@ Invalid shape/selected IDs/duplicates or oversized rendering make the slot unava
 repair or semantic retry. Valid IDs and adjacency do not establish entailment, present authority or
 truth.
 
-Identical model/options/budgets: temperature 0, seed 42, thinking false; 3,008 input + 1,024 output
-+ 64 reserve within 4,096; 49,152 full HTTP generation bytes; three transport attempts with bounded
-2/8-second backoff, no actual retries. Schema/directive overhead and failures count. Dynamic format
-keys create extra metadata reads; none are hidden or optimized away. Local hash embeddings,
+Identical model/options/budgets: temperature 0, seed 42, thinking false; 3,008 input, 1,024 output
+and 64 reserve within 4,096; 49,152 full HTTP generation bytes; three transport attempts with
+bounded 2/8-second backoff, no actual retries. Schema/directive overhead and failures count. Dynamic
+format keys create extra metadata reads; none are hidden or optimized away. Local hash embeddings,
 synthetic LAN only, no embedding endpoint requests. CPU/energy/server/grammar effects are unmeasured
 causal limits.
 
@@ -136,13 +136,13 @@ controls/reporting, not quality. All initial three review hashes match the initi
 hash-refresh amendment. A stale aggregate label was corrected to source_block_only before freeze,
 leaving counts/gate unchanged and review resolution history intact.
 
-- Initial freeze:9a3aff5d6ffb3bde8041f155a792b4b9585d1c57a6afb9af2e2985d5a23f45f2.
-- Bound freeze:573086bd988a229160f56f1f3443e0a5c2ec26e69cdbef5d38726453cf5c003a.
-- Fixture:174813d13d96ef7ef8c01be6354f0ade5f56ccae4cc4b1f2b7d7744dab696c4a.
-- Gold:480f40155e54341609170b108aad387e183f4742cf6d207c02f5437938316ff5.
-- Masked packet:2335cecb517b9159007c3df942ce9faf74142e2690e43ed5613298816b73f6ba.
-- Frozen grading JSON:8790cc61eefbc2d939378b121577232450fc62208bfa8cc59d6f28d4de15193f.
-- Frozen grading Markdown:a85f02de58b2cce357553de63ced1c922bb31c0dc1382f364cd1001604036e85.
++ Initial freeze:9a3aff5d6ffb3bde8041f155a792b4b9585d1c57a6afb9af2e2985d5a23f45f2.
++ Bound freeze:573086bd988a229160f56f1f3443e0a5c2ec26e69cdbef5d38726453cf5c003a.
++ Fixture:174813d13d96ef7ef8c01be6354f0ade5f56ccae4cc4b1f2b7d7744dab696c4a.
++ Gold:480f40155e54341609170b108aad387e183f4742cf6d207c02f5437938316ff5.
++ Masked packet:2335cecb517b9159007c3df942ce9faf74142e2690e43ed5613298816b73f6ba.
++ Frozen grading JSON:8790cc61eefbc2d939378b121577232450fc62208bfa8cc59d6f28d4de15193f.
++ Frozen grading Markdown:a85f02de58b2cce357553de63ced1c922bb31c0dc1382f364cd1001604036e85.
 
 After completion, a separate production P2 fix aligns all complete proposal-input basis chunks and
 resulting fact write to one captured apply cutoff. It does not rewrite this frozen experimental
@@ -172,3 +172,4 @@ The next bounded hypothesis will retain source blocks and request claim-local ex
 excerpts within the same model call. Literal matching can establish source-text provenance but
 cannot establish entailment or current authorization. This is a proposed next test, not a V9 change
 or quality claim; fresh independent cases and the fixed gate remain required.
+
