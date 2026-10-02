@@ -414,12 +414,17 @@ class MemoryModule:
                 history.append(key, message, project=context)
 
     async def _check_turn_evidence(
-        self, evidence_basis: list[Memory], *, owner: str, project: str
+        self,
+        evidence_basis: list[Memory],
+        *,
+        owner: str,
+        project: str,
+        now: datetime | None = None,
     ) -> None:
         """SQL-only validation inside the turn transaction; no provider I/O."""
         if not self._conn.in_transaction:
             raise ValueError("Turn evidence validation requires an active transaction")
-        basis_at = self._clock()
+        basis_at = now if now is not None else self._clock()
         resolved = await self.evidence(
             user_id=owner,
             project=project,
@@ -750,10 +755,11 @@ class MemoryModule:
         *,
         expected_fact_id: str | None,
         predicate: str = CHECKPOINT_PREDICATE,
+        now: datetime | None = None,
     ) -> str:
         """Create-only or compare-and-swap the structural checkpoint head under lock."""
         with write_transaction(self._conn):
-            now = self._clock()
+            now = now if now is not None else self._clock()
             heads = await self._temporal.current_facts(
                 user_id=fact.user_id, project=fact.project, subject=fact.subject
             )
@@ -850,6 +856,8 @@ class MemoryModule:
         preview: WorkingContextPreview,
     ) -> str:
         with write_transaction(self._conn):
+            # Attest the complete proposal and write its fact at the same instant.
+            now = self._clock()
             verify_inputs(
                 self._conn,
                 preview.input_seal,
@@ -864,10 +872,16 @@ class MemoryModule:
             erasure_store.require_generation(self._conn, expected_generation)
             for offset in range(0, len(evidence_basis), 32):
                 await self._check_turn_evidence(
-                    evidence_basis[offset : offset + 32], owner=fact.user_id, project=fact.project
+                    evidence_basis[offset : offset + 32],
+                    owner=fact.user_id,
+                    project=fact.project,
+                    now=now,
                 )
             return await self.put_checkpoint_fact(
-                fact, expected_fact_id=expected_fact_id, predicate=WORKING_CONTEXT_PREDICATE
+                fact,
+                expected_fact_id=expected_fact_id,
+                predicate=WORKING_CONTEXT_PREDICATE,
+                now=now,
             )
 
     async def working_context_list(

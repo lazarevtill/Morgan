@@ -365,6 +365,105 @@ async def test_twenty_new_sources_and_sixteen_old_ids_use_only_two_bounded_reads
         conn.close()
 
 
+@pytest.mark.parametrize("corrected_index", [16, 34], ids=["first-chunk", "second-chunk"])
+@pytest.mark.parametrize(
+    "active_at_cutoff", [False, True], ids=["activates-later", "already-active"]
+)
+async def test_complete_proposal_basis_and_fact_share_apply_cutoff(
+    tmp_path, corrected_index, active_at_cutoff
+):
+    conn, gate, client, service = stack(tmp_path / "cutoff.db")
+    try:
+        for index in range(36):
+            await event(gate, f"source-{index}", f"Exact source {index}")
+        client.draft = {
+            "title": "Sixteen source view",
+            "decisions": [
+                {"choice": {"event_id": f"source-{i}", "quote": f"Exact source {i}"}}
+                for i in range(4)
+            ],
+            "open_questions": [
+                {"event_id": f"source-{i}", "quote": f"Exact source {i}"} for i in range(4, 8)
+            ],
+            "intentions": [
+                {"event_id": f"source-{i}", "quote": f"Exact source {i}"} for i in range(8, 12)
+            ],
+            "progress": [
+                {"event_id": f"source-{i}", "quote": f"Exact source {i}"} for i in range(12, 16)
+            ],
+        }
+        context = CheckpointContext(user_id="owner")
+        first = await service.preview(
+            "ctx", context=context, event_ids=[f"source-{i}" for i in range(16)]
+        )
+        predecessor = await service.apply(first)
+        client.draft = draft("source-35", "Exact source 35")
+        preview = await service.preview(
+            "ctx", context=context, event_ids=[f"source-{i}" for i in range(16, 36)]
+        )
+        assert len(preview.evidence_basis) == 36
+        corrected_id = f"source-{corrected_index}"
+        assert corrected_id not in preview.state.event_ids()
+        assert preview.input_seal
+        # Removing an unselected input cannot evade the real database-keyed seal.
+        forged = preview.model_copy(
+            update={"evidence_basis": [r for r in preview.evidence_basis if r.id != corrected_id]}
+        )
+        sealed_before = conn.serialize()
+        with pytest.raises(ValueError, match="proposal input basis changed"):
+            await service.apply(forged)
+        assert conn.serialize() == sealed_before
+        activation = NOW + timedelta(seconds=2)
+        await gate.store(
+            Memory(
+                id="scheduled-correction",
+                user_id="owner",
+                project="personal",
+                content="Corrected measurement",
+                source=MemorySource.USER_STATED,
+                author_id="person",
+                created_at=activation,
+                revises_event_ids=[corrected_id],
+            )
+        )
+        cutoff = NOW + timedelta(seconds=3 if active_at_cutoff else 1)
+        clock_reads = []
+
+        def advancing_clock():
+            value = cutoff if not clock_reads else NOW + timedelta(seconds=4)
+            clock_reads.append(value)
+            return value
+
+        gate._store._clock = advancing_clock
+        reads = []
+        original = gate._store.evidence
+
+        async def recorded(**fields):
+            reads.append((len(fields["evidence_ids"]), fields["effective_at"]))
+            return await original(**fields)
+
+        gate._store.evidence = recorded
+        before = conn.serialize()
+        if active_at_cutoff:
+            with pytest.raises(EvidenceChanged):
+                await service.apply(preview)
+            assert conn.serialize() == before
+            assert reads == (
+                [(32, cutoff)] if corrected_index == 16 else [(32, cutoff), (4, cutoff)]
+            )
+        else:
+            identity = await service.apply(preview)
+            row = conn.execute("SELECT * FROM facts WHERE id=?", (identity,)).fetchone()
+            assert datetime.fromisoformat(row["valid_from"]) == cutoff
+            old = conn.execute("SELECT * FROM facts WHERE id=?", (predecessor,)).fetchone()
+            assert datetime.fromisoformat(old["valid_to"]) == cutoff
+            assert old["superseded_by"] == identity
+            assert reads == [(32, cutoff), (4, cutoff)]
+        assert clock_reads == [cutoff]
+    finally:
+        conn.close()
+
+
 @pytest.mark.parametrize("operation", ["ADD", "UPDATE", "DELETE"])
 async def test_automatic_consolidation_cannot_bypass_working_context_cas(operation):
     from morgan_brain.memory.knowledge.basis import UnsupportedConsolidationOperation
