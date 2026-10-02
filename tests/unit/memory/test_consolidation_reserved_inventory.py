@@ -213,3 +213,27 @@ async def test_legacy_predicate_fact_remains_recallable_consolidatable_and_not_a
         assert len(current) == 1 and current[0].object == "titanium"
     finally:
         conn.close()
+
+
+@pytest.mark.parametrize(
+    "subject,predicate",
+    [
+        ("working_checkpoint:gift", WORKING_CONTEXT_PREDICATE),
+        ("checkpoint:task", CHECKPOINT_PREDICATE),
+    ],
+)
+async def test_all_organizer_facts_are_excluded_from_recall(subject, predicate):
+    from morgan_brain.models import MemoryQuery
+
+    conn, gate = setup()
+    try:
+        reserved = await fact(gate, subject, predicate)
+        ordinary = await fact(gate, "legacy-person", predicate)
+        result = await gate.recall(
+            MemoryQuery(user_id="owner", project="personal", text="ceramic", top_k=10)
+        )
+        ids = {item.id for item in result.memories}
+        assert ordinary in ids
+        assert reserved not in ids
+    finally:
+        conn.close()

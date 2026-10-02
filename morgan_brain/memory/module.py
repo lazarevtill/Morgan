@@ -527,9 +527,7 @@ class MemoryModule:
             )
             fact_memories = []
             for fact in facts:
-                if fact.predicate == WORKING_CONTEXT_PREDICATE and is_organizer_fact(
-                    fact.subject, fact.predicate
-                ):
+                if is_organizer_fact(fact.subject, fact.predicate):
                     continue
                 state = resolver.support_state(fact)
                 if state not in ("inactive_support", "conflicted_support"):

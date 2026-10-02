@@ -15,7 +15,12 @@ from morgan_brain.memory.working_context import (
     current_source,
 )
 from morgan_brain.models import Memory
-from morgan_brain.providers.structured import JsonMode, generate_structured
+from morgan_brain.providers.structured import (
+    JsonMode,
+    generate_structured,
+    structured_input_size,
+    structured_request,
+)
 from morgan_brain.providers.wire import ChatClient, ChatMessage
 
 Proposer = Callable[[list[ChatMessage]], Awaitable[WorkingContextDraft]]
@@ -70,6 +75,11 @@ class WorkingContextService:
         ):
             raise ValueError("preview source unavailable or exceeds 4096 characters")
         messages = self._proposal_messages(old, old_state, records, event_ids)
+        prepared, response_format = structured_request(
+            messages, schema=WorkingContextDraft, json_mode=self._json_mode
+        )
+        if structured_input_size(prepared, response_format, model=self._model) > 49152:
+            raise ValueError("working context proposal input exceeds 49152 bytes")
         draft = (
             await self._proposer(messages)
             if self._proposer
@@ -80,6 +90,7 @@ class WorkingContextService:
                 schema=WorkingContextDraft,
                 json_mode=self._json_mode,
                 max_reask=0,
+                max_input_bytes=49152,
             )
         )
         state = draft.normalize(records)
@@ -144,7 +155,6 @@ class WorkingContextService:
             ),
         ]
         size = sum(len(m.content.encode("utf-8")) for m in messages)
-        size += len(json.dumps(WorkingContextDraft.model_json_schema()).encode("utf-8"))
         if size > 49152:
             raise ValueError("working context proposal input exceeds 49152 bytes")
         return messages
