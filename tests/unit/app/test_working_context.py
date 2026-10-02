@@ -726,7 +726,6 @@ async def test_structural_list_bounds_sorting_and_read_only_behavior():
 
 async def test_empty_persisted_context_is_invalid_in_show_and_list():
     from morgan_brain.memory.working_context import WORKING_CONTEXT_PREDICATE, WorkingContext
-    from morgan_brain.models import TemporalFact
 
     conn, gate, _, _ = stack()
     try:
