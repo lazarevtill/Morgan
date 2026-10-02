@@ -269,3 +269,47 @@ async def test_reported_backend_model_preserved_when_requested_alias_differs():
         assert row[0] == "model:replacement-backend-model"
     finally:
         conn.close()
+
+
+async def test_correction_activating_between_view_and_basis_rejected_before_model(monkeypatch):
+    from datetime import timedelta
+
+    conn = open_db(":memory:")
+    try:
+        gate, history, _ = await prepared(conn)
+        effective = NOW + timedelta(seconds=1)
+        await gate.store(
+            Memory(
+                id="future-correction",
+                user_id="owner",
+                content="Use two panels instead.",
+                source=MemorySource.USER_STATED,
+                author_id="person:owner",
+                created_at=effective,
+                revises_event_ids=["choice"],
+            )
+        )
+        original = gate.get_working_context
+
+        async def advance_after_view(*args, **kwargs):
+            view = await original(*args, **kwargs)
+            assert view.eligibility == "current"
+            gate._store._clock = lambda: effective
+            return view
+
+        monkeypatch.setattr(gate, "get_working_context", advance_after_view)
+        client = DraftClient(conn)
+        with pytest.raises(ValueError, match="source or exact span is not current"):
+            await run(gate, history, client)
+        assert client.messages == []
+        assert not history.recent(
+            session_key("owner", "new-agent-session"), project="personal", user_id="owner"
+        )
+        assert (
+            conn.execute(
+                "SELECT COUNT(*) FROM memories WHERE content=?", ("A usable four-panel draft.",)
+            ).fetchone()[0]
+            == 0
+        )
+    finally:
+        conn.close()

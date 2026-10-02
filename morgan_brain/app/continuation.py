@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict
 
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.store.history import SessionHistoryStore, session_key
-from morgan_brain.memory.working_context import WorkingContextResult
+from morgan_brain.memory.working_context import WorkingContextResult, validate_working_context
 from morgan_brain.models import Memory, MemorySource, Message, OriginKind, Role
 from morgan_brain.providers.structured import structured_input_size
 from morgan_brain.providers.wire import ChatClient, ChatMessage
@@ -112,6 +112,9 @@ async def resume_work(
         )
         if basis.missing_ids:
             raise ValueError("Working context source unavailable")
+        # Recheck exact spans and current source eligibility against the captured basis.
+        # A scheduled correction can activate after the view was validated.
+        validate_working_context(view.state, basis.records)
     messages = continuation_messages(view, request.text)
     if structured_input_size(messages, None, model=request.model) > 49152:
         raise ValueError("Continuation request exceeds 49152 bytes")
