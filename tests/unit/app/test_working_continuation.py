@@ -1,6 +1,6 @@
 """Useful continuation persists independently and rejects changes during generation."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -75,12 +75,12 @@ async def prepared(conn):
     return gate, history, proposal
 
 
-async def run(gate, history, client, session="new-agent-session"):
+async def run(gate, history, client, session="new-agent-session", clock=lambda: NOW):
     return await resume_work(
         gate=gate,
         history=history,
         client=client,
-        clock=lambda: NOW,
+        clock=clock,
         request=ContinuationRequest(
             model="synthetic",
             context_id="gift",
@@ -182,6 +182,66 @@ async def test_changed_basis_during_generation_never_commits_old_draft(change):
         conn.close()
 
 
+@pytest.mark.parametrize(
+    "view_seconds,capture_seconds",
+    [(0, 1), (0, 2), (0, 3), (3, 3)],
+    ids=["before", "boundary", "after", "current-replacement"],
+)
+async def test_scheduled_head_expiry_is_checked_before_model(
+    tmp_path, view_seconds, capture_seconds
+):
+    conn = open_db(str(tmp_path / "scheduled-head.db"))
+    try:
+        gate, history, _ = await prepared(conn)
+        old = (await gate.current_facts(user_id="owner"))[0]
+        replacement = old.model_copy(
+            update={
+                "id": "scheduled-head",
+                "object": old.object.replace("Gift", "Scheduled gift"),
+                "valid_from": NOW + timedelta(seconds=2),
+            }
+        )
+        await gate.upsert_fact(replacement)
+        current = NOW + timedelta(seconds=view_seconds)
+        expected_id = old.id if view_seconds < 2 else replacement.id
+        gate._store._clock = lambda: current
+        original = gate.get_working_context
+
+        async def advance_after_view(*args, **kwargs):
+            nonlocal current
+            view = await original(*args, **kwargs)
+            assert view.fact_id == expected_id
+            current = NOW + timedelta(seconds=capture_seconds)
+            return view
+
+        gate.get_working_context = advance_after_view
+        client = DraftClient(conn)
+        before = conn.serialize()
+        if capture_seconds >= 2 and view_seconds < 2:
+            with pytest.raises((ValueError, EvidenceChanged)):
+                await run(gate, history, client, clock=lambda: current)
+            assert client.messages == []
+            assert conn.serialize() == before
+        else:
+            result = await run(gate, history, client, clock=lambda: current)
+            assert result.fact_id == expected_id
+            assert client.messages
+            if view_seconds >= 2:
+                assert "Scheduled gift" in client.messages[1].content
+            assert (
+                len(
+                    history.recent(
+                        session_key("owner", "new-agent-session"),
+                        project="personal",
+                        user_id="owner",
+                    )
+                )
+                == 2
+            )
+    finally:
+        conn.close()
+
+
 async def test_truncated_generation_is_not_committed_as_a_useful_draft():
     conn = open_db(":memory:")
     try:
@@ -272,8 +332,6 @@ async def test_reported_backend_model_preserved_when_requested_alias_differs():
 
 
 async def test_correction_activating_between_view_and_basis_rejected_before_model(monkeypatch):
-    from datetime import timedelta
-
     conn = open_db(":memory:")
     try:
         gate, history, _ = await prepared(conn)
@@ -300,7 +358,8 @@ async def test_correction_activating_between_view_and_basis_rejected_before_mode
         monkeypatch.setattr(gate, "get_working_context", advance_after_view)
         client = DraftClient(conn)
         with pytest.raises(ValueError, match="source or exact span is not current"):
-            await run(gate, history, client)
+            # The correction is already effective at the explicitly captured basis cutoff.
+            await run(gate, history, client, clock=lambda: effective + timedelta(microseconds=1))
         assert client.messages == []
         assert not history.recent(
             session_key("owner", "new-agent-session"), project="personal", user_id="owner"

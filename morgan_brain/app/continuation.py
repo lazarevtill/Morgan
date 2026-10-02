@@ -10,9 +10,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from morgan_brain.memory.gate import MemoryGate
+from morgan_brain.memory.revisions import instant
 from morgan_brain.memory.store.history import SessionHistoryStore, session_key
 from morgan_brain.memory.working_context import WorkingContextResult, validate_working_context
-from morgan_brain.models import Memory, MemorySource, Message, OriginKind, Role
+from morgan_brain.models import Memory, MemoryKind, MemorySource, Message, OriginKind, Role
 from morgan_brain.providers.structured import structured_input_size
 from morgan_brain.providers.wire import ChatClient, ChatMessage
 
@@ -107,11 +108,21 @@ async def resume_work(
         ids = view.state.event_ids()
         # Including the fact itself lets existing turn validation reject concurrent head
         # replacement as well as source revisions, even during asynchronous embedding.
+        basis_at = clock()
         basis = await gate.evidence(
-            user_id=request.user_id, project=request.project, evidence_ids=[view.fact_id, *ids]
+            user_id=request.user_id,
+            project=request.project,
+            evidence_ids=[view.fact_id, *ids],
+            effective_at=basis_at,
         )
         if basis.missing_ids:
             raise ValueError("Working context source unavailable")
+        organizer = next(record for record in basis.records if record.id == view.fact_id)
+        if organizer.kind is not MemoryKind.SEMANTIC or (
+            (organizer.valid_from is not None and instant(organizer.valid_from) > instant(basis_at))
+            or (organizer.valid_to is not None and instant(organizer.valid_to) <= instant(basis_at))
+        ):
+            raise ValueError("Working context head is no longer current; prepare a fresh proposal")
         # Recheck exact spans and current source eligibility against the captured basis.
         # A scheduled correction can activate after the view was validated.
         validate_working_context(view.state, basis.records)
