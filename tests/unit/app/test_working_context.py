@@ -355,12 +355,12 @@ async def test_twenty_new_sources_and_sixteen_old_ids_use_only_two_bounded_reads
         second = await service.preview(
             "ctx", context=context, event_ids=[f"source-{i}" for i in range(16, 36)]
         )
-        assert [len(ids) for ids in reads] == [32, 4]
+        assert [len(ids) for ids in reads] == [16, 32, 4]
         assert len(json.loads(client.calls[-1][0][-1].content)["sources"]) == 20
         assert len(second.evidence_basis) == 36
         assert second.evidence_basis[0].embedding is None
         await service.apply(second)
-        assert [len(ids) for ids in reads] == [32, 4, 32, 4]
+        assert [len(ids) for ids in reads] == [16, 32, 4, 32, 4]
     finally:
         conn.close()
 
