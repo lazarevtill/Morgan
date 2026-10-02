@@ -1,6 +1,7 @@
 """Real scoped storage, bounded model selection and atomic lifecycle checks; no endpoints."""
 
 import json
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -15,7 +16,7 @@ from morgan_brain.memory.knowledge.consolidation import MemoryConsolidator
 from morgan_brain.memory.store.db import open_db
 from morgan_brain.memory.store.erasure import StoreInterruptedByForget
 from morgan_brain.memory.working_context import WorkingContextDraft
-from morgan_brain.models import Memory, MemoryQuery, MemorySource
+from morgan_brain.models import Memory, MemoryQuery, MemorySource, TemporalFact
 from morgan_brain.providers.wire import ChatResult
 
 NOW = datetime(2026, 10, 1, tzinfo=UTC)
@@ -122,6 +123,113 @@ async def test_personal_continuation_keeps_exact_reasons_roles_and_bounded_old_v
         assert await gate.get_working_context("ceramic", user_id="owner", project="other") is None
         recalled = await gate.recall(MemoryQuery(user_id="owner", text="ceramic"))
         assert resumed.fact_id not in {record.id for record in recalled.memories}
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("rebuild", [False, True])
+@pytest.mark.parametrize("predecessor", [False, True], ids=["future-only", "replacement"])
+async def test_pending_working_context_head_refuses_before_model(tmp_path, rebuild, predecessor):
+    conn, gate, client, service = stack(tmp_path / "pending-head.db")
+    context = CheckpointContext(user_id="owner")
+    try:
+        await event(gate)
+        initial = await service.preview("ctx", context=context, event_ids=["decision"])
+        if predecessor:
+            await service.apply(initial)
+            original = (await gate.current_facts(user_id="owner"))[0]
+        else:
+            from morgan_brain.memory.working_context import working_fact
+
+            original = working_fact(initial)
+        pending = original.model_copy(
+            update={
+                "id": "pending-head",
+                "object": original.object.replace("Unverified workspace", "Scheduled workspace"),
+                "valid_from": NOW + timedelta(seconds=2),
+            }
+        )
+        await gate.upsert_fact(pending)
+        view = await gate.get_working_context("ctx", user_id="owner")
+        assert (view.fact_id if view else None) == (original.id if predecessor else None)
+        calls_before = len(client.calls)
+        before = conn.serialize()
+        preview = None
+        with suppress(StaleCheckpoint):
+            preview = await service.preview(
+                "ctx", context=context, event_ids=["decision"], rebuild=rebuild
+            )
+        if preview is not None:
+            # Baseline generates against the effective predecessor/None, then structural CAS fails.
+            with pytest.raises(StaleCheckpoint):
+                await service.apply(preview)
+        assert conn.serialize() == before
+        assert len(client.calls) == calls_before
+        assert preview is None
+        gate._store._clock = lambda: NOW + timedelta(seconds=2)
+        effective = await service.preview(
+            "ctx", context=context, event_ids=["decision"], rebuild=rebuild
+        )
+        assert effective.expected_fact_id == pending.id
+        await service.apply(effective)
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("unrelated", ["subject", "project", "owner", "predicate"])
+async def test_unrelated_future_head_does_not_block_working_context_preview(unrelated):
+    conn, gate, _, service = stack()
+    context = CheckpointContext(user_id="owner")
+    try:
+        await event(gate)
+        preview = await service.preview("ctx", context=context, event_ids=["decision"])
+        identity = await service.apply(preview)
+        fields = {
+            "user_id": "owner",
+            "project": "personal",
+            "subject": "working_checkpoint:ctx",
+            "predicate": "working_context_v1",
+        }
+        fields[
+            {
+                "subject": "subject",
+                "project": "project",
+                "owner": "user_id",
+                "predicate": "predicate",
+            }[unrelated]
+        ] = "unrelated"
+        await gate.upsert_fact(
+            TemporalFact(
+                **fields, object="Future unrelated fact", valid_from=NOW + timedelta(seconds=2)
+            )
+        )
+        update = await service.preview("ctx", context=context, event_ids=["decision"])
+        assert update.expected_fact_id == identity
+        await service.apply(update)
+    finally:
+        conn.close()
+
+
+async def test_cancelled_future_head_allows_effective_predecessor_preview():
+    conn, gate, _, service = stack()
+    context = CheckpointContext(user_id="owner")
+    try:
+        await event(gate)
+        first = await service.preview("ctx", context=context, event_ids=["decision"])
+        identity = await service.apply(first)
+        old = (await gate.current_facts(user_id="owner"))[0]
+        pending = old.model_copy(
+            update={
+                "id": "cancelled-head",
+                "object": old.object.replace("Unverified workspace", "Scheduled workspace"),
+                "valid_from": NOW + timedelta(seconds=2),
+            }
+        )
+        await gate.upsert_fact(pending)
+        await gate.close_fact(pending.id, user_id="owner", project="personal", now=NOW)
+        update = await service.preview("ctx", context=context, event_ids=["decision"])
+        assert update.expected_fact_id == identity
+        await service.apply(update)
     finally:
         conn.close()
 

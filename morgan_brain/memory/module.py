@@ -800,6 +800,20 @@ class MemoryModule:
             state = RevisionResolver(self._episodics, conn=self._conn, at=now).support_state(fact)
             return fact.model_copy(update={"support_state": state})
 
+    async def _require_working_context_head(
+        self, context_id: str, *, context: CheckpointContext, expected_fact_id: str | None
+    ) -> None:
+        heads = await self._temporal.current_facts(
+            user_id=context.user_id, project=context.project, subject=working_subject(context_id)
+        )
+        if any(
+            head.predicate == WORKING_CONTEXT_PREDICATE and head.id != expected_fact_id
+            for head in heads
+        ):
+            raise StaleCheckpoint(
+                "working context has a pending structural head; wait until it becomes effective"
+            )
+
     async def prepare_working_context_inputs(
         self, context_id: str, *, context: CheckpointContext, event_ids: list[str], rebuild: bool
     ) -> WorkingContextInputs:
@@ -815,6 +829,9 @@ class MemoryModule:
                 user_id=context.user_id,
                 project=context.project,
                 subject=working_subject(context_id),
+            )
+            await self._require_working_context_head(
+                context_id, context=context, expected_fact_id=old.fact_id if old else None
             )
             if old is not None and old.eligibility != "current" and not rebuild:
                 raise ValueError("working context needs rebuilding before continuation")
