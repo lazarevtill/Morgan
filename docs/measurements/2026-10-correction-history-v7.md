@@ -131,4 +131,3 @@ PR59 remains experimental, open, non-draft and unmerged. Exact frozen-source CI 
 remote final Codex review remains pending as of this report. Product correctness and persistence
 do not override the failed quality screen. Further work must diagnose reader versus evaluation
 interpretation failures and test one bounded change with a fresh panel, preserving this result.
-
