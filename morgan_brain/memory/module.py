@@ -45,7 +45,7 @@ from morgan_brain.memory.knowledge.basis import (
     fact_fingerprint,
 )
 from morgan_brain.memory.knowledge.extract import extract_entity_names, words
-from morgan_brain.memory.proposal_integrity import seal_inputs, verify_inputs
+from morgan_brain.memory.proposal_integrity import ProposalInputs, seal_inputs, verify_inputs
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
@@ -834,11 +834,9 @@ class MemoryModule:
             ]
             seal = seal_inputs(
                 self._conn,
-                context_id=context_id,
-                context=context,
-                expected_fact_id=old.fact_id if old else None,
-                generation=generation,
-                records=records,
+                ProposalInputs(
+                    context_id, context, old.fact_id if old else None, generation, records
+                ),
             )
             return WorkingContextInputs(old, records, generation, seal)
 
@@ -855,11 +853,13 @@ class MemoryModule:
             verify_inputs(
                 self._conn,
                 preview.input_seal,
-                context_id=preview.context_id,
-                context=preview.context,
-                expected_fact_id=expected_fact_id,
-                generation=expected_generation,
-                records=evidence_basis,
+                ProposalInputs(
+                    preview.context_id,
+                    preview.context,
+                    expected_fact_id,
+                    expected_generation,
+                    evidence_basis,
+                ),
             )
             erasure_store.require_generation(self._conn, expected_generation)
             for offset in range(0, len(evidence_basis), 32):

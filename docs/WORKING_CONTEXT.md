@@ -63,7 +63,8 @@ uninitialized key refuses preparation rather than silently creating it.
 Bounds: 20 new source IDs per proposal, 16 selected source IDs, four items per
 category, 240 characters per quote, 16 KiB serialized state, and 49,152 serialized
 model-input bytes including JSON escaping and the request envelope. The proposal
-wrapper is bounded to 131,072 UTF-8 bytes. Listing returns at most 32 names with a truncation flag. These byte limits are
+wrapper is bounded to 131,072 UTF-8 bytes. Listing returns at most 32 names with a
+truncation flag. These byte limits are
 not a tokenizer budget: real token cost and usefulness require measured evaluation.
 
 ## Experimental evaluation status

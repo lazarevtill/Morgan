@@ -400,7 +400,7 @@ def _add_event_revisions(conn: sqlite3.Connection, _stores: Stores) -> None:
     )
 
 
-def _add_proposal_integrity(conn: sqlite3.Connection, stores: Stores) -> None:
+def _add_proposal_integrity(conn: sqlite3.Connection, _stores: Stores) -> None:
     proposal_key.create_schema(conn)
 
 
