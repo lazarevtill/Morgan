@@ -23,6 +23,13 @@ spans of their original events; offsets and evidence snapshots are checked again
 apply time. A changed head, corrected source, or forget operation rejects an obsolete
 proposal. Proposed reason links and category choices remain unverified.
 
+The proposal's complete input basis is sealed by a database-local integrity key.
+Edit the proposed title and source selections, leaving its context, head, generation,
+input evidence and seal intact. Removing even an unselected input invalidates the
+proposal. The seal survives a restart and is retained in database snapshots; it
+attests preparation inputs, not the owner's permission or the truth of a draft.
+Older receipt-free proposals must be prepared again.
+
 Continuation requires an unused session ID; `default` is reserved. An occupied key is
 rejected again atomically at commit, including occupation during model or embedding
 work. Continue subsequent work with another fresh session and the same context ID.
@@ -47,14 +54,16 @@ write. Resume requires an explicit fresh session ID.
 Personal and project scopes are independent of the reported client or author.
 
 Versioned contracts use `morgan.working_context.v1`,
-`morgan.working_context.preview.v1`, `morgan.working_context.result.v1`,
+`morgan.working_context.preview.v2`, `morgan.working_context.result.v1`,
 `morgan.working_context.list.v1`, and `morgan.continuation.v1`. Existing recall and
-consolidation exclude organizer JSON. No database migration or new service is needed;
-the organizer uses existing durable fact, evidence, revision, and erasure contracts.
+consolidation exclude organizer JSON. Light database migration 12 initializes one
+local integrity key, without changing source rows or adding a service. Reading an
+uninitialized key refuses preparation rather than silently creating it.
 
 Bounds: 20 new source IDs per proposal, 16 selected source IDs, four items per
-category, 240 characters per quote, 16 KiB serialized state, and 49 KiB model-input
-bytes. Listing returns at most 32 names with a truncation flag. These byte limits are
+category, 240 characters per quote, 16 KiB serialized state, and 49,152 serialized
+model-input bytes including JSON escaping and the request envelope. The proposal
+wrapper is bounded to 131,072 UTF-8 bytes. Listing returns at most 32 names with a truncation flag. These byte limits are
 not a tokenizer budget: real token cost and usefulness require measured evaluation.
 
 ## Experimental evaluation status

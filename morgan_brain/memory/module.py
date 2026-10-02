@@ -26,6 +26,7 @@ from morgan_brain.memory.checked_embedder import CheckedEmbedder
 from morgan_brain.memory.checkpoints import (
     CHECKPOINT_PREDICATE,
     AmbiguousCheckpoint,
+    CheckpointContext,
     StaleCheckpoint,
 )
 from morgan_brain.memory.embedder import Embedder
@@ -44,6 +45,7 @@ from morgan_brain.memory.knowledge.basis import (
     fact_fingerprint,
 )
 from morgan_brain.memory.knowledge.extract import extract_entity_names, words
+from morgan_brain.memory.proposal_integrity import seal_inputs, verify_inputs
 from morgan_brain.memory.recall import language
 from morgan_brain.memory.recall.floor import answer_margin, should_answer
 from morgan_brain.memory.recall.fusion import reciprocal_rank_fusion
@@ -74,8 +76,11 @@ from morgan_brain.memory.working_context import (
     AttributedSpan,
     WorkingContext,
     WorkingContextEntry,
+    WorkingContextInputs,
     WorkingContextList,
+    WorkingContextPreview,
     WorkingContextResult,
+    current_source,
     is_organizer_fact,
     validate_working_context,
     working_subject,
@@ -789,6 +794,54 @@ class MemoryModule:
             state = RevisionResolver(self._episodics, conn=self._conn, at=now).support_state(fact)
             return fact.model_copy(update={"support_state": state})
 
+    async def prepare_working_context_inputs(
+        self, context_id: str, *, context: CheckpointContext, event_ids: list[str], rebuild: bool
+    ) -> WorkingContextInputs:
+        if not 1 <= len(event_ids) <= 20 or len(set(event_ids)) != len(event_ids):
+            raise ValueError("preview requires 1 to 20 distinct new source IDs")
+        if not isinstance(rebuild, bool):
+            raise TypeError("rebuild must be an explicit boolean")
+        if self._conn.in_transaction:
+            raise ValueError("Preparation requires no active transaction")
+        with read_transaction(self._conn):
+            generation = erasure_store.read_generation(self._conn)
+            old = await self.working_context_view(
+                user_id=context.user_id,
+                project=context.project,
+                subject=working_subject(context_id),
+            )
+            if old is not None and old.eligibility != "current" and not rebuild:
+                raise ValueError("working context needs rebuilding before continuation")
+            old_state = old.state if old and not rebuild else None
+            ids = list(dict.fromkeys([*(old_state.event_ids() if old_state else []), *event_ids]))
+            records = []
+            for offset in range(0, len(ids), 32):
+                resolved = await self.evidence(
+                    user_id=context.user_id,
+                    project=context.project,
+                    evidence_ids=ids[offset : offset + 32],
+                )
+                if resolved.missing_ids:
+                    raise ValueError("preview source unavailable")
+                records.extend(resolved.records)
+            if any(
+                not current_source(r) or (r.id in event_ids and len(r.content) > 4096)
+                for r in records
+            ):
+                raise ValueError("preview source unavailable or exceeds 4096 characters")
+            records = [
+                r.model_copy(deep=True, update={"embedding": None, "entities": []}) for r in records
+            ]
+            seal = seal_inputs(
+                self._conn,
+                context_id=context_id,
+                context=context,
+                expected_fact_id=old.fact_id if old else None,
+                generation=generation,
+                records=records,
+            )
+            return WorkingContextInputs(old, records, generation, seal)
+
     async def put_working_context_fact(
         self,
         fact: TemporalFact,
@@ -796,8 +849,18 @@ class MemoryModule:
         expected_fact_id: str | None,
         expected_generation: int,
         evidence_basis: list[Memory],
+        preview: WorkingContextPreview,
     ) -> str:
         with write_transaction(self._conn):
+            verify_inputs(
+                self._conn,
+                preview.input_seal,
+                context_id=preview.context_id,
+                context=preview.context,
+                expected_fact_id=expected_fact_id,
+                generation=expected_generation,
+                records=evidence_basis,
+            )
             erasure_store.require_generation(self._conn, expected_generation)
             for offset in range(0, len(evidence_basis), 32):
                 await self._check_turn_evidence(

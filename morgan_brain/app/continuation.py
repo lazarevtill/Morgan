@@ -13,6 +13,7 @@ from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.store.history import SessionHistoryStore, session_key
 from morgan_brain.memory.working_context import WorkingContextResult
 from morgan_brain.models import Memory, MemorySource, Message, OriginKind, Role
+from morgan_brain.providers.structured import structured_input_size
 from morgan_brain.providers.wire import ChatClient, ChatMessage
 
 CONTINUATION_SYSTEM = (
@@ -112,7 +113,7 @@ async def resume_work(
         if basis.missing_ids:
             raise ValueError("Working context source unavailable")
     messages = continuation_messages(view, request.text)
-    if sum(len(m.content.encode("utf-8")) for m in messages) > 49152:
+    if structured_input_size(messages, None, model=request.model) > 49152:
         raise ValueError("Continuation request exceeds 49152 bytes")
     input_at = clock()
     generated = await client.agenerate(messages, model=request.model)

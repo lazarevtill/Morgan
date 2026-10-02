@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -127,16 +128,25 @@ class WorkingContextList(BaseModel):
 
 
 class WorkingContextPreview(BaseModel):
-    """Explicit apply input, not a signed receipt or authorization capability."""
+    """Editable output with attested input provenance; never an action permission."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    version: Literal["morgan.working_context.preview.v1"] = "morgan.working_context.preview.v1"
+    version: Literal["morgan.working_context.preview.v2"] = "morgan.working_context.preview.v2"
     context_id: str = Field(min_length=1, max_length=128, pattern=r"\S")
     context: CheckpointContext
     expected_fact_id: str | None
     generation: int = Field(ge=0, strict=True)
     state: WorkingContext
-    evidence_basis: list[Memory] = Field(max_length=36)
+    evidence_basis: list[Memory] = Field(min_length=1, max_length=36)
+    input_seal: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+
+
+@dataclass(frozen=True)
+class WorkingContextInputs:
+    old: WorkingContextResult | None
+    records: list[Memory]
+    generation: int
+    input_seal: str
 
 
 def working_subject(identity: str) -> str:

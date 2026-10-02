@@ -27,6 +27,7 @@ from morgan_brain.memory.knowledge.basis import ConsolidationBasis, Consolidatio
 from morgan_brain.memory.migrations import DatabaseNeedsMigration
 from morgan_brain.memory.store.history import SessionHistoryStore
 from morgan_brain.memory.working_context import (
+    WorkingContextInputs,
     WorkingContextList,
     WorkingContextPreview,
     WorkingContextResult,
@@ -301,6 +302,15 @@ class MemoryGate:
         )
         return CheckpointResult(fact=fact, state=state, eligibility=eligibility)
 
+    async def prepare_working_context_inputs(
+        self, context_id: str, *, context: CheckpointContext, event_ids: list[str], rebuild: bool
+    ) -> WorkingContextInputs:
+        self.require_writable()
+        self._require_scope(context.user_id, context.project)
+        return await self._store.prepare_working_context_inputs(
+            context_id, context=context, event_ids=event_ids, rebuild=rebuild
+        )
+
     async def put_working_context(self, preview: WorkingContextPreview) -> str:
         self.require_writable()
         preview = WorkingContextPreview.model_validate(preview.model_dump())
@@ -310,6 +320,7 @@ class MemoryGate:
             expected_fact_id=preview.expected_fact_id,
             expected_generation=preview.generation,
             evidence_basis=preview.evidence_basis,
+            preview=preview,
         )
 
     async def get_working_context(

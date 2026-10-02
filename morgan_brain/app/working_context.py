@@ -12,7 +12,6 @@ from morgan_brain.memory.working_context import (
     WorkingContextDraft,
     WorkingContextPreview,
     WorkingContextResult,
-    current_source,
 )
 from morgan_brain.models import Memory
 from morgan_brain.providers.structured import (
@@ -48,32 +47,11 @@ class WorkingContextService:
         rebuild: bool = False,
     ) -> WorkingContextPreview:
         """Read the old bounded view and at most twenty explicitly supplied new sources."""
-        if not 1 <= len(event_ids) <= 20 or len(set(event_ids)) != len(event_ids):
-            raise ValueError("preview requires 1 to 20 distinct new source IDs")
-        generation = self._gate.capture_erasure_generation()
-        old = await self._gate.get_working_context(
-            context_id, user_id=context.user_id, project=context.project
+        prepared = await self._gate.prepare_working_context_inputs(
+            context_id, context=context, event_ids=event_ids, rebuild=rebuild
         )
-        if not isinstance(rebuild, bool):
-            raise TypeError("rebuild must be an explicit boolean")
-        if old is not None and old.eligibility != "current" and not rebuild:
-            raise ValueError("working context needs rebuilding before continuation")
+        old, records, generation = prepared.old, prepared.records, prepared.generation
         old_state = old.state if old and not rebuild else None
-        ids = list(dict.fromkeys([*(old_state.event_ids() if old_state else []), *event_ids]))
-        records = []
-        for offset in range(0, len(ids), 32):
-            resolved = await self._gate.evidence(
-                user_id=context.user_id,
-                project=context.project,
-                evidence_ids=ids[offset : offset + 32],
-            )
-            if resolved.missing_ids:
-                raise ValueError("preview source unavailable")
-            records.extend(resolved.records)
-        if any(
-            not current_source(r) or (r.id in event_ids and len(r.content) > 4096) for r in records
-        ):
-            raise ValueError("preview source unavailable or exceeds 4096 characters")
         messages = self._proposal_messages(old, old_state, records, event_ids)
         self._check_proposal_size(messages)
         draft = (
@@ -96,6 +74,7 @@ class WorkingContextService:
             expected_fact_id=old.fact_id if old else None,
             generation=generation,
             state=state,
+            input_seal=prepared.input_seal,
             evidence_basis=[
                 r.model_copy(deep=True, update={"embedding": None, "entities": []}) for r in records
             ],

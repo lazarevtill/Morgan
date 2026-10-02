@@ -62,6 +62,14 @@ async def prepare(settings, *, project="personal", identity="gift"):
                 ],
             }
         ).normalize(basis)
+        inputs = await ctx.gate.prepare_working_context_inputs(
+            identity,
+            context=CheckpointContext(
+                user_id=settings.owner_user_id, project=project, author_id="agent:synthetic"
+            ),
+            event_ids=["choice"],
+            rebuild=False,
+        )
         return WorkingContextPreview(
             context_id=identity,
             context=CheckpointContext(
@@ -71,6 +79,7 @@ async def prepare(settings, *, project="personal", identity="gift"):
             generation=ctx.gate.capture_erasure_generation(),
             state=state,
             evidence_basis=basis,
+            input_seal=inputs.input_seal,
         )
     finally:
         ctx.conn.close()

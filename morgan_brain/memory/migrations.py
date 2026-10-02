@@ -31,7 +31,7 @@ from typing import NamedTuple
 
 from morgan_brain.memory.errors import DatabaseSchemaTooNew
 from morgan_brain.memory.knowledge.extract import extract_entity_names
-from morgan_brain.memory.store import erasure, projects, spaces, vectors
+from morgan_brain.memory.store import erasure, projects, proposal_key, spaces, vectors
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
 from morgan_brain.memory.store.tables import PROJECT_TABLES, project_tables
@@ -400,6 +400,10 @@ def _add_event_revisions(conn: sqlite3.Connection, _stores: Stores) -> None:
     )
 
 
+def _add_proposal_integrity(conn: sqlite3.Connection, stores: Stores) -> None:
+    proposal_key.create_schema(conn)
+
+
 _STEPS: tuple[Step, ...] = (
     # A capital counts as a name only where its position does not explain it.
     Step(1, "reextract entities", False, _reextract_entities),
@@ -413,6 +417,7 @@ _STEPS: tuple[Step, ...] = (
     Step(9, "fact evidence metadata", False, _add_fact_evidence),
     Step(10, "prepared store erasure generation", False, _add_erasure_generation),
     Step(11, "explicit event revisions", False, _add_event_revisions),
+    Step(12, "proposal input integrity", False, _add_proposal_integrity),
 )
 
 

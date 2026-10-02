@@ -56,6 +56,12 @@ async def prepared(conn):
             "intentions": [{"event_id": "choice", "quote": "Use four panels."}],
         }
     ).normalize(records)
+    inputs = await gate.prepare_working_context_inputs(
+        "gift",
+        context=CheckpointContext(user_id="owner", author_id="agent:planner"),
+        event_ids=["choice"],
+        rebuild=False,
+    )
     proposal = WorkingContextPreview(
         context_id="gift",
         context=CheckpointContext(user_id="owner", author_id="agent:planner"),
@@ -63,6 +69,7 @@ async def prepared(conn):
         generation=gate.capture_erasure_generation(),
         state=state,
         evidence_basis=records,
+        input_seal=inputs.input_seal,
     )
     await gate.put_working_context(proposal)
     return gate, history, proposal
@@ -129,10 +136,15 @@ async def test_changed_basis_during_generation_never_commits_old_draft(change):
         async def modify():
             if change == "head":
                 old = await gate.get_working_context("gift", user_id="owner")
+                inputs = await gate.prepare_working_context_inputs(
+                    "gift", context=proposal.context, event_ids=["choice"], rebuild=False
+                )
                 await gate.put_working_context(
                     proposal.model_copy(
                         update={
                             "expected_fact_id": old.fact_id,
+                            "input_seal": inputs.input_seal,
+                            "evidence_basis": inputs.records,
                             "state": proposal.state.model_copy(
                                 update={"title": "Gift, revised organization"}
                             ),
