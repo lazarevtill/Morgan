@@ -1,0 +1,105 @@
+{
+  "quality": {
+    "arms": {
+      "segment_locators": {
+        "available": 16,
+        "citation_error_candidates": 7,
+        "critical_error_candidates": 2,
+        "delivery_gap_candidates": 0,
+        "material_error_candidates": 7,
+        "scheduled": 16,
+        "strict_useful": 5,
+        "unavailable": 0,
+        "useful_components_with_failures": 11
+      },
+      "source_blocks": {
+        "available": 16,
+        "citation_error_candidates": 7,
+        "critical_error_candidates": 3,
+        "delivery_gap_candidates": 0,
+        "material_error_candidates": 2,
+        "scheduled": 16,
+        "strict_useful": 7,
+        "unavailable": 0,
+        "useful_components_with_failures": 9
+      }
+    },
+    "gate_pass": false,
+    "gold_sha256": "23787ff981b80a8c5b35df6975c22af2bc93531dcecac72ef532985145a34da3",
+    "grading_sha256": "d09074dd2b2a51eb357ea092ede5dbad25f24399cc54e8c5acd78f032778debe",
+    "limitations": [
+      "Independent grader read only contract, masked packet and frozen gold; no author contact, arm inference, network or other experiment files.",
+      "Output style can partly reveal a method; complete style blindness is not guaranteed.",
+      "Gold material checks and adjacent source-ID requirements were applied without a citation-count quota; original judgment sensitivities record plausible alternate interpretations.",
+      "All source packets declare audited full canonical delivery; no source-delivery gaps identified."
+    ],
+    "packet_sha256": "47080ab6fd00adfc76408c9d96711d2d51906e5d734934b4140a1867a919a0da",
+    "paired": {
+      "baseline_only": 4,
+      "both_useful": 3,
+      "candidate_only": 2,
+      "neither": 7
+    },
+    "version": "morgan.eval.aggregate.v11r.1"
+  },
+  "public_audit": {
+    "available": 4,
+    "fixture_sha256": "fb16314bcccf33673ae01128ea0737478136440ac43f7583b1d1bc3678d5aef8",
+    "freeze_sha256": "f2431ada721d363944081572b2f7053990a0393947b1f44ff784c1fc2e39c668",
+    "inclusive_seconds": 51.971312374807894,
+    "masking_limit": "Output style and sources may partly reveal method; arms/prompts/schemas/mapping/cost withheld from grader.",
+    "pass": true,
+    "physical": {
+      "cached_input_tokens": 897,
+      "chat_calls": 4,
+      "http_calls": 16,
+      "input_tokens": 3103,
+      "output_tokens": 1534,
+      "retries": 0,
+      "unknown_usage_calls": 0
+    },
+    "planned_slots": 4,
+    "retained_run_bytes_at_audit": 1797070,
+    "version": "morgan.eval.audit.v11r.1"
+  },
+  "closed_audit": {
+    "available": 32,
+    "fixture_sha256": "6322b1f324078957ed400477e99713975ca3b6555da27b13f51f95b0b2911dd7",
+    "freeze_sha256": "f2431ada721d363944081572b2f7053990a0393947b1f44ff784c1fc2e39c668",
+    "inclusive_seconds": 243.16011191694997,
+    "masking_limit": "Output style and sources may partly reveal method; arms/prompts/schemas/mapping/cost withheld from grader.",
+    "pass": true,
+    "physical": {
+      "cached_input_tokens": 9680,
+      "chat_calls": 32,
+      "http_calls": 128,
+      "input_tokens": 23421,
+      "output_tokens": 8639,
+      "retries": 0,
+      "unknown_usage_calls": 0
+    },
+    "planned_slots": 32,
+    "retained_run_bytes_at_audit": 13959153,
+    "version": "morgan.eval.audit.v11r.1"
+  },
+  "closed_arm_cost": {
+    "source_blocks": {
+      "slots": 16,
+      "input_tokens": 11061,
+      "output_tokens": 4537,
+      "cached_input_tokens": 4672,
+      "inclusive_slot_seconds": 135.5563030007761,
+      "final_bytes": 16155
+    },
+    "segment_locators": {
+      "slots": 16,
+      "input_tokens": 12360,
+      "output_tokens": 4102,
+      "cached_input_tokens": 5008,
+      "inclusive_slot_seconds": 107.51121787587181,
+      "final_bytes": 13896
+    }
+  },
+  "protocol_sha256": "f2431ada721d363944081572b2f7053990a0393947b1f44ff784c1fc2e39c668",
+  "production_head": "3eba43c4b690038fd343b913504ecdb03a76285d"
+}
