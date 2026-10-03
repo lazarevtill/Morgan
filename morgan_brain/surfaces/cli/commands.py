@@ -32,6 +32,7 @@ from morgan_brain.composition import (
 )
 from morgan_brain.config import Settings
 from morgan_brain.memory import snapshot
+from morgan_brain.memory.continuation_context import validate_request
 from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, MemorySource, OriginKind
 from morgan_brain.surfaces.cli.doctor import build_doctor_report
 from morgan_brain.surfaces.cli.payloads import (
@@ -228,8 +229,6 @@ async def cmd_inspect_context(
     args: argparse.Namespace, settings: Settings, project: str
 ) -> dict[str, Any]:
     """Read-only exact-source continuation inspection, with validation before DB open."""
-    from morgan_brain.memory.continuation_context import validate_request
-
     selections = _inspection_selections(getattr(args, "selections", None))
     proposed = selections if selections is not None else []
     cutoff = validate_request(

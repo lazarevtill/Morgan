@@ -90,7 +90,8 @@ Optional selections are a JSON array in a UTF-8 file:
 ```
 
 ```bash
-morgan context inspect event-2 --project personal --selections selections.json --effective-at 2026-10-03T12:00:00Z --json
+morgan context inspect event-2 --project personal --selections selections.json --effective-at
+2026-10-03T12:00:00Z --json
 ```
 
 Offsets count Unicode code points in the original content. SDK callers pass `selections`
@@ -99,10 +100,12 @@ remain unknown. Historical sources remain inspectable even when proposed quotes 
 
 The fixed source projection is `id`, `user_id`, `project`, `kind`, `content`, `source`,
 `author_id`, `origin_kind`, `scope`, `instruction_like`, `status`, `created_at`,
-`effective_at` (`valid_from` for facts, asserted `created_at` for events), `recorded_at`, `revises_event_ids`,
+`effective_at` (`valid_from` for facts, asserted `created_at` for events), `recorded_at`,
+`revises_event_ids`,
 `revision_root_id`, `revision_state`, `eligible_leaf_ids`, `eligible_leaf_count`,
 `revision_truncated`, `support_event_ids`, `support_state`, `valid_from`, `valid_to`,
-`superseded_by`, `last_confirmed`, `confidence`. Fact `content` is the existing deterministic `fact_memory` evidence representation of
+`superseded_by`, `last_confirmed`, `confidence`. Fact `content` is the existing deterministic
+`fact_memory` evidence representation of
 subject/predicate/object, rather than an original stored raw text field. Fact selection spans
 refer to that representation; episodic spans refer to original stored content. Classification
 and consolidation remain unverified.

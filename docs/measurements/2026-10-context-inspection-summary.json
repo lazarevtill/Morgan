@@ -1,0 +1,53 @@
+{
+  "first_panel": {
+    "export_freeze_sha256": "0ef4bc3a333d66dfa5c2cb95e73f5a6d70c83a52951b1502234c1571028e1a9f",
+    "frozen_literal_grade": {
+      "denominator": 16,
+      "passed": 0,
+      "rescored": false,
+      "valid": false
+    },
+    "gold_sha256": "123cd6dc48464374efc922d8a53afb963f856744282646201783761077bc8c3d",
+    "grade_sha256": "607af1d2ea1624cc94922beb14aa19de07163d4fd34a866fa33b2559b7236888",
+    "identical_database_schema_counts": 16,
+    "normalized_cases_sha256": "a57ecea73e2b5e45cc90b2107fb17722fa9712a81e12bb32785501bf82363c33",
+    "original_cases_sha256": "6aed9fa67a363d39f221067c19613dd2966f70eb507adddc20184636feda7f31",
+    "original_preparation_successes": 0,
+    "planned_cases": 16,
+    "runtime_freeze_sha256": "f1f741b4aeaa8018b62407fc7b6a209a2cf4097fea86b5f54e6b2ed1cfce30c1",
+    "scope_fields_normalized": 45,
+    "successful_cli_inspections": 16
+  },
+  "integration": {
+    "independent_review": "GO before structural refactor; final exact-head review required",
+    "passed": 1199,
+    "seconds": 93.79,
+    "skipped": 4
+  },
+  "lan_model_calls": 0,
+  "new_bounded_panel": {
+    "candidate_inspections": 0,
+    "cases_sha256": "bd7ef5414b415ac79c383b12819ba974cad14e6fa0aaf729b2e5ad48dd060b52",
+    "gold_preflight": "INVALID",
+    "gold_sha256": "679a108c88073023d39fcfef43e00e37743a4dc0d7c7e99dcc14fe89294f85f3",
+    "invalid_cases": 1,
+    "linked_mismatches": 2,
+    "model_calls": 0,
+    "planned_cases": 16,
+    "preflight_sha256": "3afb5bff6ffa31d9fb4a2b5f556b68004a3af0013bba6bb677d4f67690f162c9",
+    "stopped_without_repair_or_replacement": true
+  },
+  "pr59": "open/unmerged",
+  "product_scope": "read-only requested evidence and unverified exact selections",
+  "quality_acceptance": false,
+  "reader_gate": {
+    "critical_errors_allowed": 0,
+    "denominator": 16,
+    "must_not_be_worse_than_baseline": true,
+    "required_candidate_passes": 14,
+    "status": "not measured here; prior failures unchanged"
+  },
+  "reader_model_calls": 0,
+  "real_memory_migration": false,
+  "version": "morgan.context.inspection.measurement.v1"
+}

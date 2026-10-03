@@ -23,6 +23,7 @@ from morgan_brain.memory.checkpoints import (
     CheckpointResult,
     checkpoint_subject,
 )
+from morgan_brain.memory.continuation_context import assemble, validate_request
 from morgan_brain.memory.knowledge.basis import ConsolidationBasis, ConsolidationInput
 from morgan_brain.memory.migrations import DatabaseNeedsMigration
 from morgan_brain.memory.store.history import SessionHistoryStore
@@ -208,8 +209,6 @@ class MemoryGate:
         effective_at: datetime | None = None,
     ) -> dict[str, Any]:
         """Inspect explicit sources and exact caller selections; never authorize an action."""
-        from morgan_brain.memory.continuation_context import assemble, validate_request
-
         proposed = selections if selections is not None else []
         cutoff = validate_request(user_id, project, evidence_ids, proposed, effective_at)
         requested = list(evidence_ids)
@@ -218,11 +217,9 @@ class MemoryGate:
             user_id=user_id, project=project, evidence_ids=requested, effective_at=cutoff
         )
         return assemble(
+            result,
             user_id=user_id,
             project=project,
-            requested_ids=result.requested_ids,
-            records=result.records,
-            missing_ids=result.missing_ids,
             selections=proposed,
             cutoff=cutoff,
         )

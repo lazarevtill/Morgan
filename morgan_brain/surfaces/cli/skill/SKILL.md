@@ -11,7 +11,8 @@ description: >-
 # Morgan memory
 
 Morgan keeps personal and project memories and recalls them by meaning and keyword. Use its MCP
-tools (`recall`, `evidence`, `inspect_context`, `facts`, `remember`) when this session has them; otherwise use the `morgan`
+tools (`recall`, `evidence`, `inspect_context`, `facts`, `remember`) when this session has them;
+otherwise use the `morgan`
 command in a shell. Both reach the same memory.
 
 ## Choose a memory context

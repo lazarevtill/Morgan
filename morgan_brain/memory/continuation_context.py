@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from morgan_brain.memory.revisions import instant
 from morgan_brain.models import Memory, MemoryKind, MemoryStatus
+
+if TYPE_CHECKING:
+    from morgan_brain.memory.gate import EvidenceResult
 
 SECTIONS = ("current_facts", "completed_progress", "unresolved_questions", "relevant_constraints")
 FIELDS = (
@@ -40,6 +43,30 @@ FIELDS = (
 )
 
 
+def validate_selection(item: dict[str, Any], evidence_ids: list[str]) -> tuple[str, int, int]:
+    """Validate one explicit proposal and return its identity/span for uniqueness checks."""
+    if not isinstance(item, dict) or set(item) != {"section", "event_id", "start", "end", "quote"}:
+        raise ValueError("selection must have exactly section/event_id/start/end/quote")
+    if not isinstance(item["section"], str) or item["section"] not in SECTIONS:
+        raise ValueError("unknown selection section")
+    if not isinstance(item["event_id"], str) or item["event_id"] not in evidence_ids:
+        raise ValueError("selection source must be requested")
+    start, end, quote = item["start"], item["end"], item["quote"]
+    if (
+        not isinstance(start, int)
+        or isinstance(start, bool)
+        or not isinstance(end, int)
+        or isinstance(end, bool)
+        or not 0 <= start < end
+    ):
+        raise ValueError("selection offsets must be increasing Unicode code-point integers")
+    if not isinstance(quote, str) or not quote.strip() or not 1 <= len(quote) <= 240:
+        raise ValueError("quote must have 1..240 nonblank code points")
+    if end - start != len(quote):
+        raise ValueError("quote length must equal span length")
+    return item["event_id"], start, end
+
+
 def validate_request(
     user_id: str,
     project: str,
@@ -62,26 +89,7 @@ def validate_request(
         raise ValueError("inspect_context accepts at most 16 selections")
     spans: set[tuple[str, int, int]] = set()
     for item in selections:
-        if not isinstance(item, dict) or set(item) != {
-            "section",
-            "event_id",
-            "start",
-            "end",
-            "quote",
-        }:
-            raise ValueError("selection must have exactly section/event_id/start/end/quote")
-        if not isinstance(item["section"], str) or item["section"] not in SECTIONS:
-            raise ValueError("unknown selection section")
-        if not isinstance(item["event_id"], str) or item["event_id"] not in evidence_ids:
-            raise ValueError("selection source must be requested")
-        start, end, quote = item["start"], item["end"], item["quote"]
-        if type(start) is not int or type(end) is not int or not 0 <= start < end:
-            raise ValueError("selection offsets must be increasing Unicode code-point integers")
-        if not isinstance(quote, str) or not quote.strip() or not 1 <= len(quote) <= 240:
-            raise ValueError("quote must have 1..240 nonblank code points")
-        if end - start != len(quote):
-            raise ValueError("quote length must equal span length")
-        span = (item["event_id"], start, end)
+        span = validate_selection(item, evidence_ids)
         if span in spans:
             raise ValueError("duplicate selection span")
         spans.add(span)
@@ -132,16 +140,12 @@ def source_projection(memory: Memory) -> dict[str, Any]:
     }
 
 
-def assemble(
-    *,
-    user_id: str,
-    project: str,
-    requested_ids: list[str],
+def selected_sections(
     records: list[Memory],
-    missing_ids: list[str],
     selections: list[dict[str, Any]],
     cutoff: datetime,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    """Keep exact eligible proposals and explicit withholding diagnostics separate."""
     by_id = {record.id: record for record in records}
     sections: dict[str, Any] = {name: {"status": "unknown", "items": []} for name in SECTIONS}
     withheld = []
@@ -172,17 +176,29 @@ def assemble(
         section["items"].append(item)
         if section["status"] != "contested":
             section["status"] = "unverified"
-    supplied = set(by_id)
+    return sections, withheld
+
+
+def assemble(
+    evidence: EvidenceResult,
+    *,
+    user_id: str,
+    project: str,
+    selections: list[dict[str, Any]],
+    cutoff: datetime,
+) -> dict[str, Any]:
+    sections, withheld = selected_sections(evidence.records, selections, cutoff)
+    supplied = {record.id for record in evidence.records}
     result = {
         "version": "morgan.continuation_context.v1",
         "user_id": user_id,
         "project": project,
         "effective_at": cutoff.isoformat(),
-        "requested_ids": list(requested_ids),
-        "missing_ids": list(missing_ids),
+        "requested_ids": list(evidence.requested_ids),
+        "missing_ids": list(evidence.missing_ids),
         "coverage": "requested_ids_only",
         "action_authority": "none",
-        "sources": [source_projection(m) for m in records],
+        "sources": [source_projection(m) for m in evidence.records],
         "sections": sections,
         "withheld": withheld,
         "corrections": [
@@ -195,16 +211,16 @@ def assemble(
                 "eligible_leaf_count": m.eligible_leaf_count,
                 "revision_truncated": m.revision_truncated,
             }
-            for m in records
+            for m in evidence.records
             if m.revises_event_ids
         ],
         "unresolved_support_ids": sorted(
-            {i for m in records for i in m.support_event_ids} - supplied
+            {i for m in evidence.records for i in m.support_event_ids} - supplied
         ),
         "unresolved_branch_ids": sorted(
             {
                 i
-                for m in records
+                for m in evidence.records
                 for i in [
                     *m.revises_event_ids,
                     *m.eligible_leaf_ids,
