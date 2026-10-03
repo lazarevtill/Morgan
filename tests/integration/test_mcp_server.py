@@ -15,7 +15,18 @@ from tests.fakes import model_server
 
 
 def test_exposes_exactly_the_six_tools():
-    assert sorted(TOOL_NAMES) == ["ask_morgan", "evidence", "facts", "forget", "recall", "remember"]
+    assert sorted(TOOL_NAMES) == [
+        "ask_morgan",
+        "evidence",
+        "facts",
+        "forget",
+        "recall",
+        "remember",
+        "working_context_apply",
+        "working_context_propose",
+        "working_context_read",
+        "working_context_resume",
+    ]
 
 
 async def test_remember_then_recall_through_the_server(tmp_path, monkeypatch):

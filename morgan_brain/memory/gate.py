@@ -26,6 +26,14 @@ from morgan_brain.memory.checkpoints import (
 from morgan_brain.memory.knowledge.basis import ConsolidationBasis, ConsolidationInput
 from morgan_brain.memory.migrations import DatabaseNeedsMigration
 from morgan_brain.memory.store.history import SessionHistoryStore
+from morgan_brain.memory.working_context import (
+    WorkingContextInputs,
+    WorkingContextList,
+    WorkingContextPreview,
+    WorkingContextResult,
+    working_fact,
+    working_subject,
+)
 from morgan_brain.models import (
     PERSONAL_PROJECT,
     Memory,
@@ -142,6 +150,7 @@ class MemoryGate:
         history_entries: list[tuple[str, str, Message]],
         expected_generation: int,
         evidence_basis: list[Memory] | None = None,
+        fresh_session: bool = False,
     ) -> None:
         self.require_writable()
         for memory in memories:
@@ -152,6 +161,7 @@ class MemoryGate:
             history_entries=history_entries,
             expected_generation=expected_generation,
             evidence_basis=evidence_basis,
+            fresh_session=fresh_session,
         )
 
     async def get(self, memory_id: str, *, user_id: str) -> Memory | None:
@@ -291,6 +301,43 @@ class MemoryGate:
             "current" if fact.support_state == "current" else "unsupported"
         )
         return CheckpointResult(fact=fact, state=state, eligibility=eligibility)
+
+    async def prepare_working_context_inputs(
+        self, context_id: str, *, context: CheckpointContext, event_ids: list[str], rebuild: bool
+    ) -> WorkingContextInputs:
+        self.require_writable()
+        self._require_scope(context.user_id, context.project)
+        return await self._store.prepare_working_context_inputs(
+            context_id, context=context, event_ids=event_ids, rebuild=rebuild
+        )
+
+    async def put_working_context(self, preview: WorkingContextPreview) -> str:
+        self.require_writable()
+        preview = WorkingContextPreview.model_validate(preview.model_dump())
+        self._require_scope(preview.context.user_id, preview.context.project)
+        return await self._store.put_working_context_fact(
+            working_fact(preview),
+            expected_fact_id=preview.expected_fact_id,
+            expected_generation=preview.generation,
+            evidence_basis=preview.evidence_basis,
+            preview=preview,
+        )
+
+    async def get_working_context(
+        self, context_id: str, *, user_id: str, project: str = PERSONAL_PROJECT
+    ) -> WorkingContextResult | None:
+        self._require_scope(user_id, project)
+        return await self._store.working_context_view(
+            user_id=user_id, project=project, subject=working_subject(context_id)
+        )
+
+    async def list_working_contexts(
+        self, *, user_id: str, project: str = PERSONAL_PROJECT, limit: int = 32
+    ) -> WorkingContextList:
+        self._require_scope(user_id, project)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 32:
+            raise ValueError("working context list limit must be an integer from 1 to 32")
+        return await self._store.working_context_list(user_id=user_id, project=project, limit=limit)
 
     async def record_project(
         self,

@@ -89,6 +89,10 @@ class OpenAICompatAdapter:
     # ChatClient protocol
     # ------------------------------------------------------------------
 
+    async def aclose(self) -> None:
+        """Release this adapter's HTTP pool after a one-shot application command."""
+        await self._client.close()
+
     async def agenerate(
         self,
         messages: list[ChatMessage],
@@ -128,7 +132,7 @@ class OpenAICompatAdapter:
 
         return ChatResult(
             text=text,
-            model=model,
+            model=response.model,
             tool_calls=tool_calls,
             usage=usage,
             finish_reason=finish_reason,

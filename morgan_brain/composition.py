@@ -33,7 +33,7 @@ from morgan_brain.memory.migrations import (
     upgrade,
 )
 from morgan_brain.memory.module import MemoryModule
-from morgan_brain.memory.store import erasure, spaces, vectors
+from morgan_brain.memory.store import erasure, proposal_key, spaces, vectors
 from morgan_brain.memory.store.db import open_db, open_readonly, write_transaction
 from morgan_brain.memory.store.entities import EntityIndex
 from morgan_brain.memory.store.episodic import EpisodicStore
@@ -145,6 +145,7 @@ def build_memory_module(
     if is_new:
         with write_transaction(conn):
             erasure.create_schema(conn)
+            proposal_key.create_schema(conn)
     stores = migration_stores(conn)
     EmbeddingSpaceStore(conn)
     ProjectStore(conn)

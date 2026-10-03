@@ -153,16 +153,18 @@ come in" are answered by the directory names.
   regression, and so is sending the owner to check a server that works.
 - **stdout is a protocol on both surfaces.** `--json` output and the MCP stdio transport are
   parsed by machines; all logs go to stderr. Never `print()` diagnostics from library code.
-- **Nothing runs a model unasked.** `ask` and `consolidate` call the chat model; nothing else
-  does, and nothing runs on a schedule. Consolidation is on demand (or the owner's own cron).
+- **Nothing runs a model unasked.** `ask`, `consolidate`, `context propose`, and `context resume`
+  call the chat model only when requested; nothing runs on a schedule. Consolidation is on
+  demand (or the owner's own cron).
   Nothing embeds at open, in a hook or in a sweep. The active embedding space is fingerprinted
   at a process's first embedding call, riding on that call, or by `morgan migrate` once its
   wave has committed; `doctor` embeds when it is run, and `doctor --vectors` re-embeds a
   sample when asked.
 - **Every MCP tool declares what it does.** `TOOL_ANNOTATIONS` states all four hints for every
-  tool, and only a tool that changes nothing claims read-only: a client may run those
-  unprompted, and `install-skill` allows exactly those in Claude Code. `ask_morgan` stores the
-  exchange, so it is a write.
+  tool, and only a tool that changes nothing claims read-only. `install-skill` auto-allows
+  repeatable read-only tools in Claude Code; model-backed proposals remain excluded even
+  though they do not write. `ask_morgan` and working-context resume store the exchange, so
+  they are writes.
 - **A project is a repository.** The CLI names it after the enclosing git repository; a linked
   worktree belongs to the repository it was created from, a submodule is its own. Outside one,
   the project is `personal`. One resolution answers the name and the repository together, so

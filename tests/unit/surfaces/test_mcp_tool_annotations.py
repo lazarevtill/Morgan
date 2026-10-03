@@ -8,9 +8,14 @@ judged by each client's own defaults, which is not a decision this server should
 
 from __future__ import annotations
 
-from morgan_brain.surfaces.mcp_server import build_server
+from morgan_brain.surfaces.mcp_server import READ_ONLY_TOOLS, build_server
 
 HINTS = ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")
+
+
+def test_model_backed_proposals_are_not_auto_approved():
+    assert "working_context_propose" not in READ_ONLY_TOOLS
+    assert "working_context_read" in READ_ONLY_TOOLS
 
 
 async def _declared(tmp_path, monkeypatch):
@@ -25,7 +30,13 @@ async def test_only_recall_evidence_and_facts_declare_themselves_read_only(tmp_p
 
     read_only = {name for name, hints in declared.items() if hints and hints.readOnlyHint}
 
-    assert read_only == {"recall", "evidence", "facts"}
+    assert read_only == {
+        "recall",
+        "evidence",
+        "facts",
+        "working_context_read",
+        "working_context_propose",
+    }
 
 
 async def test_forget_is_the_one_destructive_tool(tmp_path, monkeypatch):

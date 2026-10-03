@@ -140,3 +140,35 @@ def test_from_openai_tool_calls_invalid_json():
 
     result = _from_openai_tool_calls([FakeTc()])
     assert result[0].arguments == {}
+
+
+async def test_generation_keeps_backend_model_identity_instead_of_requested_alias():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    adapter = OpenAICompatAdapter(
+        base_url="http://unused/v1",
+        api_key="synthetic",
+        provider="p",
+        setting="MORGAN_LLM_ENDPOINT",
+    )
+    create = AsyncMock(
+        return_value=SimpleNamespace(
+            model="resolved-backend-v2",
+            usage=None,
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content="Draft", tool_calls=None), finish_reason="stop"
+                )
+            ],
+        )
+    )
+    adapter._client.chat.completions.create = create
+    try:
+        result = await adapter.agenerate(
+            [ChatMessage(role="user", content="Synthetic prompt")], model="requested-alias"
+        )
+        assert create.call_args.kwargs["model"] == "requested-alias"
+        assert result.model == "resolved-backend-v2"
+    finally:
+        await adapter.aclose()

@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from morgan_brain.surfaces.cli.working_context import render_context
+
 
 def _render_remember(data: dict[str, Any]) -> str:
     return f"Stored memory {data['id']} in project {data['project']!r}."
@@ -343,6 +345,7 @@ def _render_evidence(data: dict[str, Any]) -> str:
 
 
 RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
+    "context": render_context,
     "remember": _render_remember,
     "recall": _render_recall,
     "facts": _render_facts,
