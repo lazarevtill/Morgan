@@ -90,8 +90,8 @@ Optional selections are a JSON array in a UTF-8 file:
 ```
 
 ```bash
-morgan context inspect event-2 --project personal --selections selections.json --effective-at
-2026-10-03T12:00:00Z --json
+morgan context inspect event-2 --project personal --selections selections.json \
+  --effective-at 2026-10-03T12:00:00Z --json
 ```
 
 Offsets count Unicode code points in the original content. SDK callers pass `selections`
