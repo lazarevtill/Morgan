@@ -14,7 +14,6 @@ The measured core is pinned to commit `1b9c1559f50eee8555708301bc4d10468a6fbec1`
 PR62; use its merged public main revision rather than assuming a packaged release
 contains this example. This is a tested source revision, not a new version/tag release.
 
-
 From a Morgan checkout with its existing dependencies, run:
 
 ```sh
