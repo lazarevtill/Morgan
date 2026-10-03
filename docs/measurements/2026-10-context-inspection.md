@@ -112,7 +112,8 @@ synthetic database files separately occupy 5,963,776 bytes.
 
 Observed parent-process peak RSS was 82,345,984 bytes, with at least 5,838,700,544 bytes of
 reclaimable RAM across recorded pre/post-case observations. Child peak RSS was not independently
-measured; bounded pipe capture is not a proof of its peak. Platform/operator review tokens and monetary cost were
+measured; bounded pipe capture is not a proof of its peak. Platform/operator review tokens and
+monetary cost were
 not measured. These limits keep the measured per-inspection result distinct from total
 project cost. This panel demonstrates a bounded read-only tool for caller-selected evidence;
 it does not satisfy or replace the separate freeform-reader acceptance gate for PR59.
