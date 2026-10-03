@@ -146,3 +146,22 @@ public copy; `original-export-freeze.json` binds the immutable local originals.
 Large database/snapshot files and unmodified original receipts remain on the selected
 Mac. No physical erasure of previously published Git history is claimed. This report
 does not justify merging PR59.
+
+## Scope of the earlier publication metadata
+
+A separate read-only audit inspected all 891 original ZIP members and all 893
+path-normalized members. The earlier archive contained synthetic fixture/source IDs,
+run timing/resource metadata, and absolute local workstation paths in 16 members:
+the OS username component, workspace layout, source checkout locations, selection-file
+paths and synthetic snapshot locations. Workspace/project labels also appear in the
+instrument. These are operational metadata, not real personal-memory records.
+
+All 20,000 fixtures matched the retained synthetic generator output. Source-content
+occurrences matched the synthetic diary prefix or the public example's literal texts.
+The audit found no HTTP/IPv4 endpoint addresses, recognizable credential formats or
+credential-assignment candidates in either archive, and no actual private-memory
+content. This was a source-grounded audit plus pattern screening, not a universal
+proof that every possible secret format could be recognized. No sensitive values
+are reproduced here. The current public copy contains no workstation home paths;
+earlier Git commits retain their original metadata. No history rewrite, purge,
+snapshot deletion or physical erasure was performed.

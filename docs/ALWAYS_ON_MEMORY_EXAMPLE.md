@@ -9,11 +9,23 @@ service and does not import anyone's memory.
 
 ## A small offline example
 
+The measured core is pinned to commit `1b9c1559f50eee8555708301bc4d10468a6fbec1`
+(package metadata version `0.2.0`, Python 3.12+). The integration example accompanies
+PR62; use its merged public main revision rather than assuming a packaged release
+contains this example. This is a tested source revision, not a new version/tag release.
+
+
 From a Morgan checkout with its existing dependencies, run:
 
 ```sh
 PYTHONPATH=. python examples/context_inspect_zero_model.py /tmp/morgan-synthetic-demo
 ```
+
+Use a Python environment containing Morgan's dependencies; an isolated `uv tool`
+installation does not put those dependencies into every system Python environment.
+`PYTHONPATH=.` selects this checkout's code. The example was also executed under
+guards denying socket/DNS access and chat/live-model construction: six offline hash
+embeddings, zero network attempts and zero model-construction attempts.
 
 The directory must be new. The example uses only synthetic records, one explicit
 owner/project and the deterministic hash embedding backend at width 1024. Hash
