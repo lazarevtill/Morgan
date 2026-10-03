@@ -8,6 +8,7 @@ here rather than reimplementing a single memory operation between them.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -203,6 +204,54 @@ async def cmd_recall(args: argparse.Namespace, settings: Settings, project: str)
     result = recall_result(outcome, project=project, all_projects=args.all_projects)
     result["effective_at"] = effective_at.isoformat() if effective_at else None
     return result
+
+
+def _inspection_selections(selections: Any) -> Any:
+    if isinstance(selections, str):
+        path = Path(selections)
+        if path.stat().st_size > 16384:
+            raise ValueError("selection file exceeds 16384 bytes")
+
+        def unique_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+            result: dict[str, Any] = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("duplicate selection JSON key")
+                result[key] = value
+            return result
+
+        selections = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_pairs)
+    return selections
+
+
+async def cmd_inspect_context(
+    args: argparse.Namespace, settings: Settings, project: str
+) -> dict[str, Any]:
+    """Read-only exact-source continuation inspection, with validation before DB open."""
+    from morgan_brain.memory.continuation_context import validate_request
+
+    selections = _inspection_selections(getattr(args, "selections", None))
+    proposed = selections if selections is not None else []
+    cutoff = validate_request(
+        settings.owner_user_id,
+        project,
+        args.ids,
+        proposed,
+        effective_time(getattr(args, "effective_at", None)),
+    )
+    if getattr(args, "all_projects", False):
+        raise ValueError("inspect_context requires one project")
+    ctx = build_evidence_context(settings)
+    try:
+        return await ctx.gate.inspect_context(
+            user_id=settings.owner_user_id,
+            project=project,
+            evidence_ids=args.ids,
+            selections=proposed,
+            effective_at=cutoff,
+        )
+    finally:
+        ctx.conn.close()
 
 
 async def cmd_evidence(

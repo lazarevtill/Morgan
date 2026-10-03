@@ -11,7 +11,7 @@ description: >-
 # Morgan memory
 
 Morgan keeps personal and project memories and recalls them by meaning and keyword. Use its MCP
-tools (`recall`, `evidence`, `facts`, `remember`) when this session has them; otherwise use the `morgan`
+tools (`recall`, `evidence`, `inspect_context`, `facts`, `remember`) when this session has them; otherwise use the `morgan`
 command in a shell. Both reach the same memory.
 
 ## Choose a memory context
@@ -59,6 +59,13 @@ Recall IDs refer to stored records. Use `morgan evidence <id> --project <returne
 without embedding or chat calls. The result declares `version: "morgan.evidence.v1"`
 and includes `missing_ids`; unknown IDs and records outside the named scope look alike.
 Use at most 32 IDs per call. For cross-project recall, read each returned project separately.
+
+For a bounded continuation inspection, use `morgan context inspect <id> --project <project>
+--json` or `inspect_context(ids=["<id>"], project="<project>")`. It reads only 1..16 requested
+IDs and preserves their full source text. Optional exact Unicode quote selections organize
+four sections; every classification is unverified, and completed progress is an unverified
+report. `action_authority: none` always applies. Missing support/branch IDs are pointers;
+inspect them explicitly if needed. This does not discover omitted sources or generate a reply.
 
 For inferred facts, follow `support_event_ids` in a subsequent bounded evidence call.
 Missing support or conflicting events leaves the claim uncertain. Source labels and author
