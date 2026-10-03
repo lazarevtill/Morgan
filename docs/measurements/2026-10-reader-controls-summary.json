@@ -1,0 +1,84 @@
+{
+  "version": "morgan.reader.control.summary.v1",
+  "diagnostic_only": true,
+  "product_readiness": false,
+  "heldout": false,
+  "planned": 20,
+  "available": 20,
+  "strict_pass": 8,
+  "format_pass": 8,
+  "value_pass": 8,
+  "attribution_pass": 8,
+  "operational_failures": 0,
+  "format_failures": 12,
+  "parsed_semantic_failures": 0,
+  "observations": [
+    "One rejected fenced reversed-progress answer contains stale not_started/S1; not rescored"
+  ],
+  "conditions": {
+    "plain_short": {
+      "planned": 5,
+      "available": 5,
+      "format_pass": 2,
+      "strict_pass": 2,
+      "input_tokens": 1030,
+      "output_tokens": 95,
+      "inclusive_slot_seconds": 26.566865832079202
+    },
+    "structured_short": {
+      "planned": 5,
+      "available": 5,
+      "format_pass": 5,
+      "strict_pass": 5,
+      "input_tokens": 1030,
+      "output_tokens": 81,
+      "inclusive_slot_seconds": 6.082696958910674
+    },
+    "plain_reverse": {
+      "planned": 5,
+      "available": 5,
+      "format_pass": 0,
+      "strict_pass": 0,
+      "input_tokens": 1030,
+      "output_tokens": 106,
+      "inclusive_slot_seconds": 10.351583249401301
+    },
+    "plain_long": {
+      "planned": 5,
+      "available": 5,
+      "format_pass": 1,
+      "strict_pass": 1,
+      "input_tokens": 9020,
+      "output_tokens": 107,
+      "inclusive_slot_seconds": 20.489098206628114
+    }
+  },
+  "cost": {
+    "run_http": 60,
+    "metadata_http": 8,
+    "http_total": 68,
+    "chat_calls": 20,
+    "input_tokens": 12110,
+    "output_tokens": 389,
+    "cached_input_included": 2219,
+    "retries": 0,
+    "unknown_usage_calls": 0,
+    "inclusive_run_seconds": 63.53812799998559,
+    "metadata_seconds": 0.622772998875007
+  },
+  "protocol_freeze_sha256": "ffd6d4d625fa1074a8c36fefa407a7a1893d82a732cb4df41f5de9e93e744f2e",
+  "export_freeze_sha256": "22e4e7567d99c5cbcce4593530f373d4ba805fac8743efc087b18e0c7d276e52",
+  "offline_tests": 13,
+  "independent_pre_call_review": "GO",
+  "independent_post_run_audit": "PASS",
+  "model_metadata": {
+    "model_id": "ornith15",
+    "advertised_parameters": 35505251456,
+    "quantization": "Q6_K",
+    "context": 262144,
+    "build": "b11330-c061df198",
+    "template_sha256": "f55f52930aa8bf44ab5cb85f99370fcc3c56e9a85640b812086d5330bce5d86b",
+    "weight_attested": false,
+    "post_metadata_match_except_created": true
+  }
+}

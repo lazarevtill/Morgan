@@ -2,6 +2,10 @@
 
 One package, `morgan_brain`, one process, one SQLite file. Two surfaces over one gate.
 
+See [memory guarantees and reader boundaries](MEMORY_GUARANTEES.md) and the
+[reader capability contract](READER_CAPABILITY.md) for the limits of scoped evidence,
+current state, provenance, persistence and model-backed claims.
+
 ```text
 morgan CLI ──┐                          ┌─ episodic rows
              ├─▶ MemoryGate ─▶ MemoryModule ─┼─ sqlite-vec vectors
