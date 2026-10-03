@@ -1,0 +1,180 @@
+{
+  "result": {
+    "export_freeze_sha256": "b9ba9027d29d8155ee7685799409f41bb4277f4581d63b08ae213743baa37459",
+    "gate_pass": false,
+    "gold": "8354036c40f86dd314013240c798dd50a9a76e79951a25f30f009d3020983b7b",
+    "grading_sha256": "11a023a0f0e678a50b3a31776938c94a5d40930268e7ad7eefd365f5bac2ab64",
+    "limitations": [
+      "Closed local source-grounded synthetic evaluation; no network, model calls, role mapping, author contact or prior scores used.",
+      "Output style may partly reveal method; no roles or methods inferred and no stage comparison used.",
+      "Citation adjacency judged at coherent paragraph/block scale; explicit inline event IDs count, but separate later explanations do not repair unsupported earlier factual claims.",
+      "Creative questions, invitation phrasing and clearly proposed actions are not treated as executed actions; factual recommendation suitability remains a judgment sensitivity.",
+      "Unavailable artifacts remain in denominator; audit flags and required evidence distinguish delivery gaps from semantic source-selection errors."
+    ],
+    "mapping": "144da08414638745e0485ec394704fe59a0a0c87d3e74f984a89dde10d2dc9af",
+    "masked": "8d6a2c4e0dd8006b4a596fb792b40f32607238d7ec47859d953c7ccb2cc137a8",
+    "paired": {
+      "baseline_only": 3,
+      "both_useful": 2,
+      "candidate_only": 1,
+      "neither": 10
+    },
+    "review_damage": {
+      "correct_draft_to_unavailable": 0,
+      "correct_draft_to_unavailable_rate_all_slots": 0.0,
+      "correct_drafts": 3,
+      "correct_drafts_lost": 1,
+      "lost_rate_all_slots": 0.0625,
+      "lost_rate_among_correct_drafts": 0.3333333333333333,
+      "new_citation_flags": 2,
+      "new_citation_flags_rate_all_slots": 0.125,
+      "new_critical_flags": 0,
+      "new_critical_flags_rate_all_slots": 0.0,
+      "new_material_flags": 0,
+      "new_material_flags_rate_all_slots": 0.0,
+      "nonpassing_drafts_rescued": 1,
+      "nonpassing_drafts_rescued_rate_all_slots": 0.0625,
+      "scheduled": 16
+    },
+    "roles": {
+      "baseline": {
+        "available": 16,
+        "citation_error_candidates": 11,
+        "critical_error_candidates": 5,
+        "delivery_gap_candidates": 0,
+        "material_error_candidates": 4,
+        "scheduled": 16,
+        "strict_useful": 5,
+        "unavailable": 0,
+        "useful_components_with_failures": 11
+      },
+      "candidate_draft": {
+        "available": 16,
+        "citation_error_candidates": 10,
+        "critical_error_candidates": 6,
+        "delivery_gap_candidates": 0,
+        "material_error_candidates": 5,
+        "scheduled": 16,
+        "strict_useful": 3,
+        "unavailable": 0,
+        "useful_components_with_failures": 13
+      },
+      "candidate_final": {
+        "available": 16,
+        "citation_error_candidates": 11,
+        "critical_error_candidates": 6,
+        "delivery_gap_candidates": 0,
+        "material_error_candidates": 5,
+        "scheduled": 16,
+        "strict_useful": 3,
+        "unavailable": 0,
+        "useful_components_with_failures": 13
+      }
+    },
+    "version": "morgan.eval.aggregate.v12.1"
+  },
+  "cost": {
+    "phases": {
+      "public": {
+        "physical": {
+          "cached_input_tokens": 2485,
+          "chat_calls": 6,
+          "http_calls": 24,
+          "input_tokens": 5213,
+          "output_tokens": 1782,
+          "retries": 0,
+          "unknown_usage_calls": 0
+        },
+        "inclusive_seconds": 57.42905137501657,
+        "resource_wait_seconds": 0
+      },
+      "closed": {
+        "physical": {
+          "cached_input_tokens": 20152,
+          "chat_calls": 48,
+          "http_calls": 192,
+          "input_tokens": 39023,
+          "output_tokens": 13709,
+          "retries": 0,
+          "unknown_usage_calls": 0
+        },
+        "inclusive_seconds": 347.836027875077,
+        "resource_wait_seconds": 0
+      }
+    },
+    "by_closed_arm": {
+      "source_blocks": {
+        "physical": {
+          "cached_input_tokens": 8519,
+          "chat_calls": 16,
+          "http_calls": 64,
+          "input_tokens": 11199,
+          "output_tokens": 4589,
+          "retries": 0,
+          "unknown_usage_calls": 0
+        },
+        "inclusive_slot_seconds": 128.60251833172515,
+        "final_utf8_bytes": 16199
+      },
+      "semantic_review": {
+        "physical": {
+          "cached_input_tokens": 11633,
+          "chat_calls": 32,
+          "http_calls": 128,
+          "input_tokens": 27824,
+          "output_tokens": 9120,
+          "retries": 0,
+          "unknown_usage_calls": 0
+        },
+        "inclusive_slot_seconds": 219.08767083357088,
+        "final_utf8_bytes": 16713
+      }
+    },
+    "metadata_preflight_http": 1,
+    "preflight_chat_calls": 0,
+    "unmeasured": [
+      "CPU",
+      "energy",
+      "server cache causal effects",
+      "platform author/reviewer/grader cost"
+    ],
+    "combined_physical": {
+      "cached_input_tokens": 22637,
+      "chat_calls": 54,
+      "http_calls": 217,
+      "input_tokens": 44236,
+      "output_tokens": 15491,
+      "retries": 0,
+      "unknown_usage_calls": 0
+    }
+  },
+  "protocol": {
+    "runtime_freeze_sha256": "d0adbb7b02e6c88b84d68a17778df952aac3aec6ced0c7fc79788f3305b4abe4",
+    "fixture_sha256": "7ae94b073dda2f6a69c5892a84272c5ce5b79bcab72e403b0178a2032120f207",
+    "gold_sha256": "8354036c40f86dd314013240c798dd50a9a76e79951a25f30f009d3020983b7b",
+    "production_head": "5be453cd9badabfdbac9e7a56bb8fd5579d61b51",
+    "offline_tests": 63,
+    "grading_contract_tests": 17,
+    "public_integrity_gate": "4/4",
+    "closed_integrity_gate": "32/32 finals plus16 drafts",
+    "grading_contract_tests_are_subset_of_offline_tests": true
+  },
+  "decision": {
+    "gate": "FAIL",
+    "integrate": false,
+    "merge": false,
+    "stopping_rule": "Stop expanding memory mechanisms and model/panel shopping; identify minimum reader capabilities and deterministic memory guarantees."
+  },
+  "independent_review": {
+    "arithmetic_hashes_topology": "PASS",
+    "identical_pairs": 3,
+    "identical_pair_classifications_consistent": true,
+    "grading_sensitivities": [
+      "Proposed-game suitability partly depends on grader recognition/background knowledge",
+      "Future-versus-historical action wording",
+      "Composition-versus-provenance wording"
+    ],
+    "rescore": false,
+    "publication_blocker": null
+  }
+}
