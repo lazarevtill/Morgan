@@ -134,7 +134,8 @@ CI status is a regression check, not the semantic quality gate.
 Use [the integration example](../ALWAYS_ON_MEMORY_EXAMPLE.md) to retain source IDs and
 inspect current, contested and unknown metadata without a chat model. The
 [machine-readable summary](2026-10-memory-scale-summary.json) contains exact timings,
-resources, cardinalities and freeze hashes. The [evidence archive](2026-10-memory-scale-evidence.zip) preserves
+resources, cardinalities and freeze hashes. The
+[evidence archive](2026-10-memory-scale-evidence.zip) preserves
 original instrument/protocol, fixtures, raw durations, original SDK/CLI/MCP outputs,
 trace and deletion receipts and independent review. Large database/snapshot files remain
 on the selected Mac and are bound by the original export manifest rather than committed

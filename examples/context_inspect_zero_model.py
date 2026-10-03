@@ -16,17 +16,9 @@ from morgan_brain.config import Settings
 from morgan_brain.models import Memory
 
 
-async def demonstrate(directory: Path) -> dict:
-    settings = Settings(
-        _env_file=None,
-        data_dir=str(directory),
-        temporal_db_url=f"sqlite:///{directory}/morgan.db",
-        snapshot_dir=str(directory / "snapshots"),
-        owner_user_id="synthetic-demo-owner",
-        embedding_backend="hash",
-        embedding_dim=1024,
-    )
-    owner, project = settings.owner_user_id, "synthetic-demo"
+async def seed_sources(
+    settings: Settings, owner: str, project: str
+) -> tuple[dict[str, str], dict[str, str]]:
     base = datetime(2026, 1, 1, tzinfo=UTC)
     inputs = [
         ("reported", "Reported preference: morning walks.", []),
@@ -56,6 +48,21 @@ async def demonstrate(directory: Path) -> dict:
             texts[label] = content
     finally:
         writer.conn.close()
+    return ids, texts
+
+
+async def demonstrate(directory: Path) -> dict:
+    settings = Settings(
+        _env_file=None,
+        data_dir=str(directory),
+        temporal_db_url=f"sqlite:///{directory}/morgan.db",
+        snapshot_dir=str(directory / "snapshots"),
+        owner_user_id="synthetic-demo-owner",
+        embedding_backend="hash",
+        embedding_dim=1024,
+    )
+    owner, project = settings.owner_user_id, "synthetic-demo"
+    ids, texts = await seed_sources(settings, owner, project)
     # The caller owns this index. Morgan does not discover which IDs a task needs.
     (directory / "source-ids.json").write_text(json.dumps(ids, indent=2) + "\n")
     selections = []
