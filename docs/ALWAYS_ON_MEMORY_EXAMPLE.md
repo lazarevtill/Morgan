@@ -12,7 +12,7 @@ service and does not import anyone's memory.
 From a Morgan checkout with its existing dependencies, run:
 
 ```sh
-python examples/context_inspect_zero_model.py /tmp/morgan-synthetic-demo
+PYTHONPATH=. python examples/context_inspect_zero_model.py /tmp/morgan-synthetic-demo
 ```
 
 The directory must be new. The example uses only synthetic records, one explicit

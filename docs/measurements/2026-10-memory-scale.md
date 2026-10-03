@@ -63,11 +63,12 @@ corrections follow them: 20,043 memories and 40 facts before forget. SQLite shar
 sidecars were 32,768 bytes at each checkpoint. Read-lane main DB/WAL hashes, complete
 schema and table counts were unchanged before/after each series.
 
-All 20,000 store durations are retained, including offline hash embedding: median
+All 20,000 store durations are retained, including offline hash embedding: lower-middle p50
 4.26 ms, p95 7.04 ms, p99 7.77 ms, maximum 88.49 ms; total timed stores 85.52 s.
 Stage correction sample p95 ranges from 1.96 to 8.77 ms; fact upsert sample p95 from
-0.63 to 0.73 ms. The frozen quantile convention uses sorted index `floor(n*p)` capped
-at the last sample. Three CLI/MCP samples and ten updates per stage are descriptive
+0.63 to 0.73 ms. The frozen p50 uses sorted index `(n-1)//2`: the lower middle
+order statistic, not the arithmetic median. The p95/p99 use sorted index
+`floor(n*p)` capped at the last sample. Three CLI/MCP samples and ten updates per stage are descriptive
 small samples, not stable population-tail estimates. CLI timing includes process
 startup and the denial/capture receipt harness; MCP includes server construction,
 initialization and actual in-memory tool dispatch, without stdio/HTTP transport.
@@ -135,8 +136,13 @@ Use [the integration example](../ALWAYS_ON_MEMORY_EXAMPLE.md) to retain source I
 inspect current, contested and unknown metadata without a chat model. The
 [machine-readable summary](2026-10-memory-scale-summary.json) contains exact timings,
 resources, cardinalities and freeze hashes. The
-[evidence archive](2026-10-memory-scale-evidence.zip) preserves
-original instrument/protocol, fixtures, raw durations, original SDK/CLI/MCP outputs,
-trace and deletion receipts and independent review. Large database/snapshot files remain
-on the selected Mac and are bound by the original export manifest rather than committed
-as binary memory copies. This report does not justify merging PR59.
+[evidence archive](2026-10-memory-scale-evidence.zip) is a publication derivative of
+instrument/protocol, fixtures, durations, SDK/CLI/MCP outputs, trace/deletion receipts
+and independent review. Absolute workstation paths become `<WORKSPACE>` or `<HOME>`;
+those bytes are intentionally changed, with no measurements rescored. The bundled
+`publication-derivation.json` binds each original and published member by separate
+hashes and identifies changed members. `published-export-freeze.json` verifies the
+public copy; `original-export-freeze.json` binds the immutable local originals.
+Large database/snapshot files and unmodified original receipts remain on the selected
+Mac. No physical erasure of previously published Git history is claimed. This report
+does not justify merging PR59.

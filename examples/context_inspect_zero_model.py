@@ -1,6 +1,6 @@
 """Run against a new synthetic directory; no chat model or network is required.
 
-python examples/context_inspect_zero_model.py /tmp/morgan-synthetic-demo
+PYTHONPATH=. python examples/context_inspect_zero_model.py /tmp/morgan-synthetic-demo
 """
 
 from __future__ import annotations
