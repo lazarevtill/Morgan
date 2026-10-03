@@ -61,6 +61,40 @@ Compute the entire envelope and refuse if its canonical compact JSON exceeds 163
 Never crop a source, summarize it, drop an item or silently return a partial view to fit.
 Model/agent proposals remain proposals; `action_authority: none` is unconditional.
 
+## Explicit event lifecycle
+
+Revision edges are explicit whole-event corrections. Parents must already exist as stored
+episodics in the same owner/project, with matching source, author and scope, a shared family
+root, and an event time no later than the correction. A correction names at most eight
+distinct parents; their IDs are canonicalized in sorted order on admission. New writes
+without an asserted event time receive the store clock time. Existing undated records can
+still be read; they are not the result of an ordinary new write with an omitted time.
+An event's words do not create additional edges or grant action permission.
+
+At one captured cutoff, stored events with event time at or before the cutoff are activated;
+undated roots are also eligible. Every activated stored correction suppresses only its named
+parents. Suppression persists when that correction is itself superseded: ancestors do not
+resurface. Future and quarantined corrections do not suppress stored parents.
+
+Family leaves are activated events minus all explicitly suppressed parents. A record that
+is not a leaf is `inactive`, including the historical parent of a fork. Only actual leaves
+are `conflicted` when more than one family leaf exists; a unique leaf is `active`.
+For example, `R -> A` and `R -> B` yield inactive `R` and conflicted `A`, `B`.
+A later correction of both leaves resolves that structural conflict. Independent contradictory
+statements without revision edges remain independent records; their meaning is not adjudicated.
+
+All requested family members expose the same sorted eligible-leaf pointers and full count.
+Pointers retain at most the first 32 IDs; `revision_truncated` marks a larger family. An active
+unrequested child can suppress a requested parent, but its body is not implicitly returned.
+Returned historical and quarantined bodies remain evidence, with their labels intact.
+
+For episodic selections, diagnostic priority is `quarantined`, then
+`conflicted_or_truncated_lineage`, then `inactive_or_future`; a missing requested record is
+`missing`. Thus a fork's inactive parent has `inactive_or_future` unless pointer truncation
+requires the stronger structural warning. These labels describe eligibility, not semantic truth.
+Activation includes the exact microsecond boundary. `Z`, `+00:00`, and other offsets naming the
+same instant compare equally; canonical ISO serialization need not retain input spelling.
+
 ## Validation and release boundary
 
 Integration must exercise actual SDK, CLI JSON and MCP public tools over synthetic SQLite,

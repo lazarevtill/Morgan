@@ -1,4 +1,83 @@
 {
+  "corrected_structural_panel": {
+    "actual_surface_calls": 48,
+    "canonical_envelope_bytes": {
+      "max": 6157,
+      "min": 2921
+    },
+    "case_count": 16,
+    "case_passes": 16,
+    "case_sha256": "d76b02bfc8a3ece19b1749b9a11b6503d6594fd99cb6903d05f9261d79288990",
+    "comparator_runner_mock_tests": 35,
+    "database_bytes": 5963776,
+    "export_manifest_sha256": "f3a8c6a0538625c858aabd7aec59f6a6fb7ec20bba831a0b54c691b5c0c5eebe",
+    "fixture_failures": 0,
+    "frozen_export_artifact_bytes": 3310543,
+    "inclusive_panel_seconds": 6.793069125153124,
+    "independent_result_review": "GO: 338 export files, 87 runtime and 83 instrument hashes; all48 comparisons and physical bindings verified without product rerun",
+    "independent_review_receipt_sha256": "682cf3482e269525161b17881d309a95da828d981023ec01388d907b27ec8087",
+    "input_tokens": null,
+    "instrument_freeze_sha256": "32121bc5b3251942856faba809048deb45036f36a69b37a8137b568a01bfe1d2",
+    "local_hash_embeds": 66,
+    "mcp_transport": "actual in-memory ClientSession; external-server deployment unmeasured",
+    "metamorphic_reference_tests": 31,
+    "minimum_reclaimable_ram_bytes": 5838700544,
+    "missing_ids_per_surface": 6,
+    "model_calls": 0,
+    "network_attempts": 0,
+    "notes": [
+      "Structural explicit-event cases only; not recall/discovery or freeform quality",
+      "Parent RSS excludes independently unobserved child peak; bounded captured pipes do not prove child process peak",
+      "Paid model APIs not used; platform/operator review token usage and monetary cost unmeasured",
+      "SDK returns a Python object, so physical wire serialization is not applicable"
+    ],
+    "output_rescored": false,
+    "output_tokens": null,
+    "peak_parent_rss_bytes": 82345984,
+    "physical_wire_bytes": {
+      "cli": {
+        "max": 8242,
+        "total": 97888
+      },
+      "mcp": {
+        "max": 15482,
+        "total": 184283
+      },
+      "sdk": {
+        "max": null,
+        "total": null
+      }
+    },
+    "product_failures": 0,
+    "product_head": "c95eb0779a44aaf9789f7e2a444b59141f7b3171",
+    "production_python_changed_by_report": false,
+    "provider_construction_attempts": 0,
+    "read_only_surface_checks": 48,
+    "reader_quality_acceptance": false,
+    "reference_tests": 52,
+    "returned_sources_per_surface": 60,
+    "runtime_freeze_sha256": "a882678b489315684f1d0bf8eeec9311e2c80a7be876868bab13e0d4b847f9b7",
+    "selected_items_per_surface": 28,
+    "setup_failures": 0,
+    "source_events": 66,
+    "summary_sha256": "fa2b4cf5d950a6e3c08beea4a2b7cef92b38d860f5a1b54fe8ae7bc68109e0fa",
+    "surface_latency_seconds": {
+      "cli": {
+        "max": 0.4899702921975404,
+        "total": 5.17582279141061
+      },
+      "mcp": {
+        "max": 0.03559629083611071,
+        "total": 0.36901016742922366
+      },
+      "sdk": {
+        "max": 0.009218625025823712,
+        "total": 0.09925408335402608
+      }
+    },
+    "valid_preflight_cases": 16,
+    "withheld_selections_per_surface": 38
+  },
   "first_panel": {
     "export_freeze_sha256": "0ef4bc3a333d66dfa5c2cb95e73f5a6d70c83a52951b1502234c1571028e1a9f",
     "frozen_literal_grade": {
@@ -19,9 +98,9 @@
     "successful_cli_inspections": 16
   },
   "integration": {
-    "independent_review": "GO before structural refactor; final exact-head review required",
+    "independent_review": "Prior exact c95 product publication GO; final report/head review required",
     "passed": 1199,
-    "seconds": 93.79,
+    "seconds": 92.93,
     "skipped": 4
   },
   "lan_model_calls": 0,

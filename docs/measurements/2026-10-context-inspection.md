@@ -1,4 +1,4 @@
-# Read-only context inspection: integration proofs and aborted evaluation
+# Read-only context inspection: integration and structural validation
 
 This records a main-based, read-only inspection interface, separately from useful-reader
 quality. It adds no experimental PR59 organizer, checkpoint resume, model selection, new
@@ -69,6 +69,53 @@ unadmitted. Its results are not runtime or reader-quality evidence. A valid inst
 fresh independent acceptance evidence are still blockers; PR59 must remain unmerged. This
 small read-only interface may be reviewed on its explicit tested contracts without promoting
 reported facts, completion or permission, or weakening the failed reader gate.
+
+## Corrected deterministic instrument and fresh structural panel
+
+The stopped offline case conflated family conflict with record state: for explicit edges
+`R -> A` and `R -> B`, `R` is inactive and only the two leaves are conflicted. The old cases,
+gold, literal grades and error receipts remain unchanged. No success rate is derived from
+those stopped sets.
+
+A separate standard-library reference state machine was authored from documented explicit
+lifecycle rules without importing the product resolver or interpreting text. An independent
+review checked 13 hand-audited public controls and 52 reference tests before fresh generation.
+A prospective comparator/harness review then found ordering, timestamp-provenance, capture,
+resource and freeze-admission gaps; they were fixed before generation. The final independent
+review passed 87 reference/mock tests; together with 31 metamorphic controls, 118 tests passed.
+This is instrument evidence, not additional cases in a quality denominator.
+
+The frozen generator created one fresh fixed-seed panel: 16 structural graphs, 8 EN/8 RU,
+10 personal/6 project, 66 events and 66 caller selections. All 16 passed reference admission
+before any product dispatch. New-write fixtures use explicit aware timestamps because normal
+writes fill an omitted event time from the store clock and sort correction parents; legacy
+undated/naive source reads remain separate controls. The oracle covers explicit event edges,
+not fact truth, semantic contradiction, automatic discovery, permissions or span selection.
+
+The once-only run returned **16/16 structural cases and 48/48 actual SDK, CLI subprocess and
+MCP inspections**, each matching the reference and preserving database bytes, schema and
+cardinality through restarts. Independent post-run review verified all 338 frozen exports,
+87 runtime and 83 instrument hashes, and all 48 physical-output comparisons without a product
+rerun. MCP used an actual in-memory ClientSession; external-server deployment was outside
+this test. No fixture, setup or product failures occurred. Each surface
+returned 60 scoped sources and 6 missing IDs across the panel; 28 selections were retained as
+unverified and 38 withheld. Unrequested correction bodies were not implicitly returned.
+The independent seed audit bound actual ingestion timestamps to the returned source metadata.
+
+The complete sequential panel took **6.793 seconds**, including 66 stores and 66 offline hash
+embeddings of width 4. Model calls, attempted network connections and read-phase provider
+construction were zero; model token counts are not applicable. Canonical envelopes were
+2,921–6,157 UTF-8 bytes within the 16,384-byte contract. CLI physical JSON totaled 97,888 bytes
+(max 8,242); captured MCP response JSON totaled 184,283 bytes (max 15,482). SDK returned an
+object, with no physical wire serialization. Frozen export artifacts occupy 3,310,543 bytes;
+synthetic database files separately occupy 5,963,776 bytes.
+
+Observed parent-process peak RSS was 82,345,984 bytes, with at least 5,838,700,544 bytes of
+reclaimable RAM across recorded pre/post-case observations. Child peak RSS was not independently measured; bounded pipe
+capture is not a proof of its peak. Platform/operator review tokens and monetary cost were
+not measured. These limits keep the measured per-inspection result distinct from total
+project cost. This panel demonstrates a bounded read-only tool for caller-selected evidence;
+it does not satisfy or replace the separate freeform-reader acceptance gate for PR59.
 
 ## Reproducibility identifiers
 
