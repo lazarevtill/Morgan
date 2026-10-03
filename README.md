@@ -74,6 +74,11 @@ two categories that do not yet work.
 
 ## Documentation
 
+- [`docs/ALWAYS_ON_MEMORY_EXAMPLE.md`](docs/ALWAYS_ON_MEMORY_EXAMPLE.md) — zero-model
+  scoped continuation with explicit source IDs and uncertainty.
+- [`docs/measurements/2026-10-memory-scale.md`](docs/measurements/2026-10-memory-scale.md) —
+  bounded synthetic scale, latency, storage, restart and functional forget measurements.
+
 - [`docs/WIRING.md`](docs/WIRING.md) — configuration, the model server, the CLI (snapshot,
   restore and migrate included), the MCP server, Docker.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the package, recall, the embedding space,
