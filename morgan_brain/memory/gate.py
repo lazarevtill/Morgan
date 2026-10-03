@@ -11,7 +11,7 @@ import json
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import ValidationError
 
@@ -23,6 +23,7 @@ from morgan_brain.memory.checkpoints import (
     CheckpointResult,
     checkpoint_subject,
 )
+from morgan_brain.memory.continuation_context import assemble, validate_request
 from morgan_brain.memory.knowledge.basis import ConsolidationBasis, ConsolidationInput
 from morgan_brain.memory.migrations import DatabaseNeedsMigration
 from morgan_brain.memory.store.history import SessionHistoryStore
@@ -196,6 +197,31 @@ class MemoryGate:
             project=project,
             evidence_ids=list(dict.fromkeys(evidence_ids)),
             effective_at=effective_at,
+        )
+
+    async def inspect_context(
+        self,
+        *,
+        user_id: str,
+        project: str,
+        evidence_ids: list[str],
+        selections: list[dict[str, Any]] | None = None,
+        effective_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Inspect explicit sources and exact caller selections; never authorize an action."""
+        proposed = selections if selections is not None else []
+        cutoff = validate_request(user_id, project, evidence_ids, proposed, effective_at)
+        requested = list(evidence_ids)
+        proposed = [dict(item) for item in proposed]
+        result = await self.evidence(
+            user_id=user_id, project=project, evidence_ids=requested, effective_at=cutoff
+        )
+        return assemble(
+            result,
+            user_id=user_id,
+            project=project,
+            selections=proposed,
+            cutoff=cutoff,
         )
 
     async def check_embedding_space(self) -> None:

@@ -32,6 +32,7 @@ from morgan_brain.surfaces.cli.commands import (
     cmd_facts,
     cmd_forget,
     cmd_import,
+    cmd_inspect_context,
     cmd_recall,
     cmd_remember,
 )
@@ -62,6 +63,7 @@ HANDLERS = {
     "recall": cmd_recall,
     "facts": cmd_facts,
     "evidence": cmd_evidence,
+    "inspect_context": cmd_inspect_context,
     "forget": cmd_forget,
     "ask": cmd_ask,
     "consolidate": cmd_consolidate,
@@ -137,6 +139,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_recall.add_argument("--top-k", type=int, default=8, help="Maximum results to return.")
     p_recall.add_argument("--effective-at", help="Timezone-aware ISO effective-time cutoff.")
     _add_common(p_recall)
+
+    p_context = sub.add_parser("context", help="Inspect exact source continuation context.")
+    context_sub = p_context.add_subparsers(dest="context_command", required=True)
+    p_inspect = context_sub.add_parser(
+        "inspect", help="Read explicit IDs and exact quote selections."
+    )
+    p_inspect.add_argument("ids", nargs="+", help="One to 16 distinct durable source IDs.")
+    p_inspect.add_argument("--selections", help="JSON file containing explicit quote selections.")
+    p_inspect.add_argument("--effective-at", help="Timezone-aware ISO effective-time cutoff.")
+    _add_common(p_inspect)
+    p_inspect.set_defaults(command="inspect_context")
 
     p_evidence = sub.add_parser(
         "evidence", help="Fetch durable IDs and source roots without models."

@@ -332,6 +332,29 @@ def _space_line(space: dict[str, Any]) -> str:
     )
 
 
+def _render_inspect_context(data: dict[str, Any]) -> str:
+    lines = [
+        f"Continuation inspection: {data['project']} at {data['effective_at']}",
+        "Coverage: requested IDs only; action authority: none.",
+    ]
+    for name, section in data["sections"].items():
+        lines.append(f"{name}: {section['status']} (classification unverified)")
+        for item in section["items"]:
+            lines.append(f"  {item['quote']} [{item['event_id']}:{item['start']}:{item['end']}]")
+            if item.get("verification"):
+                lines.append("  Completion: unverified report.")
+    for source in data["sources"]:
+        lines.append(
+            f"Source {source['id']} ({source['source']}, {source['author_id']}): "
+            f"{source['content']}"
+        )
+    for item in data["withheld"]:
+        lines.append(f"Withheld {item['event_id']} in {item['section']}: {item['reason']}")
+    if data["missing_ids"]:
+        lines.append("Missing IDs: " + ", ".join(data["missing_ids"]))
+    return "\n".join(lines)
+
+
 def _render_evidence(data: dict[str, Any]) -> str:
     lines = [f"Evidence in {data['project']} ({data['version']})"]
     lines.extend(
@@ -347,6 +370,7 @@ RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "recall": _render_recall,
     "facts": _render_facts,
     "evidence": _render_evidence,
+    "inspect_context": _render_inspect_context,
     "forget": _render_forget,
     "ask": _render_ask,
     "consolidate": _render_consolidate,
