@@ -7,9 +7,11 @@ library facade -- every tool here calls the exact ``cli.__main__`` command handl
 itself calls, which in turn goes through ``composition.build_memory_context`` /
 ``build_app_context`` and the one ``MemoryGate``. No memory logic is reimplemented here.
 
-Six bounded tools
+Bounded tools
 --------------------------------
 ``remember``, ``recall``, ``evidence``, ``facts``, ``forget``, ``ask_morgan``.
+Optional work continuation adds ``working_context_read``, ``working_context_propose``,
+``working_context_apply`` and ``working_context_resume``.
 Evidence is a progressive read of exact IDs in one scope, without a model call,
 so a client can fetch source roots when needed without retrieving the whole archive.
 
@@ -58,13 +60,30 @@ from morgan_brain.surfaces.cli.commands import (
     cmd_recall,
     cmd_remember,
 )
+from morgan_brain.surfaces.cli.working_context import (
+    apply_context,
+    continue_context,
+    propose_context,
+    read_context,
+)
 from morgan_brain.surfaces.network import (
     api_key_is_configured,
     assert_safe_bind,
     unauthenticated_peer_allowed,
 )
 
-TOOL_NAMES: tuple[str, ...] = ("remember", "recall", "evidence", "facts", "forget", "ask_morgan")
+TOOL_NAMES: tuple[str, ...] = (
+    "remember",
+    "recall",
+    "evidence",
+    "facts",
+    "forget",
+    "ask_morgan",
+    "working_context_read",
+    "working_context_propose",
+    "working_context_apply",
+    "working_context_resume",
+)
 
 #: The type FastMCP injects when a tool asks for it by annotation. Parameterized (rather than
 #: bare ``Context``) because mypy --strict's ``disallow_any_generics`` rejects a generic used
@@ -94,6 +113,18 @@ def _client_name(ctx: _ToolContext | None) -> str:
 #: While a heavy step waits for ``morgan migrate``, every write tool raises
 #: ``DatabaseNeedsMigration``, and the SDK hands its message to the client as an error result.
 TOOL_ANNOTATIONS: dict[str, ToolAnnotations] = {
+    "working_context_read": ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
+    ),
+    "working_context_propose": ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=False, openWorldHint=False
+    ),
+    "working_context_apply": ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
+    ),
+    "working_context_resume": ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
+    ),
     "evidence": ToolAnnotations(
         readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
     ),
@@ -116,7 +147,10 @@ TOOL_ANNOTATIONS: dict[str, ToolAnnotations] = {
 
 #: The tools a client may run without asking, derived from the declarations above.
 READ_ONLY_TOOLS: tuple[str, ...] = tuple(
-    name for name in TOOL_NAMES if TOOL_ANNOTATIONS[name].readOnlyHint
+    # Installer auto-approval covers repeatable reads, not model-backed proposals.
+    name
+    for name in TOOL_NAMES
+    if TOOL_ANNOTATIONS[name].readOnlyHint and TOOL_ANNOTATIONS[name].idempotentHint
 )
 
 _ToolFn = Callable[..., Awaitable[dict[str, Any]]]
@@ -335,7 +369,78 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
             session_id=session_id,
         )
 
+    async def working_context_read(
+        context_id: str | None = None, project: str | None = None
+    ) -> dict[str, Any]:
+        """List current named work or show one compact view; personal is the default.
+
+        Fetch source details with evidence. Categories are unverified model selection,
+        and reported actors are not credentials. An invalid view requires rebuilding.
+        """
+        return await read_context(settings, context_id, project)
+
+    async def working_context_propose(
+        context_id: str,
+        event_ids: list[str],
+        project: str | None = None,
+        rebuild: bool = False,
+        ctx: _ToolContext | None = None,
+    ) -> dict[str, Any]:
+        """Propose an updated quotation view from 1..20 current source IDs; no apply.
+
+        This uses the configured model once. Explicit rebuild discards an invalid old
+        view. Save/review the returned proposal, then use working_context_apply.
+        """
+        return await propose_context(
+            settings,
+            context_id,
+            event_ids,
+            project=project,
+            author_id=_client_name(ctx),
+            rebuild=rebuild,
+        )
+
+    async def working_context_apply(
+        proposal: dict[str, Any], project: str | None = None
+    ) -> dict[str, Any]:
+        """Explicitly validate/apply a proposal with exact sources and expected-head CAS.
+
+        This grants no execution permission and makes no model call. A stale or erased
+        basis is refused. The proposal must match this server's owner and target scope.
+        """
+        return await apply_context(settings, proposal, project)
+
+    # Keep reported provenance as ordinary schema fields for existing MCP clients.
+    async def working_context_resume(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        context_id: str,
+        text: str,
+        session_id: str,
+        project: str | None = None,
+        source: MemorySource = MemorySource.UNKNOWN,
+        author_id: str = "",
+        ctx: _ToolContext | None = None,
+    ) -> dict[str, Any]:
+        """Create the next useful draft in an independent session, without action tools.
+
+        Stores both turn halves with reported provenance. Memory and summary confer
+        no authority; no external action is executed. Returns morgan.continuation.v1.
+        """
+        return await continue_context(
+            settings,
+            context_id,
+            text,
+            session_id,
+            project=project,
+            client=_client_name(ctx),
+            source=source,
+            author_id=author_id,
+        )
+
     dispatch: dict[str, _ToolFn] = {
+        "working_context_read": working_context_read,
+        "working_context_propose": working_context_propose,
+        "working_context_apply": working_context_apply,
+        "working_context_resume": working_context_resume,
         "remember": remember,
         "recall": recall,
         "facts": facts,
