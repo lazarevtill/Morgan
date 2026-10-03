@@ -770,3 +770,83 @@ async def test_unselected_model_input_change_refuses_apply_atomically(change):
         assert await gate.get_working_context("context", user_id="owner") is None
     finally:
         conn.close()
+
+
+@pytest.mark.parametrize("surface", ["show", "list"])
+@pytest.mark.parametrize("change", ["head", "source", "future-only"])
+@pytest.mark.parametrize("after", [False, True], ids=["before-boundary", "after-boundary"])
+async def test_working_context_read_uses_one_effective_cutoff(surface, change, after):
+    conn, gate, client, service = stack()
+    try:
+        await event(gate)
+        preview = await service.preview(
+            "ctx", context=CheckpointContext(user_id="owner"), event_ids=["decision"]
+        )
+        if change == "future-only":
+            from morgan_brain.memory.working_context import working_fact
+
+            original = working_fact(preview)
+        else:
+            await service.apply(preview)
+            original = (await gate.current_facts(user_id="owner"))[0]
+        boundary = NOW + timedelta(seconds=2)
+        if change == "source":
+            await gate.store(
+                Memory(
+                    id="scheduled-source",
+                    user_id="owner",
+                    project="personal",
+                    content="Choose steel",
+                    source=MemorySource.USER_STATED,
+                    author_id="person",
+                    created_at=boundary,
+                    effective_at=boundary,
+                    revises_event_ids=["decision"],
+                )
+            )
+        else:
+            await gate.upsert_fact(
+                original.model_copy(
+                    update={
+                        "id": "scheduled-head",
+                        "object": original.object.replace(
+                            "Unverified workspace", "Scheduled workspace"
+                        ),
+                        "valid_from": boundary,
+                    }
+                )
+            )
+        reads = []
+        cutoff = boundary if after else boundary - timedelta(microseconds=1)
+
+        def advancing_clock():
+            value = cutoff if not reads else boundary + timedelta(seconds=1)
+            reads.append(value)
+            return value
+
+        gate._store._clock = advancing_clock
+        changes_before = conn.total_changes
+        calls_before = len(client.calls)
+        if surface == "show":
+            view = await gate.get_working_context("ctx", user_id="owner")
+        else:
+            result = await gate.list_working_contexts(user_id="owner")
+            view = result.items[0].view if result.items else None
+            assert not result.truncated
+        if change == "future-only" and not after:
+            assert view is None
+        else:
+            assert view is not None
+            assert view.fact_id == (
+                "scheduled-head" if change != "source" and after else original.id
+            )
+            assert view.eligibility == (
+                "needs_rebuild" if change == "source" and after else "current"
+            )
+            if view.eligibility == "needs_rebuild":
+                assert view.state is None and view.sources == []
+        assert reads == [cutoff]
+        assert conn.total_changes == changes_before
+        assert len(client.calls) == calls_before
+    finally:
+        conn.close()

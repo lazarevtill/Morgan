@@ -784,10 +784,11 @@ class MemoryModule:
         project: str,
         subject: str,
         predicate: str = CHECKPOINT_PREDICATE,
+        effective_at: datetime | None = None,
     ) -> TemporalFact | None:
         """Return the effective checkpoint even when its basis requires rebuilding."""
         with read_transaction(self._conn):
-            now = self._clock()
+            now = effective_at if effective_at is not None else self._clock()
             facts = await self._temporal.current_facts(
                 user_id=user_id, project=project, subject=subject, at=now
             )
@@ -909,9 +910,8 @@ class MemoryModule:
         # Structural discovery must precede support eligibility: stale views need rebuilding.
         # Output is bounded; the existing temporal store scans effective facts within this scope.
         with read_transaction(self._conn):
-            facts = await self._temporal.current_facts(
-                user_id=user_id, project=project, at=self._clock()
-            )
+            cutoff = self._clock()
+            facts = await self._temporal.current_facts(user_id=user_id, project=project, at=cutoff)
             identities = set()
             prefix = "working_checkpoint:"
             for fact in facts:
@@ -929,21 +929,31 @@ class MemoryModule:
             items = []
             for identity in ordered[:limit]:
                 view = await self.working_context_view(
-                    user_id=user_id, project=project, subject=working_subject(identity)
+                    user_id=user_id,
+                    project=project,
+                    subject=working_subject(identity),
+                    effective_at=cutoff,
                 )
                 if view is not None:
                     items.append(WorkingContextEntry(context_id=identity, view=view))
             return WorkingContextList(items=items, truncated=len(ordered) > limit)
 
     async def working_context_view(
-        self, *, user_id: str, project: str, subject: str
+        self,
+        *,
+        user_id: str,
+        project: str,
+        subject: str,
+        effective_at: datetime | None = None,
     ) -> WorkingContextResult | None:
         with read_transaction(self._conn):
+            cutoff = effective_at if effective_at is not None else self._clock()
             fact = await self.checkpoint_fact(
                 user_id=user_id,
                 project=project,
                 subject=subject,
                 predicate=WORKING_CONTEXT_PREDICATE,
+                effective_at=cutoff,
             )
             if fact is None:
                 return None
@@ -960,7 +970,9 @@ class MemoryModule:
             ids = state.event_ids()
             if not ids:
                 return invalid
-            resolved = await self.evidence(user_id=user_id, project=project, evidence_ids=ids)
+            resolved = await self.evidence(
+                user_id=user_id, project=project, evidence_ids=ids, effective_at=cutoff
+            )
             try:
                 validate_working_context(state, resolved.records)
             except ValueError:
