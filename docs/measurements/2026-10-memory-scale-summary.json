@@ -1,0 +1,370 @@
+{
+  "actual_operations": {
+    "hash_embeds": 20043,
+    "network_attempts": 0,
+    "provider_construction_attempts": 0
+  },
+  "admitted_original_runner": true,
+  "concurrent_extra_corrections": 3,
+  "embedding_backend": "hash",
+  "embedding_dim": 1024,
+  "evidence_archive_bytes": 1483436,
+  "evidence_archive_files": 893,
+  "evidence_archive_kind": "path-normalized publication derivative; originals private/local immutable",
+  "evidence_archive_sha256": "6b766f0ac36693665921c6d97f42d00d7b956ea66d25d438975c58f3576743f7",
+  "evidence_path_normalized_members": 16,
+  "explicit_extra_corrections": 40,
+  "fact_boundary_inspections": 72,
+  "filesystem_birth_to_final_export_seconds": 110.2801947593689,
+  "final_retained_bytes_including_snapshots_and_receipts": 323588175,
+  "fixed_seeded_rows": 20000,
+  "forget": {
+    "all_deleted_source_ids_checked": 7994,
+    "cli_deleted_memories": 3997,
+    "cli_seconds_including_snapshot": 2.2379126250743866,
+    "final_database_bytes": 99139584,
+    "final_fact_rows": 40,
+    "final_memory_rows": 12049,
+    "fresh_restart_batches": 500,
+    "sdk_deleted_memories": 3997,
+    "sdk_seconds": 1.7614459579344839,
+    "sdk_snapshot_bytes": 107778048,
+    "sdk_snapshot_seconds": 0.3142393340822309,
+    "secure_physical_erasure": false,
+    "snapshots_total_bytes": 211234816
+  },
+  "independent_postrun_review": "GO",
+  "independent_receipt_sha256": "b870605f3afa26cddef987d0df9d49df5ed6b23ac3f39d2a7b5510a93eca171a",
+  "main_commit": "1b9c1559f50eee8555708301bc4d10468a6fbec1",
+  "measurement_kind": "synthetic zero-model scalability and explicit lifecycle contract, not autonomous quality",
+  "minimum_reclaimable_ram_bytes": 5778554880,
+  "note": "3 CLI/MCP samples per stage give descriptive sample quantiles only; warm SDK includes the first read; CLI includes denial/capture receipt overhead. RSS includes harness/fixture/audits. Filesystem elapsed is not a monotonic measurement; the phase alarm includes finalization.",
+  "original_export_freeze_sha256": "ec2dae33cb73a0a9061d0a13cae249e8559098bc36a8dc3948a63dfacb6d201e",
+  "original_input_freeze_sha256": "a12aa5c96901ddafd767f2e2f120c1b944e290039d86db1ee4d75fbb1ec18979",
+  "p50_convention": "lower middle order statistic, sorted index (n-1)//2; not arithmetic median",
+  "p95_p99_convention": "sorted index floor(n*p), capped at n-1",
+  "physical_memory_bytes": 17179869184,
+  "platform": "macOS-15.8-arm64-arm-64bit-Mach-O",
+  "product_model_calls": 0,
+  "product_tokens": null,
+  "published_input_freeze_sha256": "bf47b8afccfc06657e370ae9296423370f2ceed445b91fbe3380e8b15367719b",
+  "python": "3.14.6 (main, Jun 10 2026, 10:03:53) [Clang 17.0.0 (clang-1700.6.4.2)]",
+  "regular_inspection_calls": 144,
+  "resource_peak_bytes": {
+    "child": 76120064,
+    "parent": 388743168
+  },
+  "review_operator_cost": "not measured",
+  "rows": [
+    {
+      "actual_live_rows_at_read": 100,
+      "canonical_context_bytes": 13381,
+      "corrections": {
+        "max": 0.001955917105078697,
+        "n": 10,
+        "p50": 0.0008236248977482319,
+        "p95": 0.001955917105078697,
+        "p99": 0.001955917105078697,
+        "total": 0.009690582985058427
+      },
+      "fact_rows_at_read": 0,
+      "fact_updates": {
+        "max": 0.0006285409908741713,
+        "n": 10,
+        "p50": 0.0004938330966979265,
+        "p95": 0.0006285409908741713,
+        "p99": 0.0006285409908741713,
+        "total": 0.005086041986942291
+      },
+      "lanes": {
+        "cli": {
+          "max": 0.3057421250268817,
+          "n": 3,
+          "p50": 0.2993235420435667,
+          "p95": 0.3057421250268817,
+          "p99": 0.3057421250268817,
+          "physical_bytes": [
+            18122,
+            18122,
+            18122
+          ],
+          "total": 0.9025064171291888
+        },
+        "mcp": {
+          "max": 0.033520916011184454,
+          "n": 3,
+          "p50": 0.017596625024452806,
+          "p95": 0.033520916011184454,
+          "p99": 0.033520916011184454,
+          "physical_bytes": [
+            33771,
+            33771,
+            33771
+          ],
+          "total": 0.06869683298282325
+        },
+        "restart": {
+          "max": 0.0021060421131551266,
+          "n": 5,
+          "p50": 0.001645333832129836,
+          "p95": 0.0021060421131551266,
+          "p99": 0.0021060421131551266,
+          "total": 0.008824458811432123
+        },
+        "sdk": {
+          "max": 0.0015526670031249523,
+          "n": 25,
+          "p50": 0.001017667120322585,
+          "p95": 0.0013595831114798784,
+          "p99": 0.0015526670031249523,
+          "total": 0.026620085118338466
+        }
+      },
+      "post_update_fact_rows": 10,
+      "post_update_live_rows": 110,
+      "seeded_rows": 100,
+      "source_content_bytes": 1702,
+      "storage_files_at_read": {
+        "morgan.db": 4616192,
+        "morgan.db-shm": 32768,
+        "morgan.db-wal": 4783352
+      }
+    },
+    {
+      "actual_live_rows_at_read": 1010,
+      "canonical_context_bytes": 13381,
+      "corrections": {
+        "max": 0.0032252080272883177,
+        "n": 10,
+        "p50": 0.0018861251883208752,
+        "p95": 0.0032252080272883177,
+        "p99": 0.0032252080272883177,
+        "total": 0.022300498792901635
+      },
+      "fact_rows_at_read": 10,
+      "fact_updates": {
+        "max": 0.0006654998287558556,
+        "n": 10,
+        "p50": 0.0004613341297954321,
+        "p95": 0.0006654998287558556,
+        "p99": 0.0006654998287558556,
+        "total": 0.004761501448228955
+      },
+      "lanes": {
+        "cli": {
+          "max": 0.3071826659142971,
+          "n": 3,
+          "p50": 0.30108291702345014,
+          "p95": 0.3071826659142971,
+          "p99": 0.3071826659142971,
+          "physical_bytes": [
+            18122,
+            18122,
+            18122
+          ],
+          "total": 0.9054842910263687
+        },
+        "mcp": {
+          "max": 0.02114270906895399,
+          "n": 3,
+          "p50": 0.019093041075393558,
+          "p95": 0.02114270906895399,
+          "p99": 0.02114270906895399,
+          "physical_bytes": [
+            33771,
+            33771,
+            33771
+          ],
+          "total": 0.05819158325903118
+        },
+        "restart": {
+          "max": 0.0029534590430557728,
+          "n": 5,
+          "p50": 0.002472874941304326,
+          "p95": 0.0029534590430557728,
+          "p99": 0.0029534590430557728,
+          "total": 0.012781458673998713
+        },
+        "sdk": {
+          "max": 0.002325416076928377,
+          "n": 25,
+          "p50": 0.0014552921056747437,
+          "p95": 0.002146249869838357,
+          "p99": 0.002325416076928377,
+          "total": 0.039303499506786466
+        }
+      },
+      "post_update_fact_rows": 20,
+      "post_update_live_rows": 1020,
+      "seeded_rows": 1000,
+      "source_content_bytes": 1702,
+      "storage_files_at_read": {
+        "morgan.db": 5648384,
+        "morgan.db-shm": 32768,
+        "morgan.db-wal": 4783352
+      }
+    },
+    {
+      "actual_live_rows_at_read": 5020,
+      "canonical_context_bytes": 13381,
+      "corrections": {
+        "max": 0.004183707991614938,
+        "n": 10,
+        "p50": 0.003282875055447221,
+        "p95": 0.004183707991614938,
+        "p99": 0.004183707991614938,
+        "total": 0.0339400852099061
+      },
+      "fact_rows_at_read": 20,
+      "fact_updates": {
+        "max": 0.0007310409564524889,
+        "n": 10,
+        "p50": 0.00044137495569884777,
+        "p95": 0.0007310409564524889,
+        "p99": 0.0007310409564524889,
+        "total": 0.004775333218276501
+      },
+      "lanes": {
+        "cli": {
+          "max": 0.3046758328564465,
+          "n": 3,
+          "p50": 0.3015969998668879,
+          "p95": 0.3046758328564465,
+          "p99": 0.3046758328564465,
+          "physical_bytes": [
+            18122,
+            18122,
+            18122
+          ],
+          "total": 0.9062149156816304
+        },
+        "mcp": {
+          "max": 0.026015917072072625,
+          "n": 3,
+          "p50": 0.020699334098026156,
+          "p95": 0.026015917072072625,
+          "p99": 0.026015917072072625,
+          "physical_bytes": [
+            33771,
+            33771,
+            33771
+          ],
+          "total": 0.0669905012473464
+        },
+        "restart": {
+          "max": 0.004987332969903946,
+          "n": 5,
+          "p50": 0.004558666842058301,
+          "p95": 0.004987332969903946,
+          "p99": 0.004987332969903946,
+          "total": 0.022918666945770383
+        },
+        "sdk": {
+          "max": 0.003636291017755866,
+          "n": 25,
+          "p50": 0.0027648331597447395,
+          "p95": 0.0032149171456694603,
+          "p99": 0.003636291017755866,
+          "total": 0.0708999577909708
+        }
+      },
+      "post_update_fact_rows": 30,
+      "post_update_live_rows": 5030,
+      "seeded_rows": 5000,
+      "source_content_bytes": 1702,
+      "storage_files_at_read": {
+        "morgan.db": 27181056,
+        "morgan.db-shm": 32768,
+        "morgan.db-wal": 8301832
+      }
+    },
+    {
+      "actual_live_rows_at_read": 20030,
+      "canonical_context_bytes": 13381,
+      "corrections": {
+        "max": 0.008768917061388493,
+        "n": 10,
+        "p50": 0.007479000138118863,
+        "p95": 0.008768917061388493,
+        "p99": 0.008768917061388493,
+        "total": 0.07704333448782563
+      },
+      "fact_rows_at_read": 30,
+      "fact_updates": {
+        "max": 0.0006475001573562622,
+        "n": 10,
+        "p50": 0.0004771249368786812,
+        "p95": 0.0006475001573562622,
+        "p99": 0.0006475001573562622,
+        "total": 0.004893626319244504
+      },
+      "lanes": {
+        "cli": {
+          "max": 0.3171583339571953,
+          "n": 3,
+          "p50": 0.31477166595868766,
+          "p95": 0.3171583339571953,
+          "p99": 0.3171583339571953,
+          "physical_bytes": [
+            18122,
+            18122,
+            18122
+          ],
+          "total": 0.945381416939199
+        },
+        "mcp": {
+          "max": 0.03190079191699624,
+          "n": 3,
+          "p50": 0.029359082924202085,
+          "p95": 0.03190079191699624,
+          "p99": 0.03190079191699624,
+          "physical_bytes": [
+            33771,
+            33771,
+            33771
+          ],
+          "total": 0.08969016699120402
+        },
+        "restart": {
+          "max": 0.014506957959383726,
+          "n": 5,
+          "p50": 0.013605999993160367,
+          "p95": 0.014506957959383726,
+          "p99": 0.014506957959383726,
+          "total": 0.0686464577447623
+        },
+        "sdk": {
+          "max": 0.013106334023177624,
+          "n": 25,
+          "p50": 0.012484958162531257,
+          "p95": 0.01290091685950756,
+          "p99": 0.013106334023177624,
+          "total": 0.31089487741701305
+        }
+      },
+      "post_update_fact_rows": 40,
+      "post_update_live_rows": 20040,
+      "seeded_rows": 20000,
+      "source_content_bytes": 1702,
+      "storage_files_at_read": {
+        "morgan.db": 108040192,
+        "morgan.db-shm": 32768,
+        "morgan.db-wal": 8528432
+      }
+    }
+  ],
+  "seconds_through_summary": 110.04033354204148,
+  "seeded_store_seconds": {
+    "max": 0.08849300001747906,
+    "n": 20000,
+    "p50": 0.004260375164449215,
+    "p95": 0.0070422920398414135,
+    "p99": 0.007772209122776985,
+    "total": 85.52262718998827
+  },
+  "source_content_bytes_seeded": 2839996,
+  "structural_comparator_calls_including_concurrency_and_collateral": 151,
+  "synchronized_concurrency_schedules": 3,
+  "temporal_fact_rows": 40,
+  "total_memory_rows_before_forget": 20043
+}
