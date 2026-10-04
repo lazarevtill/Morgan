@@ -1,0 +1,252 @@
+{
+  "experiment": "native-memory-v1",
+  "status": "bounded_synthetic_quality_gate_passed",
+  "production_ready": false,
+  "architecture": "existing owner AI tool consumes actual MemoryGate evidence; no additional LAN reader",
+  "repository_base": "74315ba9ee6ef290c7f265a7853c32dbce29100e",
+  "panel": {
+    "fresh_stories": 24,
+    "development": 8,
+    "closed": 16,
+    "events": 288,
+    "sessions_per_story": 12,
+    "minimum_simulated_days": 30,
+    "personal": 12,
+    "project": 12,
+    "languages": [
+      "EN",
+      "RU"
+    ],
+    "max_source_utf8_bytes": 365
+  },
+  "development": {
+    "dev_gate_passed": true,
+    "arms": {
+      "no_memory": {
+        "useful": 2,
+        "critical": 0,
+        "critical_unknown": 0,
+        "total": 8
+      },
+      "raw_retrieval": {
+        "useful": 8,
+        "critical": 0,
+        "critical_unknown": 0,
+        "total": 8
+      },
+      "morgan_inspect": {
+        "useful": 8,
+        "critical": 0,
+        "critical_unknown": 0,
+        "total": 8
+      }
+    },
+    "grade_sha256": "04e6b1d061454ae413ecef3d9170ce3404ef6b1b44d72a8801c007f49d965bb9",
+    "input_sha256": "a3f47c785207e40e6d222d3192d479eac1d0af12f26ca82725e3187a1ef51e38",
+    "holdout_permitted": true,
+    "tuning_allowed": false
+  },
+  "closed": {
+    "campaign": "native-memory-v1",
+    "holdout_gate_passed": true,
+    "arms": {
+      "no_memory": {
+        "useful": 4,
+        "critical": 0,
+        "critical_unknown": 0,
+        "total": 16
+      },
+      "raw_retrieval": {
+        "useful": 15,
+        "critical": 0,
+        "critical_unknown": 0,
+        "total": 16
+      },
+      "morgan_inspect": {
+        "useful": 16,
+        "critical": 0,
+        "critical_unknown": 0,
+        "total": 16
+      }
+    },
+    "grade_sha256": "c38e603406f7e50ec30f7a80b03eca6f94c3cf7f5e0442cfc08e78b0c877a44e",
+    "input_sha256": "774e0e02bc5dc876cb5e95eab39c1e6efdfbd0714cb8128c0640bc6d33c51501",
+    "fixed_denominator": 48,
+    "native_caller_dispatches": 48,
+    "delivered": 47,
+    "first_originals_retained": 48,
+    "tuning_allowed": false,
+    "graded_before_original_deadline": true
+  },
+  "source_totals": {
+    "owned_processes": 312,
+    "events_stored": 288,
+    "local_index_input_items": 312,
+    "LAN_HTTP_attempts": 0,
+    "min_reclaimable_GiB": 6.16705322265625,
+    "max_peak_MiB": 63.0,
+    "worker_self_timed_seconds": 16.598665417172015
+  },
+  "native_cost": {
+    "development": {
+      "quality_scores": null,
+      "native_caller_dispatches": 24,
+      "native_physical_model_calls": null,
+      "platform_tokens": null,
+      "total_monetary_cost": null,
+      "LAN_HTTP_attempts": 0,
+      "all_delivered": true,
+      "original_report_sha256": "d1ad6db46803432635cd3fb96fa4276d64df28c06dc374475bbdb1a928b3b2d4",
+      "original_export_sha256": "f6f5b00d15932d457dc11c02403bdf1afded9a9e2265374b8a02f73d820e756a",
+      "arms": {
+        "no_memory": {
+          "planned": 8,
+          "delivered": 8,
+          "frame_utf8_bytes_total": 21196,
+          "frame_utf8_bytes_max": 2758,
+          "original_output_bytes_total": 3810,
+          "dispatch_to_collector_seconds_total": 673.7230708599091,
+          "dispatch_to_collector_seconds_median": 82.38900756835938,
+          "dispatch_to_collector_seconds_max": 110.74128603935242
+        },
+        "raw_retrieval": {
+          "planned": 8,
+          "delivered": 8,
+          "frame_utf8_bytes_total": 80577,
+          "frame_utf8_bytes_max": 11154,
+          "original_output_bytes_total": 6041,
+          "dispatch_to_collector_seconds_total": 623.6956055164337,
+          "dispatch_to_collector_seconds_median": 74.48536443710327,
+          "dispatch_to_collector_seconds_max": 98.42103004455566
+        },
+        "morgan_inspect": {
+          "planned": 8,
+          "delivered": 8,
+          "frame_utf8_bytes_total": 85073,
+          "frame_utf8_bytes_max": 11828,
+          "original_output_bytes_total": 5926,
+          "dispatch_to_collector_seconds_total": 667.5082676410675,
+          "dispatch_to_collector_seconds_median": 76.43696892261505,
+          "dispatch_to_collector_seconds_max": 121.46566700935364
+        }
+      }
+    },
+    "closed": {
+      "quality_scores": null,
+      "native_caller_dispatches": 48,
+      "native_physical_model_calls": null,
+      "platform_tokens": null,
+      "total_monetary_cost": null,
+      "LAN_HTTP_attempts": 0,
+      "all_delivered": false,
+      "original_report_sha256": "1eb6fb687f258d300b7b9dee28f163868fe74657739d71daa668adcd3ee732e7",
+      "original_export_sha256": "438a7b9fb4bc736f80c664f3a3fd3ce8bfee429854a31f7ffb213840a7f63273",
+      "arms": {
+        "no_memory": {
+          "planned": 16,
+          "delivered": 16,
+          "frame_utf8_bytes_total": 42298,
+          "frame_utf8_bytes_max": 2774,
+          "original_output_bytes_total": 7289,
+          "dispatch_to_collector_seconds_total": 1014.0272476673126,
+          "dispatch_to_collector_seconds_median": 57.48663246631622,
+          "dispatch_to_collector_seconds_max": 107.8888201713562
+        },
+        "raw_retrieval": {
+          "planned": 16,
+          "delivered": 15,
+          "frame_utf8_bytes_total": 163572,
+          "frame_utf8_bytes_max": 11373,
+          "original_output_bytes_total": 11278,
+          "dispatch_to_collector_seconds_total": 1209.5623090267181,
+          "dispatch_to_collector_seconds_median": 60.45872950553894,
+          "dispatch_to_collector_seconds_max": 284.14688992500305
+        },
+        "morgan_inspect": {
+          "planned": 16,
+          "delivered": 16,
+          "frame_utf8_bytes_total": 173014,
+          "frame_utf8_bytes_max": 12099,
+          "original_output_bytes_total": 12017,
+          "dispatch_to_collector_seconds_total": 1021.2914750576019,
+          "dispatch_to_collector_seconds_median": 59.36572194099426,
+          "dispatch_to_collector_seconds_max": 100.38614702224731
+        }
+      }
+    },
+    "caller_dispatches": 72,
+    "first_originals_retained": 72,
+    "available": 71,
+    "physical_model_calls": null,
+    "model_identity": null,
+    "reasoning_tokens": null,
+    "platform_tokens": null,
+    "total_monetary_cost": null,
+    "unmetered": [
+      "author",
+      "reviewers",
+      "grader",
+      "parent orchestration",
+      "platform internal calls",
+      "hardware",
+      "electricity"
+    ]
+  },
+  "bounds": {
+    "shared_campaign_seconds": 7200,
+    "shared_start_utc": "2026-10-04T17:42:33.466628+00:00",
+    "grade_saved_elapsed_seconds": 5900.732977628708,
+    "audit_saved_elapsed_seconds": 5903.921551942825,
+    "caller_collection_cutoff_seconds": 180,
+    "context_utf8_bytes": 16384,
+    "whole_frame_utf8_bytes": 32768,
+    "original_output_bytes": 16384,
+    "rationale_chars": 4096,
+    "RAM_reclaimable_min_GiB": 4,
+    "parent_RSS_max_MiB": 512,
+    "worker_RSS_max_MiB": 256,
+    "shared_artifact_max_MiB": 512,
+    "retained_run_bytes_at_accounting": 111399420
+  },
+  "interpretation": {
+    "evidence_helped_this_panel": true,
+    "inspect_answer_quality_advantage_over_raw_demonstrated": false,
+    "raw_only_failure": "late parent collection after 180-second cutoff; original retained, no repeat",
+    "compute_equivalent_comparison": false,
+    "cheaper_claim": false,
+    "on_device_autonomy_claim": false,
+    "merge_authorized_by_result": false
+  },
+  "integrity": {
+    "public_sha256": "4d877cb643dc92af3a43c48d362873c5b8dc8e55a17db9f2fa15995f1035c6ae",
+    "private_gold_sha256": "ecf3523e02d191ebf28f69283546276902070fc97bbbec8cace9a90bf8d0c66b",
+    "instrument_freeze_sha256": "ceceefdc792bf582e480faf1ee183e0a0445b855f9cdb2355979d9b4348e53e5",
+    "semantic_preflight": "all24 independent GO before outputs",
+    "instrument_admission_sha256": "f3dfe112c8d1fbd2a745334ad6f9700e8cdeac7a439b144f494ea42b2c9ad903",
+    "scope_incident_review_sha256": "97c7f4a354d985075835fd8bb5c94eb933896778c36a1550a9fe22b583ca5709",
+    "development_audit_sha256": "082f36035e3f70621b2fa27778f9000513182a03b3e03630ceaa73c1152b924f",
+    "closed_audit_sha256": "7169d0d65585fe34f997e058af0fd93516b5c8272d258576f94732bc1cba4063",
+    "development_frozen_files": 646,
+    "closed_frozen_files": 1285,
+    "scope_incident": "Before calls, broad root Ruff recursively parsed private author.py and emitted generic lint diagnostics only, no semantic source/labels; independently reviewed continuation GO. No claim of zero private-source tool access."
+  },
+  "limitations": [
+    "synthetic episodic restart histories, not real multiday reliability or consolidation",
+    "joint domain/category allocation uneven; no independent domain-effect inference",
+    "all resumed steps share ID advance and relative progress position",
+    "unresolved fork examples are textual tentative proposals, not active revision-graph forks",
+    "platform model/internal call counts, tokens and money unknown",
+    "raw and inspect paired source content identical, inspection quality advantage unproven",
+    "cloud native consumers; no on-device autonomous assistant claim",
+    "closed data and private method mapping remain local"
+  ],
+  "prior_results_preserved": {
+    "V5_both": "7/16",
+    "V9_source_blocks": "9/16 vs baseline1/16;14/16 qualitygate failed",
+    "V10_public": "3/4;one exactexcerpt copyfailure;noheldout",
+    "V11": "baseline7/16 candidate5/16;critical3 vs2",
+    "V12": "baseline5/16 candidate3/16;critical5 vs6",
+    "long_lived_v5": "inspect7/16 raw7/16 no-memory4/16;terminalfailed;not replaced"
+  },
+  "next_step": "Review this bounded architecture evidence and separately design a prospective practical integration/realistic robustness check; no realmemory migration, extra model, production activation or merge from this synthetic result."
+}
