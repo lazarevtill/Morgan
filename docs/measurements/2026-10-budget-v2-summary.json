@@ -1,0 +1,183 @@
+{
+  "version": "budget-v2-dev-result",
+  "status": "TERMINAL_VALID_DEV_GATE_FAIL",
+  "utc": "2026-10-04T21:55:03.527426+00:00",
+  "grade_sha256": "5029534b1b48cf7794b032a6ef2168cce29fd7ba27f63614d0b3e777d04820f6",
+  "grader_input_sha256": "521cb0d6f81f8bdc501e9602368aed51d1a7ebfb9208d4eeada1c1ca2471fe62",
+  "instrument_sha256": "709a2b3ced8c89a8bc466cd839c94a733cc1a11f09ee46fdc6e28c15a41aee6b",
+  "phase_completed": true,
+  "arms": {
+    "recent_history": {
+      "total": 8,
+      "strict_useful": 2,
+      "critical": 1,
+      "critical_unknown": 1
+    },
+    "raw_retrieval": {
+      "total": 8,
+      "strict_useful": 5,
+      "critical": 1,
+      "critical_unknown": 0
+    },
+    "morgan_inspect": {
+      "total": 8,
+      "strict_useful": 3,
+      "critical": 0,
+      "critical_unknown": 0
+    }
+  },
+  "required_inspect_useful": 7,
+  "required_inspect_critical": 0,
+  "required_inspect_critical_unknown": 0,
+  "not_worse_than_both_baselines": false,
+  "heldout_started": false,
+  "heldout_reader_attempts": 0,
+  "replays": 0,
+  "post_output_tuning": false,
+  "integrity_review": "GO_INTEGRITY_COST_ONLY",
+  "interpretation": "Inspect candidate fails usefulness and comparator gates. No heldout quality claim. Zero candidate criticals is limited eight-story observation, not production safety.",
+  "integrity_review_sha256": "02a0adeb9f3128ac863238a01d3a39386aef8c4903b0f9c239ffa7c7f6374964",
+  "method": "same-scope recent eight, raw top-eight retrieval, or shared-query evidence closure plus MemoryGate.inspect; lexical SHA1024 embeddings",
+  "panel": {
+    "authored_stories": 24,
+    "events_per_story": 64,
+    "sessions_per_story": 32,
+    "minimum_simulated_days": 180,
+    "dev_stories": 8,
+    "holdout_run": false,
+    "target_events_per_story": 40,
+    "same_owner_other_project_events": 16,
+    "other_owner_events": 8
+  },
+  "reader": "LAN59 preloaded ornith15; fixed native template; no model shopping/load",
+  "ceilings": {
+    "native_input_tokens": 7040,
+    "output_tokens": 1024,
+    "reserved_tokens": 128,
+    "packed_context_utf8_bytes": 16384,
+    "candidate_bytes": 65536
+  },
+  "costs": {
+    "HTTP_attempts": 489,
+    "generation_attempts": 23,
+    "native_count_operations": 217,
+    "route_counts": {
+      "/v1/models": 26,
+      "/health": 2,
+      "/props": 2,
+      "/props?model=ornith15&autoload=false": 2,
+      "/apply-template": 217,
+      "/tokenize": 217,
+      "/v1/chat/completions": 23
+    },
+    "known_usage": {
+      "input_tokens": 61422,
+      "output_tokens": 3679,
+      "reported_cached_prompt_tokens": 6371,
+      "known_generation_receipts": 23,
+      "unknown_generation_usage_attempts": 0
+    },
+    "per_arm_costs": {
+      "recent_history": {
+        "planned": 8,
+        "available": 7,
+        "input_tokens": 17854,
+        "output_tokens": 963,
+        "inclusive_seconds": 446.671252167318,
+        "packing_seconds_known": 14.402938917744905
+      },
+      "morgan_inspect": {
+        "planned": 8,
+        "available": 8,
+        "input_tokens": 23036,
+        "output_tokens": 1285,
+        "inclusive_seconds": 469.7096125429962,
+        "packing_seconds_known": 17.85258979187347
+      },
+      "raw_retrieval": {
+        "planned": 8,
+        "available": 8,
+        "input_tokens": 20532,
+        "output_tokens": 1431,
+        "inclusive_seconds": 424.621964081889,
+        "packing_seconds_known": 25.688511040993035
+      }
+    },
+    "source_costs": {
+      "worker_elapsed_seconds": 13.451366790337488,
+      "store_attempted": 512,
+      "store_completed": 512,
+      "local_embedding_calls": 520,
+      "local_embedding_input_items": 520,
+      "processes": 264,
+      "store_processes": 256,
+      "query_processes": 8,
+      "retrieval_wall_seconds": {
+        "inspect_gate_read": 0.005816542077809572,
+        "inspect_incremental_closure": 0.006128375651314855,
+        "raw_gate_read": 0.005633499240502715,
+        "recent_gate_read": 0.0052177500911056995,
+        "recent_selection": 0.00023633334785699844,
+        "shared_seed_query": 0.03179962397553027
+      },
+      "retrieval_CPU_seconds": {
+        "inspect_gate_read": 0.005814999999999959,
+        "inspect_incremental_closure": 0.00612800000000005,
+        "raw_gate_read": 0.005581000000000003,
+        "recent_gate_read": 0.005193999999999976,
+        "recent_selection": 0.00023699999999998722,
+        "shared_seed_query": 0.03167999999999982
+      }
+    },
+    "reader_CPU_seconds": {
+      "user": 15.687027,
+      "system": 20.653704999999995
+    },
+    "HTTP_elapsed_seconds_by_route": {
+      "/props?model=ornith15&autoload=false": 0.06263058283366263,
+      "/v1/models": 3.6397213763557374,
+      "/health": 0.014933750033378601,
+      "/props": 0.016275250120088458,
+      "/tokenize": 33.62649028818123,
+      "/apply-template": 7.674784916918725,
+      "/v1/chat/completions": 1258.260362375062
+    },
+    "driver_full_cost_receipt": {
+      "audit_only_recovery": false,
+      "child_cpu_system_seconds": 40.823988,
+      "child_cpu_user_seconds": 94.054809,
+      "driver_cpu_system_seconds_including_export": 3.081789,
+      "driver_cpu_user_seconds_including_export": 2.581537,
+      "driver_peak_rss_bytes_mac": 74432512,
+      "finished_utc_epoch": 1791150670.490659,
+      "original_report_sha256": "453a23c0ec62efcf606e56604d99e6c428b00fe0d371ca3c70fb5ac524944342",
+      "phase_wall_seconds_through_export": 1453.0180201530457,
+      "platform_model_money_server_energy_unknown": true
+    },
+    "source_and_frame_parent_seconds": 99.595854541054,
+    "resources": {
+      "sample_count": 1305,
+      "min_reclaimable_bytes": 6289653760,
+      "max_sample_rss_bytes": 66600960,
+      "max_sample_peak_rss_bytes": 66600960,
+      "whole_v2_stat_bytes": 57272758,
+      "sealed_dev_bytes": 48697818
+    },
+    "latency": {
+      "max_dispatch_to_original_seconds": 101.93397279200144,
+      "max_collector_lag_seconds": 0.22361302375793457
+    }
+  },
+  "limits": [
+    "Development-only valid negative result; no heldout calls or production readiness.",
+    "Composite closure+inspect comparison, not isolated rendering.",
+    "Equal ceilings are not equal actual tokens, runtime, compute or money.",
+    "Synthetic episodic restarts with local lexical embedding, not default semantic embeddings, consolidation or real multi-day reliability.",
+    "Root/runtime never read semantic gold; shared filesystem isolation is procedural, not hardware enforced.",
+    "No real memory, expected answers, private gold, source cases, mapping or original caller output published.",
+    "CPU components overlap inclusive totals; do not double-count.",
+    "Full monetary costs, server compute/energy/hardware, and platform author/reviewer/grader model calls and tokens unknown.",
+    "Public4/4 transport/action gate and earlier native16/16 do not override this stricter dev failure.",
+    "Prior failed experiments and PR59/63 remain unchanged."
+  ]
+}
