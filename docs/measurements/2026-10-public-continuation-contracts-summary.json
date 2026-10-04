@@ -1,0 +1,135 @@
+{
+  "status": "VALID_PUBLIC_DIAGNOSTICS_NO_MEMORY_QUALITY_ADMISSION",
+  "production_head": "b09bd13b9374b41b0a5d3587f722a50277edc535",
+  "public_v1": {
+    "cells": 24,
+    "graphs": 1,
+    "available": 19,
+    "strict_pass": 13,
+    "critical_true": 1,
+    "critical_unknown": 4,
+    "forms": {
+      "source_only": {
+        "strict": 5,
+        "denominator": 8,
+        "critical": 0,
+        "unknown": 1
+      },
+      "empty_sections": {
+        "strict": 4,
+        "denominator": 8,
+        "critical": 1,
+        "unknown": 1
+      },
+      "neutral_legend": {
+        "strict": 4,
+        "denominator": 8,
+        "critical": 0,
+        "unknown": 2
+      }
+    },
+    "authorized_continuations": {
+      "strict": 0,
+      "denominator": 6
+    },
+    "http": 224,
+    "counts": 84,
+    "generations": 24,
+    "known_input_tokens": 23598,
+    "known_output_tokens": 2848,
+    "unknown_usage_attempts": 4,
+    "wall_seconds": 1874.806695,
+    "grade_history": {
+      "original_array_only_grade": "preserved, 0strict/2critical; not canonical because it added an unfrozen citation-container gate",
+      "canonical_frozen_contract_grade": "fresh independent grade, clear inline eligibleIDs qualify;13strict/1critical; three critical classifications also differed",
+      "root_unblinded_after_canonical_grade": true
+    }
+  },
+  "public_v2": {
+    "status": "TERMINAL_VALID_PUBLIC_DIAGNOSTIC_NO_QUALITY_ADMISSION",
+    "completed_utc": "2026-10-04T23:41:46.409253+00:00",
+    "grade_sha256": "1e0334a765d8ff9d1d4742da3c29596a87de49d62bf9e66f3a89d7e64d6bd096",
+    "aggregate": {
+      "strict_pass": 7,
+      "strict_fail": 5,
+      "critical_true": 5,
+      "critical_false": 7,
+      "critical_unknown": 0,
+      "available": 11,
+      "unavailable": 1
+    },
+    "conditions": {
+      "live_observation": {
+        "strict_pass": 2,
+        "denominator": 4,
+        "critical_true": 2,
+        "critical_unknown": 0
+      },
+      "adopt_for_simulation": {
+        "strict_pass": 2,
+        "denominator": 4,
+        "critical_true": 2,
+        "critical_unknown": 0
+      },
+      "report_only": {
+        "strict_pass": 3,
+        "denominator": 4,
+        "critical_true": 1,
+        "critical_unknown": 0
+      }
+    },
+    "known_usage": {
+      "input_tokens": 16670,
+      "output_tokens": 1813,
+      "total_tokens": 18483,
+      "unknown_usage_attempts": 0,
+      "physical_generations": 12,
+      "physical_http_requests": 110,
+      "native_counts": 39
+    },
+    "phase_wall_seconds": 666.372407913208,
+    "actual_durable_transitions": 4,
+    "cost_limits": [
+      "Original inclusive offline preparation process wall unknown; retained worker selftimes only.",
+      "Server CPU/GPU/energy/hardware/money and platform author/reviewer/grader calls/tokens/money unknown."
+    ],
+    "next": "Independently review bounded response-schema contract gap offline; preserve all first scores and unused budget-v2 holdout.",
+    "integrity_review_sha256": "7c78cb8ffefffa8d7f147fd6cbfd685eb91d4f23476af4d2ef052a6b9fff6815",
+    "claims_disallowed": [
+      "memoryqualitypass",
+      "isolated memory benefit",
+      "causal explanation of old public-v1 failure",
+      "qualityjustifiedmerge",
+      "actual compute/money equality"
+    ]
+  },
+  "offline_response_contract": {
+    "tests": 17,
+    "independent_offline_go_sha256": "7437421cb5a5afe60087406a1039bb5b9a5e48a8f60114db818a7d4716f8181a",
+    "native_server_compatibility_verified": false,
+    "does_not_encode_progress_or_rationale_truth": true,
+    "production_edits": 0,
+    "new_modelcalls": 0
+  },
+  "evidence": {
+    "public_v1/quality/freeze.json": "175e80774a298d2bfde80f83fb340f2f5164a8bb4e1850d061356b33992f55c7",
+    "public_v1/postrun-integrity-review.json": "adf95465d0af007bd92d7e75865a55c3b142b29eb18ea36449764f2bfc2a4265",
+    "public_v1/blinded-grade.json": "06ca1a67ca245d420368e7532d392ef6efd08b746d2ce63043b0d6ba948c4ea6",
+    "public_v1/citation-contract-review.json": "8bd1e6aba9c61a2e0c2f64e912704396a48dc791e871b329e9ad649c4b10f754",
+    "public_v1/frozen-contract-grade.json": "7752ddfce2ae6f3e13f2d9bc48971c16dca5654b3d3032f13edf41fcc332def7",
+    "public_v1/grading-integrity-review.json": "5783c820f360b59df8fb8f52beba09336ef74a76d74a7498cb3a3779e0b97c75",
+    "public_v2/quality/freeze.json": "2bd14553ffadbdd92ec038c9b3668dad02fa1b85b59a882ca3f2d9596926f18c",
+    "public_v2/instrument-admission.json": "ebeb779a6160333a22fe8c08434e8679660ab0553591cd802f4342c1985c0157",
+    "public_v2/exact-frame-review.json": "2c36bb208d11ad682d03b8ee072fbc3878499a5060666438a5f835303129786d",
+    "public_v2/blinded-grade.json": "1e0334a765d8ff9d1d4742da3c29596a87de49d62bf9e66f3a89d7e64d6bd096",
+    "public_v2/postrun-integrity-review.json": "7c78cb8ffefffa8d7f147fd6cbfd685eb91d4f23476af4d2ef052a6b9fff6815",
+    "public_v2/grading-and-causal-review.json": "e89378fadd44e401a94151cad140610de367a221019b0b197402e6e656869746"
+  },
+  "limits": [
+    "Public graphs only; no new closed gold/panel or memory quality gate. Budget-v2 heldout remains unused.",
+    "Model/server/platform/money unknown; equal caps do not mean equal token/compute/time/money.",
+    "v2 source preparation full original process wall missing, source selftimes retained; v1 source preparation reused prior transparent offlinefixture.",
+    "Semantics and observations reveal conditions despite opaqueIDs; no perfect blindness.",
+    "No changed or discarded first grades; all delivery failures retained. One v2 critical classification boundary remains disclosed without score replacement."
+  ]
+}
