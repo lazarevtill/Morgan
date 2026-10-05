@@ -1,0 +1,132 @@
+{
+  "status": "VALID_PUBLIC_NEGATIVES_NO_MEMORY_QUALITY_ADMISSION",
+  "production_head": "b09bd13b9374b41b0a5d3587f722a50277edc535",
+  "response_schema": {
+    "status": "TERMINAL_VALID_PUBLIC_SCHEMA_ONLY_NO_SEMANTIC_BENEFIT",
+    "completed_utc": "2026-10-05T00:10:11.536024+00:00",
+    "first_grade_sha256": "3d5ea1198058092c49bd907a0fc9bb9372ed9843bfc6f5bf6b665d56bb284423",
+    "conditions": {
+      "original_schema": {
+        "strict_pass": 0,
+        "denominator": 4,
+        "critical_true": 3,
+        "critical_unknown": 0,
+        "available": 2
+      },
+      "tagged_static_schema": {
+        "strict_pass": 0,
+        "denominator": 4,
+        "critical_true": 2,
+        "critical_unknown": 0,
+        "available": 4
+      }
+    },
+    "all_actual_effects": 0,
+    "aggregate": {
+      "actual_effects": 0,
+      "available": 6,
+      "critical_false": 3,
+      "critical_true": 5,
+      "critical_unknown": 0,
+      "forensic_responses_audited": 16,
+      "rows": 8,
+      "strict_fail": 8,
+      "strict_pass": 0,
+      "unavailable": 2
+    },
+    "scope": "Format validity contrast; no semantic improvement or memory quality admission",
+    "known_usage": {
+      "input_tokens": 10672,
+      "output_tokens": 1242,
+      "total_tokens": 11914,
+      "unknown_usage_attempts": 0,
+      "physical_generations": 8,
+      "physical_http_requests": 76,
+      "native_counts": 26
+    },
+    "phase_wall_seconds": 403.98962926864624,
+    "cost_limits": [
+      "ServerCPU/GPU/energy/hardware/money and platform author/reviewer/grader tokens/calls/money unknown.",
+      "Freshsourcepreparation originalwall retained separately; phasewall excludes this sourceprep."
+    ],
+    "native_compatibility": "Endpoint accepted actualanyOf requests; observed4/4taggedvaliddeliveriesnotuniversalconstraintenforcement orsemanticproof",
+    "next": "Fixed rationale contrast completed; fixed stop reached; no additional variants, replays, or heldout opening",
+    "integrity_review_sha256": "e71447e7c51ec8f5064eb29c8054b3865b38a95620abdd4f486c19bba5085353"
+  },
+  "rationale_instruction": {
+    "status": "TERMINAL_VALID_PUBLIC_NEGATIVE_DELIVERY_AND_SEMANTIC_BLOCKERS",
+    "cells": 10,
+    "available": 3,
+    "unavailable": 7,
+    "phase_wall_seconds": 993.8781418800354,
+    "physical_http_requests": 92,
+    "physical_generations": 10,
+    "known_input_tokens": 3844,
+    "known_output_tokens": 405,
+    "known_total_tokens": 4249,
+    "generations_with_unknown_usage": 7,
+    "grader_input_sha256": "9048786c79507668887395b46c4a476c2c43d51429ab53e5a6ce5d7c21b702c8",
+    "first_grade_sha256": "fda16b0c14746e3659de5a19702b0d9bebba997394a5bc14b0b8ecea58deaff2",
+    "conditions": {
+      "concise_evidence_rationale": {
+        "strict_pass": 0,
+        "denominator": 5,
+        "critical_true": 2,
+        "critical_unknown": 3,
+        "available": 2,
+        "actual_effects": 1
+      },
+      "baseline_policy": {
+        "strict_pass": 0,
+        "denominator": 5,
+        "critical_true": 1,
+        "critical_unknown": 4,
+        "available": 1,
+        "actual_effects": 0
+      }
+    },
+    "aggregate": {
+      "strict_usefulness_pass": 0,
+      "strict_usefulness_fail": 10,
+      "critical_true": 3,
+      "critical_false": 0,
+      "critical_unknown": 7,
+      "available": 3,
+      "unavailable": 7,
+      "correct_actual_resume_effects": 1,
+      "supported_rationale_available": 0
+    },
+    "scope": "Valid public contrast, no strict improvement; delivery-limited causal evidence, no memory-quality admission",
+    "completed_utc": "2026-10-05T00:47:13.531634+00:00",
+    "native_count_operations": 32,
+    "unknown_generation_usage": 7,
+    "causal_review_sha256": "2e8cf1591c1541a131fa383772c239b174d8bb96ee4f23482428b70dcefdd60a",
+    "next": "Fixed stop reached; no further public variants, retries, or heldout opening",
+    "integrity_review": "GO_INTEGRITY_COST_ONLY; original prose count correction preserved separately",
+    "integrity_review_sha256": "8653dafa377b73ae524257f66fa6969712495fc0e7a68d46fd8b7836704ff65c",
+    "integrity_count_correction_sha256": "26a6a2791e832c7e9f6166fca374580a1a29315b51fc439c12fce2c1f4a30d42"
+  },
+  "promotion": "No production changes, no memory-quality admission, no unused heldout opening",
+  "preceding_four_LAN_campaign_cost_lower_bound": {
+    "scope": "budget-v2 development, reader-comprehension-v1, continuation-public-v2, response-contract-v1; excludes final rationale contrast included separately in five-campaign total, and all earlier campaigns",
+    "physical_http_requests": 899,
+    "physical_generations": 67,
+    "known_token_total": 121944,
+    "generations_with_unknown_usage": 4,
+    "cost_limits": "Known token lower bound only; source preparation, earlier campaigns, native caller platform activity, reviewers, server compute/energy and money excluded or unknown"
+  },
+  "five_LAN_campaign_cost_lower_bound": {
+    "scope": "preceding four plus final rationale public contrast; excludes earlier campaigns and platform activity",
+    "physical_http_requests": 991,
+    "physical_generations": 77,
+    "known_token_total": 126193,
+    "generations_with_unknown_usage": 11,
+    "monetary_cost": null
+  },
+  "interpretation_limits": [
+    "Three small shared English graphs per contrast, single shot per cell; no causal improvement established",
+    "Rationale: seven generation timeouts with no semantic output are critical unknown, not semantic mistakes",
+    "Independent causal review notes one denied rationale wording may be read cautiously; first critical classification remains unchanged",
+    "No closed gold or unused heldout opened; earlier grades remain immutable"
+  ]
+}
