@@ -61,9 +61,11 @@ were actual scoped read-only synthetic-state reads, separate from memory and per
 | Live observation | 2/4 | 2 | 0 |
 
 The first independent grade was saved before mapping: 7/12 useful, five critical findings.
-All three matching continuations produced the correct durable transition and passed. Four
-transitions occurred overall, all matching the fixture's actual next step; one of these still
-failed because its rationale falsely described the historical reports. All unknown-progress
+All three matching continuations passed the frozen strict-usefulness criterion: timely
+schema-valid delivery, a correct durable transition and a supported rationale. Four durable
+transitions occurred overall, all matching the fixture's actual next step. One of those four
+responses nevertheless failed strict usefulness because its rationale falsely described
+the historical reports. All unknown-progress
 cells failed through unsupported history or unknown-to-zero assertions. A denied adoption
 cell correctly refused execution but falsely called a resolved active/inactive revision a
 current conflict. Non-live true-conflict refusals passed. Live conflict returned malformed

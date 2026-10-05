@@ -101,7 +101,8 @@
       "causal explanation of old public-v1 failure",
       "qualityjustifiedmerge",
       "actual compute/money equality"
-    ]
+    ],
+    "strict_criterion": "Timely schema-valid delivery, correct supported semantic decision, actual scoped durable next-step receipt if resume, and supported material rationale; correct transition alone does not establish strict usefulness."
   },
   "offline_response_contract": {
     "tests": 17,
