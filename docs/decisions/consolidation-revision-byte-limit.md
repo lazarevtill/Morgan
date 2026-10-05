@@ -32,10 +32,12 @@ message is appended and before dispatch.
 
 At exactly the limit, generation proceeds. Above it, `StructuredRequestTooLarge` reports
 `measured_bytes`, `limit_bytes`, and one-based `attempt`. No generation occurs for that rejected
-request, with no automatic retry, source/fact truncation or silent omission. The guard itself writes no database state and prevents proposal generation/fact apply for
+request, with no automatic retry, source/fact truncation or silent omission. The guard itself writes
+no database state and prevents proposal generation/fact apply for
 that rejected request. Consolidation performs recall before the guard: recall may already
 embed and persist an initial embedding-space fingerprint. The guard does not bound or undo
-that preceding embedding work, database metadata writes or their cost. A later re-ask rejection does not undo or conceal earlier generation.
+that preceding embedding work, database metadata writes or their cost. A later re-ask rejection does
+not undo or conceal earlier generation.
 Invalid limits refuse explicitly. These exceptions propagate to the SDK caller; no new CLI/MCP
 error rendering contract is introduced by this slice.
 
