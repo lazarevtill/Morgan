@@ -36,6 +36,8 @@ class LocalNoop:
         tools: list[ToolSpec] | None = None,
         response_format: dict[str, Any] | None = None,
     ) -> ChatResult:
+        if tools or not response_format or response_format.get("type") != "json_schema":
+            raise ValueError("Local NOOP expects no tools and a JSON-schema request")
         self.calls += 1
         self.messages = messages
         return ChatResult(
@@ -82,6 +84,7 @@ async def main() -> None:
         bounded = MemoryConsolidator(
             gate=gate, client=local, model="local-noop", clock=lambda: now, request_byte_limit=1
         )
+        refusal: dict[str, object] = {}
         try:
             await bounded.consolidate("synthetic", project="public")
         except StructuredRequestTooLarge as error:
@@ -115,7 +118,7 @@ async def main() -> None:
                     "db_unchanged": True,
                     "revision_delivered": True,
                     "provider_calls": 0,
-                    "token_count": None,
+                    "exact_token_measurement_available": False,
                 },
                 indent=2,
             )
