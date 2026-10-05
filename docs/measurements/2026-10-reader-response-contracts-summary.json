@@ -46,10 +46,10 @@
     },
     "phase_wall_seconds": 403.98962926864624,
     "cost_limits": [
-      "ServerCPU/GPU/energy/hardware/money and platform author/reviewer/grader tokens/calls/money unknown.",
-      "Freshsourcepreparation originalwall retained separately; phasewall excludes this sourceprep."
+      "Server CPU/GPU, energy, hardware, money, and platform author/reviewer/grader tokens, calls, and money are unknown.",
+      "Fresh source preparation original wall time is retained separately; phase wall time excludes this source preparation."
     ],
-    "native_compatibility": "Endpoint accepted actualanyOf requests; observed4/4taggedvaliddeliveriesnotuniversalconstraintenforcement orsemanticproof",
+    "native_compatibility": "The endpoint accepted actual anyOf requests; the observed four of four valid tagged deliveries do not establish universal constraint enforcement or semantic correctness.",
     "next": "Fixed rationale contrast completed; fixed stop reached; no additional variants, replays, or heldout opening",
     "integrity_review_sha256": "e71447e7c51ec8f5064eb29c8054b3865b38a95620abdd4f486c19bba5085353"
   },
