@@ -12,6 +12,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ValidationError
 
+from morgan_brain.providers.request_budget import (
+    StructuredRequestTooLarge,
+    chat_request_payload,
+    serialized_request_bytes,
+    validate_request_byte_limit,
+)
 from morgan_brain.providers.wire import ChatClient, ChatMessage
 
 JsonMode = Literal["json_schema", "json_object", "prompted"]
@@ -29,7 +35,11 @@ async def generate_structured[M: BaseModel](
     schema: type[M],
     json_mode: JsonMode = "json_schema",
     max_reask: int = 2,
+    request_byte_limit: int | None = None,
 ) -> M:
+    # Disabled by default. Explicit ceilings apply to each request, including re-asks;
+    # refusal does not undo an earlier generation or silently truncate its inputs.
+    validate_request_byte_limit(request_byte_limit)
     working: list[ChatMessage] = list(messages)
     response_format: dict[str, Any] | None = None
     schema_json = json.dumps(schema.model_json_schema(), indent=2)
@@ -74,6 +84,14 @@ async def generate_structured[M: BaseModel](
                     ),
                 ),
             ]
+        if request_byte_limit is not None:
+            measured = serialized_request_bytes(
+                chat_request_payload(working, model=model, response_format=response_format)
+            )
+            if measured > request_byte_limit:
+                raise StructuredRequestTooLarge(
+                    measured_bytes=measured, limit_bytes=request_byte_limit, attempt=attempt + 1
+                )
         result = await client.agenerate(working, model=model, response_format=response_format)
         try:
             return schema.model_validate_json(result.text)

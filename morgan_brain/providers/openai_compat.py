@@ -12,6 +12,7 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
+from morgan_brain.providers.request_budget import chat_request_payload
 from morgan_brain.providers.wire import (
     ChatMessage,
     ChatResult,
@@ -98,14 +99,9 @@ class OpenAICompatAdapter:
         response_format: dict[str, Any] | None = None,
     ) -> ChatResult:
         """Generate a chat completion and return a ``ChatResult``."""
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "messages": _to_openai_messages(messages),
-        }
-        if tools:
-            kwargs["tools"] = _to_openai_tools(tools)
-        if response_format:
-            kwargs["response_format"] = response_format
+        kwargs = chat_request_payload(
+            messages, model=model, tools=tools, response_format=response_format
+        )
 
         try:
             response = await self._client.chat.completions.create(**kwargs)
