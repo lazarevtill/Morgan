@@ -1,0 +1,60 @@
+{
+  "status": "TRANSPORT_NEGATIVE_OFFLINE_DETERMINISTIC_INTEGRATION_PASS_NO_READER_ADMISSION",
+  "production_head": "b09bd13b9374b41b0a5d3587f722a50277edc535",
+  "transport": {
+    "planned_controls": 4,
+    "generation_attempts": 1,
+    "controls_not_run": 3,
+    "physical_http_attempts": 13,
+    "native_input_count_not_usage": 19,
+    "output_token_request_cap": 16,
+    "unknown_generation_usage": 1,
+    "timeout_seconds": 20.003081667004153,
+    "owned_wall_seconds": 20.47063162503764,
+    "streaming_tested": false,
+    "pre_post_identity_equal": true,
+    "server_contention": "Unknown; exposed metrics returned HTTP 400, no settings changed",
+    "resources": {
+      "reclaimable_before_bytes": 6414745600,
+      "reclaimable_after_bytes": 6458474496
+    },
+    "integrity_review_sha256": "39a89d46cc89670ef45c57c03ee1d1c3e81a4d98c050e5fbfafd5ceedac7351d"
+  },
+  "offline": {
+    "new_cases": 19,
+    "new_pytest_seconds": 0.38,
+    "focused_cases": 65,
+    "focused_pytest_seconds": 1.04,
+    "wrapper_wall_seconds": 1.55,
+    "wrapper_cpu_user_seconds": 1.07,
+    "wrapper_cpu_system_seconds": 0.37,
+    "peak_rss": null,
+    "resource_receipt_limit": "Timing wrapper could not read further kernel statistics and returned an error after pytest passed; peak RSS unknown",
+    "provider_HTTP": 0,
+    "model_calls": 0,
+    "production_changes": 0,
+    "limitations": [
+      "Exact quotation does not prove truth, relevance, correct agent selection or correct downstream use",
+      "Current checkpoint support does not verify reported completion or permission",
+      "Only separately current owned observation and caller authority govern test tool effects",
+      "Memory inspection is point-in-time, not atomic revocation across another tool transaction",
+      "No equal-budget reader benefit or novel memory benefit established"
+    ]
+  },
+  "six_named_LAN_campaign_lower_bound": {
+    "physical_http_attempts": 1004,
+    "generation_attempts": 78,
+    "known_tokens": 126193,
+    "unknown_generation_usages": 12,
+    "money": null,
+    "scope": "Five campaigns named in PR67 plus this diagnostic; earlier campaigns, source preparation, native caller and platform activity excluded or unknown"
+  },
+  "preserve": [
+    "PR67 first grades and unknown usage unchanged",
+    "Budget-v2 development failure and unused sixteen-story heldout unchanged"
+  ],
+  "merge": {
+    "PR65": "Blocked by existing no merge before quality condition; publication complete",
+    "PR67": "Blocked by existing no merge before quality condition; publication complete"
+  }
+}
