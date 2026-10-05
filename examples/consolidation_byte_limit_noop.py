@@ -118,7 +118,7 @@ async def main() -> None:
                     "db_unchanged": True,
                     "revision_delivered": True,
                     "provider_calls": 0,
-                    "exact_token_measurement_available": False,
+                    "measurement_units": "canonical UTF-8 JSON bytes",
                 },
                 indent=2,
             )
