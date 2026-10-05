@@ -89,7 +89,7 @@ async def test_reask_refused_before_second_generation():
     assert fake.calls == 1
 
 
-async def test_actual_gate_refusal_no_generation_no_writes_and_default_unchanged():
+async def test_fake_embedding_gate_refusal_no_generation_no_writes_and_default_unchanged():
     now = datetime(2026, 1, 1, tzinfo=UTC)
     conn = open_db(":memory:")
     module = build_memory_module(conn, embedder=FakeEmbedder(dim=16), dim=16, clock=lambda: now)
@@ -117,3 +117,54 @@ async def test_actual_gate_refusal_no_generation_no_writes_and_default_unchanged
     assert await default.consolidate("u", project="p") == []
     assert fake.calls == 1 and conn.serialize() == before
     conn.close()
+
+
+async def test_checked_embedding_recall_can_record_fingerprint_before_request_refusal():
+    """The guard prevents proposal/apply, not preceding recall metadata writes."""
+    from morgan_brain.config import Settings
+    from morgan_brain.memory.checked_embedder import CheckedEmbedder
+    from morgan_brain.memory.store import spaces
+
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    conn = open_db(":memory:")
+    try:
+        initial = MemoryGate(
+            build_memory_module(conn, embedder=FakeEmbedder(dim=16), dim=16, clock=lambda: now)
+        )
+        await initial.store(
+            Memory(
+                id="public-source",
+                created_at=now,
+                user_id="u",
+                project="p",
+                content="public synthetic source",
+                source=MemorySource.USER_STATED,
+                author_id="person:u",
+            )
+        )
+        spaces.register(
+            conn, model="public-offline", dims=16, table_name="vec_items", clock=lambda: now
+        )
+        checked = CheckedEmbedder(
+            FakeEmbedder(dim=16),
+            conn=conn,
+            settings=Settings(embedding_model="public-offline", embedding_dim=16),
+            endpoint="public-offline-control",
+            setting="MORGAN_EMBEDDING_ENDPOINT",
+            clock=lambda: now,
+        )
+        gate = MemoryGate(build_memory_module(conn, embedder=checked, dim=16, clock=lambda: now))
+        assert spaces.active(conn).fingerprint is None
+        before = conn.serialize()
+        fake = FakeChatClient(replies=['{"ops":[]}'])
+        worker = MemoryConsolidator(
+            gate=gate, client=fake, model="fake", clock=lambda: now, request_byte_limit=1
+        )
+        with pytest.raises(StructuredRequestTooLarge):
+            await worker.consolidate("u", project="p")
+        assert fake.calls == 0
+        assert spaces.active(conn).fingerprint is not None
+        assert conn.serialize() != before
+        assert await gate.current_facts(user_id="u", project="p") == []
+    finally:
+        conn.close()
