@@ -88,7 +88,7 @@ def test_frozen_closed_options():
     with pytest.raises(FrozenInstanceError):
         options.max_output_tokens = 1
     with pytest.raises(TypeError):
-        ChatRequestOptions(model="overwrite")
+        ChatRequestOptions(**json.loads('{"model":"overwrite"}'))
     with pytest.raises(TypeError, match="ChatRequestOptions"):
         OpenAICompatAdapter(
             "http://offline/v1", "k", "p", setting="test", request_options={"model": "overwrite"}

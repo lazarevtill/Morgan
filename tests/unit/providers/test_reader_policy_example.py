@@ -553,8 +553,7 @@ async def test_postresponse_receipt_failure_preserves_raw_result(
     from morgan_brain.providers.wire import ChatMessage
 
     envelope, _ = await inspection(tmp_path / "db", [("report", "done", [])])
-    raw = resolve(envelope).model_dump_json()
-    adapter, captured = await offline_adapter(raw)
+    adapter, captured = await offline_adapter(resolve(envelope).model_dump_json())
     receipt = tmp_path / "raw.json"
     real_open = Path.open
     closed = []
@@ -597,9 +596,40 @@ async def test_postresponse_receipt_failure_preserves_raw_result(
                 task="task",
             )
         assert len(captured) == 1 and closed == [True]
-        assert caught.value.raw_result.text == raw
+        assert caught.value.raw_result.text == resolve(envelope).model_dump_json()
         assert caught.value.raw_result.usage.input_tokens == 23
         assert caught.value.raw_result.usage.output_tokens == 9
         assert caught.value.raw_result.finish_reason == "stop"
+    finally:
+        await adapter._client.close()
+
+
+@pytest.mark.parametrize("invalid", ["missing_required", "unknown_option"])
+async def test_sdk_reader_closed_keywords_fail_before_dispatch(
+    tmp_path: Path, invalid: str
+) -> None:
+    from examples.reader_policy_zero_model import read_with_policy
+    from morgan_brain.providers.wire import ChatMessage
+
+    adapter, captured = await offline_adapter("unused")
+    receipt = tmp_path / "raw-result.json"
+    options = {
+        "model": "offline-model",
+        "raw_path": receipt,
+        "context": {},
+        "user_id": "owner",
+        "project": "project",
+        "task": "task",
+    }
+    if invalid == "missing_required":
+        del options["task"]
+    else:
+        options["unexpected"] = "rejected"
+    try:
+        with pytest.raises(TypeError, match="invalid reader options"):
+            await read_with_policy(
+                adapter, [ChatMessage(role="user", content="synthetic")], **options
+            )
+        assert captured == [] and not receipt.exists()
     finally:
         await adapter._client.close()

@@ -34,7 +34,6 @@ Markdown fences independently violated JSON-only instructions. Any later semanti
 evaluation must preregister an explicit verification-status or truth-status meaning
 on fresh development cases. No prior scores or heldout data change.
 
-
 Optional `temperature` accepts a finite number from 0 to 2 and rejects booleans.
 It defaults to `None`, preserving the provider's sampler settings. It uses the
 standard top-level API field and participates in the same complete canonical byte

@@ -13,7 +13,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict, Unpack
 
 from pydantic import BaseModel, ConfigDict
 
@@ -62,19 +62,12 @@ class ProofDesignation:
     author_id: str
 
 
-def expected_answer(
+def _active_events(
     context: dict[str, Any],
-    *,
     user_id: str,
     project: str,
     task: str,
-    proof: ProofDesignation | None = None,
-) -> ReaderAnswer:
-    """Resolve this example's typed events through a caller policy, not NLP inference.
-
-    Attributions are not authentication. Use only the public gate's returned envelope;
-    a model-supplied replacement envelope is not trusted input.
-    """
+) -> tuple[dict[str, tuple[dict[str, Any], Event]], bool]:
     if (context["user_id"], context["project"], context["action_authority"]) != (
         user_id,
         project,
@@ -101,6 +94,12 @@ def expected_answer(
             conflict = True
         if source["revision_state"] == "active" and not source["revision_truncated"]:
             active[source["id"]] = (source, event)
+    return active, conflict
+
+
+def _reported_state(
+    active: dict[str, tuple[dict[str, Any], Event]],
+) -> tuple[set[str], set[str], bool]:
     permissions = set()
     proposals = set()
     reports = False
@@ -113,6 +112,14 @@ def expected_answer(
             permissions.add(event.value)
         elif event.kind == "proposal":
             proposals.add(event.value)
+    return permissions, proposals, reports
+
+
+def _designated_progress(
+    active: dict[str, tuple[dict[str, Any], Event]],
+    proof: ProofDesignation | None,
+    scope: tuple[str, str, str],
+) -> tuple[bool, str | None]:
     verified = False
     completed = None
     if proof is not None:
@@ -133,9 +140,28 @@ def expected_answer(
         artifact = VerificationArtifact.model_validate_json(content)
         if artifact.confirmed is not True:
             raise ValueError("artifact does not confirm progress")
-        if (artifact.user_id, artifact.project, artifact.task) != (user_id, project, task):
+        if (artifact.user_id, artifact.project, artifact.task) != scope:
             raise ValueError("verification artifact scope mismatch")
         verified, completed = True, artifact.completed_step
+    return verified, completed
+
+
+def expected_answer(
+    context: dict[str, Any],
+    *,
+    user_id: str,
+    project: str,
+    task: str,
+    proof: ProofDesignation | None = None,
+) -> ReaderAnswer:
+    """Resolve typed source eligibility, report state and designated proof separately.
+
+    Attribution is not authentication. The public gate envelope is trusted caller
+    input, never a model-supplied replacement.
+    """
+    active, conflict = _active_events(context, user_id, project, task)
+    permissions, proposals, reports = _reported_state(active)
+    verified, completed = _designated_progress(active, proof, (user_id, project, task))
     return ReaderAnswer(
         verification_status="verified"
         if verified
@@ -216,54 +242,75 @@ class RecordedReader:
         return result
 
 
+class _RequiredReaderOptions(TypedDict):
+    model: str
+    raw_path: Path
+    context: dict[str, Any]
+    user_id: str
+    project: str
+    task: str
+
+
+class ReaderOptions(_RequiredReaderOptions, total=False):
+    """Closed keyword contract preserving the existing SDK example's call style."""
+
+    proof: ProofDesignation | None
+    timeout_s: float
+    request_byte_limit: int
+
+
 async def read_with_policy(
     adapter: OpenAICompatAdapter,
     messages: list[ChatMessage],
-    *,
-    model: str,
-    raw_path: Path,
-    context: dict[str, Any],
-    user_id: str,
-    project: str,
-    task: str,
-    proof: ProofDesignation | None = None,
-    timeout_s: float = 60,
-    request_byte_limit: int = 8192,
+    **options: Unpack[ReaderOptions],
 ) -> ReaderAnswer:
     """Actual SDK -> strict schema -> caller policy; returns data, never actions.
 
-    The caller owns scope, proof designation, endpoint and lifetime. An invalid
-    context/proof is refused before dispatch. Raw successful transport results
-    survive schema and policy failures. Transport failures have no invented result.
+    Valid awaited keyword calls and defaults are preserved. The runtime signature
+    is **options; TypedDict exposes the named static contract. Missing/unknown
+    keyword errors occur when awaited, before policy checks or provider dispatch,
+    rather than at Python function-call binding.
     """
-    policy = {"user_id": user_id, "project": project, "task": task, "proof": proof}
-    expected_answer(context, **policy)
-    recorded = RecordedReader(adapter, raw_path)
+    missing = ReaderOptions.__required_keys__ - options.keys()
+    unexpected = options.keys() - ReaderOptions.__annotations__.keys()
+    if missing or unexpected:
+        raise TypeError(
+            f"invalid reader options: missing={sorted(missing)}, unknown={sorted(unexpected)}"
+        )
+    policy = {
+        "user_id": options["user_id"],
+        "project": options["project"],
+        "task": options["task"],
+        "proof": options.get("proof"),
+    }
+    expected_answer(options["context"], **policy)
+    recorded = RecordedReader(adapter, options["raw_path"])
     answer = await asyncio.wait_for(
         generate_structured(
             recorded,
             messages,
-            model=model,
+            model=options["model"],
             schema=ReaderAnswer,
             json_mode="json_schema",
             max_reask=0,
-            request_byte_limit=request_byte_limit,
+            request_byte_limit=options.get("request_byte_limit", 8192),
         ),
-        timeout=timeout_s,
+        timeout=options.get("timeout_s", 60),
     )
-    return validate_reader(answer.model_dump_json(), context, **policy)
+    return validate_reader(answer.model_dump_json(), options["context"], **policy)
 
 
 async def demonstrate(directory: Path) -> dict[str, Any]:
     owner, project, task = "synthetic-owner", "synthetic-reader-demo", "synthetic-task"
-    settings = Settings(
-        data_dir=str(directory),
-        owner_user_id=owner,
-        embedding_backend="hash",
-        embedding_dim=16,
-        _env_file=None,
+    writer = build_memory_context(
+        Settings(
+            data_dir=str(directory),
+            owner_user_id=owner,
+            embedding_backend="hash",
+            embedding_dim=16,
+            _env_file=None,
+        )
     )
-    writer = build_memory_context(settings)
     ids: list[str] = []
     try:
         for index, (kind, value, parent) in enumerate(
