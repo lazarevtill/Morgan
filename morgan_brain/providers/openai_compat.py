@@ -12,7 +12,11 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
-from morgan_brain.providers.request_budget import chat_request_payload
+from morgan_brain.providers.request_budget import (
+    ChatRequestOptions,
+    chat_request_payload,
+    openai_request_kwargs,
+)
 from morgan_brain.providers.wire import (
     ChatMessage,
     ChatResult,
@@ -59,6 +63,8 @@ class OpenAICompatAdapter:
         timeout:  Request timeout in seconds. Default is sized for a remote server reached
                   over a network (a homelab GPU box under load), not a loopback socket.
         setting:  The variable that addresses ``base_url``, named when it cannot be reached.
+        request_options: Explicit output-token/template controls; None preserves provider defaults.
+                         Template controls require a compatible endpoint; never model-detected.
     """
 
     def __init__(
@@ -69,7 +75,11 @@ class OpenAICompatAdapter:
         timeout: float = 120.0,
         *,
         setting: str,
+        request_options: ChatRequestOptions | None = None,
     ) -> None:
+        if request_options is not None and not isinstance(request_options, ChatRequestOptions):
+            raise TypeError("request_options must be ChatRequestOptions or None")
+        self._request_options = request_options
         # Import here so that the openai SDK is only required if this adapter is used.
         import openai
 
@@ -86,6 +96,11 @@ class OpenAICompatAdapter:
         # one SDK error. Held on the instance so the SDK stays imported in exactly one place.
         self._connection_error: type[Exception] = openai.APIConnectionError
 
+    @property
+    def request_options(self) -> ChatRequestOptions | None:
+        """Immutable opt-in controls used by every request and structured re-ask."""
+        return self._request_options
+
     # ------------------------------------------------------------------
     # ChatClient protocol
     # ------------------------------------------------------------------
@@ -99,8 +114,14 @@ class OpenAICompatAdapter:
         response_format: dict[str, Any] | None = None,
     ) -> ChatResult:
         """Generate a chat completion and return a ``ChatResult``."""
-        kwargs = chat_request_payload(
-            messages, model=model, tools=tools, response_format=response_format
+        kwargs = openai_request_kwargs(
+            chat_request_payload(
+                messages,
+                model=model,
+                tools=tools,
+                response_format=response_format,
+                request_options=self.request_options,
+            )
         )
 
         try:
@@ -147,13 +168,12 @@ class OpenAICompatAdapter:
         model: str,
         tools: list[ToolSpec] | None = None,
     ) -> AsyncIterator[StreamDelta]:
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "messages": _to_openai_messages(messages),
-            "stream": True,
-        }
-        if tools:
-            kwargs["tools"] = _to_openai_tools(tools)
+        kwargs = openai_request_kwargs(
+            chat_request_payload(
+                messages, model=model, tools=tools, request_options=self.request_options
+            )
+        )
+        kwargs["stream"] = True
 
         try:
             stream = await self._client.chat.completions.create(**kwargs)

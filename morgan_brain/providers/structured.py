@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 from morgan_brain.providers.request_budget import (
     StructuredRequestTooLarge,
     chat_request_payload,
+    request_options_for,
     serialized_request_bytes,
     validate_request_byte_limit,
 )
@@ -86,7 +87,12 @@ async def generate_structured[M: BaseModel](
             ]
         if request_byte_limit is not None:
             measured = serialized_request_bytes(
-                chat_request_payload(working, model=model, response_format=response_format)
+                chat_request_payload(
+                    working,
+                    model=model,
+                    response_format=response_format,
+                    request_options=request_options_for(client),
+                )
             )
             if measured > request_byte_limit:
                 raise StructuredRequestTooLarge(

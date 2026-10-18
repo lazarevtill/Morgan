@@ -1,0 +1,29 @@
+{
+  "status": "offline regression proposal for independent review; not an executable evaluation",
+  "target": "caller-owned reader schema/evidence policy; no new memory authority",
+  "required_checks": [
+    "Schema descriptions and system definitions are identical",
+    "Strict boolean rejects null, numeric zero and string false",
+    "Missing proof differs from missing report",
+    "A self-asserted verification claim never satisfies proof designation",
+    "Proof designation binds source ID, artifact digest and owner/project/task",
+    "Grant, revocation, explicit regrant and conflicted active branches resolve by revision state",
+    "Proposals never count as completed steps or action authority",
+    "Wrong owner/project evidence is unavailable before constructing reader input",
+    "Physical dispatch count consumes a failed request; no hidden SDK retries",
+    "A failed strict response stops the bounded reader diagnostic; no score repair"
+  ],
+  "cases": [
+    {"input": "no report/no proof", "expected_status": "unknown", "expected_verified": false},
+    {"input": "scoped assistant report/no proof", "expected_status": "unverified_report", "expected_verified": false},
+    {"input": "another assertion saying verified/no designated proof", "expected_status": "unverified_report", "expected_verified": false},
+    {"input": "actual designated scoped verification artifact", "expected_status": "verified", "expected_verified": true},
+    {"input": "no applicable permission events", "expected_permission": "unknown"},
+    {"input": "grant then explicit active revision revocation", "expected_permission": "revoked"},
+    {"input": "revocation then explicit active revision regrant", "expected_permission": "granted"},
+    {"input": "conflicting active grant/revocation branches", "expected_permission": "unknown"},
+    {"input": "other owner/project grant only", "expected_permission": "unknown"}
+  ],
+  "live_calls": 0,
+  "milestone": "independently review and integrate a caller example with deterministic evidence-policy tests, then demonstrate a useful bounded scoped memory task against matched raw evidence without changing historical scores"
+}
