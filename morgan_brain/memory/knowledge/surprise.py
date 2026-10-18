@@ -1,8 +1,8 @@
 """Which recent episodics the current fact base did not already predict.
 
 Consolidation costs a model call over everything it is given, so episodics the facts
-already cover are dropped before the call. Deliberately lexical and conservative: it
-drops near-duplicates, never borderline-novel content, and costs nothing to run.
+already cover are dropped before the call, except explicit revisions: lexical overlap
+does not establish that a correction is redundant. This selection costs no model call.
 """
 
 from __future__ import annotations
@@ -23,14 +23,14 @@ def keep_surprising(
     min_novelty: float = 0.5,
     max_keep: int = 30,
 ) -> list[Memory]:
-    """Keep only episodics the current fact base did not already predict (surprise-gating).
+    """Prioritize explicit revisions, then novelty-ranked ordinary episodics.
 
-    ``novelty`` = fraction of an episodic's tokens absent from the union of current-fact
-    tokens. Episodics with ``novelty < min_novelty`` are already-known (low prediction error)
-    and dropped; the rest are returned most-surprising-first, capped at ``max_keep``. At cold
-    start (no facts) every episodic is fully novel, so nothing is dropped. The heuristic is
-    deliberately lexical and conservative — it drops near-duplicates, never borderline-novel
-    content — and adds zero LLM cost.
+    Inputs must already be scoped, trusted and active; parent IDs here are selection
+    metadata, never validation or write authority. Revisions preserve input order and
+    bypass lexical novelty. Ordinary records retain their prior threshold and stable
+    most-novel-first order. The combined result stays within ``max_keep`` (default 30),
+    including cold start. Excess revisions are omitted, and revisions can displace
+    novel ordinary records. Retention does not establish semantic truth or entailment.
     """
     known: set[str] = set()
     for f in facts:
@@ -39,8 +39,12 @@ def keep_surprising(
         # Recall renders a fact the same way when it surfaces one.
         known |= _tokens(f"{f.subject} {f.predicate} {f.object}".replace("_", " "))
 
+    revisions: list[Memory] = []
     scored: list[tuple[float, Memory]] = []
     for m in episodics:
+        if m.revises_event_ids:
+            revisions.append(m)
+            continue
         toks = _tokens(m.content)
         if not toks:
             continue
@@ -49,4 +53,4 @@ def keep_surprising(
             scored.append((novelty, m))
 
     scored.sort(key=lambda pair: pair[0], reverse=True)
-    return [m for _, m in scored[:max_keep]]
+    return (revisions + [m for _, m in scored])[:max_keep]

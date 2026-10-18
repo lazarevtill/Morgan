@@ -37,6 +37,7 @@ from morgan_brain.models import (
     Scope,
     TemporalFact,
 )
+from morgan_brain.providers.request_budget import validate_request_byte_limit
 from morgan_brain.providers.structured import JsonMode, generate_structured
 from morgan_brain.providers.wire import ChatClient, ChatMessage
 
@@ -55,6 +56,10 @@ class MemoryConsolidator:
         ``set_confidence``, pass through here — the consolidator holds no raw store).
     client, model, json_mode:
         The chat model that proposes the fact operations, and how it is asked for JSON.
+    request_byte_limit:
+        Optional positive ceiling for complete canonical UTF-8 request JSON, including
+        model/messages/schema and every re-ask. None preserves the existing workflow.
+        This is not a token, chat-template, output or HTTP-header budget.
     clock:
         Injected callable returning the current datetime. Never calls
         ``datetime.now()`` internally.
@@ -68,7 +73,10 @@ class MemoryConsolidator:
         model: str,
         clock: Callable[[], datetime],
         json_mode: JsonMode = "json_schema",
+        request_byte_limit: int | None = None,
     ) -> None:
+        validate_request_byte_limit(request_byte_limit)
+        self._request_byte_limit = request_byte_limit
         self._gate = gate
         self._client = client
         self._model = model
@@ -147,6 +155,7 @@ class MemoryConsolidator:
             model=self._model,
             schema=FactOpBatch,
             json_mode=self._json_mode,
+            request_byte_limit=self._request_byte_limit,
         )
 
     # ------------------------------------------------------------------
@@ -293,10 +302,8 @@ class MemoryConsolidator:
         existing_facts = [fact for fact in inputs.facts if fact.predicate != CHECKPOINT_PREDICATE]
         episodics = list(inputs.episodics)
 
-        # Surprise-gate: consolidate what the current model did NOT already predict.
-        # Neuro-grounded (the hippocampus preferentially encodes prediction errors): episodics
-        # whose content is already covered by current facts carry little new signal, so we skip
-        # them and focus the LLM call on the surprising remainder — cheaper and better-targeted.
+        # Explicit validated revisions carry update intent even with low lexical novelty.
+        # Prioritize them within the same cap; ordinary records retain novelty gating.
         episodics = keep_surprising(episodics, existing_facts)
         if not episodics:
             return []
