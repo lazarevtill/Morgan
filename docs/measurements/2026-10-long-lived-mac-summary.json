@@ -1,0 +1,142 @@
+{
+  "base_commit": "74315ba9ee6ef290c7f265a7853c32dbce29100e",
+  "development": {
+    "no_memory": {
+      "total": 8,
+      "useful": 1,
+      "critical": 0
+    },
+    "morgan_inspect": {
+      "total": 8,
+      "useful": 1,
+      "critical": 0
+    },
+    "raw_retrieval": {
+      "total": 8,
+      "useful": 2,
+      "critical": 1
+    }
+  },
+  "holdout": {
+    "raw_retrieval": {
+      "total": 16,
+      "useful": 7,
+      "critical": 0,
+      "critical_unknown": 4
+    },
+    "morgan_inspect": {
+      "total": 16,
+      "useful": 7,
+      "critical": 0,
+      "critical_unknown": 5
+    },
+    "no_memory": {
+      "total": 16,
+      "useful": 4,
+      "critical": 0,
+      "critical_unknown": 1
+    }
+  },
+  "development_delivery_cost": {
+    "no_memory": {
+      "attempts": 8,
+      "delivered": 7,
+      "elapsed_seconds": 338.42927033407614,
+      "known_input_tokens": 1862,
+      "known_output_tokens": 1122,
+      "unknown_chat_usage": 1
+    },
+    "morgan_inspect": {
+      "attempts": 8,
+      "delivered": 5,
+      "elapsed_seconds": 340.34807733492926,
+      "known_input_tokens": 8143,
+      "known_output_tokens": 1127,
+      "unknown_chat_usage": 3
+    },
+    "raw_retrieval": {
+      "attempts": 8,
+      "delivered": 6,
+      "elapsed_seconds": 342.1934057902545,
+      "known_input_tokens": 8421,
+      "known_output_tokens": 1283,
+      "unknown_chat_usage": 2
+    }
+  },
+  "holdout_delivery_cost": {
+    "raw_retrieval": {
+      "planned": 16,
+      "delivered": 11,
+      "elapsed_seconds": 719.4184017505031,
+      "known_input_tokens": 23054,
+      "known_output_tokens": 3095,
+      "unknown_or_unattempted_chat_usage": 4
+    },
+    "morgan_inspect": {
+      "planned": 16,
+      "delivered": 11,
+      "elapsed_seconds": 688.9402866652235,
+      "known_input_tokens": 22951,
+      "known_output_tokens": 2983,
+      "unknown_or_unattempted_chat_usage": 5
+    },
+    "no_memory": {
+      "planned": 16,
+      "delivered": 15,
+      "elapsed_seconds": 733.4915701248683,
+      "known_input_tokens": 3978,
+      "known_output_tokens": 2320,
+      "unknown_or_unattempted_chat_usage": 1
+    }
+  },
+  "reader_attempts": {
+    "planned": 72,
+    "chat_dispatches": 71,
+    "physical_http": 302,
+    "available": 55,
+    "known_chat_usage": 56,
+    "unknown_dispatched_chat_usage": 15,
+    "count_timeout_before_chat": 1,
+    "known_prompt_tokens": 68409,
+    "known_completion_tokens": 11930
+  },
+  "prior_resource_failed_embeddings": {
+    "http": 2,
+    "input_items": 8,
+    "known_prompt_tokens": 266,
+    "reader_outputs": 0
+  },
+  "local_source_setup": {
+    "processes": 312,
+    "stored_events": 288,
+    "embedding_input_items": 312,
+    "network_embeddings": 0,
+    "max_child_peak_MiB": 63.0625,
+    "min_reclaimable_RAM_GiB": 6.23419189453125
+  },
+  "gates": {
+    "dev_min": 7,
+    "dev_total": 8,
+    "holdout_min": 14,
+    "holdout_total": 16,
+    "critical_max": 0,
+    "not_worse_than_both_baselines": true,
+    "passed": false
+  },
+  "public_fixture_sha256": "f6c747e50e6b3d464f93b00c68e2e59e646a16b5277fc3d29905b84adc6ac758",
+  "private_gold_sha256_reviewer_verified": "35a03e47d4c702d81110c59ef25e3a898deab8291d2a105803b58dc63313187a",
+  "dev_inputs_sha256": "5aaa3ba4931fe936d93d47b8de9fe2ed240edb6a5e2fb58d21521bb487e26661",
+  "holdout_inputs_sha256": "2a14216b478ccc69a2aca0f6758238eb7cd3649270ae4aa4ad990f8021f460c8",
+  "holdout_grade_sha256": "23a0131384ee6b082deb613576ba5e5a2291b54854ab5a58f6d390c9c0919433",
+  "original_raw_supplement_sha256": "b6fb37dfe77fba37a25cdbf0b3f347b2d297ce72ecd946081006269644dccadd",
+  "total_monetary_cost": null,
+  "unmetered": [
+    "operator",
+    "platform agents",
+    "hardware",
+    "electricity"
+  ],
+  "production_changes": false,
+  "closed_panel_finished_no_further_tuning": true,
+  "development_critical_count_scope": "Observed critical errors only; six development chat timeouts supplied no answer to audit. Original grades and counts unchanged."
+}
