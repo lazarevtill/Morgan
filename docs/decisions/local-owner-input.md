@@ -142,3 +142,28 @@ CLI lookup remains available after STOP or expiry without clearing either. Nativ
 search is offered in the active menu and is subject to the existing GUI session bound.
 Tests cover current completion/renewal, source quotes, owner isolation, missing memory,
 conflicting revisions, query bounds, unconfirmed/dismissed sources and unchanged storage.
+
+## Multiline source context
+
+The inbox accepts literal LF line breaks within its existing 1..1000-character message
+limit. It preserves the exact source, including quote boundaries; tabs, carriage returns,
+terminal escapes and other non-printable characters remain rejected. Delivery replay and
+review digests bind the entire unchanged text. Availability statements remain single-line.
+
+The native review leaves the task title empty for a multiline message, so quoted context
+is not silently copied into a task title. The owner supplies the task fields and confirms
+them with the full source visible. Confirmation explicitly distinguishes the provided text
+from the selected owner's task: it does not establish the author of embedded quotations.
+The source memory records what the account supplied, not a speaker annotation for every
+sentence. Imported archive text still has unknown authorship; no import promotion is added.
+
+Renewal/completion/cancellation journals also accept LF in their exact source text, allowing
+review to resume after restart. Older runtimes reject these pending multiline revisions:
+update every reader before allowing this input in a deployed workspace. This change does
+not update or restart an existing pilot automatically.
+
+Eight new paired EN/RU mixed-context inputs previously failed at submission; all eight now
+complete scripted source-preserving review, rejection, resume and explicit confirmation.
+The first review still has eight dialog responses from the main menu through confirmation
+(no new dialog); the task title is deliberately entered by the owner. This is a controller
+measurement, not a physical macOS GUI trial or evidence of improved model extraction.

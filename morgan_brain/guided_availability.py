@@ -37,10 +37,11 @@ class AvailabilityUpdate(BaseModel):
         return self
 
 
-def source_statement(value: str) -> str:
+def source_statement(value: str, *, multiline: bool = False) -> str:
     """Retain the user's own words, not a generated reason or a location inference."""
-    if not value.strip() or len(value) > 1000 or not value.isprintable():
-        raise ValueError("enter one printable statement of 1..1000 characters")
+    visible = value.replace("\n", " ") if multiline else value
+    if not value.strip() or len(value) > 1000 or not visible.isprintable():
+        raise ValueError("enter 1..1000 printable characters; only permitted line feeds allowed")
     return value
 
 

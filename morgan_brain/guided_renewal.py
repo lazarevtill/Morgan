@@ -23,8 +23,8 @@ class RenewalUpdate(BaseModel):
     @field_validator("source_text")
     @classmethod
     def visible_source(cls, value: str) -> str:
-        """Preserve one printable owner-entered statement, without terminal controls."""
-        return source_statement(value)
+        """Preserve source line feeds for owner inbox reviews, without other controls."""
+        return source_statement(value, multiline=True)
 
     @model_validator(mode="after")
     def valid_review(self) -> Self:

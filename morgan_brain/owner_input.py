@@ -158,7 +158,7 @@ def _submit(inbox: Inbox, identity: str, text: str) -> Message:
             return existing
     if len(inbox.messages) >= 14:
         raise ValueError("pilot message limit reached; preserve journal")
-    message = Message(identity=identity, text=source_statement(text))
+    message = Message(identity=identity, text=source_statement(text, multiline=True))
     inbox.messages.append(message)
     return message
 
