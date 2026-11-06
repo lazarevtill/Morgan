@@ -26,6 +26,8 @@ It does not start a service or call a model. `enqueue` appends exact account-app
 counts; it never retries or changes tasks. See `docs/decisions/local-worker-diagnostics.md`.
 `supervise` explicitly owns a finite fixed worker subprocess with bounded crash restarts and
 sequential shutdown; it installs no service. See `docs/decisions/bounded-local-supervisor.md`.
+`daily_brief_cli` prepares an unapproved focus plan from explicitly selected current commitment
+evidence through the gate, without model calls. See `docs/decisions/memory-backed-daily-brief.md`.
 
 Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
 `docs/ROADMAP.md` (what is not in the code and why, what retrieval measures, what is next),

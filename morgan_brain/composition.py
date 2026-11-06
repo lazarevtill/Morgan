@@ -100,9 +100,14 @@ def build_evidence_context(settings: Settings) -> EvidenceContext:
     path = sqlite_path(settings.temporal_db_url)
     if path == ":memory:":
         raise ValueError("Evidence reads require an existing database file")
-    if not pathlib.Path(path).is_file():
+    return open_evidence_context(pathlib.Path(path), busy_timeout_ms=settings.db_busy_timeout_ms)
+
+
+def open_evidence_context(path: pathlib.Path, *, busy_timeout_ms: int = 1000) -> EvidenceContext:
+    """Open an explicit existing source path without reading environment settings or secrets."""
+    if not path.is_file():
         raise FileNotFoundError(f"Morgan evidence database does not exist: {path}")
-    conn = open_readonly(path, busy_timeout_ms=settings.db_busy_timeout_ms)
+    conn = open_readonly(str(path), busy_timeout_ms=busy_timeout_ms)
     try:
         require_supported_version(conn)
         validate_source_schema(conn)
