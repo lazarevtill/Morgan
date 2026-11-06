@@ -573,9 +573,14 @@ def _day_relation(session: Session, as_of: datetime) -> str:
     return "past" if session.day < today else "future"
 
 
-async def _status_payload(workspace: NoteWorkspace, session: Session) -> dict[str, object]:
+async def _status_payload(
+    workspace: NoteWorkspace, session: Session, preview_day: date | None = None
+) -> dict[str, object]:
     """Read exact current evidence, never the latest saved Markdown file or a model guess."""
     _read_inputs(workspace, session)
+    original_day = session.day
+    if preview_day is not None:
+        session = session.model_copy(update={"day": preview_day})
     pending = _pending_reviews(session)
     as_of = datetime.now(UTC)
     payload: dict[str, object] = {
@@ -592,6 +597,8 @@ async def _status_payload(workspace: NoteWorkspace, session: Session) -> dict[st
         "plan_available": not pending,
         "execution_authorized": False,
     }
+    if preview_day is not None:
+        payload.update({"preview_only": True, "session_planning_day": original_day.isoformat()})
     if pending:
         return payload
     draft, view = await _read_plan(workspace, session)
@@ -625,11 +632,9 @@ def _print_status(args: argparse.Namespace) -> None:
     if any(
         value is not None
         for name, value in vars(args).items()
-        if name not in ("workspace", "status")
+        if name not in ("workspace", "status", "preview_day")
     ):
-        raise ValueError(
-            "status uses only workspace and --status; it does not change session inputs"
-        )
+        raise ValueError("status accepts only workspace, --status and optional --preview-day")
     workspace = NoteWorkspace(args.workspace, create=False)
     try:
         with os.fdopen(workspace.open_file(".guided.lock", os.O_RDONLY), "r") as lock:
@@ -640,7 +645,7 @@ def _print_status(args: argparse.Namespace) -> None:
                     "session is busy; retry status after the dialogue exits"
                 ) from error
             session = Session.model_validate_json(workspace.read("session.json", 32768))
-            print(json.dumps(asyncio.run(_status_payload(workspace, session))))
+            print(json.dumps(asyncio.run(_status_payload(workspace, session, args.preview_day))))
     finally:
         workspace.close()
 
@@ -662,7 +667,14 @@ def main() -> None:
         action="store_true",
         help="Read existing session status as JSON; no prompts or memory updates.",
     )
+    parser.add_argument(
+        "--preview-day",
+        type=date.fromisoformat,
+        help="With --status only: preview current commitments on an explicit day without writes.",
+    )
     args = parser.parse_args()
+    if args.preview_day is not None and not args.status:
+        parser.error("--preview-day requires --status; it never changes the session day")
     if args.status:
         try:
             _print_status(args)

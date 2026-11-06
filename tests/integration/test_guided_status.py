@@ -190,3 +190,68 @@ guided_plan.main()
     assert payload["pending_reviews"] == ["unavailability_confirmation"]
     assert not payload["plan_available"] and "unavailability" not in payload
     assert durable_files(tmp_path / "session") == before
+
+
+def test_day_preview_uses_current_constraints_without_mutating_session(tmp_path):
+    """An explicit future day releases today's constraint but cannot alter the stored session."""
+    assert (
+        run(tmp_path, task_answers() + busy_answers() + "quit\n", setup(tmp_path)).returncode == 0
+    )
+    before = durable_files(tmp_path / "session")
+    script = """
+from morgan_brain import guided_plan
+from morgan_brain.local_notes import NoteWorkspace
+def forbidden(*args, **kwargs):
+    raise AssertionError('preview attempted a write or model call')
+guided_plan.cmd_remember = forbidden
+guided_plan.managed_model = forbidden
+NoteWorkspace.publish = forbidden
+guided_plan.main()
+"""
+    result = run(tmp_path, "", ["--status", "--preview-day", "2026-11-07"], script=script)
+    assert result.returncode == 0, result.stderr
+    preview = json.loads(result.stdout)
+    assert preview["preview_only"] and preview["session_planning_day"] == "2026-11-06"
+    assert preview["planning_day"] == "2026-11-07" and preview["timezone"] == "Europe/Paris"
+    assert preview["planned_minutes"] == 10 and preview["blocked_ids"] == []
+    assert not preview["execution_authorized"] and not preview["scope_complete"]
+    assert durable_files(tmp_path / "session") == before
+    original = json.loads(status(tmp_path).stdout)
+    assert original["planning_day"] == "2026-11-06" and original["planned_minutes"] == 0
+    assert "preview_only" not in original
+    assert run(tmp_path, "done 1\nquit\n").returncode == 0
+    after = run(tmp_path, "", ["--status", "--preview-day", "2026-11-07"])
+    assert json.loads(after.stdout)["planned_minutes"] == 0
+
+
+def test_future_due_task_enters_preview_and_pending_review_stays_pending(tmp_path):
+    """Preview changes eligibility date, never the evidence snapshot or review decision."""
+    args = setup(tmp_path)
+    assert (
+        run(
+            tmp_path, task_answers().replace("2026-11-06", "2026-11-07") + "quit\n", args
+        ).returncode
+        == 0
+    )
+    assert json.loads(status(tmp_path).stdout)["planned_minutes"] == 0
+    preview = run(tmp_path, "", ["--status", "--preview-day", "2026-11-07"])
+    assert json.loads(preview.stdout)["planned_minutes"] == 10
+    other = tmp_path / "pending"
+    other.mkdir()
+    assert run(other, "", setup(other)).returncode == 0
+    before = durable_files(other / "session")
+    pending = run(other, "", ["--status", "--preview-day", "2026-11-07"])
+    payload = json.loads(pending.stdout)
+    assert payload["state"] == "needs_review" and payload["preview_only"]
+    assert "tasks" not in payload and not payload["plan_available"]
+    assert durable_files(other / "session") == before
+
+
+@pytest.mark.parametrize(
+    "arguments", [["--preview-day", "2026-11-07"], ["--status", "--preview-day", "bad-date"]]
+)
+def test_invalid_preview_invocation_creates_nothing(tmp_path, arguments):
+    """A preview flag is neither an interactive date override nor an initialization command."""
+    result = run(tmp_path, "", arguments)
+    assert result.returncode == 2
+    assert not (tmp_path / "session").exists()

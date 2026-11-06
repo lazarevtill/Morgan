@@ -52,7 +52,9 @@ Its `busy` / `change N` / `cancel N` dialogue journals reviewed source statement
 and carries them into each session plan; see `docs/decisions/guided-unavailability.md`.
 `guided_plan WORKSPACE --status` reads current scoped state as JSON without prompts, memory
 updates or model calls; pending review and fixed-day freshness remain explicit.
-See `docs/decisions/guided-status.md`; it installs no user messaging channel or service.
+Its `--preview-day DATE` option evaluates current evidence for an explicit day without changing
+the saved session date. See `docs/decisions/guided-status.md` and the bounded personal pilot plan;
+it installs no user messaging channel or service.
 
 `local_alert_cli` explicitly displays one bounded macOS dialog with account-approved text,
 STOP and journal fencing; see `docs/decisions/local-alert.md`. A timeout is not a read receipt.
