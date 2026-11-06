@@ -208,3 +208,25 @@ def test_embedding_environment_change_cannot_break_resumed_completion(tmp_path):
     resumed = run(tmp_path, "done 1\nquit\n", overrides={"MORGAN_EMBEDDING_DIM": "4096"})
     assert resumed.returncode == 0, resumed.stderr
     assert "planned: 0 min" in resumed.stdout
+
+
+def test_typos_retry_without_losing_selected_tasks(tmp_path):
+    """Invalid source indices, fields and completion numbers stay in the same conversation."""
+    note = "I need to water plants.\nI need to call the library."
+    args = inputs(tmp_path, note, note.splitlines())
+    answers = (
+        "9\n1 2\nbad\n10 normal 2026-11-06\n10 normal bad-date\n"
+        "10 normal 2026-11-06\nCONFIRM\ndone x\ndone 1\nquit\n"
+    )
+    result = run(tmp_path, answers, args)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.count("Invalid input") == 4
+    assert "planned: 20 min" in result.stdout and "planned: 10 min" in result.stdout
+
+
+def test_blank_source_line_can_be_reselected_without_restart(tmp_path):
+    """Rejecting an unusable line returns to selection rather than a futile parameter loop."""
+    note = "\nI need to water plants."
+    args = inputs(tmp_path, note, [note.splitlines()[1]])
+    result = run(tmp_path, "1\n2\n10 normal 2026-11-06\nCONFIRM\nquit\n", args)
+    assert result.returncode == 0 and "planned: 10 min" in result.stdout, result.stderr

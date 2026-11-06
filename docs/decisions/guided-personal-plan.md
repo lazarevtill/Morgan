@@ -35,7 +35,8 @@ For the synthetic note “water plants; bread already bought; call library”, t
 5. Read the plan. Enter `done 1` or `готово 1` to report that the displayed task is complete.
 6. Read the refreshed plan and enter `quit` or `выход`.
 
-Russian priorities `высокий`, `обычный`, `низкий` are also accepted. Each source selection,
+Russian priorities `высокий`, `обычный`, `низкий` are also accepted. Typos in task numbers,
+planning fields or completion commands are re-prompted, up to five attempts per prompt. Each source selection,
 planning-field entry, confirmation and menu command is one answer submission. The model does
 not supply ownership, deadlines or priority by authority. Its suggestions may be wrong.
 

@@ -8,7 +8,9 @@ import fcntl
 import hashlib
 import json
 import os
+from collections.abc import Callable
 from datetime import UTC, date, datetime
+from functools import partial
 from pathlib import Path
 from typing import Literal, cast
 from uuid import uuid4
@@ -134,6 +136,63 @@ async def _new_session(workspace: NoteWorkspace, args: argparse.Namespace) -> Se
     return session
 
 
+def _ask[Value](prompt: str, parse: Callable[[str], Value]) -> Value:
+    """Retry invalid entries locally; EOF/Ctrl-C still stop without hidden confirmation."""
+    for _ in range(5):
+        try:
+            return parse(input(prompt))
+        except ValueError:
+            print("Неверный ввод, попробуйте ещё раз / Invalid input, please try again.")
+    raise ValueError("too many invalid entries; resume the session to try again")
+
+
+def _indices(lines: list[str], raw: str) -> list[int]:
+    """Allow a bounded set of usable source lines, or an explicit empty selection to exit."""
+    if not raw.strip():
+        return []
+    indices = [int(value) for value in raw.split()]
+    if not 1 <= len(indices) <= 8 or len(set(indices)) != len(indices):
+        raise ValueError("choose 1..8 distinct lines")
+    for index in indices:
+        if not 1 <= index <= len(lines):
+            raise ValueError("line number is outside source")
+        title = lines[index - 1]
+        if not title.strip() or len(title) > 240 or not title.isprintable():
+            raise ValueError("select a nonblank printable task line of at most 240 characters")
+    return indices
+
+
+def _commitment(title: str, raw: str) -> Commitment:
+    """Validate one human-entered duration, priority and date without guessing corrections."""
+    fields = raw.split()
+    if len(fields) != 3:
+        raise ValueError("provide minutes, priority and date")
+    return Commitment(
+        version="morgan.commitment.v1",
+        title=title,
+        minutes=int(fields[0]),
+        priority=cast(
+            Literal["high", "normal", "low"],
+            {"высокий": "high", "обычный": "normal", "низкий": "low"}.get(fields[1], fields[1]),
+        ),
+        due=date.fromisoformat(fields[2]),
+        status="open",
+    )
+
+
+def _done_index(items: list[tuple[str, Commitment]], raw: str) -> int | None:
+    """Accept an explicit completion index or exit, retaining the displayed task numbering."""
+    command = raw.split()
+    if command in (["quit"], ["выход"]):
+        return None
+    if len(command) != 2 or command[0] not in ("done", "готово"):
+        raise ValueError("use done N or quit")
+    index = int(command[1]) - 1
+    if not 0 <= index < len(items):
+        raise ValueError("unknown task number")
+    return index
+
+
 def _select(note: str, proposal: Proposal, session: Session) -> list[Capture]:
     """Ask the owner to choose their own tasks, including lines omitted by the model."""
     lines = note.splitlines()
@@ -141,33 +200,17 @@ def _select(note: str, proposal: Proposal, session: Session) -> list[Capture]:
     for index, line in enumerate(lines, 1):
         mark = " [model]" if line in proposal.selected_lines else ""
         print(f"{index}{mark}: {_quote(line)}")
-    raw = input("Номера только ВАШИХ задач / Your task numbers (space-separated; empty = exit): ")
-    if not raw.strip():
-        return []
-    indices = [int(value) for value in raw.split()]
-    if not 1 <= len(indices) <= 8 or len(set(indices)) != len(indices):
-        raise ValueError("choose 1..8 distinct lines")
+    indices = _ask(
+        "Номера только ВАШИХ задач / Your task numbers (space-separated; empty = exit): ",
+        lambda raw: _indices(lines, raw),
+    )
     captures = []
     for index in indices:
-        if not 1 <= index <= len(lines):
-            raise ValueError("line number is outside source")
         print(f"Задача / Task: {_quote(lines[index - 1])}")
-        fields = input(
+        commitment = _ask(
             f"Минуты priority due / minutes high|normal|low YYYY-MM-DD "
-            f"(example: 10 normal {session.day}): "
-        ).split()
-        if len(fields) != 3:
-            raise ValueError("provide minutes, priority and date")
-        commitment = Commitment(
-            version="morgan.commitment.v1",
-            title=lines[index - 1],
-            minutes=int(fields[0]),
-            priority=cast(
-                Literal["high", "normal", "low"],
-                {"высокий": "high", "обычный": "normal", "низкий": "low"}.get(fields[1], fields[1]),
-            ),
-            due=date.fromisoformat(fields[2]),
-            status="open",
+            f"(example: 10 normal {session.day}): ",
+            partial(_commitment, lines[index - 1]),
         )
         captures.append(
             Capture(
@@ -282,14 +325,9 @@ def _interact(workspace: NoteWorkspace, session: Session) -> None:
         _save(workspace, session)
     for _ in range(20):
         items = asyncio.run(_plan(workspace, session))
-        command = input("done N / готово N; quit / выход: ").split()
-        if command in (["quit"], ["выход"]):
+        index = _ask("done N / готово N; quit / выход: ", partial(_done_index, items))
+        if index is None:
             return
-        if len(command) != 2 or command[0] not in ("done", "готово"):
-            raise ValueError("use done N or quit")
-        index = int(command[1]) - 1
-        if not 0 <= index < len(items):
-            raise ValueError("unknown task number")
         identity, item = items[index]
         if item.status == "done":
             print("Уже выполнено / Already done")
