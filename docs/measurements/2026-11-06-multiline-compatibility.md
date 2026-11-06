@@ -45,8 +45,10 @@ the launch-plan renderer reads paths, not journals.
 Six separate STOP-startup states per revision exercised `OwnerLoop.run`, with inference
 forbidden by a test adapter. The new worker returned `stopped`; the old worker rejected
 incompatible data before admission. Protected journals, STOP and expiry were unchanged.
-These were isolated counters, not deployment launches. Source-keyed model-cache status
-returned `stopped` in all twelve copies. No model process or network call was made.
+These were isolated counters, not deployment launches. With a seeded count of eight,
+the new stopped startup recorded nine; the old loader rejected before incrementing. Even
+a STOP-startup probe consumes a launch, so run it on a copy, never as a live preflight.
+Source-keyed model-cache status returned `stopped` in all twelve copies. No model process or network call was made.
 The old emergency `owner_input stop` command was separately verified to bypass parsing
 and set STOP without modifying the incompatible journals or memory.
 
