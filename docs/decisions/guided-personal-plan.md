@@ -106,6 +106,14 @@ Evidence: [four workflows](../measurements/2026-11-guided-plan.json),
 Tests cover both languages, missed/foreign model suggestions, cancellation before memory,
 source tampering, partial capture and completion acknowledgement loss, and concurrent sessions.
 
+## Reviewed unavailability
+
+The menu also supports `busy`, `change N` and `cancel N` (with Russian equivalents) to review
+intervals in a saved explicit timezone. Every subsequent plan includes those constraint families.
+See [guided unavailability](guided-unavailability.md) for confirmation, source provenance,
+correction, cancellation and recovery. Any overlap conservatively defers the whole day
+because this planner does not assign task hours.
+
 ## Limits and next real-data pilot
 
 This is an operator-driven personal planning conversation, not an autonomous 24/7 agent.

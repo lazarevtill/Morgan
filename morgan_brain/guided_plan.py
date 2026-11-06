@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from functools import partial
 from pathlib import Path
@@ -17,11 +18,19 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from morgan_brain.availability import Unavailability
 from morgan_brain.composition import open_evidence_context
 from morgan_brain.config import Settings
-from morgan_brain.daily_brief import BriefRequest, Commitment, prepare_brief
+from morgan_brain.daily_brief import BriefDraft, BriefRequest, Commitment, prepare_brief
+from morgan_brain.guided_availability import (
+    AvailabilityUpdate,
+    explicit_zone,
+    interval_entry,
+    source_statement,
+)
 from morgan_brain.local_notes import NoteWorkspace, StopRequested
 from morgan_brain.memory.continuation_context import ineligible
+from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.model_cycle import ModelCycle, managed_model
 from morgan_brain.providers.note_probe import ProbeFailure
 from morgan_brain.surfaces.cli.commands import cmd_remember
@@ -43,7 +52,7 @@ class Session(BaseModel):
     """A bounded workspace-local review journal, not authorization against the OS account."""
 
     model_config = ConfigDict(extra="forbid")
-    version: Literal["morgan.guided-plan.v1"] = "morgan.guided-plan.v1"
+    version: Literal["morgan.guided-plan.v1", "morgan.guided-plan.v2"] = "morgan.guided-plan.v2"
     user: str = Field(min_length=1, max_length=128)
     project: str = Field(min_length=1, max_length=128)
     day: date
@@ -53,6 +62,9 @@ class Session(BaseModel):
     captures: list[Capture] = Field(default_factory=list, max_length=8)
     captured: bool = False
     pending_done: Capture | None = None
+    timezone: str | None = None
+    unavailability_ids: list[str] = Field(default_factory=list, max_length=8)
+    pending_availability: AvailabilityUpdate | None = None
 
 
 def _quote(text: str) -> str:
@@ -258,7 +270,15 @@ async def _capture(workspace: NoteWorkspace, session: Session, capture: Capture)
     )
 
 
-async def _plan(workspace: NoteWorkspace, session: Session) -> list[tuple[str, Commitment]]:
+@dataclass(frozen=True)
+class PlanView:
+    """One displayed snapshot: task and constraint indices remain stable within the menu."""
+
+    tasks: list[tuple[str, Commitment]]
+    constraints: list[tuple[str, Unavailability]]
+
+
+async def _plan(workspace: NoteWorkspace, session: Session) -> PlanView:
     """Show and save a derived plan, reading current commitments through MemoryGate only."""
     context = open_evidence_context(workspace.path / "memory/morgan.db")
     try:
@@ -268,6 +288,8 @@ async def _plan(workspace: NoteWorkspace, session: Session) -> list[tuple[str, C
             session.day,
             session.budget,
             follow_revisions=True,
+            unavailability_ids=tuple(session.unavailability_ids),
+            timezone=session.timezone,
         )
         draft = await prepare_brief(context.gate, request)
         evidence = await context.gate.evidence(
@@ -282,6 +304,7 @@ async def _plan(workspace: NoteWorkspace, session: Session) -> list[tuple[str, C
         items = [
             (item.id, Commitment.model_validate_json(item.content)) for item in evidence.records
         ]
+        constraints = await _constraint_view(context.gate, session, draft)
     finally:
         context.conn.close()
     filename = f"plan-{uuid4().hex}.md"
@@ -290,11 +313,14 @@ async def _plan(workspace: NoteWorkspace, session: Session) -> list[tuple[str, C
     print(f"Файл / File: {workspace.path / filename}")
     for index, (identity, item) in enumerate(items, 1):
         label = "focus" if identity in draft.selected_ids else "outside this plan"
+        if identity in draft.blocked_ids:
+            label = "отложено: недоступность / deferred: unavailability"
         print(
             f"{index}: {item.status} — {_quote(item.title)}; {item.minutes} min; "
             f"due {item.due}; {label}"
         )
-    return items
+    _show_constraints(session, constraints)
+    return PlanView(items, constraints)
 
 
 def _interact(workspace: NoteWorkspace, session: Session) -> None:
@@ -323,12 +349,26 @@ def _interact(workspace: NoteWorkspace, session: Session) -> None:
         asyncio.run(_capture(workspace, session, session.pending_done))
         session.pending_done = None
         _save(workspace, session)
-    for _ in range(20):
-        items = asyncio.run(_plan(workspace, session))
-        index = _ask("done N / готово N; quit / выход: ", partial(_done_index, items))
-        if index is None:
+    if session.pending_availability is not None:
+        print("Незавершённая запись недоступности / Pending availability update:")
+        if not _confirm_availability(session, session.pending_availability):
             return
-        identity, item = items[index]
+        asyncio.run(_apply_availability(workspace, session))
+    for _ in range(20):
+        view = asyncio.run(_plan(workspace, session))
+        command, index = _ask(
+            "done N / готово N; busy / недоступность; change N / изменить N; "
+            "cancel N / отменить N; quit / выход: ",
+            partial(_menu, view),
+        )
+        if command == "quit":
+            return
+        if command != "done":
+            _edit_availability(workspace, session, view, command, index)
+            continue
+        if index is None:
+            raise ValueError("completion requires a task index")
+        identity, item = view.tasks[index]
         if item.status == "done":
             print("Уже выполнено / Already done")
             continue
@@ -342,6 +382,166 @@ def _interact(workspace: NoteWorkspace, session: Session) -> None:
         asyncio.run(_capture(workspace, session, session.pending_done))
         session.pending_done = None
         _save(workspace, session)
+
+
+async def _constraint_view(
+    gate: MemoryGate, session: Session, draft: BriefDraft
+) -> list[tuple[str, Unavailability]]:
+    """Read the exact constraint versions just used by the planner before offering edits."""
+    if not draft.unavailability_resolved_ids:
+        return []
+    targets = dict(draft.unavailability_resolved_ids)
+    result = await gate.evidence(
+        user_id=session.user,
+        project=session.project,
+        evidence_ids=list(dict.fromkeys(targets.values())),
+    )
+    if result.missing_ids or any(
+        ineligible(item, draft.as_of) is not None for item in result.records
+    ):
+        raise ValueError("constraints changed during planning; resume to refresh")
+    records = {item.id: item for item in result.records}
+    return [
+        (targets[root], Unavailability.model_validate_json(records[targets[root]].content))
+        for root in session.unavailability_ids
+    ]
+
+
+def _show_constraints(session: Session, constraints: list[tuple[str, Unavailability]]) -> None:
+    """State coverage honestly and show the provenance and conservative day-level policy."""
+    if not constraints:
+        print("Недоступность не задана / No unavailability recorded; availability is not verified.")
+        return
+    print(f"Зона плана / Planning zone: {_quote(str(session.timezone))}")
+    print("Пересечение откладывает весь дневной план / Any overlap defers the whole daily plan.")
+    print("Недоступность не означает местоположение / Unavailability does not imply location.")
+    for index, (identity, interval) in enumerate(constraints, 1):
+        print(
+            f"U{index}: {interval.status}; {interval.starts_at.isoformat()} → "
+            f"{interval.ends_at.isoformat()} (end excluded); {_quote(interval.timezone)}; "
+            f"record {_quote(identity)}; sources {_quote(', '.join(interval.source_ids))}"
+        )
+
+
+def _menu(view: PlanView, raw: str) -> tuple[str, int | None]:
+    """Separate task indices from displayed constraint indices; no ambiguous bare numbers."""
+    command = raw.split()
+    if command in (["busy"], ["недоступность"]):
+        if len(view.constraints) >= 8:
+            raise ValueError("this session already has eight constraint families")
+        return "busy", None
+    if len(command) == 2 and command[0] in ("change", "изменить", "cancel", "отменить"):
+        index = int(command[1]) - 1
+        if not 0 <= index < len(view.constraints):
+            raise ValueError("unknown constraint number")
+        return ("change" if command[0] in ("change", "изменить") else "cancel"), index
+    task_index = _done_index(view.tasks, raw)
+    return ("quit" if task_index is None else "done"), task_index
+
+
+def _availability_input(
+    session: Session, current: tuple[str, Unavailability] | None, cancel: bool
+) -> AvailabilityUpdate:
+    """Collect an actual user assertion, explicit local zone and offset-bearing bounds."""
+    source = _ask(
+        "Ваше утверждение о недоступности/изменении/отмене / Your availability statement: ",
+        source_statement,
+    )
+    zone = session.timezone or _ask(
+        "Зона плана IANA (пример Europe/Paris) / Planning timezone: ",
+        explicit_zone,
+    )
+    source_id = f"guided-source-{uuid4().hex}"
+    if cancel:
+        if current is None:
+            raise ValueError("cancellation requires an existing interval")
+        interval = current[1].model_copy(update={"status": "cancelled", "source_ids": [source_id]})
+    else:
+        interval = _ask(
+            "Начало и исключительный конец с UTC-смещением / Start and exclusive end "
+            "(example: 2027-04-10T09:00+02:00 2027-04-10T10:00+02:00): ",
+            lambda raw: interval_entry(raw, zone, source_id),
+        )
+    return AvailabilityUpdate(
+        source_id=source_id,
+        source_text=source,
+        event_id=f"guided-unavailable-{uuid4().hex}",
+        effective_at=datetime.now(UTC).isoformat(),
+        interval=interval,
+        parent_id=current[0] if current else None,
+    )
+
+
+def _confirm_availability(session: Session, update: AvailabilityUpdate) -> bool:
+    """Review exact words, owner, dates, timezone, provenance and correction before any write."""
+    interval = update.interval
+    print(f"Владелец / Owner: {_quote(session.user)}; project: {_quote(session.project)}")
+    print(f"Источник / Your statement: {_quote(update.source_text)}; ID {_quote(update.source_id)}")
+    print(
+        f"{interval.status}: {interval.starts_at.isoformat()} → {interval.ends_at.isoformat()}; "
+        f"zone {_quote(interval.timezone)}; end excluded; "
+        f"revises {_quote(update.parent_id or 'none')}"
+    )
+    print("Это недоступность, не местоположение / This is unavailability, not location.")
+    print("Любое пересечение откладывает весь план дня / Any overlap defers the whole daily plan.")
+    return input("Подтвердить / Confirm: CONFIRM / ПОДТВЕРЖДАЮ (else cancel): ").strip() in (
+        "CONFIRM",
+        "ПОДТВЕРЖДАЮ",
+    )
+
+
+async def _apply_availability(workspace: NoteWorkspace, session: Session) -> None:
+    """Replay exact source/assertion writes; clear pending only after both acknowledgements."""
+    update = session.pending_availability
+    if update is None:
+        raise ValueError("no pending availability update")
+    if session.timezone is not None and session.timezone != update.interval.timezone:
+        raise ValueError("pending interval changed the session timezone")
+    digest = hashlib.sha256(update.model_dump_json().encode()).hexdigest()
+    for identity, content, parents in (
+        (update.source_id, update.source_text, []),
+        (
+            update.event_id,
+            update.interval.model_dump_json(),
+            [update.parent_id] if update.parent_id else [],
+        ),
+    ):
+        args = argparse.Namespace(
+            text=content,
+            source="user_stated",
+            author_id=session.user,
+            event_id=identity,
+            effective_at=update.effective_at,
+            revises_event_ids=parents,
+            assert_session_id=True,
+        )
+        await cmd_remember(
+            args,
+            _settings(workspace, session),
+            session.project,
+            client="guided-availability-v1",
+            session_id=digest,
+        )
+    if update.parent_id is None and update.event_id not in session.unavailability_ids:
+        session.unavailability_ids.append(update.event_id)
+    session.timezone = update.interval.timezone
+    session.version = "morgan.guided-plan.v2"
+    session.pending_availability = None
+    _save(workspace, session)
+
+
+def _edit_availability(
+    workspace: NoteWorkspace, session: Session, view: PlanView, command: str, index: int | None
+) -> None:
+    """Do not persist unconfirmed input; journal confirmed values before starting capture."""
+    current = None if index is None else view.constraints[index]
+    update = _availability_input(session, current, command == "cancel")
+    if not _confirm_availability(session, update):
+        print("Отменено без записи / Cancelled without writing")
+        return
+    session.pending_availability = update
+    _save(workspace, session)
+    asyncio.run(_apply_availability(workspace, session))
 
 
 def main() -> None:

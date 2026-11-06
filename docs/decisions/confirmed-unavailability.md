@@ -13,8 +13,9 @@ free time: it does not claim that the whole day is unavailable or schedule tasks
 free period. Completed and future-dated tasks remain excluded as before.
 
 Only explicitly selected constraint IDs are checked. Omitting a constraint is not evidence that
-the user is available. `guided_plan` does not yet collect or forward constraints; use the explicit
-`daily_brief_cli` path below for this feature. There is no automatic calendar discovery or service.
+the user is available. The [guided conversation](guided-unavailability.md) collects reviewed
+intervals and carries its saved constraint families into subsequent plans. The explicit CLI below
+can select existing records directly. There is no automatic calendar discovery or service.
 
 ## Reviewed record and source provenance
 
@@ -97,7 +98,6 @@ partial-day deferral, source and owner isolation, missing/untrusted evidence, co
 cancellation, conflicts, database reopen and the actual CLI. Examples and fixtures are synthetic;
 no personal chat data is committed. Existing task selection remains unchanged without constraints.
 
-This is a useful day-level restriction, not a calendar scheduler. Next useful work is a reviewed
-intake interface for intervals and a connected personal workflow that carries selected constraints
-into every relevant plan. Slot scheduling, automatic timezone/date inference, notifications and
-persistent service operation are intentionally not claimed by this change.
+This is a useful day-level restriction, not a calendar scheduler. The guided intake now carries
+its reviewed intervals into every session plan. Slot scheduling, automatic timezone/date inference,
+notifications and persistent service operation are not claimed by this change.
