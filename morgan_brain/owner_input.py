@@ -178,27 +178,32 @@ async def _review(
     capture = None
     renewal = None
     effective = datetime.now(UTC).isoformat()
-    if args.target or args.complete:
+    if args.target or args.complete or args.cancel:
         if args.title is not None or args.minutes is not None or args.priority is not None:
             raise ValueError("renewal accepts target and due only")
-        if args.complete and args.due is not None:
-            raise ValueError("completion preserves the existing due date")
+        if (args.complete or args.cancel) and args.due is not None:
+            raise ValueError("completion/cancellation preserves the existing due date")
         if args.target and args.due is None:
             raise ValueError("renewal requires an explicit due date")
-        target = args.complete or args.target
+        target = args.complete or args.cancel or args.target
+        operation = "complete" if args.complete else ("cancel" if args.cancel else "renew")
         _, view = await guided_read_plan(workspace, session)
         matches = [task for identity, task in view.tasks if identity == target]
         if len(matches) != 1:
             raise ValueError("select one exact current task ID from status")
         before = matches[0]
         renewal = RenewalUpdate(
-            event_id=f"guided-{'complete' if args.complete else 'renew'}-{uuid4().hex}",
+            event_id=f"guided-{operation}-{uuid4().hex}",
             parent_id=target,
             source_text=message.text,
             effective_at=effective,
             before=before,
             after=before.model_copy(
-                update={"status": "done"} if args.complete else {"due": args.due}
+                update=(
+                    {"status": "done" if args.complete else "cancelled"}
+                    if args.complete or args.cancel
+                    else {"due": args.due}
+                )
             ),
         )
     else:
@@ -338,6 +343,7 @@ def _parser(*, exit_on_error: bool = True) -> argparse.ArgumentParser:
     action.add_argument("--new", action="store_true")
     action.add_argument("--target")
     action.add_argument("--complete", help="Review completion of one exact current task")
+    action.add_argument("--cancel", help="Review cancellation of one exact current task")
     review.add_argument("--title")
     review.add_argument("--minutes", type=int)
     review.add_argument("--priority", choices=("high", "normal", "low"))
@@ -444,7 +450,7 @@ def _dispatch(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, o
 
 def execute(args: argparse.Namespace) -> dict[str, object]:
     """Execute one parsed local account request without stdin or presentation side effects."""
-    if args.command == "review" and not args.complete and args.due is None:
+    if args.command == "review" and not (args.complete or args.cancel) and args.due is None:
         raise ValueError("new tasks and renewals require an explicit due date")
     if args.command == "submit" and args.text.strip().casefold() in ("stop", "стоп"):
         args.command = "stop"

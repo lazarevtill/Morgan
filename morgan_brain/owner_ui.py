@@ -73,6 +73,8 @@ class OwnerUI:
         action = "Создать задачу" if not renewal else f"Перенести с {renewal['before']['due']}"
         if renewal and item["status"] == "done":
             action = "Отметить выполненной"
+        if renewal and item["status"] == "cancelled":
+            action = "Отменить обязательство (не выполнено)"
         context = ""
         if renewal:
             target = renewal["parent_id"]
@@ -149,7 +151,13 @@ class OwnerUI:
         return self.dialogs.show(
             "choose",
             f"Ваше сообщение:\n{message['text']}\n\nЧто сделать?",
-            options=("Новая задача", "Перенести задачу", "Завершить задачу", "Оставить на проверку")
+            options=(
+                "Новая задача",
+                "Перенести задачу",
+                "Завершить задачу",
+                "Отменить задачу",
+                "Оставить на проверку",
+            )
             + (("Не задача",) if message["state"] == "needs_review" else ())
             + (("Предложение локальной модели",) if self.model is not None else ()),
         )
@@ -205,7 +213,7 @@ class OwnerUI:
                 "--due",
                 due,
             )
-        elif action in ("Перенести задачу", "Завершить задачу"):
+        elif action in ("Перенести задачу", "Завершить задачу", "Отменить задачу"):
             tasks = [
                 item
                 for item in state["plan"].get("tasks", [])
@@ -219,8 +227,9 @@ class OwnerUI:
             if selected is None:
                 return
             target = tasks[labels.index(selected)]["evidence_id"]
-            if action == "Завершить задачу":
-                envelope = self.call("review", message["identity"], "--complete", target)
+            if action in ("Завершить задачу", "Отменить задачу"):
+                option = "--complete" if action == "Завершить задачу" else "--cancel"
+                envelope = self.call("review", message["identity"], option, target)
             else:
                 due = self.text("Новый срок: ГГГГ-ММ-ДД", day)
                 envelope = self.call(
@@ -302,8 +311,9 @@ class OwnerUI:
             return
         item = results[labels.index(selected)]
         task = item["current_task"]
+        statuses = {"open": "открыта", "done": "выполнено", "cancelled": "отменена"}
         current = (
-            f"Текущее состояние: {'выполнено' if task['status'] == 'done' else 'открыта'}; "
+            f"Текущее состояние: {statuses[task['status']]}; "
             f"срок: {task['due']}\nЗадача: {task['title']}"
             if task
             else "Подтверждённое текущее состояние задачи не установлено."

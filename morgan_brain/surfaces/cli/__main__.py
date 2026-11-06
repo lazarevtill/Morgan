@@ -152,7 +152,7 @@ def build_parser() -> argparse.ArgumentParser:
     commitment.add_argument("--due", required=True, help="Explicit ISO date YYYY-MM-DD.")
     commitment.add_argument("--minutes", type=int, required=True)
     commitment.add_argument("--priority", choices=("high", "normal", "low"), required=True)
-    commitment.add_argument("--status", choices=("open", "done"), required=True)
+    commitment.add_argument("--status", choices=("open", "done", "cancelled"), required=True)
     _add_capture_fields(commitment)
 
     _add_common(add_review_parser(sub))

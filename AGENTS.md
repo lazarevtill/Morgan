@@ -349,3 +349,9 @@ source-keyed draft recovery never grants task authority. See
 It prepares unapproved local proposals, never confirms tasks, and preserves the pilot's
 seven-day expiry, STOP and attempt markers across restart. `owner_loop_plan` only renders
 an uninstalled disabled login-agent plist. See `docs/decisions/finite-owner-loop.md`.
+
+`owner_input review --cancel CURRENT_ID` and native `Отменить задачу` record an
+explicit reviewed open-to-cancelled transition. It is distinct from completion;
+never infer cancellation authority from message text. Older runtimes cannot read
+cancelled commitments or pending cancellations: update every pilot reader before
+exposing the action. See `docs/decisions/reviewed-task-cancellation.md`.

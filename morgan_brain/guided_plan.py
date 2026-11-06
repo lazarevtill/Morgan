@@ -414,8 +414,8 @@ def _interact(workspace: NoteWorkspace, session: Session) -> None:
         if index is None:
             raise ValueError("completion requires a task index")
         identity, item = view.tasks[index]
-        if item.status == "done":
-            print("Уже выполнено / Already done")
+        if item.status != "open":
+            print("Задача уже закрыта / Task already closed")
             continue
         session.pending_done = Capture(
             event_id=f"guided-done-{uuid4().hex}",

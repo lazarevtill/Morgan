@@ -53,3 +53,25 @@ def test_pending_renewal_rejects_bad_provenance(field, value):
     payload[field] = value
     with pytest.raises(ValidationError):
         RenewalUpdate.model_validate_json(json.dumps(payload))
+
+
+@pytest.mark.parametrize(
+    "field,value", [("due", "2027-03-01"), ("title", "Different"), ("status", "done")]
+)
+def test_cancellation_changes_only_open_status(field, value):
+    payload = review()
+    payload["event_id"] = "guided-cancel-example"
+    payload["after"] = {**payload["before"], "status": "cancelled"}
+    RenewalUpdate.model_validate_json(json.dumps(payload))
+    payload["after"][field] = value
+    with pytest.raises(ValidationError):
+        RenewalUpdate.model_validate_json(json.dumps(payload))
+
+
+def test_cancellation_cannot_reopen_or_relabel_terminal_task():
+    payload = review()
+    payload["event_id"] = "guided-cancel-example"
+    payload["before"]["status"] = "done"
+    payload["after"] = {**payload["before"], "status": "cancelled"}
+    with pytest.raises(ValidationError):
+        RenewalUpdate.model_validate_json(json.dumps(payload))

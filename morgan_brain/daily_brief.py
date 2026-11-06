@@ -30,7 +30,7 @@ class Commitment(BaseModel):
     due: date
     minutes: int = Field(ge=1, le=240)
     priority: Literal["high", "normal", "low"]
-    status: Literal["open", "done"]
+    status: Literal["open", "done", "cancelled"]
 
     @field_validator("title")
     @classmethod
@@ -137,12 +137,15 @@ def _render(
         )
     for title, entries in (
         ("Deferred: insufficient remaining time", deferred),
-        ("Excluded: completed or future-dated", excluded),
+        ("Excluded: completed, cancelled or future-dated", excluded),
     ):
         if entries:
             lines.extend(["", f"## {title}", ""])
             for identity, item in entries:
-                lines.append(f"- {_literal(item.title)} — source: {_literal(identity)}.")
+                lines.append(
+                    f"- {_literal(item.title)} — status: {item.status}; "
+                    f"source: {_literal(identity)}."
+                )
     lines.extend(
         [
             "",
