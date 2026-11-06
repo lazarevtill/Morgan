@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import getpass
 import json
+import signal
 import sys
 import warnings
 from contextlib import closing
@@ -15,7 +16,23 @@ from pydantic import SecretStr
 
 from morgan_brain.local_notes import NoteWorkspace, StopRequested
 from morgan_brain.owner_push import OwnerPush, Push, send
-from morgan_brain.tasks import TaskKey
+from morgan_brain.tasks import Task, TaskKey
+
+
+async def send_with_stop_signal(
+    workspace: NoteWorkspace, key: TaskKey, push: Push, adapter: OwnerPush
+) -> Task:
+    """Persist STOP on SIGTERM while this foreground invocation owns its event loop.
+
+    A stopped request can already have reached the provider. The adapter records uncertainty;
+    a later process must explicitly resume and still cannot replay the unresolved task.
+    """
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGTERM, workspace.stop)
+    try:
+        return await send(workspace, key, push, adapter)
+    finally:
+        loop.remove_signal_handler(signal.SIGTERM)
 
 
 def main() -> int:
@@ -37,7 +54,9 @@ def main() -> int:
             with open("/dev/tty", "r+", encoding="utf-8") as terminal, warnings.catch_warnings():
                 warnings.simplefilter("error", getpass.GetPassWarning)
                 token = SecretStr(getpass.getpass("Transient ntfy token: ", stream=terminal))
-            task = asyncio.run(send(workspace, key, push, OwnerPush(workspace, token)))
+            task = asyncio.run(
+                send_with_stop_signal(workspace, key, push, OwnerPush(workspace, token))
+            )
             print(
                 json.dumps(
                     {
