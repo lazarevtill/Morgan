@@ -20,7 +20,12 @@ for the supplied format, not a detector of reasoning disguised as ordinary final
 Non-text objects are not stored. Unknown content formats must get a reviewed adapter.
 
 New memories record `session_id = chatgpt:<conversation-id>`, source event time when supplied,
-import origin, and actor attribution. User text is `user_stated`; assistant answers are
+import origin, and actor attribution. A `user` role does not identify a human in a shared account.
+New user-role text has
+`source=unknown` and empty `author_id`; `user_id` controls access, not authorship.
+`unresolved_user_turns` reports accepted user-role turns, including unchanged replays,
+without counting chunks separately. Text, names and conversation titles never establish identity.
+Assistant answers are
 `agent_inferred`, authored by `chatgpt:assistant`, never owner commitments. Existing memory
 IDs remain SHA256(`chatgpt:<message-id>#<part>`) truncated to 32 hex characters, allowing a
 source export to locate each split part. The export itself is not retained automatically.
@@ -30,7 +35,9 @@ All supplied branches are independent evidence; sorting is presentation, not inf
 
 Unchanged reimports add no memories and do not re-embed. Reusing a message identity with
 changed content, actor, or known conversation provenance fails closed. Legacy records with
-empty session IDs remain unchanged on replay, not retroactively attributed. Old records
+empty session IDs are not retroactively attributed. Previously owner-attributed user records
+now raise an identity conflict on replay; they are not silently accepted or rewritten.
+Existing assistant compatibility is unchanged. Old records
 that a previous importer wrongly accepted are not silently deleted or reclassified.
 An interrupted import may have committed earlier messages; replay safely resumes them.
 
@@ -53,3 +60,21 @@ six skipped, zero excluded markers, both with `chatgpt:c2` provenance. Reimport:
 memories and zero embedding calls. Russian keyword `билет` retrieves both correctly attributed
 quotes through existing recall. This measures filtering, replay and search plumbing only.
 No real export, private session, model service, or active pilot data was used or changed.
+
+## Shared-account validation
+
+Two synthetic user-role messages naming different speakers remain searchable with unknown
+source and empty author IDs. Both share verified export conversation provenance and remain
+isolated to the importing account. Replay reports two unresolved turns and no new memories.
+Even syntactically valid commitment JSON from that export is rejected by the existing daily
+planner's user-stated evidence requirement. No author-mapping or bulk promotion option is
+provided; verified human authorship needs separate explicit evidence, not an account-wide guess.
+
+Existing wrongly attributed rows are not repaired by this release. A replay conflict preserves
+the database and requires review. Use a separate fresh database for an unverified shared export;
+do not treat the unchanged old archive as corrected. No real export was supplied for this test.
+
+A same-input before/after run confirms the boundary: the previous importer labelled a
+synthetic user-role commitment `user_stated` / importing owner and the planner accepted it.
+The corrected importer stores `unknown` / empty author; search still retrieves it, while the
+planner rejects it. No model or live-pilot data was used.
