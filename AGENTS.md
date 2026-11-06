@@ -37,6 +37,10 @@ evidence through the gate, without model calls. See `docs/decisions/memory-backe
 `python -m morgan_brain.eval.note_selection` is an explicit synthetic-only Ollama experiment.
 It neither reads memory nor authorizes tasks; see `docs/decisions/synthetic-note-selection.md`.
 
+`daily_brief_cli --follow-revisions` resolves selected commitment families to one current version,
+so explicit completion/correction updates the next plan without changing the selected IDs.
+See `docs/decisions/current-personal-plan-pilot.md` for the full synthetic pilot and remaining gaps.
+
 `note_proposal_cli` makes an explicit local-model draft from piped text, without memory writes.
 `morgan commitment` validates reviewed planning fields and reuses `remember` capture. See
 `docs/decisions/personal-note-intake.md`; neither path grants execution authority.

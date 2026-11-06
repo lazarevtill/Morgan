@@ -1,0 +1,37 @@
+{
+  "synthetic": true,
+  "before": {
+    "draft_written": true,
+    "planner": "controlled-priority-v1",
+    "planned_minutes": 20,
+    "selected": 2,
+    "deferred": 0,
+    "excluded": 0,
+    "approved": false,
+    "resolved_sources": {
+      "plants": "plants",
+      "library": "library"
+    }
+  },
+  "after": {
+    "draft_written": true,
+    "planner": "controlled-priority-v1",
+    "planned_minutes": 10,
+    "selected": 1,
+    "deferred": 0,
+    "excluded": 1,
+    "approved": false,
+    "resolved_sources": {
+      "plants": "plants-done",
+      "library": "library"
+    }
+  },
+  "stop_actions": 0,
+  "resume_actions": 1,
+  "replay_actions": 0,
+  "original_ids_reused": true,
+  "automatic_approval_of_arbitrary_model_output": false,
+  "real_local_model_output": true,
+  "pipeline_seconds": 2.068,
+  "cli_invocations": 14
+}

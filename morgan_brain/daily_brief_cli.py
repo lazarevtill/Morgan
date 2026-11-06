@@ -22,12 +22,21 @@ def main() -> None:
     parser.add_argument("--project", required=True)
     parser.add_argument("--task", required=True)
     parser.add_argument("--evidence", action="append", required=True)
+    parser.add_argument(
+        "--follow-revisions",
+        action="store_true",
+        help="Follow selected tasks to one current unambiguous version.",
+    )
     parser.add_argument("--day", type=date.fromisoformat, required=True)
     parser.add_argument("--budget", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     request = BriefRequest(
-        TaskKey(args.user, args.project, args.task), tuple(args.evidence), args.day, args.budget
+        TaskKey(args.user, args.project, args.task),
+        tuple(args.evidence),
+        args.day,
+        args.budget,
+        follow_revisions=args.follow_revisions,
     )
     context = open_evidence_context(args.memory_db)
     try:
@@ -49,6 +58,7 @@ def main() -> None:
                 "deferred": len(draft.deferred_ids),
                 "excluded": len(draft.excluded_ids),
                 "approved": False,
+                "resolved_sources": dict(draft.resolved_ids),
             }
         )
     )
