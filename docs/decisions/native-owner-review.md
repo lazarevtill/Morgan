@@ -17,7 +17,9 @@ Use Apple's existing [text dialogs](https://developer.apple.com/library/archive/
 and [list selection](https://developer.apple.com/library/archive/documentation/LanguagesUtilities/Conceptual/MacAutomationScriptingGuide/ManipulateListsofItems.html).
 The fixed JXA program receives JSON data, never interpolated source or shell commands.
 The Python controller calls the same owner-input command implementation as the CLI;
-there is no second journal, task executor or model inference path.
+there is no second journal or task executor. Without optional model flags it performs no inference.
+[The optional integrated model flow](integrated-owner-model.md) keeps draft generation separate
+from task confirmation.
 
 ## Run
 
@@ -67,7 +69,7 @@ this interface currently covers intake, review and date renewal only.
 
 The existing pilot limits remain: seven days, fourteen messages and eight task families.
 The planning day is fixed, not a rolling scheduler. This UI does not extract fields with an
-LLM, infer ownership, deliver reminders, install launchd jobs or demonstrate 24/7 availability.
+LLM by default, infer ownership, deliver reminders, install launchd jobs or demonstrate 24/7 availability.
 
 ## Evidence
 

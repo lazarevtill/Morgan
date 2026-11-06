@@ -72,3 +72,5 @@ One shared stop command is sufficient:
 
 Readiness remains limited to the logged-in foreground desktop. There is no persistent
 credential, installed LaunchAgent, phone delivery or incoming-message service.
+
+Measured real-model and synthetic lifecycle evidence: [pilot measurement](../measurements/2026-11-06-integrated-owner-model.md).
