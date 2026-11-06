@@ -33,7 +33,8 @@ def read_state(workspace: NoteWorkspace) -> dict[str, object]:
     if (
         not isinstance(value, dict)
         or value.get("version") != 1
-        or type(value.get("launches")) is not int
+        or not isinstance(value.get("launches"), int)
+        or isinstance(value.get("launches"), bool)
         or not 0 <= value["launches"] <= _MAX_LAUNCHES
     ):
         raise ValueError("invalid loop state; preserve it for manual recovery")

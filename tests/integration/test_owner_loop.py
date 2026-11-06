@@ -189,3 +189,11 @@ def test_real_process_sigterm_then_restart_preserves_expiry(model):
             if process.poll() is None:
                 process.kill()
                 process.wait(timeout=5)
+
+
+@pytest.mark.parametrize("launches", [True, False, -1, 17, "1"])
+def test_counter_rejects_non_integer_or_out_of_budget(model, launches):
+    with closing(NoteWorkspace(model.path, create=False)) as workspace:
+        workspace.publish("owner-loop.json", json.dumps({"version": 1, "launches": launches}))
+        with pytest.raises(ValueError, match="invalid loop state"):
+            read_state(workspace)
