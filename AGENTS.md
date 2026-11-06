@@ -10,6 +10,13 @@ model. One SQLite database under `MORGAN_DATA_DIR` holds memories, facts, vector
 one `MemoryGate`. The model server is any OpenAI-compatible endpoint (llama-server by
 default). One process, no queue, no worker, no scheduler.
 
+The optional `morgan_brain.tasks` SDK is a separate, explicitly invoked task-execution stage.
+It uses a caller-selected execution journal, never the memory database, and runs only registered
+trusted handlers. It has no service, scheduler, retry or provider client. See
+`docs/decisions/explicit-task-execution.md` for the authority, cancellation and recovery contract.
+The one-database invariant below applies to memory; task receipts have a separate lifecycle and
+are not erased by `morgan forget`. Never derive execution authority from remembered text.
+
 Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
 `docs/ROADMAP.md` (what is not in the code and why, what retrieval measures, what is next),
 `docs/decisions/` (decisions, and what the code does about each). The archived agent kernel is

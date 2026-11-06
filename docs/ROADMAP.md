@@ -14,6 +14,10 @@ Its core:
 - The reachability contract: a model server that is down, slow or refusing is reported by
   name on every surface.
 
+An opt-in [single-attempt task SDK](decisions/explicit-task-execution.md) now supports explicit
+trusted-handler invocation with an isolated journal. It is not connected to the memory surfaces
+and does not provide an autonomous assistant, scheduling or external-action reconciliation.
+
 ## What is not in the code, and why
 
 - **No learning loop.** Nothing tunes prompts, promotes a champion or learns from signals. A
