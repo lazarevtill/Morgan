@@ -191,8 +191,12 @@ async def test_version_three_import_replay_after_migration_keeps_evidence(tmp_pa
     export[0]["mapping"]["m0"]["message"]["author"]["role"] = role
     path.write_text(json.dumps(export), encoding="utf-8")
     before = conn.serialize()
-    result = await import_chatgpt(path, gate=gate, user_id="u")
-    assert result.memories == 0 and result.skipped_turns == 1
+    if role == "user":
+        with pytest.raises(EventIdentityConflict, match="source"):
+            await import_chatgpt(path, gate=gate, user_id="u")
+    else:
+        result = await import_chatgpt(path, gate=gate, user_id="u")
+        assert result.memories == 0 and result.skipped_turns == 1
     assert embedder.calls == 0
     assert conn.serialize() == before
     stored = await gate.get(identity, user_id="u")

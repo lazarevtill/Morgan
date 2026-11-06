@@ -239,9 +239,10 @@ async def test_an_import_stores_client_cli(settings_for_tmp: Settings, tmp_path:
     ``"cli"`` outright, the same value the CLI's other writers default to."""
     export = _chatgpt_export(tmp_path)
 
-    await cmd_import(argparse.Namespace(path=str(export)), settings_for_tmp, "ignored")
+    result = await cmd_import(argparse.Namespace(path=str(export)), settings_for_tmp, "ignored")
+    assert result["unresolved_user_turns"] == 1
 
-    stored = _memory_row_by_source(settings_for_tmp, MemorySource.USER_STATED.value)
+    stored = _memory_row_by_source(settings_for_tmp, MemorySource.UNKNOWN.value)
     assert stored["origin_kind"] == OriginKind.IMPORT.value
     assert stored["client"] == "cli"
 

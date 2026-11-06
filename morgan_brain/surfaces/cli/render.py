@@ -261,7 +261,9 @@ def _render_import(data: dict[str, Any]) -> str:
     return (
         f"Imported {data['memories']} memories from {data['conversations']} conversations "
         f"into {data['archive_project']!r}; {data['held_out']} conversations held out in "
-        f"{data['holdout_project']!r}, {data['skipped_turns']} turns skipped."
+        f"{data['holdout_project']!r}, {data['skipped_turns']} turns skipped. "
+        f"{data.get('unresolved_user_turns', 0)} user turns have unverified authorship; "
+        "they are not attributed to the owner."
     )
 
 

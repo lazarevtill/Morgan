@@ -65,7 +65,7 @@ async def _contents(gate: MemoryGate, project: str) -> list[str]:
 
 async def test_user_and_assistant_turns_keep_their_attribution(gate, tmp_path):
     """The actor-attribution invariant is the whole reason the import is not a bulk insert:
-    an assistant's answer is an inference and must never be stored as the owner's statement.
+    an assistant's answer is an inference; a user role does not identify a human author.
     """
     path = _export(
         tmp_path / "c.json",
@@ -78,7 +78,7 @@ async def test_user_and_assistant_turns_keep_their_attribution(gate, tmp_path):
         MemoryQuery(user_id="owner", project=ARCHIVE_PROJECT, text="", top_k=100)
     )
     by_content = {m.content: m.source for m in stored.memories}
-    assert by_content["I prefer terse answers"] is MemorySource.USER_STATED
+    assert by_content["I prefer terse answers"] is MemorySource.UNKNOWN
     assert by_content["Understood"] is MemorySource.AGENT_INFERRED
 
 
@@ -246,7 +246,7 @@ async def test_legacy_final_answer_has_provenance_and_replays_without_new_memori
     ).memories
     assert len(found) == 2
     assert {m.session_id for m in found} == {f"chatgpt:{KEPT}"}
-    assert {m.author_id for m in found} == {"owner", "chatgpt:assistant"}
+    assert {m.author_id for m in found} == {"", "chatgpt:assistant"}
     assert (await import_chatgpt(path, gate=gate, user_id="owner")).memories == 0
 
 
@@ -270,3 +270,60 @@ async def test_reused_message_in_different_conversation_is_not_silently_deduplic
     _export(path, [conversation])
     with pytest.raises(EventIdentityConflict, match="session_id"):
         await import_chatgpt(path, gate=gate, user_id="owner")
+
+
+async def test_shared_export_does_not_guess_people_from_text_or_account(gate, tmp_path):
+    path = _export(
+        tmp_path / "shared.json",
+        [
+            _conversation(
+                KEPT,
+                ("user", "Synthetic speaker Alex: I prefer tea"),
+                ("user", "Synthetic speaker Sam: I prefer coffee"),
+            )
+        ],
+    )
+    first = await import_chatgpt(path, gate=gate, user_id="account-owner")
+    found = (
+        await gate.recall(
+            MemoryQuery(user_id="account-owner", project=ARCHIVE_PROJECT, text="", top_k=10)
+        )
+    ).memories
+    assert len(found) == 2
+    assert all(m.author_id == "" and m.source is MemorySource.UNKNOWN for m in found)
+    assert {m.session_id for m in found} == {f"chatgpt:{KEPT}"}
+    assert first.unresolved_user_turns == 2
+    replay = await import_chatgpt(path, gate=gate, user_id="account-owner")
+    assert replay.memories == 0 and replay.unresolved_user_turns == 2
+    other = await gate.recall(
+        MemoryQuery(user_id="different-owner", project=ARCHIVE_PROJECT, text="", top_k=10)
+    )
+    assert other.memories == []
+
+
+async def test_unattributed_import_cannot_become_owner_commitment(gate, tmp_path):
+    from datetime import UTC, date, datetime
+
+    from morgan_brain.daily_brief import BriefRequest, prepare_brief
+    from morgan_brain.tasks import TaskKey
+
+    payload = json.dumps(
+        {
+            "version": "morgan.commitment.v1",
+            "title": "Synthetic review",
+            "due": "2026-11-06",
+            "minutes": 10,
+            "priority": "normal",
+            "status": "open",
+        }
+    )
+    path = _export(tmp_path / "shared.json", [_conversation(KEPT, ("user", payload))])
+    await import_chatgpt(path, gate=gate, user_id="owner")
+    found = (
+        await gate.recall(MemoryQuery(user_id="owner", project=ARCHIVE_PROJECT, text="", top_k=10))
+    ).memories
+    request = BriefRequest(
+        TaskKey("owner", ARCHIVE_PROJECT, "synthetic-plan"), (found[0].id,), date(2026, 11, 6), 30
+    )
+    with pytest.raises(ValueError, match="user-stated"):
+        await prepare_brief(gate, request, as_of=datetime(2027, 11, 6, 12, tzinfo=UTC))

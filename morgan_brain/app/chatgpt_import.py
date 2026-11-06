@@ -56,11 +56,12 @@ MAX_EMBED_CHARS = 6_000
 #: text; a line break is usually one; a space rarely is but beats cutting a word in half.
 _BOUNDARIES = ("\n\n", "\n", " ")
 
-#: Which roles become memories, and what attribution each one carries. A tool result is the
+#: Roles identify transcript sides, not people. User-role authorship is unresolved in an
+#: export, so it cannot establish an owner statement. A tool result is the
 #: environment talking, not the owner and not the assistant's reasoning, and carries no
 #: preference worth recalling -- so it is skipped rather than mis-attributed.
 _SOURCE_BY_ROLE = {
-    "user": MemorySource.USER_STATED,
+    "user": MemorySource.UNKNOWN,
     "assistant": MemorySource.AGENT_INFERRED,
 }
 
@@ -75,6 +76,8 @@ class ImportReport:
     #: Turns not stored: tool output, empty content, and pieces an earlier run already
     #: imported unchanged.
     skipped_turns: int = 0
+    #: Accepted user-role turns (including replays) without verified human authorship.
+    unresolved_user_turns: int = 0
 
 
 class ImportStopped(Exception):
@@ -306,7 +309,7 @@ async def import_chatgpt(
     # loop the embedding calls below run on.
     raw = await asyncio.to_thread(path.read_text, encoding="utf-8")
     conversations = _read_export(raw)
-    kept = held = stored = skipped = 0
+    kept = held = stored = skipped = unresolved = 0
     #: Memory ids stored since the last canary that still matched -- the suspects a failure
     #: names, and what a caller acts on directly without parsing the message.
     since_last_canary: list[str] = []
@@ -324,7 +327,10 @@ async def import_chatgpt(
             if source is None or not text:
                 skipped += 1
                 continue
-            author_id = user_id if role == "user" else f"chatgpt:{role}"
+            # Account ownership is access control, not evidence of who typed a turn.
+            # Shared exports cannot establish the human author from role alone.
+            author_id = "" if role == "user" else f"chatgpt:{role}"
+            unresolved += role == "user"
             message_id = str(message["id"])
             for part, piece in enumerate(split_for_embedding(text)):
                 memory_id = _memory_id(message_id, part)
@@ -413,7 +419,13 @@ async def import_chatgpt(
     if gate.capture_erasure_generation() != generation:
         raise StoreInterruptedByForget("Forget interrupted import; retry explicitly")
 
-    return ImportReport(conversations=kept, held_out=held, memories=stored, skipped_turns=skipped)
+    return ImportReport(
+        conversations=kept,
+        held_out=held,
+        memories=stored,
+        skipped_turns=skipped,
+        unresolved_user_turns=unresolved,
+    )
 
 
 async def _run_canary(gate: MemoryGate, stored: int, since_last_canary: list[str]) -> None:
