@@ -140,3 +140,7 @@ No permanent access, paid process or background service is installed by this com
 A note without open tasks can be reviewed with `none` / `нет задач`, then `CONFIRM` /
 `ПОДТВЕРЖДАЮ`. The availability menu remains usable without inventing a commitment.
 Blank selection still exits without review. See [reviewed empty plans](reviewed-empty-plan.md).
+
+`renew N` / `повторить N` renews one explicitly selected open task after recording the
+source statement and confirming a new date. It preserves the task family and does not send
+a notification. See [reviewed renewal and rejected automatic matching](reviewed-task-renewal.md).

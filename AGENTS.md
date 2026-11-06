@@ -50,6 +50,9 @@ model cycle, capture path and current-revision planner. It uses a separate priva
 workspace and explicit confirmation; see `docs/decisions/guided-personal-plan.md`.
 Its `busy` / `change N` / `cancel N` dialogue journals reviewed source statements and intervals
 and carries them into each session plan; see `docs/decisions/guided-unavailability.md`.
+`renew N` / `повторить N` renews a selected open task after source/date review, with exact
+revision replay and stale-parent checks; see `docs/decisions/reviewed-task-renewal.md`.
+It changes a plan date only, never sends a reminder or infers a target from message text.
 `guided_plan WORKSPACE --status` reads current scoped state as JSON without prompts, memory
 updates or model calls; pending review and fixed-day freshness remain explicit.
 Its `--preview-day DATE` option evaluates current evidence for an explicit day without changing
