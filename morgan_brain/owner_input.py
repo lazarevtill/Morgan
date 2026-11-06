@@ -58,7 +58,7 @@ class Message(BaseModel):
     model_config = ConfigDict(extra="forbid")
     identity: str = Field(min_length=1, max_length=128)
     text: str
-    state: Literal["needs_review", "reviewed", "applying", "applied"] = "needs_review"
+    state: Literal["needs_review", "reviewed", "applying", "applied", "dismissed"] = "needs_review"
     capture: guided.Capture | None = None
     renewal: RenewalUpdate | None = None
     digest: str | None = None
@@ -170,7 +170,7 @@ async def _review(
     args: argparse.Namespace,
 ) -> None:
     """Prepare explicit owner-selected fields without changing memory or granting execution."""
-    if message.state in ("applying", "applied"):
+    if message.state in ("applying", "applied", "dismissed"):
         raise ValueError("review cannot change an attempted operation")
     if guided_pending_reviews(session):
         raise ValueError("resolve pending guided review first")
@@ -332,6 +332,8 @@ def _parser(*, exit_on_error: bool = True) -> argparse.ArgumentParser:
     review.add_argument("--minutes", type=int)
     review.add_argument("--priority", choices=("high", "normal", "low"))
     review.add_argument("--due", required=True, type=date.fromisoformat)
+    for name in ("dismiss", "restore"):
+        commands.add_parser(name).add_argument("identity")
     confirm = commands.add_parser("confirm")
     confirm.add_argument("identity")
     confirm.add_argument("--digest", required=True)
@@ -351,7 +353,7 @@ def _status(workspace: NoteWorkspace, session: guided.Session, inbox: Inbox) -> 
         stopped = True
     expired = datetime.now(UTC) >= inbox.expires_at
     state = "ready"
-    if any(message.state != "applied" for message in inbox.messages):
+    if any(message.state not in ("applied", "dismissed") for message in inbox.messages):
         state = "needs_review"
     if expired:
         state = "expired"
@@ -379,6 +381,13 @@ def load_pilot(workspace: NoteWorkspace) -> tuple[guided.Session, Inbox]:
     return session, inbox
 
 
+def _classify(message: Message, command: str) -> None:
+    """Reversibly classify only unreviewed input; never hide an attempted task change."""
+    if message.state not in ("needs_review", "dismissed"):
+        raise ValueError("only unreviewed messages can be dismissed or restored")
+    message.state = "dismissed" if command == "dismiss" else "needs_review"
+
+
 def _dispatch(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, object]:
     """Enforce scope, expiry and recovery boundaries before routing a local command."""
     if args.command == "init":
@@ -402,7 +411,9 @@ def _dispatch(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, o
         message = _submit(inbox, args.identity, args.text)
     else:
         message = _find(inbox, args.identity)
-        if args.command == "review":
+        if args.command in ("dismiss", "restore"):
+            _classify(message, args.command)
+        elif args.command == "review":
             asyncio.run(_review(workspace, session, inbox, message, args))
         else:
             asyncio.run(_confirm(workspace, session, inbox, message, args.digest))
