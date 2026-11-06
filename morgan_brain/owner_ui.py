@@ -1,4 +1,4 @@
-"""A bounded native owner review session; no listener, background service or model calls."""
+"""A bounded native owner review session with optional explicit local-model drafts."""
 
 from __future__ import annotations
 
