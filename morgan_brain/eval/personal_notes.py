@@ -54,3 +54,14 @@ HOLDOUT_CASES = (
         (2,),
     ),
 )
+
+
+# Synthetic regression probes for explicit renewed reminders, not real owner messages.
+REMINDER_CASES = (
+    Case("ru_missed_reminder", "Я так и не вернул книгу, напомни мне ещё раз.", (1,)),
+    Case("en_missed_reminder", "I did not water the plants. Remind me again.", (1,)),
+    Case("ru_reminder_cancelled", "Напомни забрать посылку.\nОтменяю: посылку уже забрали.", ()),
+    Case("en_reminder_cancelled", "Remind me to buy bread.\nCancel that, I already bought it.", ()),
+    Case("ru_foreign_missed", "Оля не вернула книгу. Пусть ей напомнит Антон.", ()),
+    Case("en_foreign_missed", "Alex did not water his plants. Sam should remind him.", ()),
+)
