@@ -367,6 +367,7 @@ def _render_evidence(data: dict[str, Any]) -> str:
 
 RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "remember": _render_remember,
+    "commitment": _render_remember,
     "recall": _render_recall,
     "facts": _render_facts,
     "evidence": _render_evidence,

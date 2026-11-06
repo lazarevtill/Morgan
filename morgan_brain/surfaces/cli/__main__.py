@@ -26,6 +26,7 @@ from morgan_brain.logging_setup import configure_logging
 from morgan_brain.models import PERSONAL_PROJECT, MemorySource
 from morgan_brain.surfaces.cli.commands import (
     cmd_ask,
+    cmd_commitment,
     cmd_consolidate,
     cmd_doctor,
     cmd_evidence,
@@ -60,6 +61,7 @@ def _positive_int(value: str) -> int:
 #: lives in ``render.RENDERERS`` under the same key.
 HANDLERS = {
     "remember": cmd_remember,
+    "commitment": cmd_commitment,
     "recall": cmd_recall,
     "facts": cmd_facts,
     "evidence": cmd_evidence,
@@ -76,7 +78,7 @@ HANDLERS = {
 
 # Commands where --all-projects is meaningless: a write or a single chat turn always
 # targets exactly one project.
-_SINGLE_PROJECT_ONLY = {"remember", "ask"}
+_SINGLE_PROJECT_ONLY = {"remember", "commitment", "ask"}
 
 #: The write commands that record what repository their project is (`_repository_to_record`).
 #: `forget` is a write and is deliberately absent: it erases a project rather than writing to
@@ -84,7 +86,7 @@ _SINGLE_PROJECT_ONLY = {"remember", "ask"}
 #: not one to write a remote and a root back into. (It could not: `record` only ever updates a
 #: row that exists.) `import` is absent too -- it writes to the archive and holdout projects,
 #: never to the one the working directory names.
-_RECORDS_THE_REPOSITORY = {"remember", "ask", "consolidate"}
+_RECORDS_THE_REPOSITORY = {"remember", "commitment", "ask", "consolidate"}
 
 
 # ---------------------------------------------------------------------------
@@ -109,30 +111,44 @@ def _add_common(sp: argparse.ArgumentParser) -> None:
     )
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="morgan", description="Talk to your local Morgan brain.")
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    p_remember = sub.add_parser("remember", help="Store a memory.")
-    p_remember.add_argument("text", help="What to remember.")
-    p_remember.add_argument("--event-id", help="Stable ID for an immutable retry.")
-    p_remember.add_argument("--effective-at", help="Timezone-aware ISO event time.")
-    p_remember.add_argument(
+def _add_capture_fields(parser: argparse.ArgumentParser) -> None:
+    """Share provenance and immutable-revision arguments across typed and free-text capture."""
+    parser.add_argument("--event-id", help="Stable ID for an immutable retry.")
+    parser.add_argument("--effective-at", help="Timezone-aware ISO event time.")
+    parser.add_argument(
         "--revises-event-id",
         dest="revises_event_ids",
         action="append",
         help="Parent event ID; repeat for an explicit resolution (at most eight).",
     )
-    p_remember.add_argument(
+    parser.add_argument(
         "--source",
         choices=[source.value for source in MemorySource],
         default="unknown",
         help="Reported evidence source; user_stated requires an actual user statement.",
     )
-    p_remember.add_argument(
+    parser.add_argument(
         "--author-id", default="", help="Reported author; does not change ownership or access."
     )
-    _add_common(p_remember)
+    _add_common(parser)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build CLI commands with shared scope and explicit capture provenance fields."""
+    parser = argparse.ArgumentParser(prog="morgan", description="Talk to your local Morgan brain.")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_remember = sub.add_parser("remember", help="Store a memory.")
+    p_remember.add_argument("text", help="What to remember.")
+    _add_capture_fields(p_remember)
+
+    commitment = sub.add_parser("commitment", help="Store explicit reviewed planning fields.")
+    commitment.add_argument("title")
+    commitment.add_argument("--due", required=True, help="Explicit ISO date YYYY-MM-DD.")
+    commitment.add_argument("--minutes", type=int, required=True)
+    commitment.add_argument("--priority", choices=("high", "normal", "low"), required=True)
+    commitment.add_argument("--status", choices=("open", "done"), required=True)
+    _add_capture_fields(commitment)
 
     p_recall = sub.add_parser("recall", help="Search memory by meaning and by keyword.")
     p_recall.add_argument("query", help="Search text.")
@@ -283,6 +299,7 @@ async def _dispatch(
     remember_project: str | None,
     repository: Repository | None,
 ) -> int:
+    """Apply command scope rules, invoke the selected handler and render protocol-safe output."""
     if args.command in _SINGLE_PROJECT_ONLY and args.all_projects:
         message = (
             f"morgan {args.command}: --all-projects is not valid here "
@@ -319,13 +336,12 @@ async def _dispatch(
 
     handler, renderer = HANDLERS[args.command], RENDERERS[args.command]
     try:
-        # `remember` alone takes an *optional* project -- it is the one command whose result
-        # says whether the project came from the caller or from no one naming it -- and the
-        # three write commands that record their repository take it as a keyword the MCP
-        # server never passes, so each is called directly rather than through the shared
-        # `handler(args, settings, project)` signature every other verb still uses.
-        if args.command == "remember":
-            data = await cmd_remember(args, settings, remember_project, repository=repository)
+        # Capture preserves the distinction between named and defaulted projects.
+        # Repository-writing handlers also receive the CLI's detected repository;
+        # the remaining handlers use the shared three-argument signature.
+        if args.command in {"remember", "commitment"}:
+            capture = cmd_commitment if args.command == "commitment" else cmd_remember
+            data = await capture(args, settings, remember_project, repository=repository)
         elif args.command == "ask":
             data = await cmd_ask(args, settings, project, repository=repository)
         elif args.command == "consolidate":

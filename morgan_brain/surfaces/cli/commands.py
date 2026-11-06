@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,7 @@ from morgan_brain.composition import (
     utcnow,
 )
 from morgan_brain.config import Settings
+from morgan_brain.daily_brief import Commitment
 from morgan_brain.memory import snapshot
 from morgan_brain.memory.continuation_context import validate_request
 from morgan_brain.models import PERSONAL_PROJECT, Memory, MemoryQuery, MemorySource, OriginKind
@@ -510,3 +512,24 @@ async def cmd_import(args: argparse.Namespace, settings: Settings, project: str)
         "memories": report.memories,
         "skipped_turns": report.skipped_turns,
     }
+
+
+async def cmd_commitment(
+    args: argparse.Namespace,
+    settings: Settings,
+    project: str | None,
+    *,
+    repository: Repository | None = None,
+) -> dict[str, Any]:
+    """Validate explicit planning data before reusing the normal scoped memory write path."""
+    commitment = Commitment(
+        version="morgan.commitment.v1",
+        title=args.title,
+        due=date.fromisoformat(args.due),
+        minutes=args.minutes,
+        priority=args.priority,
+        status=args.status,
+    )
+    capture = argparse.Namespace(**vars(args))
+    capture.text = commitment.model_dump_json()
+    return await cmd_remember(capture, settings, project, repository=repository)
