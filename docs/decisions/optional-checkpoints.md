@@ -70,6 +70,9 @@ context, and old source IDs cannot authorize their reconstruction after erasure.
 
 ## Validation and comparison limits
 
+See the [task recovery review](../measurements/2026-11-task-recovery.md) for abrupt-process
+checkpoint recovery checks, COMMIT failure handling and the remaining executor boundary.
+
 The frozen four RU/EN cases provide eight temporal views: six require rebuilding an old
 checkpoint and two retain its current basis. Tests exercise those outcomes through public
 gate calls without using a model. They additionally cover two-connection stale writers,
