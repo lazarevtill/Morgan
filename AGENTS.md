@@ -41,6 +41,10 @@ It neither reads memory nor authorizes tasks; see `docs/decisions/synthetic-note
 so explicit completion/correction updates the next plan without changing the selected IDs.
 See `docs/decisions/current-personal-plan-pilot.md` for the full synthetic pilot and remaining gaps.
 
+`daily_brief_cli --unavailability ID --timezone IANA_ZONE` conservatively defers a day when
+reviewed, sourced unavailability overlaps it. Constraints follow explicit immutable revisions;
+see `docs/decisions/confirmed-unavailability.md`. It does not infer location or schedule hours.
+
 `guided_plan` provides one foreground review/plan/completion conversation over the existing
 model cycle, capture path and current-revision planner. It uses a separate private session
 workspace and explicit confirmation; see `docs/decisions/guided-personal-plan.md`.

@@ -27,6 +27,13 @@ def main() -> None:
         action="store_true",
         help="Follow selected tasks to one current unambiguous version.",
     )
+    parser.add_argument(
+        "--unavailability",
+        action="append",
+        default=[],
+        help="Confirmed constraint evidence ID; repeat up to eight times.",
+    )
+    parser.add_argument("--timezone", help="Explicit IANA zone for the planning day.")
     parser.add_argument("--day", type=date.fromisoformat, required=True)
     parser.add_argument("--budget", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -37,6 +44,8 @@ def main() -> None:
         args.day,
         args.budget,
         follow_revisions=args.follow_revisions,
+        unavailability_ids=tuple(args.unavailability),
+        timezone=args.timezone,
     )
     context = open_evidence_context(args.memory_db)
     try:
@@ -58,6 +67,8 @@ def main() -> None:
                 "deferred": len(draft.deferred_ids),
                 "excluded": len(draft.excluded_ids),
                 "approved": False,
+                "blocked": len(draft.blocked_ids),
+                "resolved_unavailability": dict(draft.unavailability_resolved_ids),
                 "resolved_sources": dict(draft.resolved_ids),
             }
         )

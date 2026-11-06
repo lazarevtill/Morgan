@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import html
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from morgan_brain.availability import Unavailability, planning_zone
 from morgan_brain.local_notes import ACTION
 from morgan_brain.memory.continuation_context import ineligible
 from morgan_brain.memory.gate import MemoryGate
@@ -49,9 +50,24 @@ class BriefRequest:
     day: date
     budget_minutes: int
     follow_revisions: bool = False
+    unavailability_ids: tuple[str, ...] = ()
+    timezone: str | None = None
 
     def __post_init__(self) -> None:
         """Bound exact evidence selection and reject implicit or duplicate source selection."""
+        if self.unavailability_ids:
+            if self.timezone is None:
+                raise ValueError("unavailability requires an explicit planning timezone")
+            planning_zone(self.timezone)
+            if len(self.unavailability_ids) > 8 or len(set(self.unavailability_ids)) != len(
+                self.unavailability_ids
+            ):
+                raise ValueError("select at most 8 distinct unavailability IDs")
+            if any(
+                not isinstance(i, str) or not i.strip() or not i.isprintable() or len(i) > 256
+                for i in self.unavailability_ids
+            ):
+                raise ValueError("invalid unavailability ID")
         if not isinstance(self.follow_revisions, bool):
             raise TypeError("follow_revisions must be a boolean")
         if not 1 <= len(self.evidence_ids) <= 8 or len(set(self.evidence_ids)) != len(
@@ -83,6 +99,8 @@ class BriefDraft:
     as_of: datetime
     planner: str = "controlled-priority-v1"
     resolved_ids: tuple[tuple[str, str], ...] = ()
+    blocked_ids: tuple[str, ...] = ()
+    unavailability_resolved_ids: tuple[tuple[str, str], ...] = ()
 
 
 def _literal(value: str) -> str:
@@ -137,7 +155,7 @@ def _render(
     return "\n".join(lines) + "\n"
 
 
-def _current_leaf(memory: Memory, cutoff: datetime) -> str:
+def _current_leaf(memory: Memory, cutoff: datetime, schema: type[BaseModel] = Commitment) -> str:
     """Follow only a trusted commitment with one complete, unambiguous revision family."""
     if (
         memory.kind != MemoryKind.EPISODIC
@@ -152,12 +170,12 @@ def _current_leaf(memory: Memory, cutoff: datetime) -> str:
         raise ValueError("commitment revisions are ambiguous or incomplete")
     if len(memory.eligible_leaf_ids) != 1 or len(memory.content.encode("utf-8")) > 4096:
         raise ValueError("invalid commitment revision source")
-    Commitment.model_validate_json(memory.content)
+    schema.model_validate_json(memory.content)
     return memory.eligible_leaf_ids[0]
 
 
 async def _sources(
-    gate: MemoryGate, request: BriefRequest, cutoff: datetime
+    gate: MemoryGate, request: BriefRequest, cutoff: datetime, schema: type[BaseModel] = Commitment
 ) -> tuple[list[Memory], tuple[tuple[str, str], ...]]:
     """Resolve only explicitly selected families through scoped gate reads at one cutoff."""
     original = await gate.evidence(
@@ -170,7 +188,7 @@ async def _sources(
         raise ValueError("selected evidence is unavailable in this scope")
     if not request.follow_revisions:
         return original.records, tuple((item.id, item.id) for item in original.records)
-    links = tuple((item.id, _current_leaf(item, cutoff)) for item in original.records)
+    links = tuple((item.id, _current_leaf(item, cutoff, schema)) for item in original.records)
     current = await gate.evidence(
         user_id=request.task_key.user_id,
         project=request.task_key.project,
@@ -184,7 +202,7 @@ async def _sources(
         leaf = by_id[target]
         if (
             leaf.revision_root_id != source.revision_root_id
-            or _current_leaf(leaf, cutoff) != target
+            or _current_leaf(leaf, cutoff, schema) != target
         ):
             raise ValueError("commitment revisions changed during planning; retry")
     return current.records, links
@@ -212,6 +230,117 @@ async def prepare_brief(
     if cutoff.utcoffset() is None:
         raise ValueError("brief snapshot requires a timezone")
     records, resolved = await _sources(gate, request, cutoff)
+    constraints, availability_links = await _unavailability(gate, request, cutoff)
+    candidates, excluded = _partition(records, request, cutoff)
+    blocked = candidates if any(overlap for _, _, overlap in constraints) else []
+    selected, deferred = _allocate([] if blocked else candidates, request.budget_minutes)
+    payload = _render(request, selected, deferred, excluded, cutoff) + _render_resolutions(resolved)
+    payload += _render_unavailability(request, constraints, blocked, availability_links)
+    return BriefDraft(
+        task=TaskRequest(request.task_key, ACTION, payload),
+        selected_ids=tuple(identity for identity, _ in selected),
+        deferred_ids=tuple(identity for identity, _ in deferred),
+        excluded_ids=tuple(identity for identity, _ in excluded),
+        planned_minutes=sum(item.minutes for _, item in selected),
+        as_of=cutoff,
+        resolved_ids=resolved,
+        blocked_ids=tuple(identity for identity, _ in blocked),
+        unavailability_resolved_ids=availability_links,
+    )
+
+
+async def _unavailability(
+    gate: MemoryGate, request: BriefRequest, cutoff: datetime
+) -> tuple[list[tuple[str, Unavailability, bool]], tuple[tuple[str, str], ...]]:
+    """Resolve confirmed constraints and their exact supporting sources, never infer intervals."""
+    if not request.unavailability_ids:
+        return [], ()
+    selection = replace(
+        request,
+        evidence_ids=request.unavailability_ids,
+        follow_revisions=True,
+        unavailability_ids=(),
+    )
+    records, links = await _sources(gate, selection, cutoff, Unavailability)
+    constraints: list[tuple[str, Unavailability, bool]] = []
+    for memory in records:
+        if ineligible(memory, cutoff) is not None:
+            raise ValueError("select current unambiguous unavailability evidence")
+        interval = Unavailability.model_validate_json(memory.content)
+        sources = await gate.evidence(
+            user_id=request.task_key.user_id,
+            project=request.task_key.project,
+            evidence_ids=interval.source_ids,
+            effective_at=cutoff,
+        )
+        if sources.missing_ids:
+            raise ValueError("unavailability source is unavailable in this scope")
+        for source in sources.records:
+            if (
+                source.source != MemorySource.USER_STATED
+                or source.instruction_like
+                or source.kind != MemoryKind.EPISODIC
+                or ineligible(source, cutoff) is not None
+                or source.id == memory.id
+            ):
+                raise ValueError("unavailability requires current user-stated source evidence")
+        if request.timezone is None:
+            raise ValueError("unavailability requires a planning timezone")
+        constraints.append(
+            (memory.id, interval, interval.overlaps_day(request.day, request.timezone))
+        )
+    return constraints, links
+
+
+def _render_unavailability(
+    request: BriefRequest,
+    constraints: list[tuple[str, Unavailability, bool]],
+    blocked: list[tuple[str, Commitment]],
+    links: tuple[tuple[str, str], ...],
+) -> str:
+    """Explain conservative whole-day deferral and retain both assertion and source provenance."""
+    if not constraints:
+        return ""
+    lines = [
+        "",
+        "## Confirmed unavailability",
+        "",
+        f"Planning timezone: {_literal(str(request.timezone))}.",
+    ]
+    for identity, interval, overlap in constraints:
+        lines.append(
+            f"- {_literal(identity)}: {interval.starts_at.isoformat()} → "
+            f"{interval.ends_at.isoformat()} ({_literal(interval.timezone)}); "
+            f"{interval.status}; overlaps planning day: {overlap}; sources: "
+            + ", ".join(_literal(source) for source in interval.source_ids)
+            + "."
+        )
+    lines.extend(
+        [
+            "",
+            "Intervals are [start, end): the end instant is excluded.",
+            "Unavailability does not describe location, travel or an empty home.",
+            "This planner does not assign task hours. Any overlap conservatively defers the whole",
+            "day's eligible tasks; it does not claim that the entire day is unavailable.",
+        ]
+    )
+    if blocked:
+        lines.extend(["", "## Deferred: confirmed unavailability overlaps this day", ""])
+        lines.extend(
+            f"- {_literal(item.title)} — source: {_literal(identity)}."
+            for identity, item in blocked
+        )
+    changed = [(source, target) for source, target in links if source != target]
+    if changed:
+        lines.extend(["", "Constraint revisions followed:"])
+        lines.extend(f"- {_literal(source)} → {_literal(target)}" for source, target in changed)
+    return "\n".join(lines) + "\n"
+
+
+def _partition(
+    records: list[Memory], request: BriefRequest, cutoff: datetime
+) -> tuple[list[tuple[str, Commitment]], list[tuple[str, Commitment]]]:
+    """Validate and order only current eligible commitment sources."""
     candidates: list[tuple[str, Commitment]] = []
     excluded: list[tuple[str, Commitment]] = []
     for memory in records:
@@ -232,22 +361,20 @@ async def prepare_brief(
         )
         target.append((memory.id, commitment))
     candidates.sort(key=lambda pair: (_PRIORITY_RANK[pair[1].priority], pair[1].due, pair[0]))
+    return candidates, excluded
+
+
+def _allocate(
+    candidates: list[tuple[str, Commitment]], budget: int
+) -> tuple[list[tuple[str, Commitment]], list[tuple[str, Commitment]]]:
+    """Allocate the existing finite budget only after availability permits this day."""
     selected: list[tuple[str, Commitment]] = []
     deferred: list[tuple[str, Commitment]] = []
-    remaining = request.budget_minutes
+    remaining = budget
     for item in candidates:
         if item[1].minutes <= remaining:
             selected.append(item)
             remaining -= item[1].minutes
         else:
             deferred.append(item)
-    payload = _render(request, selected, deferred, excluded, cutoff) + _render_resolutions(resolved)
-    return BriefDraft(
-        task=TaskRequest(request.task_key, ACTION, payload),
-        selected_ids=tuple(identity for identity, _ in selected),
-        deferred_ids=tuple(identity for identity, _ in deferred),
-        excluded_ids=tuple(identity for identity, _ in excluded),
-        planned_minutes=request.budget_minutes - remaining,
-        as_of=cutoff,
-        resolved_ids=resolved,
-    )
+    return selected, deferred
