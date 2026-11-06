@@ -52,6 +52,11 @@ keychain and writes no credential. Exact content, owner/project, server and topi
 to the journal task; invoking `send` explicitly authorizes that one request. Never let a model
 invoke this surface without a separate trusted authorization decision.
 
+ntfy trims surrounding whitespace. This adapter rejects blank text or surrounding whitespace
+(including a trailing newline) before requesting a token or sending. Use `printf`, not plain
+`echo`; content is never silently normalized after approval. This follows the upstream
+[text-body handler](https://github.com/binwiederhier/ntfy/blob/main/server/server.go).
+
 The SDK `owner_push.send` reuses the private workspace lock and task journal. `OwnerPush`
 requires an authorizer through TaskControl. Only HTTPS origins are accepted, no embedded
 credentials, redirects, inherited proxies, attachments, callbacks, remote actions or retries.
@@ -128,8 +133,8 @@ For a concrete installation review, the remaining configuration/actions are:
 
 ## Evidence
 
-Sixteen tests cover matched/mismatched receipts, redirects, oversized/lost replies, STOP before
-and during requests, exact replay, changed destinations, credential exclusion, refusal of echoed token input and plist bounds.
+Twenty tests cover matched/mismatched receipts, redirects, oversized/lost replies, STOP before
+and during requests, exact replay, changed destinations, credential exclusion, refusal of echoed token input, whitespace preflight and plist bounds.
 A real loopback HTTP server exercised request bytes and response parsing with a test-only
 transport mapping; no external TLS/service or phone was exercised. A separate subprocess test
 ran the generated worker argv twice with a temporary finite synthetic note grant, then with

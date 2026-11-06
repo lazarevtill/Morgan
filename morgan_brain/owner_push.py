@@ -32,6 +32,8 @@ class Push(BaseModel):
         extras = parsed.path not in ("", "/") or bool(parsed.query) or bool(parsed.fragment)
         if not origin_ok or credentials or extras:
             raise ValueError("push server must be an explicit HTTPS origin")
+        if not self.text.strip() or self.text != self.text.strip():
+            raise ValueError("push text must be nonblank with no surrounding whitespace")
         if len(self.text.encode("utf-8")) > 4096:
             raise ValueError("push text exceeds ntfy message limit")
         return self.server.rstrip("/") + "/" + self.topic

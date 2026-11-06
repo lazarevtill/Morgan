@@ -40,7 +40,7 @@ async def test_provider_receipts(tmp_path: Path, mode: str, caplog) -> None:
                 "id": "receipt-1",
                 "event": "message",
                 "topic": "wrong" if mode == "wrong_topic" else push.topic,
-                "message": push.text,
+                "message": push.text.strip(),
             },
         )
 
@@ -271,3 +271,37 @@ def test_cli_refuses_echo_fallback(tmp_path: Path, monkeypatch, capsys) -> None:
     assert owner_push_cli.main() == 2
     assert "push refused" in capsys.readouterr().out
     assert not (tmp_path / "outbox" / ".tasks.db").exists()
+
+
+@pytest.mark.parametrize("text", ["Synthetic\n", " Leading", "\t \n", "\u00a0Text"])
+@pytest.mark.asyncio
+async def test_reject_server_normalization(tmp_path: Path, text: str) -> None:
+    """Reject ntfy-trimmed input before journal creation or any externally visible effect."""
+    calls = []
+
+    async def provider(request: httpx.Request) -> httpx.Response:
+        """Model the server's TrimSpace behavior if preflight ever fails to reject input."""
+        calls.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "id": "trimmed",
+                "event": "message",
+                "topic": "demo",
+                "message": request.content.decode().strip(),
+            },
+        )
+
+    with closing(NoteWorkspace(tmp_path / "outbox")) as workspace:
+        adapter = OwnerPush(
+            workspace, SecretStr("test-only-credential"), transport=httpx.MockTransport(provider)
+        )
+        with pytest.raises(ValueError, match="surrounding whitespace"):
+            await send(
+                workspace,
+                TaskKey("demo", "personal", "trim"),
+                Push(server="https://push.example", topic="demo", text=text),
+                adapter,
+            )
+        assert calls == []
+        assert not (workspace.path / ".tasks.db").exists()
