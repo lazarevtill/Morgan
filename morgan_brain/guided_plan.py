@@ -21,13 +21,20 @@ from pydantic import BaseModel, ConfigDict, Field
 from morgan_brain.availability import Unavailability, planning_zone
 from morgan_brain.composition import build_memory_context, open_evidence_context
 from morgan_brain.config import Settings
-from morgan_brain.daily_brief import BriefDraft, BriefRequest, Commitment, prepare_brief
+from morgan_brain.daily_brief import (
+    BriefDraft,
+    BriefRequest,
+    Commitment,
+    _current_leaf,
+    prepare_brief,
+)
 from morgan_brain.guided_availability import (
     AvailabilityUpdate,
     explicit_zone,
     interval_entry,
     source_statement,
 )
+from morgan_brain.guided_renewal import RenewalUpdate
 from morgan_brain.local_notes import NoteWorkspace, StopRequested
 from morgan_brain.memory.continuation_context import ineligible
 from morgan_brain.memory.gate import MemoryGate
@@ -65,6 +72,7 @@ class Session(BaseModel):
     timezone: str | None = None
     unavailability_ids: list[str] = Field(default_factory=list, max_length=8)
     pending_availability: AvailabilityUpdate | None = None
+    pending_renewal: RenewalUpdate | None = None
 
 
 def _quote(text: str) -> str:
@@ -380,15 +388,26 @@ def _interact(workspace: NoteWorkspace, session: Session) -> None:
         if not _confirm_availability(session, session.pending_availability):
             return
         asyncio.run(_apply_availability(workspace, session))
+    if session.pending_renewal is not None:
+        print("Незавершённый перенос / Pending renewal:")
+        if not _confirm_renewal(session, session.pending_renewal):
+            return
+        asyncio.run(_apply_renewal(workspace, session))
     for _ in range(20):
         view = asyncio.run(_plan(workspace, session))
         command, index = _ask(
-            "done N / готово N; busy / недоступность; change N / изменить N; "
+            "done N / готово N; renew N / повторить N; busy / недоступность; "
+            "change N / изменить N; "
             "cancel N / отменить N; quit / выход: ",
             partial(_menu, view),
         )
         if command == "quit":
             return
+        if command == "renew":
+            if index is None:
+                raise ValueError("renewal requires a task index")
+            _renew(workspace, session, view.tasks[index])
+            continue
         if command != "done":
             _edit_availability(workspace, session, view, command, index)
             continue
@@ -461,6 +480,11 @@ def _menu(view: PlanView, raw: str) -> tuple[str, int | None]:
         if not 0 <= index < len(view.constraints):
             raise ValueError("unknown constraint number")
         return ("change" if command[0] in ("change", "изменить") else "cancel"), index
+    if len(command) == 2 and command[0] in ("renew", "повторить"):
+        index = int(command[1]) - 1
+        if not 0 <= index < len(view.tasks):
+            raise ValueError("unknown task number")
+        return "renew", index
     task_index = _done_index(view.tasks, raw)
     return ("quit" if task_index is None else "done"), task_index
 
@@ -570,6 +594,105 @@ def _edit_availability(
     asyncio.run(_apply_availability(workspace, session))
 
 
+def _confirm_renewal(session: Session, update: RenewalUpdate) -> bool:
+    """Expose the actual target and exact before/after; prose alone never authorizes a write."""
+    print(f"Владелец / Owner: {_quote(session.user)}; project: {_quote(session.project)}")
+    print(f"Задача / Task: {_quote(update.before.title)}; ID {_quote(update.parent_id)}")
+    print(f"Источник / Statement: {_quote(update.source_text)}; ID {_quote(update.source_id)}")
+    print(f"Срок / Date: {update.before.due} → {update.after.due}; status remains open.")
+    print("Это изменение плана, не доставка напоминания / Plan change, not notification delivery.")
+    return input("Подтвердить / Confirm: CONFIRM / ПОДТВЕРЖДАЮ (else cancel): ").strip() in (
+        "CONFIRM",
+        "ПОДТВЕРЖДАЮ",
+    )
+
+
+async def _check_renewal(
+    workspace: NoteWorkspace, session: Session, update: RenewalUpdate, *, committed: bool = False
+) -> None:
+    """Refuse stale or conflicted parents; allow only our exact acknowledged-write replay."""
+    if datetime.fromisoformat(update.effective_at) > datetime.now(UTC):
+        raise ValueError("renewal review time is in the future")
+    context = open_evidence_context(workspace.path / "memory/morgan.db")
+    try:
+        result = await context.gate.evidence(
+            user_id=session.user, project=session.project, evidence_ids=[update.parent_id]
+        )
+        if result.missing_ids:
+            raise ValueError("renewal parent is unavailable in this scope")
+        parent = result.records[0]
+        if (
+            parent.revision_state not in ("active", "inactive")
+            or parent.author_id != session.user
+            or _current_leaf(parent, datetime.now(UTC)) not in (update.parent_id, update.event_id)
+            or (committed and parent.eligible_leaf_ids != [update.event_id])
+            or Commitment.model_validate_json(parent.content) != update.before
+        ):
+            raise ValueError("renewal target changed or is ambiguous; review current state")
+    finally:
+        context.conn.close()
+
+
+async def _apply_renewal(workspace: NoteWorkspace, session: Session) -> None:
+    """Replay exact paired source/revision writes; a conflict leaves the review pending."""
+    update = session.pending_renewal
+    if update is None:
+        raise ValueError("no pending renewal")
+    await _check_renewal(workspace, session, update)
+    digest = hashlib.sha256(
+        json.dumps(
+            [session.user, session.project, update.model_dump(mode="json")], sort_keys=True
+        ).encode()
+    ).hexdigest()
+    for identity, content, parents in (
+        (update.source_id, update.source_text, []),
+        (update.event_id, update.after.model_dump_json(), [update.parent_id]),
+    ):
+        await cmd_remember(
+            argparse.Namespace(
+                text=content,
+                source="user_stated",
+                author_id=session.user,
+                event_id=identity,
+                effective_at=update.effective_at,
+                revises_event_ids=parents,
+                assert_session_id=True,
+            ),
+            _settings(workspace, session),
+            session.project,
+            client="guided-renewal-v1",
+            session_id=digest,
+        )
+    await _check_renewal(workspace, session, update, committed=True)
+    session.pending_renewal = None
+    _save(workspace, session)
+
+
+def _renew(workspace: NoteWorkspace, session: Session, current: tuple[str, Commitment]) -> None:
+    """Use the explicitly selected task, preserving the statement and requiring a new date."""
+    identity, item = current
+    if item.status != "open":
+        print("Выполненную задачу нельзя переносить / Cannot renew a completed task.")
+        return
+    print(f"Повторить / Renew: {_quote(item.title)}; ID {_quote(identity)}")
+    source = _ask("Ваше сообщение / Your statement: ", source_statement)
+    due = _ask("Новый срок YYYY-MM-DD / New date: ", date.fromisoformat)
+    update = RenewalUpdate(
+        event_id=f"guided-renew-{uuid4().hex}",
+        parent_id=identity,
+        source_text=source,
+        effective_at=datetime.now(UTC).isoformat(),
+        before=item,
+        after=item.model_copy(update={"due": due}),
+    )
+    if not _confirm_renewal(session, update):
+        print("Отменено без записи / Cancelled without writing")
+        return
+    session.pending_renewal = update
+    _save(workspace, session)
+    asyncio.run(_apply_renewal(workspace, session))
+
+
 def _pending_reviews(session: Session) -> list[str]:
     """Do not turn unacknowledged writes into an authoritative ready plan."""
     pending = []
@@ -579,6 +702,8 @@ def _pending_reviews(session: Session) -> list[str]:
         pending.append("completion_confirmation")
     if session.pending_availability is not None:
         pending.append("unavailability_confirmation")
+    if session.pending_renewal is not None:
+        pending.append("renewal_confirmation")
     return pending
 
 
@@ -688,6 +813,7 @@ def _human_status(payload: dict[str, object]) -> str:
             "task_confirmation": "подтвердить выбранные задачи",
             "completion_confirmation": "подтвердить завершение",
             "unavailability_confirmation": "подтвердить недоступность",
+            "renewal_confirmation": "подтвердить повторное поручение",
         }
         lines.append("Нужно подтверждение в диалоге: " + ", ".join(labels[p] for p in pending))
         lines.append("План не сформирован: незавершённая проверка не считается подтверждением.")

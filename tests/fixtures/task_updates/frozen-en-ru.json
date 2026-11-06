@@ -1,0 +1,862 @@
+[
+  {
+    "name": "en_renew_book",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "I did not return the borrowed book. Please remind me again."
+    },
+    "expected": {
+      "action": "renew",
+      "target_id": "book"
+    }
+  },
+  {
+    "name": "ru_renew_plants",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Цветы я так и не полил, напомни ещё раз."
+    },
+    "expected": {
+      "action": "renew",
+      "target_id": "plants"
+    }
+  },
+  {
+    "name": "en_renew_parcel",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "The parcel is still waiting. Remind me to collect it again tomorrow."
+    },
+    "expected": {
+      "action": "renew",
+      "target_id": "parcel"
+    }
+  },
+  {
+    "name": "ru_renew_book",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Не успел вернуть книгу в библиотеку. Перенеси напоминание."
+    },
+    "expected": {
+      "action": "renew",
+      "target_id": "book"
+    }
+  },
+  {
+    "name": "en_renew_negated_done",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "I said I returned the book, but that was wrong. I still need to return it."
+    },
+    "expected": {
+      "action": "renew",
+      "target_id": "book"
+    }
+  },
+  {
+    "name": "ru_renew_parcel",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Посылку ещё не забрал. Нужно повторить напоминание о ней."
+    },
+    "expected": {
+      "action": "renew",
+      "target_id": "parcel"
+    }
+  },
+  {
+    "name": "en_done_book",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "I returned the borrowed book this morning."
+    },
+    "expected": {
+      "action": "done",
+      "target_id": "book"
+    }
+  },
+  {
+    "name": "ru_done_plants",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Цветы уже политы, можешь отметить это дело выполненным."
+    },
+    "expected": {
+      "action": "done",
+      "target_id": "plants"
+    }
+  },
+  {
+    "name": "en_done_parcel",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "I collected my parcel, that task is finished."
+    },
+    "expected": {
+      "action": "done",
+      "target_id": "parcel"
+    }
+  },
+  {
+    "name": "ru_done_book",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Вернул книгу, больше об этом не напоминай."
+    },
+    "expected": {
+      "action": "done",
+      "target_id": "book"
+    }
+  },
+  {
+    "name": "en_done_negation",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "It is no longer true that I have not watered my plants: I watered them today."
+    },
+    "expected": {
+      "action": "done",
+      "target_id": "plants"
+    }
+  },
+  {
+    "name": "ru_done_parcel",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Я уже забрал посылку, хотя раньше писал, что не забрал."
+    },
+    "expected": {
+      "action": "done",
+      "target_id": "parcel"
+    }
+  },
+  {
+    "name": "en_cancel_book",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Cancel the task to return the book; the lender told me to keep it."
+    },
+    "expected": {
+      "action": "cancel",
+      "target_id": "book"
+    }
+  },
+  {
+    "name": "ru_cancel_plants",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Отмени задачу полить цветы. Теперь за ними ухаживает сосед."
+    },
+    "expected": {
+      "action": "cancel",
+      "target_id": "plants"
+    }
+  },
+  {
+    "name": "en_cancel_parcel",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Cancel the parcel collection task. It was returned to the sender."
+    },
+    "expected": {
+      "action": "cancel",
+      "target_id": "parcel"
+    }
+  },
+  {
+    "name": "ru_cancel_book",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Возвращать книгу больше не нужно, эту задачу отменяю."
+    },
+    "expected": {
+      "action": "cancel",
+      "target_id": "book"
+    }
+  },
+  {
+    "name": "en_cancel_not_done",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "I have not watered the plants, but cancel that task because I gave the plants away."
+    },
+    "expected": {
+      "action": "cancel",
+      "target_id": "plants"
+    }
+  },
+  {
+    "name": "ru_cancel_parcel",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Посылку не забрал. Но напоминать снова не надо, отменяю это дело."
+    },
+    "expected": {
+      "action": "cancel",
+      "target_id": "parcel"
+    }
+  },
+  {
+    "name": "en_ambiguous_pronoun",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "I did not do it. Remind me again."
+    },
+    "expected": {
+      "action": "abstain",
+      "target_id": null
+    }
+  },
+  {
+    "name": "ru_ambiguous_pronoun",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Не сделал, напомни снова."
+    },
+    "expected": {
+      "action": "abstain",
+      "target_id": null
+    }
+  },
+  {
+    "name": "en_ambiguous_two",
+    "tasks": [
+      {
+        "id": "library",
+        "title": "Return the library book",
+        "status": "open"
+      },
+      {
+        "id": "friend",
+        "title": "Return the book to my friend",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Move the book reminder."
+    },
+    "expected": {
+      "action": "abstain",
+      "target_id": null
+    }
+  },
+  {
+    "name": "ru_ambiguous_two",
+    "tasks": [
+      {
+        "id": "library",
+        "title": "Вернуть книгу в библиотеку",
+        "status": "open"
+      },
+      {
+        "id": "friend",
+        "title": "Вернуть книгу другу",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Перенеси напоминание о книге."
+    },
+    "expected": {
+      "action": "abstain",
+      "target_id": null
+    }
+  },
+  {
+    "name": "en_ambiguous_two_actions",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "I returned the book and collected the parcel."
+    },
+    "expected": {
+      "action": "abstain",
+      "target_id": null
+    }
+  },
+  {
+    "name": "ru_ambiguous_two_actions",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Полил цветы и забрал посылку."
+    },
+    "expected": {
+      "action": "abstain",
+      "target_id": null
+    }
+  },
+  {
+    "name": "en_foreign",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Alex did not return his borrowed book. Remind him again."
+    },
+    "expected": {
+      "action": "abstain",
+      "target_id": null
+    }
+  },
+  {
+    "name": "ru_foreign",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Оля не забрала свою посылку. Пусть ей напомнит Антон."
+    },
+    "expected": {
+      "action": "abstain",
+      "target_id": null
+    }
+  },
+  {
+    "name": "en_quoted",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Here is a quote for a translation: \"I returned the book; mark it done.\""
+    },
+    "expected": {
+      "action": "abstain",
+      "target_id": null
+    }
+  },
+  {
+    "name": "ru_quoted",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Переведи пример: «Цветы уже политы, отметь задачу выполненной»."
+    },
+    "expected": {
+      "action": "abstain",
+      "target_id": null
+    }
+  },
+  {
+    "name": "en_unrelated",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Remind me to renew my driving licence."
+    },
+    "expected": {
+      "action": "abstain",
+      "target_id": null
+    }
+  },
+  {
+    "name": "ru_unrelated",
+    "tasks": [
+      {
+        "id": "book",
+        "title": "Return the borrowed book",
+        "status": "open"
+      },
+      {
+        "id": "plants",
+        "title": "Water my plants",
+        "status": "open"
+      },
+      {
+        "id": "parcel",
+        "title": "Collect my parcel",
+        "status": "open"
+      }
+    ],
+    "message": {
+      "id": "update",
+      "author": "owner",
+      "text": "Нужно напомнить про оплату интернета."
+    },
+    "expected": {
+      "action": "abstain",
+      "target_id": null
+    }
+  }
+]
