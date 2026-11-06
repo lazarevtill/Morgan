@@ -47,6 +47,7 @@ from morgan_brain.guided_plan import (
 )
 from morgan_brain.guided_renewal import RenewalUpdate
 from morgan_brain.local_notes import NoteWorkspace, StopRequested
+from morgan_brain.owner_search import search
 from morgan_brain.surfaces.cli.commands import cmd_remember
 from morgan_brain.surfaces.cli.proposal_review import Proposal
 from morgan_brain.tasks import TaskConflict
@@ -321,6 +322,7 @@ def _parser(*, exit_on_error: bool = True) -> argparse.ArgumentParser:
     init.add_argument("--day", required=True, type=date.fromisoformat)
     init.add_argument("--budget", required=True, type=int)
     init.add_argument("--timezone", required=True)
+    commands.add_parser("find").add_argument("query")
     submit = commands.add_parser("submit", help="Read one bounded owner message from stdin")
     submit.add_argument("identity")
     review = commands.add_parser("review")
@@ -394,13 +396,15 @@ def _dispatch(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, o
         workspace.check_stop()
         return _init(workspace, args)
     session, inbox = load_pilot(workspace)
-    if args.command not in ("status", "resume") and datetime.now(UTC) >= inbox.expires_at:
+    if args.command not in ("status", "resume", "find") and datetime.now(UTC) >= inbox.expires_at:
         raise ValueError("seven-day pilot expired; preserve journal")
     if args.command == "resume":
         workspace.resume()
         return {"state": "resumed", "automatic_processing": False}
     if args.command == "status":
         return _status(workspace, session, inbox)
+    if args.command == "find":
+        return asyncio.run(search(workspace, session, inbox, args.query))
     workspace.check_stop()
     if any(
         m.state == "applying" and m.identity != getattr(args, "identity", None)

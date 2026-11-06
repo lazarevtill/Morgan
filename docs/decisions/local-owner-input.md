@@ -119,3 +119,26 @@ Deploy readers and writers together as one pinned revision. Older runtimes rejec
 new `dismissed` state; do not downgrade a journal that contains it or erase receipts to
 make an older reader accept it. Normal restore retains STOP/expiry restrictions. This
 change does not automatically upgrade an installed pilot or mutate its existing inputs.
+
+## Literal source lookup
+
+`find QUERY` searches a case-insensitive literal fragment in this pilot's at most
+fourteen retained messages and verified current task titles. It is not semantic QA,
+whole-memory search or evidence that an absent match means no obligation exists.
+The native «Найти источник» entry shows selectable results with exact quotations,
+source identifiers, review status and an as-of timestamp. No model, embedding or
+external endpoint is used; nothing is captured or confirmed by searching.
+
+For applied receipts the original companion source and current task revision are
+read through the scoped MemoryGate. Completed and renewed tasks are resolved from
+memory rather than the stale captured fields in the workflow receipt. Missing,
+conflicted, mismatched or ineligible sources are counted as unavailable and omitted;
+the source text is never recovered from the applied journal as a fallback. Pending,
+reviewed, applying and dismissed entries are explicitly inbox receipts with unknown
+current task state, not verified task facts. This bounded lookup does not include
+unrelated memories or sources outside the pilot.
+
+CLI lookup remains available after STOP or expiry without clearing either. Native
+search is offered in the active menu and is subject to the existing GUI session bound.
+Tests cover current completion/renewal, source quotes, owner isolation, missing memory,
+conflicting revisions, query bounds, unconfirmed/dismissed sources and unchanged storage.
