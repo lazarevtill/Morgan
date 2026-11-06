@@ -88,7 +88,12 @@ def _render_ask(data: dict[str, Any]) -> str:
     if data.get("schema_version") == "morgan.answer.v1":
         if data["abstained"]:
             return answer + "\nAbstained: insufficient evidence."
-        return answer + "\nEvidence IDs: " + ", ".join(data["evidence_ids"])
+        return (
+            "Unverified model answer: citations identify sources, not proof of this conclusion.\n"
+            + answer
+            + "\nEvidence IDs: "
+            + ", ".join(data["evidence_ids"])
+        )
     return answer
 
 
