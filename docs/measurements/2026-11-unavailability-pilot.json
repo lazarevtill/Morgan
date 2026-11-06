@@ -1,0 +1,73 @@
+{
+  "synthetic": true,
+  "model_calls": 0,
+  "external_actions": 0,
+  "plans": [
+    {
+      "draft_written": true,
+      "planner": "controlled-priority-v1",
+      "planned_minutes": 0,
+      "selected": 0,
+      "deferred": 0,
+      "excluded": 0,
+      "approved": false,
+      "blocked": 1,
+      "resolved_unavailability": {
+        "constraint": "constraint"
+      },
+      "resolved_sources": {
+        "task": "task"
+      }
+    },
+    {
+      "draft_written": true,
+      "planner": "controlled-priority-v1",
+      "planned_minutes": 20,
+      "selected": 1,
+      "deferred": 0,
+      "excluded": 0,
+      "approved": false,
+      "blocked": 0,
+      "resolved_unavailability": {
+        "constraint": "constraint"
+      },
+      "resolved_sources": {
+        "task": "task"
+      }
+    },
+    {
+      "draft_written": true,
+      "planner": "controlled-priority-v1",
+      "planned_minutes": 20,
+      "selected": 1,
+      "deferred": 0,
+      "excluded": 0,
+      "approved": false,
+      "blocked": 0,
+      "resolved_unavailability": {
+        "constraint": "cancelled"
+      },
+      "resolved_sources": {
+        "task": "task"
+      }
+    },
+    {
+      "draft_written": true,
+      "planner": "controlled-priority-v1",
+      "planned_minutes": 0,
+      "selected": 0,
+      "deferred": 0,
+      "excluded": 1,
+      "approved": false,
+      "blocked": 0,
+      "resolved_unavailability": {
+        "constraint": "cancelled"
+      },
+      "resolved_sources": {
+        "task": "done"
+      }
+    }
+  ],
+  "guided_intake_supported": false,
+  "policy": "defer whole planning day on any interval overlap"
+}
