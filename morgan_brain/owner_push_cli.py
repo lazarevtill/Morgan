@@ -34,7 +34,7 @@ def main() -> int:
         key = TaskKey(args.user, args.project, args.task_id)
         with closing(NoteWorkspace(args.workspace)) as workspace:
             workspace.check_stop()
-            with open("/dev/tty", "r+") as terminal, warnings.catch_warnings():
+            with open("/dev/tty", "r+", encoding="utf-8") as terminal, warnings.catch_warnings():
                 warnings.simplefilter("error", getpass.GetPassWarning)
                 token = SecretStr(getpass.getpass("Transient ntfy token: ", stream=terminal))
             task = asyncio.run(send(workspace, key, push, OwnerPush(workspace, token)))

@@ -85,6 +85,7 @@ more suitable, but no host availability or deployment authorization was establis
 The installed macOS 15.8.2 SDK `launchd.plist(5)` distinguishes missed StartInterval firings
 from StartCalendarInterval events coalesced on wake. The older public launchd man page differs
 on StartInterval, so this plan uses calendar minutes, not assumptions about interval catch-up.
+Calendar minutes use the Mac's local clock; this is not an IANA-zone task scheduler.
 Neither calendar launch nor RunAtLoad proves continuous availability or task timeliness.
 
 Generate a disabled review artifact:
@@ -127,8 +128,8 @@ For a concrete installation review, the remaining configuration/actions are:
 
 ## Evidence
 
-Fifteen tests cover matched/mismatched receipts, redirects, oversized/lost replies, STOP before
-and during requests, exact replay, changed destinations, credential exclusion and plist bounds.
+Sixteen tests cover matched/mismatched receipts, redirects, oversized/lost replies, STOP before
+and during requests, exact replay, changed destinations, credential exclusion, refusal of echoed token input and plist bounds.
 A real loopback HTTP server exercised request bytes and response parsing with a test-only
 transport mapping; no external TLS/service or phone was exercised. A separate subprocess test
 ran the generated worker argv twice with a temporary finite synthetic note grant, then with

@@ -232,3 +232,42 @@ def test_generated_worker_restart(tmp_path: Path) -> None:
         assert stopped.returncode == 2
         with closing(workspace.journal()) as journal:
             assert journal.get(key).attempt_id == attempt
+
+
+def test_cli_refuses_echo_fallback(tmp_path: Path, monkeypatch, capsys) -> None:
+    """A terminal unable to hide input must not downgrade to reading an echoed token."""
+    import io
+    import warnings
+
+    from morgan_brain import owner_push_cli
+
+    monkeypatch.setattr(
+        owner_push_cli.sys,
+        "argv",
+        [
+            "push",
+            str(tmp_path / "outbox"),
+            "--server",
+            "https://push.example",
+            "--topic",
+            "demo",
+            "--user",
+            "demo",
+            "--project",
+            "personal",
+            "--task-id",
+            "one",
+        ],
+    )
+    monkeypatch.setattr(owner_push_cli.sys, "stdin", io.StringIO("Synthetic"))
+    monkeypatch.setattr(owner_push_cli, "open", lambda *a, **kw: io.StringIO(), raising=False)
+
+    def cannot_hide(*args, **kwargs):
+        """Emulate getpass's warning before its insecure fallback input step."""
+        warnings.warn("Cannot hide input", owner_push_cli.getpass.GetPassWarning, stacklevel=2)
+        pytest.fail("echo fallback must not continue")
+
+    monkeypatch.setattr(owner_push_cli.getpass, "getpass", cannot_hide)
+    assert owner_push_cli.main() == 2
+    assert "push refused" in capsys.readouterr().out
+    assert not (tmp_path / "outbox" / ".tasks.db").exists()
