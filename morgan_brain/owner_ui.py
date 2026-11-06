@@ -79,10 +79,14 @@ class OwnerUI:
         if renewal:
             target = renewal["parent_id"]
             quote = self.task_source(target, renewal["before"]["title"])
-            context = f"ID задачи: {target}\nСохранённый источник задачи: {quote}\n\n"
+            quoted = "\n".join(f"│ {line}" for line in quote.split("\n"))
+            context = f"ID задачи: {target}\nСохранённый источник задачи:\n{quoted}\n\n"
+        quoted_source = "\n".join(f"│ {line}" for line in message["text"].split("\n"))
         prompt = (
             f"Владелец: {envelope['owner']}\nПроект: {envelope['project']}\n"
-            f"Источник: {message['text']}\n\n{context}{action}\n"
+            f"Предоставленный текст:\n{quoted_source}\n"
+            "Автор цитаты не определяется. Вы подтверждаете выбранную задачу владельца.\n\n"
+            f"{context}{action}\n"
             f"Задача: {item['title']}\nСрок: {item['due']}\n"
             f"Минуты: {item['minutes']}\nПриоритет: {item['priority']}\n"
             f"Состояние: {item['status']}\n\n"
@@ -193,7 +197,8 @@ class OwnerUI:
             action = "Новая задача"
         day = state["plan"]["planning_day"]
         if action == "Новая задача":
-            title = self.text("Название вашей задачи", message["text"][:240])
+            initial_title = "" if "\n" in message["text"] else message["text"][:240]
+            title = self.text("Название вашей задачи (не чужая цитата)", initial_title)
             minutes = self.text("Сколько минут выделить задаче?", "10")
             priority = self.dialogs.show(
                 "choose", "Приоритет задачи", options=("Обычный", "Высокий", "Низкий")

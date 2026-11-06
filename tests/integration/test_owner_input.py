@@ -265,7 +265,7 @@ def test_stop_is_available_while_guided_writer_holds_lock(tmp_path):
     assert status(tmp_path)["stopped"]
 
 
-@pytest.mark.parametrize("text", ["", "x" * 1001, "first\nsecond", "\x1b[31mhello"])
+@pytest.mark.parametrize("text", ["", "x" * 1001, "first\rsecond", "\x1b[31mhello"])
 def test_invalid_source_does_not_enter_journal(tmp_path, text):
     initialize(tmp_path)
     assert run(tmp_path, "submit", "invalid", text=text).returncode == 2
