@@ -19,7 +19,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from morgan_brain.availability import Unavailability, planning_zone
-from morgan_brain.composition import open_evidence_context
+from morgan_brain.composition import build_memory_context, open_evidence_context
 from morgan_brain.config import Settings
 from morgan_brain.daily_brief import BriefDraft, BriefRequest, Commitment, prepare_brief
 from morgan_brain.guided_availability import (
@@ -205,7 +205,16 @@ def _done_index(items: list[tuple[str, Commitment]], raw: str) -> int | None:
     return index
 
 
-def _select(note: str, proposal: Proposal, session: Session) -> list[Capture]:
+def _selection(lines: list[str], raw: str) -> list[int] | None:
+    """Distinguish an explicit zero-task review from leaving an unfinished selection."""
+    if not raw.strip():
+        return None
+    if raw.strip().lower() in ("none", "нет задач"):
+        return []
+    return _indices(lines, raw)
+
+
+def _select(note: str, proposal: Proposal, session: Session) -> list[Capture] | None:
     """Ask the owner to choose their own tasks, including lines omitted by the model."""
     lines = note.splitlines()
     print("Исходная заметка / Source note (model suggestions are untrusted):")
@@ -213,9 +222,11 @@ def _select(note: str, proposal: Proposal, session: Session) -> list[Capture]:
         mark = " [model]" if line in proposal.selected_lines else ""
         print(f"{index}{mark}: {_quote(line)}")
     indices = _ask(
-        "Номера только ВАШИХ задач / Your task numbers (space-separated; empty = exit): ",
-        lambda raw: _indices(lines, raw),
+        "Номера ВАШИХ задач / Task numbers; none / нет задач; empty = exit: ",
+        lambda raw: _selection(lines, raw),
     )
+    if indices is None:
+        return None
     captures = []
     for index in indices:
         print(f"Задача / Task: {_quote(lines[index - 1])}")
@@ -243,7 +254,9 @@ def _confirm(session: Session, captures: list[Capture]) -> bool:
             f"- {_quote(task.title)} — {task.minutes} min; {task.priority}; "
             f"due {task.due}; {task.status}"
         )
-    answer = input("Это мои задачи / These are my tasks. CONFIRM / ПОДТВЕРЖДАЮ (else cancel): ")
+    if not captures:
+        print("В этой заметке нет моих открытых задач / No open tasks of mine in this note.")
+    answer = input("Подтвердить проверку / Confirm review: CONFIRM / ПОДТВЕРЖДАЮ (else cancel): ")
     return answer.strip() in ("CONFIRM", "ПОДТВЕРЖДАЮ")
 
 
@@ -292,18 +305,20 @@ async def _read_plan(workspace: NoteWorkspace, session: Session) -> tuple[BriefD
             timezone=session.timezone,
         )
         draft = await prepare_brief(context.gate, request)
-        evidence = await context.gate.evidence(
-            user_id=session.user,
-            project=session.project,
-            evidence_ids=[target for _, target in draft.resolved_ids],
-        )
-        if evidence.missing_ids or any(
-            ineligible(item, draft.as_of) is not None for item in evidence.records
-        ):
-            raise ValueError("tasks changed during planning; resume to refresh")
-        items = [
-            (item.id, Commitment.model_validate_json(item.content)) for item in evidence.records
-        ]
+        items: list[tuple[str, Commitment]] = []
+        if draft.resolved_ids:
+            evidence = await context.gate.evidence(
+                user_id=session.user,
+                project=session.project,
+                evidence_ids=[target for _, target in draft.resolved_ids],
+            )
+            if evidence.missing_ids or any(
+                ineligible(item, draft.as_of) is not None for item in evidence.records
+            ):
+                raise ValueError("tasks changed during planning; resume to refresh")
+            items = [
+                (item.id, Commitment.model_validate_json(item.content)) for item in evidence.records
+            ]
         constraints = await _constraint_view(context.gate, session, draft)
     finally:
         context.conn.close()
@@ -333,10 +348,11 @@ async def _plan(workspace: NoteWorkspace, session: Session) -> PlanView:
 def _interact(workspace: NoteWorkspace, session: Session) -> None:
     """Keep explicit review separate from completion; resume interrupted captures idempotently."""
     note, proposal = _read_inputs(workspace, session)
-    if not session.captures:
-        session.captures = _select(note, proposal, session)
-        if not session.captures:
+    if not session.captured and not session.captures:
+        selection = _select(note, proposal, session)
+        if selection is None:
             return
+        session.captures = selection
         _save(workspace, session)
     if not session.captured:
         print("Проверьте контекст / Review context:", _quote(note))
@@ -345,6 +361,9 @@ def _interact(workspace: NoteWorkspace, session: Session) -> None:
                 session.captures = []
                 _save(workspace, session)
             return
+        if not session.captures:
+            context = build_memory_context(_settings(workspace, session))
+            context.conn.close()
         for capture in session.captures:
             asyncio.run(_capture(workspace, session, capture))
         session.captured = True
@@ -627,6 +646,24 @@ async def _status_payload(
     return payload
 
 
+def _human_constraints(payload: dict[str, object]) -> list[str]:
+    """Show reviewed availability even when there are no open commitments to block."""
+    lines = []
+    day = date.fromisoformat(str(payload["planning_day"]))
+    for record in cast(list[dict[str, object]], payload["unavailability"]):
+        interval = Unavailability.model_validate_json(json.dumps(record["interval"]))
+        overlap = interval.overlaps_day(day, str(payload["timezone"]))
+        label = (
+            "день пересекает недоступность" if overlap else "день не заблокирован этим интервалом"
+        )
+        lines.append(
+            f"Недоступность: {interval.starts_at.isoformat()} → "
+            f"{interval.ends_at.isoformat()} (конец не включён); {interval.status}; {label}."
+        )
+        lines.append("Недоступность не означает местоположение.")
+    return lines
+
+
 def _human_status(payload: dict[str, object]) -> str:
     """Render the already validated snapshot without inference, writes or terminal controls."""
     zone = _quote(str(payload["timezone"])) if payload["timezone"] else "не задана"
@@ -676,6 +713,7 @@ def _human_status(payload: dict[str, object]) -> str:
             f"{item.minutes} мин; срок: {item.due}"
         )
         lines.append(f"   Запись: {_quote(identity)}")
+    lines.extend(_human_constraints(payload))
     if not payload["tasks"]:
         lines.append("В этой сессии нет подтверждённых задач.")
     return "\n".join(lines)
