@@ -38,7 +38,8 @@ the session journal, inputs and draft files are not rewritten by this query.
 Exit 0 returns the snapshot, including a legitimate `needs_review` result. Exit 2 refuses
 missing/changed inputs, an active interactive dialogue, invalid overrides, or another handled
 read error. Do not reuse a cached successful answer after a refusal. The lock is nonblocking;
-retry only after the interactive dialogue exits. Status accepts no other session-input flags.
+retry only after the interactive dialogue exits. Status accepts only the explicit read-only
+day preview described below, not session-input flags.
 
 ## User channel and control boundary
 
@@ -64,3 +65,22 @@ into separate planning implementations.
 A synthetic completed session with a cancelled interval returned its current state in one
 launch and zero answer submissions. This is a scripted functional check, not a human usability
 study. [Measurement](../measurements/2026-11-guided-status.json).
+
+## Preview another day without starting a new session
+
+```sh
+python -m morgan_brain.guided_plan /private/session --status --preview-day 2026-11-07
+```
+
+Choose an explicit ISO date; the command never guesses "today" from the host timezone. The
+same current confirmed commitments, budget and sourced intervals are evaluated for that day.
+The JSON keeps `planning_day` as the evaluated date and adds `preview_only: true` plus
+`session_planning_day` for the unchanged stored date. `as_of` still describes current evidence:
+this is not historical reconstruction of what was known on the requested date.
+
+Completed tasks remain completed on every preview; future due dates and unavailability are
+re-evaluated. Pending reviews still return no plan. No session fields, memory, inputs or draft
+files are written, and no model is called. All existing scope and execution limitations remain.
+Resuming the dialogue still uses the original session day. Use the ordinary dialogue to report
+completion; a preview cannot confirm anything. `--preview-day` without `--status` is rejected
+before creating a workspace. Other input overrides remain forbidden.
