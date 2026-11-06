@@ -76,3 +76,10 @@ Readiness remains limited to the logged-in foreground desktop. There is no persi
 credential, installed LaunchAgent, phone delivery or incoming-message service.
 
 Measured real-model and synthetic lifecycle evidence: [pilot measurement](../measurements/2026-11-06-integrated-owner-model.md).
+
+The owner menu reports pending review and saved, unapproved draft counts. The
+pending-message list distinguishes a ready draft, a failure, an interrupted attempt,
+and an unreadable cache without starting inference. A busy shared model lane does
+not claim that every listed message is running. Dismissed/applied messages do not
+inflate pending counts. These are on-open snapshots, not push notifications or proof
+that the background process is alive; no retry or task confirmation is implied.

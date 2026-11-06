@@ -255,6 +255,42 @@ class OwnerUI:
             self.call("restore" if restore else "dismiss", message["identity"])
             self.dialogs.show("info", "Состояние сообщения сохранено. План не изменён.")
 
+    def draft_state(self, message: dict[str, Any]) -> str:
+        """Inspect saved draft state without inference; one bad cache must not hide the inbox."""
+        if self.model is None or message["state"] != "needs_review":
+            return "not_applicable"
+        try:
+            return str(self.model.status(message["text"])["state"])
+        except (OSError, ValueError, TypeError):
+            return "unavailable"
+
+    def inbox_summary(self, state: dict[str, Any]) -> str:
+        """Expose pending work on entry, without claiming drafts are approved tasks."""
+        pending = [m for m in state["messages"] if m["state"] not in ("applied", "dismissed")]
+        summary = f"Ожидают проверки: {len(pending)}."
+        if self.model is not None:
+            drafts = [self.draft_state(message) for message in pending]
+            problems = sum(value in ("failed", "interrupted", "unavailable") for value in drafts)
+            summary += (
+                f"\nГотовых черновиков: {drafts.count('ready')} (не подтверждены). "
+                f"Сбоев или прерванных попыток: {problems}."
+            )
+        return summary
+
+    def draft_label(self, message: dict[str, Any]) -> str:
+        """A busy shared model lane is not proof that this particular message is running."""
+        labels = {
+            "ready": "черновик готов, не подтверждён",
+            "failed": "ошибка модели",
+            "interrupted": "попытка прервана",
+            "not_started": "модель ещё не запускалась",
+            "stopped": "модель остановлена",
+            "running": "общий канал модели занят",
+            "unavailable": "состояние черновика недоступно",
+        }
+        label = labels.get(self.draft_state(message))
+        return f" — {label}" if label else ""
+
     def pending(self, state: dict[str, Any], *, dismissed: bool = False) -> None:
         """Select by a stable receipt identity even when two messages have identical text."""
         messages = [
@@ -273,7 +309,8 @@ class OwnerUI:
             )
             return
         labels = tuple(
-            f"{i + 1}. {item['text'][:120]} [{item['state']}]" for i, item in enumerate(messages)
+            f"{i + 1}. {item['text'][:120]} [{item['state']}]{self.draft_label(item)}"
+            for i, item in enumerate(messages)
         )
         selected = self.dialogs.show(
             "choose",
@@ -390,7 +427,7 @@ class OwnerUI:
                 "choose",
                 "Morgan — локальный план\n"
                 f"Срок пилота: {state['expires_at']}\n"
-                f"Дата плана: {state['plan']['planning_day']}",
+                f"Дата плана: {state['plan']['planning_day']}\n{self.inbox_summary(state)}",
                 options=options,
                 allow_stopped=True,
             )
