@@ -299,7 +299,10 @@ class FileApproval:
     def load(self) -> tuple[tuple[TaskRequest, ...], TaskPermissions]:
         """Fail closed on STOP, expiry, malformed policy, or another workspace's approval."""
         self.workspace.check_stop()
-        requests, expiry = self.snapshot()
+        try:
+            requests, expiry = self.snapshot()
+        except FileNotFoundError:
+            return (), TaskPermissions()
         if expiry <= datetime.now(UTC):
             raise TaskPermissionDenied("approval has expired")
         permissions = TaskPermissions()
@@ -309,10 +312,7 @@ class FileApproval:
 
     def check(self, task: Task) -> None:
         """Re-read the policy so removal or replacement revokes future effects."""
-        try:
-            _, permissions = self.load()
-        except FileNotFoundError as exc:
-            raise TaskPermissionDenied("approval was revoked") from exc
+        _, permissions = self.load()
         permissions.check(task)
 
 
@@ -417,10 +417,7 @@ async def _work(
             workspace.check_stop()
             if asyncio.get_running_loop().time() >= deadline:
                 return LocalRun("deadline", actions, recovered)
-            try:
-                requests, _ = policy.load()
-            except FileNotFoundError:
-                requests = ()
+            requests, _ = policy.load()
             tasks = journal.create_many(requests) if requests else ()
             for task in tasks:
                 workspace.check_stop()
