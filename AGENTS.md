@@ -29,6 +29,9 @@ sequential shutdown; it installs no service. See `docs/decisions/bounded-local-s
 `daily_brief_cli` prepares an unapproved focus plan from explicitly selected current commitment
 evidence through the gate, without model calls. See `docs/decisions/memory-backed-daily-brief.md`.
 
+`python -m morgan_brain.eval.note_selection` is an explicit synthetic-only Ollama experiment.
+It neither reads memory nor authorizes tasks; see `docs/decisions/synthetic-note-selection.md`.
+
 Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
 `docs/ROADMAP.md` (what is not in the code and why, what retrieval measures, what is next),
 `docs/decisions/` (decisions, and what the code does about each). The archived agent kernel is
