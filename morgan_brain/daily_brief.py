@@ -16,6 +16,8 @@ from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.models import MemoryKind, MemorySource
 from morgan_brain.tasks import TaskKey, TaskRequest
 
+_PRIORITY_RANK = {"high": 0, "normal": 1, "low": 2}
+
 
 class Commitment(BaseModel):
     """Explicit stored planning data; title text is never an instruction to execute."""
@@ -168,8 +170,7 @@ async def prepare_brief(
             else excluded
         )
         target.append((memory.id, commitment))
-    rank = {"high": 0, "normal": 1, "low": 2}
-    candidates.sort(key=lambda pair: (rank[pair[1].priority], pair[1].due, pair[0]))
+    candidates.sort(key=lambda pair: (_PRIORITY_RANK[pair[1].priority], pair[1].due, pair[0]))
     selected: list[tuple[str, Commitment]] = []
     deferred: list[tuple[str, Commitment]] = []
     remaining = request.budget_minutes

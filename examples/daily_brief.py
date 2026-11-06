@@ -17,31 +17,28 @@ from morgan_brain.memory.store.db import open_db
 from morgan_brain.models import Memory, MemorySource
 from morgan_brain.tasks import TaskKey
 
+_DEMO_ITEMS = [
+    ("meeting", "Подготовить вопросы к встрече", 30, "high", -1, "open"),
+    ("papers", "Разобрать домашние документы", 20, "normal", 0, "open"),
+    ("reading", "Почитать книгу", 25, "low", 0, "open"),
+    ("shopping", "Проверить список покупок", 10, "high", 0, "done"),
+    ("weekend", "Спланировать выходные", 20, "normal", 1, "open"),
+]
 
-async def demonstrate(root: Path) -> dict[str, object]:
-    """Seed synthetic memory, prepare a plan, explicitly approve that fixture and deliver it."""
-    # Refuse an existing directory rather than touching personal data.
-    await asyncio.to_thread(root.mkdir, mode=0o700)
-    now = datetime.now(UTC)
-    day = now.date()
-    values = [
-        ("meeting", "Подготовить вопросы к встрече", 30, "high", -1, "open"),
-        ("papers", "Разобрать домашние документы", 20, "normal", 0, "open"),
-        ("reading", "Почитать книгу", 25, "low", 0, "open"),
-        ("shopping", "Проверить список покупок", 10, "high", 0, "done"),
-        ("weekend", "Спланировать выходные", 20, "normal", 1, "open"),
-    ]
-    conn = open_db(str(root / "memory.db"))
+
+async def _seed(path: Path, now: datetime) -> tuple[str, ...]:
+    """Store only this synthetic fixture through the real gate in a new demo database."""
+    conn = open_db(str(path))
     gate = MemoryGate(build_memory_module(conn, embedder=FakeEmbedder(dim=4), dim=4))
     try:
-        for identity, title, minutes, priority, offset, status in values:
+        for identity, title, minutes, priority, offset, status in _DEMO_ITEMS:
             commitment = Commitment.model_validate(
                 {
                     "version": "morgan.commitment.v1",
                     "title": title,
                     "minutes": minutes,
                     "priority": priority,
-                    "due": day + timedelta(days=offset),
+                    "due": now.date() + timedelta(days=offset),
                     "status": status,
                 }
             )
@@ -59,14 +56,22 @@ async def demonstrate(root: Path) -> dict[str, object]:
             )
     finally:
         conn.close()
+    return tuple(item[0] for item in _DEMO_ITEMS)
+
+
+async def demonstrate(root: Path) -> dict[str, object]:
+    """Prepare a fixture plan and explicitly approve only its checked local delivery."""
+    await asyncio.to_thread(root.mkdir, mode=0o700)
+    now = datetime.now(UTC)
+    evidence_ids = await _seed(root / "memory.db", now)
     source = open_evidence_context(root / "memory.db")
     try:
         draft = await prepare_brief(
             source.gate,
             BriefRequest(
                 TaskKey("demo", "personal", "daily-brief"),
-                tuple(v[0] for v in values),
-                day,
+                evidence_ids,
+                now.date(),
                 50,
             ),
         )
