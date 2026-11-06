@@ -13,7 +13,49 @@ from morgan_brain.app.strict_context import AnswerBudget, AnswerResult, StrictCo
 from morgan_brain.config import Settings
 from morgan_brain.surfaces.cli.__main__ import _dispatch, build_parser
 from morgan_brain.surfaces.cli.commands import cmd_ask
+from morgan_brain.surfaces.cli.render import RENDERERS
 from morgan_brain.surfaces.mcp_server import build_server
+
+
+@pytest.mark.parametrize("answer", ["The task is completed.", "Задача выполнена."])
+def test_strict_citations_do_not_present_conclusions_as_verified(answer):
+    payload = {
+        "schema_version": "morgan.answer.v1",
+        "response": answer,
+        "evidence_ids": ["source"],
+        "abstained": False,
+    }
+    rendered = RENDERERS["ask"](payload)
+    assert rendered.startswith("Unverified model answer:")
+    assert rendered.index("not proof") < rendered.index(answer)
+    assert "Evidence IDs: source" in rendered
+    assert RENDERERS["ask"]({"response": answer}) == answer
+    payload.update(response="UNKNOWN", abstained=True, evidence_ids=[])
+    assert RENDERERS["ask"](payload) == "UNKNOWN\nAbstained: insufficient evidence."
+
+
+def test_result_cannot_claim_semantic_verification():
+    budget = AnswerBudget(
+        input_tokens=100,
+        reported_output_tokens=9,
+        total_tokens=4096,
+        output_reserve_tokens=256,
+        safety_tokens=32,
+        template_id="fake",
+        counter_calls=2,
+    )
+    fields = {
+        "user_id": "owner",
+        "project": "personal",
+        "model": "fake",
+        "answer": "Done",
+        "evidence_ids": ["source"],
+        "abstained": False,
+        "budget": budget,
+    }
+    assert AnswerResult(**fields).model_dump()["semantic_verification"] == "not_performed"
+    with pytest.raises(ValidationError):
+        AnswerResult(**fields, semantic_verification="verified")
 
 
 def test_cli_strict_opt_in_default_and_flag():

@@ -660,6 +660,7 @@ async def test_detailed_answer_exposes_citations_and_budget_after_commit(abstain
             TurnRequest(user_id="owner", project="personal", text="Tea?")
         )
         assert detailed.schema_version == "morgan.answer.v1"
+        assert detailed.semantic_verification == "not_performed"
         assert detailed.evidence_ids == answer["evidence_ids"] and detailed.abstained is abstained
         assert detailed.user_id == "owner" and detailed.project == "personal"
         assert detailed.budget.input_tokens == backend.generated[0][2].input_tokens
@@ -744,11 +745,13 @@ async def test_strict_surface_contract_citations_resolve_after_restart(tmp_path,
             argparse.Namespace(text="Tea?", strict_context=True), settings, "personal"
         )
     assert payload["schema_version"] == "morgan.answer.v1"
+    assert payload["semantic_verification"] == "not_performed"
     assert payload["answer"] == payload["response"] == "Tea"
     assert payload["evidence_ids"] == ["source"] and payload["abstained"] is False
     assert payload["model"] == payload["model_used"] == "fake"
     assert payload["budget"]["input_tokens"] > 0
     assert "Evidence IDs: source" in RENDERERS["ask"](payload)
+    assert RENDERERS["ask"](payload).startswith("Unverified model answer:")
     restarted = open_db(database)
     try:
         restarted_gate, _, _ = stack(restarted)

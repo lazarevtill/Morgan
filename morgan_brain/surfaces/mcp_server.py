@@ -351,6 +351,8 @@ def build_server(settings: Settings | None = None) -> MorganMcpServer:
         Input source defaults to unknown. Use user_stated only for actual user words.
         Source and author are reported provenance, not authentication or permissions.
         Replies are agent_inferred. Generated replies carry a model author label;
+        strict replies report semantic_verification=not_performed: valid citation IDs
+        do not establish that the generated conclusion follows from its sources.
         in default mode, unresolved recalled versions return a program notice authored by
         morgan:conflict-guard with model_used null, without chat generation.
         """

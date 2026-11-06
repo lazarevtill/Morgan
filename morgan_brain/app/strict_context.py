@@ -87,7 +87,7 @@ class AnswerBudget(BaseModel):
 
 
 class AnswerResult(BaseModel):
-    """Validated strict answer, exposed only after its atomic turn commits."""
+    """Citation-validated answer, not semantically verified; exposed after its turn commits."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     schema_version: Literal["morgan.answer.v1"] = "morgan.answer.v1"
@@ -97,6 +97,7 @@ class AnswerResult(BaseModel):
     answer: str
     evidence_ids: list[str]
     abstained: bool
+    semantic_verification: Literal["not_performed"] = "not_performed"
     budget: AnswerBudget
 
 
