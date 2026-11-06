@@ -20,7 +20,8 @@ for the supplied format, not a detector of reasoning disguised as ordinary final
 Non-text objects are not stored. Unknown content formats must get a reviewed adapter.
 
 New memories record `session_id = chatgpt:<conversation-id>`, source event time when supplied,
-import origin, and actor attribution. A `user` role does not identify a human in a shared account. New user-role text has
+import origin, and actor attribution. A `user` role does not identify a human in a shared account.
+New user-role text has
 `source=unknown` and empty `author_id`; `user_id` controls access, not authorship.
 `unresolved_user_turns` reports accepted user-role turns, including unchanged replays,
 without counting chunks separately. Text, names and conversation titles never establish identity.
@@ -59,7 +60,6 @@ six skipped, zero excluded markers, both with `chatgpt:c2` provenance. Reimport:
 memories and zero embedding calls. Russian keyword `билет` retrieves both correctly attributed
 quotes through existing recall. This measures filtering, replay and search plumbing only.
 No real export, private session, model service, or active pilot data was used or changed.
-
 
 ## Shared-account validation
 
