@@ -1,0 +1,724 @@
+[
+  {
+    "case": "en_other_named",
+    "language": "en",
+    "kind": "owner",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "Owen still needs to renew his parking permit. His sister will remind him."
+    ],
+    "exact": false,
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 5.472
+  },
+  {
+    "case": "en_other_named",
+    "language": "en",
+    "kind": "owner",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 11.937
+  },
+  {
+    "case": "ru_other_named",
+    "language": "ru",
+    "kind": "owner",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "Жене ещё нужно забрать её планшет. Ей напомнит отец."
+    ],
+    "exact": false,
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 3.751
+  },
+  {
+    "case": "ru_other_named",
+    "language": "ru",
+    "kind": "owner",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 6.742
+  },
+  {
+    "case": "en_my_commitment",
+    "language": "en",
+    "kind": "owner",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "My neighbour asked me to feed her fish. I agreed and still need to do it."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.612
+  },
+  {
+    "case": "en_my_commitment",
+    "language": "en",
+    "kind": "owner",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "My neighbour asked me to feed her fish. I agreed and still need to do it."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 7.29
+  },
+  {
+    "case": "ru_my_commitment",
+    "language": "ru",
+    "kind": "owner",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "Сосед попросил меня проверить его почту. Я согласился и ещё не сделал это."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.423
+  },
+  {
+    "case": "ru_my_commitment",
+    "language": "ru",
+    "kind": "owner",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "Сосед попросил меня проверить его почту. Я согласился и ещё не сделал это."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 7.782
+  },
+  {
+    "case": "en_nested_quote",
+    "language": "en",
+    "kind": "owner",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 5.531
+  },
+  {
+    "case": "en_nested_quote",
+    "language": "en",
+    "kind": "owner",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 5.531
+  },
+  {
+    "case": "ru_nested_quote",
+    "language": "ru",
+    "kind": "owner",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.671
+  },
+  {
+    "case": "ru_nested_quote",
+    "language": "ru",
+    "kind": "owner",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.671
+  },
+  {
+    "case": "en_owner_mixed",
+    "language": "en",
+    "kind": "owner",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "I must pick up my prescription.",
+      "My brother needs to return his uniform."
+    ],
+    "exact": false,
+    "tp": 1,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 4.029
+  },
+  {
+    "case": "en_owner_mixed",
+    "language": "en",
+    "kind": "owner",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "I must pick up my prescription.",
+      "My brother needs to return his uniform."
+    ],
+    "exact": false,
+    "tp": 1,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 12.475
+  },
+  {
+    "case": "ru_owner_mixed",
+    "language": "ru",
+    "kind": "owner",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "Брату нужно сдать его форму.",
+      "Мне нужно получить рецепт."
+    ],
+    "exact": false,
+    "tp": 1,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 4.36
+  },
+  {
+    "case": "ru_owner_mixed",
+    "language": "ru",
+    "kind": "owner",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "Брату нужно сдать его форму.",
+      "Мне нужно получить рецепт."
+    ],
+    "exact": false,
+    "tp": 1,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 8.21
+  },
+  {
+    "case": "en_cancel_latest",
+    "language": "en",
+    "kind": "cancel",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 5.815
+  },
+  {
+    "case": "en_cancel_latest",
+    "language": "en",
+    "kind": "cancel",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 5.815
+  },
+  {
+    "case": "ru_cancel_latest",
+    "language": "ru",
+    "kind": "cancel",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.648
+  },
+  {
+    "case": "ru_cancel_latest",
+    "language": "ru",
+    "kind": "cancel",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.648
+  },
+  {
+    "case": "en_not_cancelled",
+    "language": "en",
+    "kind": "cancel",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "I have NOT cancelled the tyre appointment. I still need to attend it."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.51
+  },
+  {
+    "case": "en_not_cancelled",
+    "language": "en",
+    "kind": "cancel",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "I have NOT cancelled the tyre appointment. I still need to attend it."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 12.199
+  },
+  {
+    "case": "ru_not_cancelled",
+    "language": "ru",
+    "kind": "cancel",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "Я НЕ отменял запись к мастеру. Мне всё ещё нужно прийти."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.335
+  },
+  {
+    "case": "ru_not_cancelled",
+    "language": "ru",
+    "kind": "cancel",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "Я НЕ отменял запись к мастеру. Мне всё ещё нужно прийти."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 7.795
+  },
+  {
+    "case": "en_done_correction",
+    "language": "en",
+    "kind": "cancel",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 5.837
+  },
+  {
+    "case": "en_done_correction",
+    "language": "en",
+    "kind": "cancel",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 5.837
+  },
+  {
+    "case": "ru_done_correction",
+    "language": "ru",
+    "kind": "cancel",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.508
+  },
+  {
+    "case": "ru_done_correction",
+    "language": "ru",
+    "kind": "cancel",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.508
+  },
+  {
+    "case": "en_replaced_task",
+    "language": "en",
+    "kind": "cancel",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "Cancel the large frame; I need to order a small one instead."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.14
+  },
+  {
+    "case": "en_replaced_task",
+    "language": "en",
+    "kind": "cancel",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "Cancel the large frame; I need to order a small one instead."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 13.217
+  },
+  {
+    "case": "ru_replaced_task",
+    "language": "ru",
+    "kind": "cancel",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "Большую отменяю; вместо неё мне нужно купить маленькую."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.712
+  },
+  {
+    "case": "ru_replaced_task",
+    "language": "ru",
+    "kind": "cancel",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": false,
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "seconds": 8.727
+  },
+  {
+    "case": "en_renew_explicit",
+    "language": "en",
+    "kind": "renew",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "I still have not collected the dry cleaning. Remind me again."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 6.714
+  },
+  {
+    "case": "en_renew_explicit",
+    "language": "en",
+    "kind": "renew",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "I still have not collected the dry cleaning. Remind me again."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 15.416
+  },
+  {
+    "case": "ru_renew_explicit",
+    "language": "ru",
+    "kind": "renew",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": false,
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "seconds": 3.437
+  },
+  {
+    "case": "ru_renew_explicit",
+    "language": "ru",
+    "kind": "renew",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": false,
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "seconds": 3.437
+  },
+  {
+    "case": "en_renew_negation",
+    "language": "en",
+    "kind": "renew",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.3
+  },
+  {
+    "case": "en_renew_negation",
+    "language": "en",
+    "kind": "renew",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.3
+  },
+  {
+    "case": "ru_renew_negation",
+    "language": "ru",
+    "kind": "renew",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.038
+  },
+  {
+    "case": "ru_renew_negation",
+    "language": "ru",
+    "kind": "renew",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.038
+  },
+  {
+    "case": "en_renew_completed",
+    "language": "en",
+    "kind": "renew",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 7.068
+  },
+  {
+    "case": "en_renew_completed",
+    "language": "en",
+    "kind": "renew",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 7.068
+  },
+  {
+    "case": "ru_renew_completed",
+    "language": "ru",
+    "kind": "renew",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.029
+  },
+  {
+    "case": "ru_renew_completed",
+    "language": "ru",
+    "kind": "renew",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.029
+  },
+  {
+    "case": "en_renew_reopened",
+    "language": "en",
+    "kind": "renew",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "I changed my mind: I still need the repair. Remind me again."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.28
+  },
+  {
+    "case": "en_renew_reopened",
+    "language": "en",
+    "kind": "renew",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "I changed my mind: I still need the repair. Remind me again."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 15.622
+  },
+  {
+    "case": "ru_renew_reopened",
+    "language": "ru",
+    "kind": "renew",
+    "arm": "granite",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "Передумал: зонт всё же нужно починить. Напомни снова."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 5.905
+  },
+  {
+    "case": "ru_renew_reopened",
+    "language": "ru",
+    "kind": "renew",
+    "arm": "granite_validated",
+    "valid": true,
+    "error": null,
+    "selected": [
+      "Передумал: зонт всё же нужно починить. Напомни снова."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 11.079
+  }
+]

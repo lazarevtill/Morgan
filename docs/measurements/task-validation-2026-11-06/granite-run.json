@@ -1,0 +1,51 @@
+{
+  "model": "granite",
+  "digest": "ed902ac9eb6adce5a90c6a08c8ea201b50e23fdc5976d1cd0362006afac5309e",
+  "status": "complete",
+  "wall_seconds": 266.226,
+  "cycles": [
+    {
+      "batch": 0,
+      "load_seconds": 13.656,
+      "wall_seconds": 47.626,
+      "child_cpu_seconds": 140.094,
+      "child_maxrss_bytes": 8964636672
+    },
+    {
+      "batch": 4,
+      "load_seconds": 14.189,
+      "wall_seconds": 44.261,
+      "child_cpu_seconds": 267.203,
+      "child_maxrss_bytes": 8985493504
+    },
+    {
+      "batch": 8,
+      "load_seconds": 12.314,
+      "wall_seconds": 41.984,
+      "child_cpu_seconds": 392.048,
+      "child_maxrss_bytes": 8985493504
+    },
+    {
+      "batch": 12,
+      "load_seconds": 11.552,
+      "wall_seconds": 43.054,
+      "child_cpu_seconds": 524.188,
+      "child_maxrss_bytes": 9107832832
+    },
+    {
+      "batch": 16,
+      "load_seconds": 11.546,
+      "wall_seconds": 37.96,
+      "child_cpu_seconds": 636.803,
+      "child_maxrss_bytes": 9107832832
+    },
+    {
+      "batch": 20,
+      "load_seconds": 13.384,
+      "wall_seconds": 51.342,
+      "child_cpu_seconds": 793.329,
+      "child_maxrss_bytes": 9107832832
+    }
+  ],
+  "rows": 48
+}

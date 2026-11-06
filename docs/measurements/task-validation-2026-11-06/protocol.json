@@ -1,0 +1,9 @@
+{
+  "corpus_sha256": "d2b949043d9f83e7cda010d7c681af57b1addcd109c2b5394749223c5a398c6c",
+  "validator_sha256": "ef90d3ba63e9288ce7b8ef304623d57da4e9b0cc6040422067d1ece7ed44fd9a",
+  "cases": 24,
+  "independence": "New synthetic notes frozen before model runs; same investigator labels, not external blind.",
+  "models": "Baseline Granite; choose one existing alternative by fastest structurally valid exact single canary, not by evaluation labels. No downloads. Granite also receives one frozen second-pass validator; intersection can remove but never add proposed lines.",
+  "acceptance": "Full valid coverage, strictly better exact or fewer FP, no increase in FP or FN overall or within either language or any category. Successful requests within existing 20-second bound, peak child RSS below 12 GiB. Existing regression corpus must also pass before changing production.",
+  "budget": "Each owned cycle <=120 seconds, four CPU threads, no GPU, synthetic inputs only. No service. No tuning or second candidate after inspecting outcomes."
+}
