@@ -52,6 +52,8 @@ class OwnerUI:
         renewal = message["renewal"]
         item = renewal["after"] if renewal else message["capture"]["commitment"]
         action = "Создать задачу" if not renewal else f"Перенести с {renewal['before']['due']}"
+        if renewal and item["status"] == "done":
+            action = "Отметить выполненной"
         prompt = (
             f"Владелец: {envelope['owner']}\nПроект: {envelope['project']}\n"
             f"Источник: {message['text']}\n\n{action}\n"
@@ -123,7 +125,7 @@ class OwnerUI:
         return self.dialogs.show(
             "choose",
             f"Ваше сообщение:\n{message['text']}\n\nЧто сделать?",
-            options=("Новая задача", "Перенести задачу", "Оставить на проверку")
+            options=("Новая задача", "Перенести задачу", "Завершить задачу", "Оставить на проверку")
             + (("Не задача",) if message["state"] == "needs_review" else ())
             + (("Предложение локальной модели",) if self.model is not None else ()),
         )
@@ -179,14 +181,14 @@ class OwnerUI:
                 "--due",
                 due,
             )
-        elif action == "Перенести задачу":
+        elif action in ("Перенести задачу", "Завершить задачу"):
             tasks = [
                 item
                 for item in state["plan"].get("tasks", [])
                 if item["commitment"]["status"] == "open"
             ]
             if not tasks:
-                self.dialogs.show("info", "Нет открытых задач для переноса.")
+                self.dialogs.show("info", "Нет открытых задач для изменения.")
                 return
             labels = tuple(
                 f"{i + 1}. {item['commitment']['title']} — {item['commitment']['due']}"
@@ -196,8 +198,13 @@ class OwnerUI:
             if selected is None:
                 return
             target = tasks[labels.index(selected)]["evidence_id"]
-            due = self.text("Новый срок: ГГГГ-ММ-ДД", day)
-            envelope = self.call("review", message["identity"], "--target", target, "--due", due)
+            if action == "Завершить задачу":
+                envelope = self.call("review", message["identity"], "--complete", target)
+            else:
+                due = self.text("Новый срок: ГГГГ-ММ-ДД", day)
+                envelope = self.call(
+                    "review", message["identity"], "--target", target, "--due", due
+                )
         else:
             return
         self.confirm(envelope)

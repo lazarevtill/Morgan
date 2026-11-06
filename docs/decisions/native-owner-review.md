@@ -36,12 +36,21 @@ Initialization creates a new private pilot dated today in the chosen timezone wi
 30-minute planning budget. Omit all three init flags to reopen the same pilot. Existing
 pilots are never reset by initialization. Do not use a stale editable installation.
 
-Choose **Новое сообщение**, enter a short message, explicitly choose new task or renewal,
+Choose **Новое сообщение**, enter a short message, explicitly choose new task, renewal or completion,
 review fields and press **Подтвердить** on the complete source/owner/project/action preview.
 Renewal requires selection of an exact open task. Ambiguous text does not choose a task.
 **Проверить сообщения** resumes saved messages and exact unfinished reviews.
-**План** displays current tasks. Completion remains in the existing guided-plan workflow;
-this interface currently covers intake, review and date renewal only.
+**План** displays current tasks. To mark a task done, submit the completion statement, choose
+**Завершить задачу**, select one exact open task and confirm the complete review. Completion
+changes only status; title, date, priority and minutes stay fixed. Cancel leaves it open.
+The saved review can be resumed through **Проверить сообщения** after interruption.
+Completion reuses the paired source/revision write path, not a new executor or database.
+`owner_input review ID --complete CURRENT_TASK_ID` exposes the same explicit CLI review.
+Neither a model draft nor completion-like text selects or completes a task automatically.
+
+A completion uses a `guided-complete-` event identity in the existing transition envelope.
+Legacy renewal digests and payloads are unchanged. Older runtimes cannot read new completion
+reviews; after using this feature, do not downgrade the runtime against that journal.
 
 ## Authority, cancellation and recovery
 
