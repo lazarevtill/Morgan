@@ -52,7 +52,7 @@ def plan(request, clock, **overrides):
     limits = RepeatLimits(
         args.pop("interval_seconds"), args.pop("count"), args.pop("window_seconds")
     )
-    return repeat_plan(request, limits=limits, **args)
+    return repeat_plan(request, limits=limits, start=args["start"], now=args["now"])
 
 
 async def test_restart_skips_missed_windows_and_delivers_each_once(fixture):
