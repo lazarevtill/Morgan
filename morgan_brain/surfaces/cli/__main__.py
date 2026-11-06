@@ -134,6 +134,7 @@ def _add_capture_fields(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build CLI commands with shared scope and explicit capture provenance fields."""
     parser = argparse.ArgumentParser(prog="morgan", description="Talk to your local Morgan brain.")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -298,6 +299,7 @@ async def _dispatch(
     remember_project: str | None,
     repository: Repository | None,
 ) -> int:
+    """Apply command scope rules, invoke the selected handler and render protocol-safe output."""
     if args.command in _SINGLE_PROJECT_ONLY and args.all_projects:
         message = (
             f"morgan {args.command}: --all-projects is not valid here "
