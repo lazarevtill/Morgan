@@ -31,6 +31,7 @@ from morgan_brain.task_receipts import (
 )
 from morgan_brain.tasks import (
     Task,
+    TaskConflict,
     TaskControl,
     TaskJournal,
     TaskKey,
@@ -116,11 +117,12 @@ class NoteWorkspace:
                 os.unlink(temporary, dir_fd=self.fd)
 
     @contextmanager
-    def locked(self) -> Iterator[None]:
-        """Exclude cooperating workers; process death releases the kernel-held lock."""
-        fd = self.open_file(".worker.lock", os.O_RDWR | os.O_CREAT)
+    def locked(self, *, approval: bool = False) -> Iterator[None]:
+        """Lock workers without waiting, or serialize short approval writes on a separate lock."""
+        name = ".approval.lock" if approval else ".worker.lock"
+        fd = self.open_file(name, os.O_RDWR | os.O_CREAT)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_EX | (0 if approval else fcntl.LOCK_NB))
             yield
         finally:
             os.close(fd)
@@ -173,16 +175,16 @@ def _requests(raw: object) -> tuple[TaskRequest, ...]:
     return tuple(requests)
 
 
-def approve(workspace: NoteWorkspace, requests: Sequence[TaskRequest], *, ttl_seconds: int) -> None:
-    """Explicit trusted-account operation; never call this on behalf of an untrusted planner."""
-    if not 1 <= ttl_seconds <= 86400:
-        raise ValueError("approval lifetime must be 1 to 86400 seconds")
+def _write_approval(
+    workspace: NoteWorkspace, requests: Sequence[TaskRequest], expiry: datetime
+) -> None:
+    """Publish one validated policy atomically while the caller holds the approval lock."""
     checked = _requests([asdict(r) for r in requests])
     document = json.dumps(
         {
             "version": "morgan.local-approval.v1",
             "workspace": workspace.provider_id,
-            "expires_at": (datetime.now(UTC) + timedelta(seconds=ttl_seconds)).isoformat(),
+            "expires_at": expiry.isoformat(),
             "requests": [asdict(r) for r in checked],
         },
         ensure_ascii=False,
@@ -192,6 +194,85 @@ def approve(workspace: NoteWorkspace, requests: Sequence[TaskRequest], *, ttl_se
     workspace.publish(".approval.json", document, replace=True)
 
 
+def _expiry(ttl_seconds: int) -> datetime:
+    """Bound new grants without silently extending previously approved work."""
+    if not 1 <= ttl_seconds <= 86400:
+        raise ValueError("approval lifetime must be 1 to 86400 seconds")
+    return datetime.now(UTC) + timedelta(seconds=ttl_seconds)
+
+
+def approve(workspace: NoteWorkspace, requests: Sequence[TaskRequest], *, ttl_seconds: int) -> None:
+    """Explicitly replace all active grants; never derive this operation from planner output."""
+    with workspace.locked(approval=True):
+        _write_approval(workspace, requests, _expiry(ttl_seconds))
+
+
+def enqueue(workspace: NoteWorkspace, request: TaskRequest, *, ttl_seconds: int) -> None:
+    """Append an exact owner-approved note, preserving prior grants and their earliest expiry.
+
+    Identical resubmission is a no-op; changed input for an existing ID is refused. Capacity
+    remains 16 notes in one scope. Expired/malformed policies require explicit replacement.
+    """
+    with workspace.locked(approval=True):
+        expiry = _expiry(ttl_seconds)
+        try:
+            requests, previous_expiry = FileApproval(workspace).snapshot()
+        except FileNotFoundError:
+            requests = ()
+        else:
+            if previous_expiry <= datetime.now(UTC):
+                raise TaskPermissionDenied("replace the expired approval explicitly")
+            for previous in requests:
+                if previous.key == request.key:
+                    if previous != request:
+                        raise TaskConflict("queued task ID already has different input")
+                    return
+            expiry = min(expiry, previous_expiry)
+        _write_approval(workspace, [*requests, request], expiry)
+
+
+def revoke(workspace: NoteWorkspace) -> None:
+    """Remove active authority without deleting journal history, notes, or STOP."""
+    with workspace.locked(approval=True):
+        with suppress(FileNotFoundError):
+            os.unlink(".approval.json", dir_fd=workspace.fd)
+        os.fsync(workspace.fd)
+
+
+def local_status(workspace: NoteWorkspace) -> dict[str, str | bool | int | None]:
+    """Observe lifecycle controls without reading note contents or opening the task journal.
+
+    This is a momentary snapshot, not a reservation or proof of completed task delivery.
+    """
+    active = stopped = False
+    try:
+        with workspace.locked():
+            pass
+    except BlockingIOError:
+        active = True
+    try:
+        workspace.check_stop()
+    except StopRequested:
+        stopped = True
+    try:
+        requests, expiry = FileApproval(workspace).snapshot()
+    except FileNotFoundError:
+        return {
+            "worker_active": active,
+            "stop_requested": stopped,
+            "approval": "missing",
+            "approved_tasks": 0,
+            "expires_at": None,
+        }
+    return {
+        "worker_active": active,
+        "stop_requested": stopped,
+        "approval": "valid" if expiry > datetime.now(UTC) else "expired",
+        "approved_tasks": len(requests),
+        "expires_at": expiry.isoformat(),
+    }
+
+
 class FileApproval:
     """Reload exact grants from the private account-owned policy before every effect."""
 
@@ -199,9 +280,8 @@ class FileApproval:
         """Bind authorization to one explicitly selected workspace."""
         self.workspace = workspace
 
-    def load(self) -> tuple[tuple[TaskRequest, ...], TaskPermissions]:
-        """Fail closed on STOP, expiry, malformed policy, or another workspace's approval."""
-        self.workspace.check_stop()
+    def snapshot(self) -> tuple[tuple[TaskRequest, ...], datetime]:
+        """Read and validate a policy without granting authority or requiring a running state."""
         raw = json.loads(self.workspace.read(".approval.json", _MAX_APPROVAL))
         if (
             not isinstance(raw, dict)
@@ -211,9 +291,16 @@ class FileApproval:
         ):
             raise TaskPermissionDenied("approval does not belong to this workspace")
         expiry = datetime.fromisoformat(raw["expires_at"])
-        if expiry.utcoffset() is None or expiry <= datetime.now(UTC):
-            raise TaskPermissionDenied("approval has expired or lacks a timezone")
-        requests = _requests(raw["requests"])
+        if expiry.utcoffset() is None:
+            raise TaskPermissionDenied("approval lacks a timezone")
+        return _requests(raw["requests"]), expiry
+
+    def load(self) -> tuple[tuple[TaskRequest, ...], TaskPermissions]:
+        """Fail closed on STOP, expiry, malformed policy, or another workspace's approval."""
+        self.workspace.check_stop()
+        requests, expiry = self.snapshot()
+        if expiry <= datetime.now(UTC):
+            raise TaskPermissionDenied("approval has expired")
         permissions = TaskPermissions()
         for request in requests:
             permissions.grant(TaskPermit(request, "local-account-file", expiry))
@@ -221,7 +308,10 @@ class FileApproval:
 
     def check(self, task: Task) -> None:
         """Re-read the policy so removal or replacement revokes future effects."""
-        _, permissions = self.load()
+        try:
+            _, permissions = self.load()
+        except FileNotFoundError as exc:
+            raise TaskPermissionDenied("approval was revoked") from exc
         permissions.check(task)
 
 
@@ -302,8 +392,14 @@ async def _work(workspace: NoteWorkspace, journal: TaskJournal, limits: RunLimit
     actions = recovered = 0
     try:
         for cycle in range(limits.max_cycles):
-            requests, _ = policy.load()
-            tasks = journal.create_many(requests)
+            workspace.check_stop()
+            if asyncio.get_running_loop().time() >= deadline:
+                return LocalRun("deadline", actions, recovered)
+            try:
+                requests, _ = policy.load()
+            except FileNotFoundError:
+                requests = ()
+            tasks = journal.create_many(requests) if requests else ()
             for task in tasks:
                 workspace.check_stop()
                 remaining = deadline - asyncio.get_running_loop().time()

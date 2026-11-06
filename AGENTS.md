@@ -19,7 +19,9 @@ are not erased by `morgan forget`. Never derive execution authority from remembe
 
 The opt-in `python -m morgan_brain.local_notes_cli` workflow delivers account-approved Markdown
 notes into a private workspace with finite limits, STOP control and receipt-based recovery.
-It does not start a service or call a model. See `docs/decisions/local-approved-notes.md`.
+It does not start a service or call a model. `enqueue` appends exact account-approved notes;
+`status`, `revoke`, STOP/resume and SIGTERM manage its finite lifecycle. See
+`docs/decisions/local-approved-notes.md` and `docs/decisions/local-note-intake.md`.
 
 Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
 `docs/ROADMAP.md` (what is not in the code and why, what retrieval measures, what is next),
