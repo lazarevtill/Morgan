@@ -1,0 +1,62 @@
+{
+  "checked_on": "2026-11-06",
+  "scope": "Read-only research. README review, GitHub default-branch HEAD metadata; no installation or runtime validation.",
+  "repositories": [
+    {
+      "repo": "Dicklesworthstone/coding_agent_session_search",
+      "sha": "f3b2dadaf57f641c56694b5d8d10be7743e1dbdd",
+      "date": "2026-11-06T03:18:51Z",
+      "url": "https://github.com/Dicklesworthstone/coding_agent_session_search/commit/f3b2dadaf57f641c56694b5d8d10be7743e1dbdd",
+      "readme_url": "https://github.com/Dicklesworthstone/coding_agent_session_search/blob/f3b2dadaf57f641c56694b5d8d10be7743e1dbdd/README.md",
+      "readme_review": "CASS and five others reviewed on main near HEAD lookup; sessionwiki reviewed at pinned HEAD. Pin records checked revision, not a binary release."
+    },
+    {
+      "repo": "youdie006/sessionwiki",
+      "sha": "d506a4a2abfcd824187ebf7e9fd72bb267e9cf76",
+      "date": "2026-10-29T04:54:42Z",
+      "url": "https://github.com/youdie006/sessionwiki/commit/d506a4a2abfcd824187ebf7e9fd72bb267e9cf76",
+      "readme_url": "https://github.com/youdie006/sessionwiki/blob/d506a4a2abfcd824187ebf7e9fd72bb267e9cf76/README.md",
+      "readme_review": "CASS and five others reviewed on main near HEAD lookup; sessionwiki reviewed at pinned HEAD. Pin records checked revision, not a binary release."
+    },
+    {
+      "repo": "thedotmack/claude-mem",
+      "sha": "89b97644e39d75b395824a22be38150deba4b8cb",
+      "date": "2026-11-06T01:42:38Z",
+      "url": "https://github.com/thedotmack/claude-mem/commit/89b97644e39d75b395824a22be38150deba4b8cb",
+      "readme_url": "https://github.com/thedotmack/claude-mem/blob/89b97644e39d75b395824a22be38150deba4b8cb/README.md",
+      "readme_review": "CASS and five others reviewed on main near HEAD lookup; sessionwiki reviewed at pinned HEAD. Pin records checked revision, not a binary release."
+    },
+    {
+      "repo": "sqliteai/sqlite-memory",
+      "sha": "67716690f44cc3a7b1207ea33b936c7fb26860fe",
+      "date": "2026-11-01T14:30:04Z",
+      "url": "https://github.com/sqliteai/sqlite-memory/commit/67716690f44cc3a7b1207ea33b936c7fb26860fe",
+      "readme_url": "https://github.com/sqliteai/sqlite-memory/blob/67716690f44cc3a7b1207ea33b936c7fb26860fe/README.md",
+      "readme_review": "CASS and five others reviewed on main near HEAD lookup; sessionwiki reviewed at pinned HEAD. Pin records checked revision, not a binary release."
+    },
+    {
+      "repo": "riponcm/projectmem",
+      "sha": "a405361b8d12cb773bb42ef0f64004623dbee764",
+      "date": "2026-11-01T22:32:34Z",
+      "url": "https://github.com/riponcm/projectmem/commit/a405361b8d12cb773bb42ef0f64004623dbee764",
+      "readme_url": "https://github.com/riponcm/projectmem/blob/a405361b8d12cb773bb42ef0f64004623dbee764/README.md",
+      "readme_review": "CASS and five others reviewed on main near HEAD lookup; sessionwiki reviewed at pinned HEAD. Pin records checked revision, not a binary release."
+    },
+    {
+      "repo": "mem0ai/mem0",
+      "sha": "ed1f10fc87080f0b67f99be370817504888462ab",
+      "date": "2026-11-04T10:55:26Z",
+      "url": "https://github.com/mem0ai/mem0/commit/ed1f10fc87080f0b67f99be370817504888462ab",
+      "readme_url": "https://github.com/mem0ai/mem0/blob/ed1f10fc87080f0b67f99be370817504888462ab/README.md",
+      "readme_review": "CASS and five others reviewed on main near HEAD lookup; sessionwiki reviewed at pinned HEAD. Pin records checked revision, not a binary release."
+    },
+    {
+      "repo": "getzep/graphiti",
+      "sha": "fb60e59d4a208c99e7d0186ee6335d2a257f17f2",
+      "date": "2026-11-03T20:41:02Z",
+      "url": "https://github.com/getzep/graphiti/commit/fb60e59d4a208c99e7d0186ee6335d2a257f17f2",
+      "readme_url": "https://github.com/getzep/graphiti/blob/fb60e59d4a208c99e7d0186ee6335d2a257f17f2/README.md",
+      "readme_review": "CASS and five others reviewed on main near HEAD lookup; sessionwiki reviewed at pinned HEAD. Pin records checked revision, not a binary release."
+    }
+  ]
+}
