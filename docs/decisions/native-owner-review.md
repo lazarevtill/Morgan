@@ -111,3 +111,16 @@ human usability study or verification of physical macOS dialog rendering.
 Source lookup remains available after STOP: the owner can inspect exact quotes and
 current verified task state without resuming processing. Cancelling a search returns
 to the menu. Search, empty results and errors do not clear STOP or authorize writes.
+
+## Date suggestions after a day boundary
+
+When the saved planning day is in the past and the session has an explicit timezone,
+new-task, reschedule and date-preview fields suggest the local date from the current
+status snapshot. A current or future saved day remains the default. Without an explicit
+timezone, the saved day is retained rather than guessing from the Mac's timezone.
+
+This changes a field suggestion only: the saved planning day, existing task dates and
+pilot expiry are unchanged. The owner can enter another date and must still explicitly
+confirm any task change. Cancelling a preview writes nothing. Six integration cases cover
+local midnight, different UTC offsets, a month boundary, a future plan and unknown timezone,
+including an explicitly entered date different from the suggestion.

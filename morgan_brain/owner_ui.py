@@ -22,6 +22,14 @@ from morgan_brain.owner_model import OwnerModel
 from morgan_brain.tasks import TaskConflict
 
 
+def _suggested_day(plan: dict[str, Any]) -> str:
+    """Suggest local today only for a past session day; keep the saved plan unchanged."""
+    if plan["day_relation"] == "past" and plan["timezone"] is not None:
+        instant = datetime.fromisoformat(plan["as_of"])
+        return instant.astimezone(ZoneInfo(plan["timezone"])).date().isoformat()
+    return str(plan["planning_day"])
+
+
 class OwnerUI:
     """Present existing receipts and exact reviews without a second persistence mechanism."""
 
@@ -195,7 +203,7 @@ class OwnerUI:
             if not self.model_review(message["text"]):
                 return
             action = "Новая задача"
-        day = state["plan"]["planning_day"]
+        day = _suggested_day(state["plan"])
         if action == "Новая задача":
             initial_title = "" if "\n" in message["text"] else message["text"][:240]
             title = self.text("Название вашей задачи (не чужая цитата)", initial_title)
@@ -441,7 +449,7 @@ class OwnerUI:
         day = self.dialogs.show(
             "text",
             "Дата предпросмотра: ГГГГ-ММ-ДД. Сохранённый план не изменится.",
-            initial=state["plan"]["planning_day"],
+            initial=_suggested_day(state["plan"]),
             allow_stopped=True,
         )
         if day is None:
@@ -509,7 +517,7 @@ class OwnerUI:
                 elif choice == "Читать черновики":
                     self.read_drafts(state)
                 elif choice == "Новое сообщение":
-                    text = self.text("Ваше сообщение (одна строка, до 1000 символов)")
+                    text = self.text("Ваше сообщение (до 1000 символов)")
                     receipt = self.call("submit", f"ui-{uuid4().hex}", text=text)
                     if "message" in receipt:
                         self.review(receipt["message"], self.call("status"))
