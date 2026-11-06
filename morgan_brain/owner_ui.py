@@ -250,6 +250,50 @@ class OwnerUI:
             else:
                 self.review(message, state)
 
+    def search_sources(self) -> None:
+        """Show exact source quotations and verified task state without calling a model."""
+        query = self.text("Поиск по фрагменту текста или названию задачи (не по смыслу)")
+        found = self.call("find", query)
+        results = found["results"]
+        summary = (
+            "Поиск только в сообщениях этого пилота. Не вся личная память.\n"
+            f"Недоступных подтверждённых источников: {found['unavailable_confirmed_sources']}."
+        )
+        if not results:
+            self.dialogs.show(
+                "info", summary + "\nСовпадений нет; это не доказывает отсутствие задачи."
+            )
+            return
+        labels = tuple(f"{i + 1}. {item['quote'][:100]}" for i, item in enumerate(results))
+        selected = self.dialogs.show("choose", summary, options=labels)
+        if selected is None:
+            return
+        item = results[labels.index(selected)]
+        task = item["current_task"]
+        current = (
+            f"Текущее состояние: {'выполнено' if task['status'] == 'done' else 'открыта'}; "
+            f"срок: {task['due']}\nЗадача: {task['title']}"
+            if task
+            else "Подтверждённое текущее состояние задачи не установлено."
+        )
+        review = {
+            "needs_review": "ожидает проверки",
+            "reviewed": "поля проверены, запись не подтверждена",
+            "applying": "запись не завершена",
+            "applied": "изменение ранее подтверждено",
+            "dismissed": "отмечено как не задача",
+        }[item["review_state"]]
+        source_label = (
+            "память" if item["source_kind"] == "verified_memory" else "входящее сообщение"
+        )
+        self.dialogs.show(
+            "info",
+            f"Источник: {source_label} / {item['source_id']}\n"
+            f"Цитата: {item['quote']}\nПроверка сообщения: {review}\n\n"
+            f"{current}\nЗапись состояния: {item['current_evidence_id']}\n"
+            f"Проверено на: {found['as_of']}\nЭто сведения, не разрешение на действие.",
+        )
+
     def run(self) -> None:
         """Run a finite foreground menu; cancel/exit never sends or confirms queued work."""
         for _ in range(30):
@@ -261,6 +305,7 @@ class OwnerUI:
                     "Новое сообщение",
                     "Проверить сообщения",
                     "Не задачи",
+                    "Найти источник",
                     "План",
                     "STOP",
                     "Выход",
@@ -301,6 +346,8 @@ class OwnerUI:
                         "\n".join(lines) or "Нет доступных задач; проверьте сообщения.",
                         allow_stopped=True,
                     )
+                elif choice == "Найти источник":
+                    self.search_sources()
                 elif choice == "Новое сообщение":
                     text = self.text("Ваше сообщение (одна строка, до 1000 символов)")
                     receipt = self.call("submit", f"ui-{uuid4().hex}", text=text)
