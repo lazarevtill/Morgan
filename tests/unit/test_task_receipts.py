@@ -10,7 +10,13 @@ import pytest
 
 from examples.synthetic_receipts import SyntheticReceiptProvider
 from morgan_brain.task_batches import TaskPermissionDenied, TaskPermissions, TaskPermit
-from morgan_brain.task_receipts import ReceiptMismatch, TaskReceipt, receipt_request, reconcile_task
+from morgan_brain.task_receipts import (
+    ReceiptAccess,
+    ReceiptMismatch,
+    TaskReceipt,
+    receipt_request,
+    reconcile_task,
+)
 from morgan_brain.tasks import TaskConflict, TaskJournal, TaskKey, TaskRequest
 
 KEY = TaskKey("owner", "synthetic", "one")
@@ -36,8 +42,7 @@ async def reconcile(journal, provider, task, policy, seconds=1):
         journal,
         KEY,
         expected_attempt_id=task.attempt_id,
-        reader=provider,
-        authorize=policy.check,
+        access=ReceiptAccess(provider, policy.check),
         timeout_seconds=seconds,
     )
 
@@ -187,8 +192,7 @@ async def test_running_attempt_requires_explicit_fence(tmp_path):
                 journal,
                 KEY,
                 expected_attempt_id=task.attempt_id,
-                reader=provider,
-                authorize=lambda task: None,
+                access=ReceiptAccess(provider, lambda task: None),
                 timeout_seconds=1,
             )
     finally:
@@ -203,8 +207,7 @@ async def test_wrong_expected_attempt_is_refused_before_lookup(setup):
             journal,
             KEY,
             expected_attempt_id="wrong",
-            reader=provider,
-            authorize=policy.check,
+            access=ReceiptAccess(provider, policy.check),
             timeout_seconds=1,
         )
     assert provider.count_effects() == 0

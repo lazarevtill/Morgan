@@ -18,6 +18,7 @@ from uuid import uuid4
 from morgan_brain.memory.store.transactions import write_transaction
 from morgan_brain.task_batches import TaskPermissions, TaskPermit
 from morgan_brain.task_receipts import (
+    ReceiptAccess,
     ReceiptMismatch,
     ReceiptRequest,
     TaskReceipt,
@@ -146,8 +147,7 @@ async def main() -> None:
                 journal,
                 spec.key,
                 expected_attempt_id=task.attempt_id,
-                reader=provider,
-                authorize=policy.check,
+                access=ReceiptAccess(provider, policy.check),
                 timeout_seconds=2,
             )
             task = recovered.task

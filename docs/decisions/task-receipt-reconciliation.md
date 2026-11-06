@@ -9,7 +9,8 @@ Extend the [task SDK](explicit-task-execution.md) with an explicit, read-only pr
 `task_receipts.reconcile_task` can confirm an unknown attempt using a matched `TaskReceipt`.
 It never invokes a task handler, submits an action, retries an effect or continues a batch.
 
-The trusted application selects the adapter and supplies a mandatory authorization callback.
+The trusted application supplies `ReceiptAccess`, pairing its selected adapter with a mandatory
+authorization callback.
 Authority is checked before lookup and again before recording a returned completion receipt.
 The callback must cover the selected provider, lookup and local state update; a closure can
 bind those details. `TaskPermissions.check` is suitable for the synthetic example's exact task

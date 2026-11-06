@@ -71,14 +71,23 @@ class TaskReceipt:
 
 class ReceiptReader(Protocol):
     @property
-    def provider_id(self) -> str: ...
+    def provider_id(self) -> str:
+        raise NotImplementedError
 
     async def lookup(self, request: ReceiptRequest) -> TaskReceipt | None:
         """Return affirmative completion evidence, or None for no definitive answer.
 
         Must not submit, retry or mutate the external action. Exceptions propagate.
         """
-        ...
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class ReceiptAccess:
+    """Caller-selected adapter and current authorization check; not proof of authority."""
+
+    reader: ReceiptReader
+    authorize: Callable[[Task], None]
 
 
 @dataclass(frozen=True)
@@ -113,8 +122,7 @@ async def reconcile_task(
     key: TaskKey,
     *,
     expected_attempt_id: str,
-    reader: ReceiptReader,
-    authorize: Callable[[Task], None],
+    access: ReceiptAccess,
     timeout_seconds: float,
 ) -> Reconciliation:
     """Look up once, recheck authority, then atomically persist matched completion evidence.
@@ -127,15 +135,15 @@ async def reconcile_task(
     task = journal.get(key)
     if task is None or task.attempt_id != expected_attempt_id:
         raise TaskConflict("receipt reconciliation requires the exact existing attempt")
-    authorize(task)
-    request = receipt_request(task, provider_id=reader.provider_id)
+    access.authorize(task)
+    request = receipt_request(task, provider_id=access.reader.provider_id)
     if task.status == "succeeded" and task.receipt_json is not None:
         _check_saved_receipt(task, request)
         return Reconciliation(task, "already_confirmed")
     if task.status != "outcome_unknown":
         raise TaskConflict("fence the interrupted attempt as unknown before receipt lookup")
     async with asyncio.timeout(timeout_seconds):
-        receipt = await reader.lookup(request)
+        receipt = await access.reader.lookup(request)
     if receipt is None:
         return Reconciliation(task, "unresolved")
     if (
@@ -146,7 +154,7 @@ async def reconcile_task(
         raise ReceiptMismatch("receipt does not match the expected provider/task/attempt/input")
     # Validate nested returned data again; a trusted adapter still may return malformed data.
     checked = TaskReceipt(receipt.request, receipt.receipt_id, receipt.result)
-    authorize(task)
+    access.authorize(task)
     evidence = _json(
         {"version": "morgan.receipt.v1", "basis": "trusted_adapter_report", **asdict(checked)}
     )

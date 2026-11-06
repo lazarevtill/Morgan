@@ -10,7 +10,7 @@ import pytest
 
 from examples.synthetic_receipts import SyntheticReceiptProvider
 from morgan_brain.task_batches import TaskPermissions, TaskPermit
-from morgan_brain.task_receipts import reconcile_task
+from morgan_brain.task_receipts import ReceiptAccess, reconcile_task
 from morgan_brain.tasks import TaskConflict, TaskJournal, TaskKey, TaskRequest
 
 KEY = TaskKey("owner", "synthetic", "crash")
@@ -30,8 +30,7 @@ def _crash(directory, phase):
             journal,
             KEY,
             expected_attempt_id=claimed.attempt_id,
-            reader=provider,
-            authorize=lambda task: None,
+            access=ReceiptAccess(provider, lambda task: None),
             timeout_seconds=1,
         )
     )
@@ -75,8 +74,7 @@ async def test_receipt_recovery_after_process_exit(tmp_path, phase):
             journal,
             KEY,
             expected_attempt_id=current.attempt_id,
-            reader=provider,
-            authorize=permissions.check,
+            access=ReceiptAccess(provider, permissions.check),
             timeout_seconds=1,
         )
         assert result.outcome == ("confirmed" if phase == "after_provider" else "already_confirmed")
