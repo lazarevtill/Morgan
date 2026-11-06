@@ -71,7 +71,8 @@ class OwnerUI:
         item = task["commitment"]
         quote = " ".join(self.task_source(task["evidence_id"], item["title"]).split())
         excerpt = quote[:120] + ("…" if len(quote) > 120 else "")
-        return f"{index + 1}. {item['title']} — {item['due']} — открыта — Источник: {excerpt}"
+        status = {"open": "открыта", "done": "выполнено", "cancelled": "отменена"}[item["status"]]
+        return f"{index + 1}. {item['title']} — {item['due']} — {status} — Источник: {excerpt}"
 
     def confirm(self, envelope: dict[str, Any]) -> None:
         """Display the exact persisted proposal and bind only an explicit button to its digest."""
@@ -83,6 +84,8 @@ class OwnerUI:
             action = "Отметить выполненной"
         if renewal and item["status"] == "cancelled":
             action = "Отменить обязательство (не выполнено)"
+        if renewal and renewal["before"]["status"] == "done" and item["status"] == "open":
+            action = "Вернуть выполненную задачу в работу (история сохраняется)"
         context = ""
         if renewal:
             target = renewal["parent_id"]
@@ -168,6 +171,7 @@ class OwnerUI:
                 "Перенести задачу",
                 "Завершить задачу",
                 "Отменить задачу",
+                "Вернуть выполненную задачу в работу",
                 "Оставить на проверку",
             )
             + (("Не задача",) if message["state"] == "needs_review" else ())
@@ -226,14 +230,25 @@ class OwnerUI:
                 "--due",
                 due,
             )
-        elif action in ("Перенести задачу", "Завершить задачу", "Отменить задачу"):
+        elif action in (
+            "Перенести задачу",
+            "Завершить задачу",
+            "Отменить задачу",
+            "Вернуть выполненную задачу в работу",
+        ):
+            reopening = action == "Вернуть выполненную задачу в работу"
             tasks = [
                 item
                 for item in state["plan"].get("tasks", [])
-                if item["commitment"]["status"] == "open"
+                if item["commitment"]["status"] == ("done" if reopening else "open")
             ]
             if not tasks:
-                self.dialogs.show("info", "Нет открытых задач для изменения.")
+                self.dialogs.show(
+                    "info",
+                    "Нет выполненных задач для возвращения в работу."
+                    if reopening
+                    else "Нет открытых задач для изменения.",
+                )
                 return
             labels = tuple(self.task_label(i, item) for i, item in enumerate(tasks))
             selected = self.dialogs.show("choose", "Выберите конкретную задачу", options=labels)
@@ -246,7 +261,12 @@ class OwnerUI:
             else:
                 due = self.text("Новый срок: ГГГГ-ММ-ДД", day)
                 envelope = self.call(
-                    "review", message["identity"], "--target", target, "--due", due
+                    "review",
+                    message["identity"],
+                    "--reopen" if reopening else "--target",
+                    target,
+                    "--due",
+                    due,
                 )
         else:
             return

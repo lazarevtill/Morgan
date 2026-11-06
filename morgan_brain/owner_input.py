@@ -178,15 +178,23 @@ async def _review(
     capture = None
     renewal = None
     effective = datetime.now(UTC).isoformat()
-    if args.target or args.complete or args.cancel:
+    if args.target or args.complete or args.cancel or args.reopen:
         if args.title is not None or args.minutes is not None or args.priority is not None:
             raise ValueError("renewal accepts target and due only")
         if (args.complete or args.cancel) and args.due is not None:
             raise ValueError("completion/cancellation preserves the existing due date")
-        if args.target and args.due is None:
+        if (args.target or args.reopen) and args.due is None:
             raise ValueError("renewal requires an explicit due date")
-        target = args.complete or args.cancel or args.target
-        operation = "complete" if args.complete else ("cancel" if args.cancel else "renew")
+        target = args.complete or args.cancel or args.reopen or args.target
+        operation = (
+            "complete"
+            if args.complete
+            else "cancel"
+            if args.cancel
+            else "reopen"
+            if args.reopen
+            else "renew"
+        )
         _, view = await guided_read_plan(workspace, session)
         matches = [task for identity, task in view.tasks if identity == target]
         if len(matches) != 1:
@@ -202,6 +210,8 @@ async def _review(
                 update=(
                     {"status": "done" if args.complete else "cancelled"}
                     if args.complete or args.cancel
+                    else {"due": args.due, "status": "open"}
+                    if args.reopen
                     else {"due": args.due}
                 )
             ),
@@ -347,6 +357,9 @@ def _parser(*, exit_on_error: bool = True) -> argparse.ArgumentParser:
     action.add_argument("--target")
     action.add_argument("--complete", help="Review completion of one exact current task")
     action.add_argument("--cancel", help="Review cancellation of one exact current task")
+    action.add_argument(
+        "--reopen", help="Review reopening one exact completed task with a due date"
+    )
     review.add_argument("--title")
     review.add_argument("--minutes", type=int)
     review.add_argument("--priority", choices=("high", "normal", "low"))
