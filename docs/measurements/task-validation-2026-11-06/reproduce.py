@@ -57,7 +57,10 @@ async def validate(session, note, selected):
                 "temperature": 0,
                 "max_tokens": 128,
                 "messages": [
-                    {"role": "system", "content": (ROOT / "validator.txt").read_text()},
+                    {
+                        "role": "system",
+                        "content": (ROOT / "validator.txt").read_text(encoding="utf-8"),
+                    },
                     {
                         "role": "user",
                         "content": json.dumps(
@@ -150,7 +153,7 @@ async def evaluate_case(session, case, rows):
 
 async def main():
     raw = (ROOT / "cases.json").read_bytes()
-    protocol = json.loads((ROOT / "protocol.json").read_text())
+    protocol = json.loads((ROOT / "protocol.json").read_text(encoding="utf-8"))
     if hashlib.sha256(raw).hexdigest() != protocol["corpus_sha256"]:
         raise ValueError("corpus changed")
     if (
@@ -166,7 +169,7 @@ async def main():
     status = "complete"
     try:
         for batch in range(0, len(cases), 4):
-            if json.loads((SHARED / "owner-input.json").read_text())["messages"]:
+            if json.loads((SHARED / "owner-input.json").read_text(encoding="utf-8"))["messages"]:
                 status = "deferred_for_owner"
                 break
             cycle_start = time.monotonic()
@@ -176,7 +179,7 @@ async def main():
                     for case in cases[batch : batch + 4]:
                         failures += await evaluate_case(session, case, rows)
                         (OUTPUT / (NAME + "-results.json")).write_text(
-                            json.dumps(rows, ensure_ascii=False, indent=2) + "\n"
+                            json.dumps(rows, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
                         )
                         print(
                             json.dumps({k: v for k, v in rows[-1].items() if k != "selected"}),
@@ -207,7 +210,9 @@ async def main():
         "cycles": cycles,
         "rows": len(rows),
     }
-    (OUTPUT / (NAME + "-run.json")).write_text(json.dumps(summary, indent=2) + "\n")
+    (OUTPUT / (NAME + "-run.json")).write_text(
+        json.dumps(summary, indent=2) + "\n", encoding="utf-8"
+    )
     print(json.dumps(summary), flush=True)
 
 
