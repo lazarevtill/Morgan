@@ -172,6 +172,64 @@ def _memory_id(message_id: str, part: int) -> str:
     return hashlib.sha256(f"chatgpt:{message_id}#{part}".encode()).hexdigest()[:32]
 
 
+def _stable_id(value: object) -> bool:
+    """Require supplied source identities; never synthesize them from import progress."""
+    return (
+        isinstance(value, str) and bool(value.strip()) and len(value) <= 256 and value.isprintable()
+    )
+
+
+def _visible_role(message: dict[str, Any]) -> str | None:
+    """Accept typed user text or an explicitly final, user-facing assistant message."""
+    author, metadata, content = (
+        message.get("author") or {},
+        message.get("metadata") or {},
+        message.get("content") or {},
+    )
+    if not all(isinstance(item, dict) for item in (author, metadata, content)):
+        return None
+    role = author.get("role")
+    if (
+        not isinstance(role, str)
+        or role not in _SOURCE_BY_ROLE
+        or author.get("name") not in (None, "", role)
+        or not _stable_id(message.get("id"))
+        or message.get("recipient") not in (None, "all")
+        or metadata.get("is_visually_hidden_from_conversation")
+        or content.get("content_type") not in (None, "text", "multimodal_text")
+        or message.get("tool_calls")
+        or message.get("function_call")
+    ):
+        return None
+    channels = (message.get("channel"), metadata.get("channel"))
+    if any(channel not in (None, "final") for channel in channels):
+        return None
+    if role == "user":
+        return "user"
+    if message.get("end_turn") is False or message.get("status") not in (
+        None,
+        "finished_successfully",
+    ):
+        return None
+    final = "final" in channels or (
+        message.get("end_turn") is True and message.get("status") == "finished_successfully"
+    )
+    return "assistant" if final else None
+
+
+def _read_export(raw: str) -> list[dict[str, Any]]:
+    """Validate conversation identities before any writes; source IDs are not list positions."""
+    conversations = json.loads(raw)
+    if not isinstance(conversations, list) or any(
+        not isinstance(item, dict)
+        or not _stable_id(item.get("conversation_id") or item.get("id"))
+        or not isinstance(item.get("mapping"), dict)
+        for item in conversations
+    ):
+        raise ValueError("export requires conversations with stable IDs and message mappings")
+    return conversations
+
+
 def _turn_text(message: dict[str, Any]) -> str:
     """The message's text, or empty when it carries none.
 
@@ -179,6 +237,8 @@ def _turn_text(message: dict[str, Any]) -> str:
     something to recall as prose, so only the string parts are joined.
     """
     parts = (message.get("content") or {}).get("parts") or []
+    if not isinstance(parts, list):
+        return ""
     return "\n".join(p for p in parts if isinstance(p, str)).strip()
 
 
@@ -191,10 +251,13 @@ def _messages(conversation: dict[str, Any]) -> list[dict[str, Any]]:
     """The conversation's messages in the order they were sent.
 
     The export stores a node tree, not a list, because a conversation can branch; ordering by
-    ``create_time`` gives the transcript a reader would recognise without walking the tree.
+    ``create_time`` is presentation only. All supplied branches remain independent; no
+    ancestry, active branch or conversational continuity is inferred.
     """
     nodes = (conversation.get("mapping") or {}).values()
-    messages = [n["message"] for n in nodes if isinstance(n, dict) and n.get("message")]
+    messages = [
+        n["message"] for n in nodes if isinstance(n, dict) and isinstance(n.get("message"), dict)
+    ]
     return sorted(messages, key=lambda m: m.get("create_time") or 0)
 
 
@@ -239,26 +302,27 @@ async def import_chatgpt(
     # to_thread: a real export is tens of megabytes, and reading it inline would block the
     # loop the embedding calls below run on.
     raw = await asyncio.to_thread(path.read_text, encoding="utf-8")
-    conversations = json.loads(raw)
+    conversations = _read_export(raw)
     kept = held = stored = skipped = 0
     #: Memory ids stored since the last canary that still matched -- the suspects a failure
     #: names, and what a caller acts on directly without parsing the message.
     since_last_canary: list[str] = []
 
     for done, conversation in enumerate(conversations, start=1):
-        conversation_id = str(conversation.get("conversation_id") or conversation.get("id") or done)
+        conversation_id = str(conversation.get("conversation_id") or conversation.get("id"))
         project = HOLDOUT_PROJECT if is_held_out(conversation_id) else ARCHIVE_PROJECT
 
+        session_id = f"chatgpt:{conversation_id}"
         wrote_any = False
         for message in _messages(conversation):
-            role = (message.get("author") or {}).get("role", "")
-            source = _SOURCE_BY_ROLE.get(role)
-            text = _turn_text(message)
+            role = _visible_role(message)
+            source = _SOURCE_BY_ROLE.get(role or "")
+            text = _turn_text(message) if role is not None else ""
             if source is None or not text:
                 skipped += 1
                 continue
             author_id = user_id if role == "user" else f"chatgpt:{role}"
-            message_id = str(message.get("id") or f"{conversation_id}-{stored}")
+            message_id = str(message["id"])
             for part, piece in enumerate(split_for_embedding(text)):
                 memory_id = _memory_id(message_id, part)
                 # Already imported, unchanged: skip it. Every piece costs an embedding call
@@ -298,6 +362,8 @@ async def import_chatgpt(
                         )
                         if getattr(existing, name) != value
                     ]
+                    if existing.session_id not in ("", session_id):
+                        changed.append("session_id")
                     if event_time is not None and existing.created_at != event_time:
                         changed.append("created_at")
                     if changed:
@@ -319,6 +385,7 @@ async def import_chatgpt(
                         created_at=_created_at(message),
                         origin_kind=OriginKind.IMPORT,
                         client="cli",
+                        session_id=session_id,
                         cwd=str(Path.cwd()),
                         author_id=author_id,
                     ),

@@ -36,6 +36,7 @@ def _conversation(conv_id: str, *turns: tuple[str, str], title: str = "t") -> di
             "message": {
                 "id": mid,
                 "author": {"role": role},
+                "channel": "final",
                 "create_time": 1700000000.0 + i,
                 "content": {"content_type": "text", "parts": [text]},
             },
@@ -196,3 +197,76 @@ async def test_a_long_turn_is_stored_as_several_memories_and_reimport_does_not_d
     assert second.memories == 0
     assert await _contents(gate, ARCHIVE_PROJECT) == await _contents(gate, ARCHIVE_PROJECT)
     assert len(await _contents(gate, ARCHIVE_PROJECT)) == first.memories
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"channel": "analysis"},
+        {"channel": "commentary"},
+        {"metadata": {"channel": "analysis"}},
+        {"recipient": "python"},
+        {"tool_calls": [{"name": "internal"}]},
+        {"function_call": {"name": "internal"}},
+        {"metadata": {"is_visually_hidden_from_conversation": True}},
+        {"author": {"role": "assistant", "name": "internal-agent"}},
+        {"author": {"role": []}},
+        {"end_turn": False},
+        {"status": "in_progress"},
+        {"channel": None},
+        {"id": None},
+        {"content": {"content_type": "code", "parts": ["excluded"]}},
+        {"content": {"parts": "excluded"}},
+    ],
+)
+async def test_import_excludes_nonfinal_internal_or_unidentified_messages(gate, tmp_path, patch):
+    conversation = _conversation(KEPT, ("assistant", "excluded"))
+    message = next(iter(conversation["mapping"].values()))["message"]
+    message.update(patch)
+    report = await import_chatgpt(
+        _export(tmp_path / "c.json", [conversation]), gate=gate, user_id="owner"
+    )
+    assert report.memories == 0
+    assert await _contents(gate, ARCHIVE_PROJECT) == []
+
+
+async def test_legacy_final_answer_has_provenance_and_replays_without_new_memories(gate, tmp_path):
+    conversation = _conversation(
+        KEPT, ("user", "Librarycard in blue folder"), ("assistant", "Librarycard: blue folder")
+    )
+    message = list(conversation["mapping"].values())[1]["message"]
+    message.pop("channel")
+    message.update(end_turn=True, status="finished_successfully")
+    path = _export(tmp_path / "c.json", [conversation])
+    assert (await import_chatgpt(path, gate=gate, user_id="owner")).memories == 2
+    found = (
+        await gate.recall(
+            MemoryQuery(user_id="owner", project=ARCHIVE_PROJECT, text="Librarycard", top_k=10)
+        )
+    ).memories
+    assert len(found) == 2
+    assert {m.session_id for m in found} == {f"chatgpt:{KEPT}"}
+    assert {m.author_id for m in found} == {"owner", "chatgpt:assistant"}
+    assert (await import_chatgpt(path, gate=gate, user_id="owner")).memories == 0
+
+
+async def test_missing_conversation_identity_rejected_before_any_writes(gate, tmp_path):
+    path = _export(tmp_path / "c.json", [_conversation(KEPT, ("user", "valid")), {"mapping": {}}])
+    with pytest.raises(ValueError, match="stable IDs"):
+        await import_chatgpt(path, gate=gate, user_id="owner")
+    assert await _contents(gate, ARCHIVE_PROJECT) == []
+
+
+async def test_reused_message_in_different_conversation_is_not_silently_deduplicated(
+    gate, tmp_path
+):
+    from morgan_brain.memory.store.episodic import EventIdentityConflict
+
+    conversation = _conversation(KEPT, ("user", "same text"))
+    path = _export(tmp_path / "c.json", [conversation])
+    await import_chatgpt(path, gate=gate, user_id="owner")
+    other = next(f"other{i}" for i in range(50) if not is_held_out(f"other{i}"))
+    conversation["conversation_id"] = other
+    _export(path, [conversation])
+    with pytest.raises(EventIdentityConflict, match="session_id"):
+        await import_chatgpt(path, gate=gate, user_id="owner")

@@ -46,6 +46,7 @@ def _export(path, turns):
                     "message": {
                         "id": f"m{i}",
                         "author": {"role": "user"},
+                        "channel": "final",
                         "create_time": 1700000000.0 + i,
                         "content": {"content_type": "text", "parts": [text]},
                     },
