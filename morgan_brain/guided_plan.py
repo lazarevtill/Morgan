@@ -627,14 +627,68 @@ async def _status_payload(
     return payload
 
 
+def _human_status(payload: dict[str, object]) -> str:
+    """Render the already validated snapshot without inference, writes or terminal controls."""
+    zone = _quote(str(payload["timezone"])) if payload["timezone"] else "не задана"
+    relation = {
+        "past": "дата в прошлом",
+        "today": "сегодня",
+        "future": "будущая дата",
+        "unknown_timezone": "не определено: часовой пояс не задан",
+    }[str(payload["day_relation"])]
+    lines = [
+        f"План на {payload['planning_day']}; зона: {zone}",
+        f"Владелец: {_quote(str(payload['owner']))}; проект: {_quote(str(payload['project']))}",
+        f"Снимок: {payload['as_of']}; {relation}",
+    ]
+    if payload.get("preview_only"):
+        lines.append(f"Предпросмотр; дата сохранённой сессии: {payload['session_planning_day']}")
+    lines.append("Только выбранная сессия, не полный календарь. Разрешения на действия нет.")
+    pending = cast(list[str], payload["pending_reviews"])
+    if pending:
+        labels = {
+            "task_selection": "выбрать свои задачи",
+            "task_confirmation": "подтвердить выбранные задачи",
+            "completion_confirmation": "подтвердить завершение",
+            "unavailability_confirmation": "подтвердить недоступность",
+        }
+        lines.append("Нужно подтверждение в диалоге: " + ", ".join(labels[p] for p in pending))
+        lines.append("План не сформирован: незавершённая проверка не считается подтверждением.")
+        return "\n".join(lines)
+    lines.append(
+        f"В плане: {payload['planned_minutes']} мин; бюджет: {payload['budget_minutes']} мин."
+    )
+    groups = {
+        "selected_ids": "в плане",
+        "blocked_ids": "недоступность",
+        "deferred_ids": "не помещается в бюджет",
+        "excluded_ids": "вне плана",
+    }
+    for index, record in enumerate(cast(list[dict[str, object]], payload["tasks"]), 1):
+        item = Commitment.model_validate_json(json.dumps(record["commitment"]))
+        identity = str(record["evidence_id"])
+        reason = next(
+            (label for key, label in groups.items() if identity in cast(list[str], payload[key])),
+            "вне плана",
+        )
+        lines.append(
+            f"{index}. {_quote(item.title)} — {item.status}; {reason}; "
+            f"{item.minutes} мин; срок: {item.due}"
+        )
+        lines.append(f"   Запись: {_quote(identity)}")
+    if not payload["tasks"]:
+        lines.append("В этой сессии нет подтверждённых задач.")
+    return "\n".join(lines)
+
+
 def _print_status(args: argparse.Namespace) -> None:
     """Read an existing private workspace under a shared lock; create no dialogue files."""
     if any(
         value is not None
         for name, value in vars(args).items()
-        if name not in ("workspace", "status", "preview_day")
+        if name not in ("workspace", "status", "preview_day", "human")
     ):
-        raise ValueError("status accepts only workspace, --status and optional --preview-day")
+        raise ValueError("status accepts only workspace, --status, --human and --preview-day")
     workspace = NoteWorkspace(args.workspace, create=False)
     try:
         with os.fdopen(workspace.open_file(".guided.lock", os.O_RDONLY), "r") as lock:
@@ -645,7 +699,8 @@ def _print_status(args: argparse.Namespace) -> None:
                     "session is busy; retry status after the dialogue exits"
                 ) from error
             session = Session.model_validate_json(workspace.read("session.json", 32768))
-            print(json.dumps(asyncio.run(_status_payload(workspace, session, args.preview_day))))
+            payload = asyncio.run(_status_payload(workspace, session, args.preview_day))
+            print(_human_status(payload) if args.human else json.dumps(payload))
     finally:
         workspace.close()
 
@@ -672,7 +727,10 @@ def main() -> None:
         type=date.fromisoformat,
         help="With --status only: preview current commitments on an explicit day without writes.",
     )
+    parser.add_argument("--human", action="store_true", help="With --status: readable local plan.")
     args = parser.parse_args()
+    if args.human and not args.status:
+        parser.error("--human requires --status")
     if args.preview_day is not None and not args.status:
         parser.error("--preview-day requires --status; it never changes the session day")
     if args.status:

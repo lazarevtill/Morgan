@@ -255,3 +255,54 @@ def test_invalid_preview_invocation_creates_nothing(tmp_path, arguments):
     result = run(tmp_path, "", arguments)
     assert result.returncode == 2
     assert not (tmp_path / "session").exists()
+
+
+def test_human_preview_keeps_snapshot_scope_and_files(tmp_path):
+    """The readable view exposes the same dated constraints and never writes a new plan."""
+    assert (
+        run(tmp_path, task_answers() + busy_answers() + "quit\n", setup(tmp_path)).returncode == 0
+    )
+    before = durable_files(tmp_path / "session")
+    blocked = run(tmp_path, "", ["--status", "--human"])
+    assert blocked.returncode == 0, blocked.stderr
+    assert "В плане: 0 мин" in blocked.stdout and "недоступность" in blocked.stdout
+    future = run(tmp_path, "", ["--status", "--human", "--preview-day", "2026-11-07"])
+    assert future.returncode == 0, future.stderr
+    assert "План на 2026-11-07" in future.stdout and "Europe/Paris" in future.stdout
+    assert "дата сохранённой сессии: 2026-11-06" in future.stdout
+    assert "В плане: 10 мин" in future.stdout and "I need to read a chapter." in future.stdout
+    assert "Разрешения на действия нет" in future.stdout and "Запись:" in future.stdout
+    assert durable_files(tmp_path / "session") == before
+    assert json.loads(status(tmp_path).stdout)["planning_day"] == "2026-11-06"
+
+
+def test_human_pending_does_not_display_unconfirmed_tasks(tmp_path):
+    """A readable output cannot promote an incomplete confirmation to a useful-looking plan."""
+    assert run(tmp_path, "1\n10 normal 2026-11-06\n", setup(tmp_path)).returncode == 0
+    result = run(tmp_path, "", ["--status", "--human"])
+    assert result.returncode == 0
+    assert (
+        "Нужно подтверждение" in result.stdout and "подтвердить выбранные задачи" in result.stdout
+    )
+    assert "План не сформирован" in result.stdout
+    assert "I need to read a chapter." not in result.stdout
+    assert not (tmp_path / "session/memory").exists()
+
+
+def test_human_output_escapes_owner_terminal_controls(tmp_path):
+    """Stored scope text must not inject terminal escapes or visually reorder the report."""
+    assert run(tmp_path, "", setup(tmp_path)).returncode == 0
+    path = tmp_path / "session/session.json"
+    session = json.loads(path.read_text())
+    session["user"] = "owner\x1b[31m\u202e"
+    path.write_text(json.dumps(session))
+    result = run(tmp_path, "", ["--status", "--human"])
+    assert result.returncode == 0
+    assert "\x1b" not in result.stdout and "\u202e" not in result.stdout
+    assert "\\u001b" in result.stdout and "\\u202e" in result.stdout
+
+
+def test_human_flag_without_status_does_not_initialize(tmp_path):
+    """A rendering option is not a new dialogue or an implicit approval."""
+    assert run(tmp_path, "", ["--human"]).returncode == 2
+    assert not (tmp_path / "session").exists()
