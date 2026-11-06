@@ -203,10 +203,11 @@ def test_foreign_database_is_refused_without_modification(tmp_path):
 
 
 def test_future_journal_version_is_refused(tmp_path):
+    """Refuse a journal version newer than the supported receipt schema."""
     path = tmp_path / "tasks.db"
     TaskJournal(path).close()
     conn = sqlite3.connect(path)
-    conn.execute("PRAGMA user_version=2")
+    conn.execute("PRAGMA user_version=3")
     conn.close()
     with pytest.raises(ValueError, match="supported task journal"):
         TaskJournal(path)

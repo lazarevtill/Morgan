@@ -104,6 +104,9 @@ mypy and Bandit passed. Repeating the synthetic example returned identical saved
 
 ## Next integration requirement
 
+The [receipt reconciliation stage](task-receipt-reconciliation.md) now exercises lookup and
+binding checks with an isolated synthetic provider. It does not add a real provider or retry.
+
 Choose one provider/action with an idempotency key or receipt lookup and an authoritative source
 of current approvals. Define revocation, result reconciliation, credential scope, spending/call
 limits and journal retention for that exact integration. Validate remote acceptance followed by
