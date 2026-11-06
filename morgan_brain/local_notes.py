@@ -59,9 +59,10 @@ def _private(info: os.stat_result, *, directory: bool = False) -> None:
 class NoteWorkspace:
     """An explicitly selected private directory, pinned by descriptor on POSIX systems."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, create: bool = True) -> None:
         """Create a private workspace or validate an existing one without repairing its modes."""
-        path.mkdir(mode=0o700, exist_ok=True)
+        if create:
+            path.mkdir(mode=0o700, exist_ok=True)
         self.path = path.absolute()
         self.fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:

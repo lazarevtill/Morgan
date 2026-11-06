@@ -44,6 +44,10 @@ from morgan_brain.surfaces.cli.maintenance import (
     restore_preview,
 )
 from morgan_brain.surfaces.cli.project import Repository, detect_project, read_repository
+from morgan_brain.surfaces.cli.proposal_review import (
+    add_review_parser,
+    cmd_review_proposal,
+)
 from morgan_brain.surfaces.cli.render import RENDERERS
 
 
@@ -62,6 +66,7 @@ def _positive_int(value: str) -> int:
 HANDLERS = {
     "remember": cmd_remember,
     "commitment": cmd_commitment,
+    "review-proposal": cmd_review_proposal,
     "recall": cmd_recall,
     "facts": cmd_facts,
     "evidence": cmd_evidence,
@@ -78,7 +83,7 @@ HANDLERS = {
 
 # Commands where --all-projects is meaningless: a write or a single chat turn always
 # targets exactly one project.
-_SINGLE_PROJECT_ONLY = {"remember", "commitment", "ask"}
+_SINGLE_PROJECT_ONLY = {"remember", "commitment", "review-proposal", "ask"}
 
 #: The write commands that record what repository their project is (`_repository_to_record`).
 #: `forget` is a write and is deliberately absent: it erases a project rather than writing to
@@ -86,7 +91,7 @@ _SINGLE_PROJECT_ONLY = {"remember", "commitment", "ask"}
 #: not one to write a remote and a root back into. (It could not: `record` only ever updates a
 #: row that exists.) `import` is absent too -- it writes to the archive and holdout projects,
 #: never to the one the working directory names.
-_RECORDS_THE_REPOSITORY = {"remember", "commitment", "ask", "consolidate"}
+_RECORDS_THE_REPOSITORY = {"remember", "commitment", "review-proposal", "ask", "consolidate"}
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +154,8 @@ def build_parser() -> argparse.ArgumentParser:
     commitment.add_argument("--priority", choices=("high", "normal", "low"), required=True)
     commitment.add_argument("--status", choices=("open", "done"), required=True)
     _add_capture_fields(commitment)
+
+    _add_common(add_review_parser(sub))
 
     p_recall = sub.add_parser("recall", help="Search memory by meaning and by keyword.")
     p_recall.add_argument("query", help="Search text.")
@@ -342,6 +349,10 @@ async def _dispatch(
         if args.command in {"remember", "commitment"}:
             capture = cmd_commitment if args.command == "commitment" else cmd_remember
             data = await capture(args, settings, remember_project, repository=repository)
+        elif args.command == "review-proposal":
+            data = await cmd_review_proposal(
+                args, settings, remember_project, repository=repository
+            )
         elif args.command == "ask":
             data = await cmd_ask(args, settings, project, repository=repository)
         elif args.command == "consolidate":

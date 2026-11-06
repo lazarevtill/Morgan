@@ -40,6 +40,10 @@ It neither reads memory nor authorizes tasks; see `docs/decisions/synthetic-note
 private Unix socket and the existing workspace locks/STOP. No service is installed; see
 `docs/decisions/bounded-model-cycle.md` for limits and measured extraction failures.
 
+`morgan review-proposal` previews full source context and binds explicit acceptance to the
+exact claim and destination before reusing memory capture. The digest is not authentication;
+see `docs/decisions/reviewed-proposal-intake.md`. No execution authority is granted.
+
 Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
 `docs/ROADMAP.md` (what is not in the code and why, what retrieval measures, what is next),
 `docs/decisions/` (decisions, and what the code does about each). The archived agent kernel is
