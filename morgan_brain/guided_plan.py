@@ -621,11 +621,11 @@ async def _check_renewal(
         if result.missing_ids:
             raise ValueError("renewal parent is unavailable in this scope")
         parent = result.records[0]
+        allowed = {update.event_id} if committed else {update.parent_id, update.event_id}
         if (
             parent.revision_state not in ("active", "inactive")
             or parent.author_id != session.user
-            or _current_leaf(parent, datetime.now(UTC)) not in (update.parent_id, update.event_id)
-            or (committed and parent.eligible_leaf_ids != [update.event_id])
+            or _current_leaf(parent, datetime.now(UTC)) not in allowed
             or Commitment.model_validate_json(parent.content) != update.before
         ):
             raise ValueError("renewal target changed or is ambiguous; review current state")

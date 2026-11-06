@@ -33,14 +33,12 @@ class RenewalUpdate(BaseModel):
             raise ValueError("renewal requires an open task")
         if self.before.model_copy(update={"due": self.after.due}) != self.after:
             raise ValueError("renewal may change only the reviewed date")
-        if (
-            not self.event_id.startswith("guided-renew-")
-            or len(self.event_id) > 200
-            or not self.event_id.isprintable()
-            or not self.parent_id.strip()
-            or len(self.parent_id) > 256
-            or not self.parent_id.isprintable()
-            or self.parent_id in (self.event_id, self.source_id)
+        for identity, limit in ((self.event_id, 200), (self.parent_id, 256)):
+            if not identity.strip() or len(identity) > limit or not identity.isprintable():
+                raise ValueError("invalid renewal identities")
+        if not self.event_id.startswith("guided-renew-") or self.parent_id in (
+            self.event_id,
+            self.source_id,
         ):
             raise ValueError("invalid renewal identities")
         if datetime.fromisoformat(self.effective_at).utcoffset() is None:
