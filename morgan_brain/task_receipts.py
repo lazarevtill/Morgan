@@ -17,10 +17,12 @@ from morgan_brain.tasks import Task, TaskConflict, TaskJournal, TaskKey
 
 
 def _json(value: object) -> str:
+    """Serialize bindings deterministically without escaping non-ASCII text unnecessarily."""
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _digest(value: object) -> str:
+    """Hash a canonical structured value so field boundaries remain unambiguous."""
     return hashlib.sha256(_json(value).encode("utf-8")).hexdigest()
 
 
@@ -59,6 +61,7 @@ class TaskReceipt:
     result: str
 
     def __post_init__(self) -> None:
+        """Reject empty receipt identities and oversized results before persistence."""
         if (
             not isinstance(self.receipt_id, str)
             or not self.receipt_id.strip()
@@ -72,6 +75,7 @@ class TaskReceipt:
 class ReceiptReader(Protocol):
     @property
     def provider_id(self) -> str:
+        """Return the stable namespace chosen with this provider adapter."""
         raise NotImplementedError
 
     async def lookup(self, request: ReceiptRequest) -> TaskReceipt | None:
@@ -97,6 +101,7 @@ class Reconciliation:
 
 
 def _check_saved_receipt(task: Task, request: ReceiptRequest) -> None:
+    """Reject cached evidence that does not bind this provider, attempt and saved result."""
     if task.receipt_json is None or len(task.receipt_json.encode("utf-8")) > 32768:
         raise ReceiptMismatch("missing or oversized saved receipt")
     try:

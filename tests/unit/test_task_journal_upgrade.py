@@ -8,6 +8,7 @@ from morgan_brain.tasks import TaskJournal, TaskKey
 
 
 def legacy(path):
+    """Create a version-1 fixture containing an unresolved, cancelled-requested attempt."""
     conn = sqlite3.connect(path)
     conn.executescript(
         "PRAGMA application_id=0x4D54534B; PRAGMA user_version=1;"
@@ -21,6 +22,7 @@ def legacy(path):
 
 
 def test_v1_upgrade_preserves_every_existing_field(tmp_path):
+    """Add the receipt column without rewriting any legacy task field."""
     path = tmp_path / "tasks.db"
     legacy(path)
     conn = sqlite3.connect(path)
@@ -42,16 +44,19 @@ def test_v1_upgrade_preserves_every_existing_field(tmp_path):
 
 
 def test_failed_upgrade_commit_keeps_v1_schema_and_marker(tmp_path, monkeypatch):
+    """Roll back the schema extension and version marker together on commit rejection."""
     path = tmp_path / "tasks.db"
     legacy(path)
     connect = sqlite3.connect
 
     def deny_commit(action, argument, _second, _db, _trigger):
+        """Reject COMMIT through SQLite authorization while allowing rollback."""
         if action == sqlite3.SQLITE_TRANSACTION and argument == "COMMIT":
             return sqlite3.SQLITE_DENY
         return sqlite3.SQLITE_OK
 
     def rejecting_connection(*args, **kwargs):
+        """Open a connection with the test commit failure injected."""
         conn = connect(*args, **kwargs)
         conn.set_authorizer(deny_commit)
         return conn

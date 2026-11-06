@@ -34,6 +34,7 @@ class SyntheticReceiptProvider:
     provider_id = "synthetic-uppercase-v1"
 
     def __init__(self, path: Path) -> None:
+        """Open only an empty or recognized synthetic ledger and initialize its atomic schema."""
         self.conn = sqlite3.connect(path)
         try:
             self._validate()
@@ -52,6 +53,7 @@ class SyntheticReceiptProvider:
             raise
 
     def _validate(self) -> None:
+        """Refuse unrelated database files before changing any journal setting."""
         marker = self.conn.execute("PRAGMA application_id").fetchone()[0]
         version = self.conn.execute("PRAGMA user_version").fetchone()[0]
         tables = self.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
@@ -59,18 +61,22 @@ class SyntheticReceiptProvider:
             raise ValueError("refusing a foreign synthetic-provider database")
 
     def close(self) -> None:
+        """Release the synthetic ledger connection."""
         self.conn.close()
 
     def count_effects(self) -> int:
+        """Count durable synthetic effects, independently of local task status."""
         return int(self.conn.execute("SELECT COUNT(*) FROM effects").fetchone()[0])
 
     @staticmethod
     def _encode(request: ReceiptRequest) -> str:
+        """Preserve the complete request binding for exact idempotency comparison."""
         return json.dumps(
             asdict(request), sort_keys=True, ensure_ascii=False, separators=(",", ":")
         )
 
     def _lookup(self, request: ReceiptRequest) -> TaskReceipt | None:
+        """Read one completion record, refusing provider or specification mismatches."""
         if request.provider_id != self.provider_id:
             raise ReceiptMismatch("receipt request names another provider")
         row = self.conn.execute(
@@ -84,6 +90,7 @@ class SyntheticReceiptProvider:
         return TaskReceipt(request, row[1], row[2])
 
     async def lookup(self, request: ReceiptRequest) -> TaskReceipt | None:
+        """Look up completion evidence without submitting or repeating an effect."""
         return self._lookup(request)
 
     async def execute(self, task: Task) -> TaskReceipt:
@@ -109,6 +116,7 @@ class SyntheticReceiptProvider:
 
 
 async def main() -> None:
+    """Simulate a lost provider reply and recover one synthetic effect by receipt lookup."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
     parser.add_argument("--owner", required=True)
@@ -127,6 +135,7 @@ async def main() -> None:
         )
 
         async def lost_reply(current: Task, control: TaskControl) -> str:
+            """Commit the synthetic effect, then simulate losing its acknowledgement."""
             control.check_ready()
             await provider.execute(current)
             raise RuntimeError("synthetic reply lost after provider commit")

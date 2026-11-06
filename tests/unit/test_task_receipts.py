@@ -24,6 +24,7 @@ KEY = TaskKey("owner", "synthetic", "one")
 
 @pytest.fixture
 def setup(tmp_path):
+    """Build isolated ledgers, an unknown attempt and a current synthetic permission."""
     journal = TaskJournal(tmp_path / "tasks.db")
     provider = SyntheticReceiptProvider(tmp_path / "provider.db")
     spec = TaskRequest(KEY, "uppercase-v1", "hello")
@@ -38,6 +39,7 @@ def setup(tmp_path):
 
 
 async def reconcile(journal, provider, task, policy, seconds=1):
+    """Invoke reconciliation with the fixture attempt and its live authorization check."""
     return await reconcile_task(
         journal,
         KEY,
@@ -48,6 +50,7 @@ async def reconcile(journal, provider, task, policy, seconds=1):
 
 
 async def test_provider_idempotency_and_receipt_persistence(setup, tmp_path):
+    """Preserve one effect and immutable confirmation across replay and journal reopening."""
     journal, provider, task, policy = setup
     first = await provider.execute(task)
     second = await provider.execute(task)
@@ -88,6 +91,7 @@ async def test_provider_idempotency_and_receipt_persistence(setup, tmp_path):
 
 
 async def test_reusing_idempotency_key_with_changed_input_is_refused(setup):
+    """Reject changed input under the same provider key without creating another effect."""
     _, provider, task, _ = setup
     await provider.execute(task)
     changed = replace(task, payload="changed")
@@ -101,6 +105,7 @@ async def test_reusing_idempotency_key_with_changed_input_is_refused(setup):
 
 
 async def test_absent_receipt_is_unresolved_not_permission_to_retry(setup):
+    """Keep an absent provider record uncertain and the original attempt non-runnable."""
     journal, provider, task, policy = setup
     result = await reconcile(journal, provider, task, policy)
     assert result.outcome == "unresolved"
@@ -113,6 +118,7 @@ async def test_absent_receipt_is_unresolved_not_permission_to_retry(setup):
     "field", ["provider", "owner", "project", "task", "attempt", "key", "spec"]
 )
 async def test_mismatched_receipt_never_confirms(setup, field):
+    """Reject every request-binding mismatch without changing local task evidence."""
     journal, provider, task, policy = setup
     expected = receipt_request(task, provider_id=provider.provider_id)
     changes = {
@@ -129,6 +135,7 @@ async def test_mismatched_receipt_never_confirms(setup, field):
         provider_id = provider.provider_id
 
         async def lookup(self, request):
+            """Supply the deliberately controlled lookup response for this failure scenario."""
             return TaskReceipt(replace(expected, **changes[field]), "receipt", "result")
 
     with pytest.raises(ReceiptMismatch):
@@ -139,6 +146,7 @@ async def test_mismatched_receipt_never_confirms(setup, field):
 
 @pytest.mark.parametrize("failure", ["exception", "timeout", "malformed", "revoked"])
 async def test_lookup_failure_or_revoked_permission_leaves_unknown(setup, failure):
+    """Preserve uncertainty when lookup fails, times out or loses its permission."""
     journal, provider, task, policy = setup
     receipt = await provider.execute(task)
 
@@ -146,6 +154,7 @@ async def test_lookup_failure_or_revoked_permission_leaves_unknown(setup, failur
         provider_id = provider.provider_id
 
         async def lookup(self, request):
+            """Supply the deliberately controlled lookup response for this failure scenario."""
             if failure == "exception":
                 raise OSError("synthetic provider unavailable")
             if failure == "timeout":
@@ -168,6 +177,7 @@ async def test_lookup_failure_or_revoked_permission_leaves_unknown(setup, failur
 
 
 async def test_permission_denied_before_lookup_makes_no_provider_call(setup):
+    """Refuse lookup itself when current reconciliation authority is missing."""
     journal, provider, task, policy = setup
     policy.revoke(KEY)
 
@@ -175,6 +185,7 @@ async def test_permission_denied_before_lookup_makes_no_provider_call(setup):
         provider_id = provider.provider_id
 
         async def lookup(self, request):
+            """Supply the deliberately controlled lookup response for this failure scenario."""
             pytest.fail("lookup ran without authority")
 
     with pytest.raises(TaskPermissionDenied):
@@ -182,6 +193,7 @@ async def test_permission_denied_before_lookup_makes_no_provider_call(setup):
 
 
 async def test_running_attempt_requires_explicit_fence(tmp_path):
+    """Require explicit fencing before inspecting an interrupted running attempt."""
     journal = TaskJournal(tmp_path / "tasks.db")
     provider = SyntheticReceiptProvider(tmp_path / "provider.db")
     try:
@@ -201,6 +213,7 @@ async def test_running_attempt_requires_explicit_fence(tmp_path):
 
 
 async def test_wrong_expected_attempt_is_refused_before_lookup(setup):
+    """Reject a stale attempt identity before touching the provider."""
     journal, provider, _, policy = setup
     with pytest.raises(TaskConflict):
         await reconcile_task(
@@ -214,10 +227,12 @@ async def test_wrong_expected_attempt_is_refused_before_lookup(setup):
 
 
 async def test_receipt_and_state_rollback_together_on_commit_failure(setup):
+    """Roll back both evidence and success on commit rejection, then recover once."""
     journal, provider, task, policy = setup
     await provider.execute(task)
 
     def deny_commit(action, argument, _second, _db, _trigger):
+        """Inject a real SQLite commit rejection while permitting rollback."""
         if action == sqlite3.SQLITE_TRANSACTION and argument == "COMMIT":
             return sqlite3.SQLITE_DENY
         return sqlite3.SQLITE_OK
@@ -234,6 +249,7 @@ async def test_receipt_and_state_rollback_together_on_commit_failure(setup):
 
 
 async def test_already_confirmed_does_not_claim_a_different_provider(setup):
+    """Do not relabel cached confirmation as evidence from a different provider."""
     journal, provider, task, policy = setup
     await provider.execute(task)
     await reconcile(journal, provider, task, policy)
@@ -242,6 +258,7 @@ async def test_already_confirmed_does_not_claim_a_different_provider(setup):
         provider_id = "other"
 
         async def lookup(self, request):
+            """Supply the deliberately controlled lookup response for this failure scenario."""
             pytest.fail("cached evidence should be checked locally")
 
     with pytest.raises(ReceiptMismatch):

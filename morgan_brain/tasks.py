@@ -100,6 +100,7 @@ class TaskJournal:
     """
 
     def __init__(self, path: Path) -> None:
+        """Open a supported task journal and atomically add the optional receipt column."""
         if not isinstance(path, Path) or str(path) == ":memory:":
             raise ValueError("task journal requires an explicit on-disk Path")
         self._conn = sqlite3.connect(path, timeout=5)
@@ -128,6 +129,7 @@ class TaskJournal:
             raise
 
     def _validate_format(self) -> None:
+        """Admit empty files and known task versions while refusing foreign formats."""
         application = self._conn.execute("PRAGMA application_id").fetchone()[0]
         version = self._conn.execute("PRAGMA user_version").fetchone()[0]
         tables = self._conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
@@ -136,6 +138,7 @@ class TaskJournal:
             raise ValueError("not a supported task journal; refusing to alter this database")
 
     def _add_receipt_column(self) -> None:
+        """Upgrade a v1 table inside its writer transaction without rewriting task rows."""
         columns = {row[1] for row in self._conn.execute("PRAGMA table_info(tasks)")}
         if "receipt_json" not in columns:
             if self._conn.execute("PRAGMA user_version").fetchone()[0] != 1:
@@ -146,6 +149,7 @@ class TaskJournal:
         self._conn.close()
 
     def get(self, key: TaskKey) -> Task | None:
+        """Read one owner/project-scoped task including its optional saved receipt evidence."""
         row = self._conn.execute(
             "SELECT * FROM tasks WHERE user_id=? AND project=? AND task_id=?", key.sql()
         ).fetchone()

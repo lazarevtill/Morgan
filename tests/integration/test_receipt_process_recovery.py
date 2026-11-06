@@ -17,6 +17,7 @@ KEY = TaskKey("owner", "synthetic", "crash")
 
 
 def _crash(directory, phase):
+    """Exit without cleanup after provider completion or after local confirmation."""
     directory = Path(directory)
     journal = TaskJournal(directory / "tasks.db")
     provider = SyntheticReceiptProvider(directory / "provider.db")
@@ -39,6 +40,7 @@ def _crash(directory, phase):
 
 @pytest.mark.parametrize("phase", ["after_provider", "after_confirmation"])
 async def test_receipt_recovery_after_process_exit(tmp_path, phase):
+    """Recover one external synthetic effect after abrupt death without replay."""
     journal = TaskJournal(tmp_path / "tasks.db")
     journal.create(KEY, action="uppercase-v1", payload="synthetic")
     journal.close()
