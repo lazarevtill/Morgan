@@ -83,3 +83,9 @@ and an unreadable cache without starting inference. A busy shared model lane doe
 not claim that every listed message is running. Dismissed/applied messages do not
 inflate pending counts. These are on-open snapshots, not push notifications or proof
 that the background process is alive; no retry or task confirmation is implied.
+
+The separate `Читать черновики` action reads validated saved drafts for messages
+still awaiting review, including under STOP or expiry. It offers no start, retry,
+resume or confirmation action. An empty model selection is explicitly fallible;
+a saved proposal is not presented as the current verified state of a task.
+Unreadable caches are counted and excluded. Cancelling returns to the menu.
