@@ -1,0 +1,8 @@
+{
+  "corpus_sha256": "2dc49c10e371aa858897d62aa75c5c768273a0cb5ce69917fc649e73eed2a502",
+  "candidate_sha256": "17a31961197c38f1b60e8a13acd2404263cefb5dc0c5e81696109bb2e724cefe",
+  "candidate_count": 1,
+  "acceptance": "On held-out cases: improve exact and reduce total FN, with no added FP and no worse exact/FP/FN for either language or any category. All calls must be valid. Then verify existing regression corpus before deployment.",
+  "independence": "New synthetic wording frozen before execution; same investigator labels, not externally blind. Development cases reported separately. No prompt tuning after inspecting outcomes.",
+  "authority": "Review only; never automatic task matching or confirmation."
+}

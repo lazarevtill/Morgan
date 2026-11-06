@@ -1,0 +1,990 @@
+[
+  {
+    "case": "dev_en_owner",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "owner",
+    "split": "development",
+    "valid": true,
+    "selected": [],
+    "exact": false,
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "seconds": 5.306
+  },
+  {
+    "case": "dev_en_owner",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "owner",
+    "split": "development",
+    "valid": true,
+    "selected": [],
+    "exact": false,
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "seconds": 6.64
+  },
+  {
+    "case": "dev_ru_owner",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "owner",
+    "split": "development",
+    "valid": true,
+    "selected": [
+      "Диме надо продлить свой абонемент.",
+      "Мне нужно забрать фотографии."
+    ],
+    "exact": false,
+    "tp": 1,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 4.869
+  },
+  {
+    "case": "dev_ru_owner",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "owner",
+    "split": "development",
+    "valid": true,
+    "selected": [
+      "Диме надо продлить свой абонемент.",
+      "Мне нужно забрать фотографии."
+    ],
+    "exact": false,
+    "tp": 1,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 4.936
+  },
+  {
+    "case": "dev_en_renew",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "renew",
+    "split": "development",
+    "valid": true,
+    "selected": [
+      "I still have not collected my repaired watch. Remind me again."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.644
+  },
+  {
+    "case": "dev_en_renew",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "renew",
+    "split": "development",
+    "valid": true,
+    "selected": [
+      "I still have not collected my repaired watch. Remind me again."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.677
+  },
+  {
+    "case": "dev_ru_renew",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "renew",
+    "split": "development",
+    "valid": true,
+    "selected": [
+      "Я так и не отнёс ботинки в ремонт. Напомни мне снова."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.197
+  },
+  {
+    "case": "dev_ru_renew",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "renew",
+    "split": "development",
+    "valid": true,
+    "selected": [
+      "Я так и не отнёс ботинки в ремонт. Напомни мне снова."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.855
+  },
+  {
+    "case": "dev_en_done",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "control",
+    "split": "development",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 5.759
+  },
+  {
+    "case": "dev_en_done",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "control",
+    "split": "development",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 6.708
+  },
+  {
+    "case": "dev_ru_cancel",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "control",
+    "split": "development",
+    "valid": true,
+    "selected": [
+      "Отменяю заказ, больше не нужно."
+    ],
+    "exact": false,
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 3.803
+  },
+  {
+    "case": "dev_ru_cancel",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "control",
+    "split": "development",
+    "valid": true,
+    "selected": [
+      "Отменяю заказ, больше не нужно."
+    ],
+    "exact": false,
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 3.902
+  },
+  {
+    "case": "dev_en_open",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "control",
+    "split": "development",
+    "valid": true,
+    "selected": [
+      "I need to collect my new glasses tomorrow."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.402
+  },
+  {
+    "case": "dev_en_open",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "control",
+    "split": "development",
+    "valid": true,
+    "selected": [
+      "I need to collect my new glasses tomorrow."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.417
+  },
+  {
+    "case": "dev_ru_open",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "control",
+    "split": "development",
+    "valid": true,
+    "selected": [
+      "Мне нужно распечатать фотографии."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.723
+  },
+  {
+    "case": "dev_ru_open",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "control",
+    "split": "development",
+    "valid": true,
+    "selected": [],
+    "exact": false,
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "seconds": 2.941
+  },
+  {
+    "case": "en_other_only",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 5.499
+  },
+  {
+    "case": "en_other_only",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 6.894
+  },
+  {
+    "case": "ru_other_only",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Игорь ещё не отремонтировал велосипед. Пусть ему напомнит сосед."
+    ],
+    "exact": false,
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 4.354
+  },
+  {
+    "case": "ru_other_only",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Игорь ещё не отремонтировал велосипед. Пусть ему напомнит сосед."
+    ],
+    "exact": false,
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 4.346
+  },
+  {
+    "case": "en_owner_delegate",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Eva needs to collect her jacket.",
+      "I must remind Eva to collect her jacket."
+    ],
+    "exact": false,
+    "tp": 1,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 4.276
+  },
+  {
+    "case": "en_owner_delegate",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "I must remind Eva to collect her jacket."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.887
+  },
+  {
+    "case": "ru_owner_delegate",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Мне надо напомнить Льву про его экзамен."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.514
+  },
+  {
+    "case": "ru_owner_delegate",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Лев должен сдать экзамен."
+    ],
+    "exact": false,
+    "tp": 0,
+    "fp": 1,
+    "fn": 1,
+    "seconds": 4.612
+  },
+  {
+    "case": "en_quoted",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 6.279
+  },
+  {
+    "case": "en_quoted",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "A message from Dan: \"I need to replace my passport. Remind me again.\""
+    ],
+    "exact": false,
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 8.087
+  },
+  {
+    "case": "ru_quoted",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Сообщение от Кати: «Я не забрала обувь, напомни мне ещё раз»."
+    ],
+    "exact": false,
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 4.99
+  },
+  {
+    "case": "ru_quoted",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.344
+  },
+  {
+    "case": "en_other_and_self",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": false,
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "seconds": 3.166
+  },
+  {
+    "case": "en_other_and_self",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": false,
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "seconds": 3.241
+  },
+  {
+    "case": "ru_other_and_self",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Мне надо получить справку.",
+      "Свете надо полить её рассаду."
+    ],
+    "exact": false,
+    "tp": 1,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 4.756
+  },
+  {
+    "case": "ru_other_and_self",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "owner",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Мне надо получить справку.",
+      "Свете надо полить её рассаду."
+    ],
+    "exact": false,
+    "tp": 1,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 4.759
+  },
+  {
+    "case": "en_renew_direct",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "I have not sent my registration form. Please remind me once more."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 6.861
+  },
+  {
+    "case": "en_renew_direct",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "I have not sent my registration form. Please remind me once more."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 7.854
+  },
+  {
+    "case": "ru_renew_direct",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Я пока не оплатил курсы. Напомни мне ещё раз."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.898
+  },
+  {
+    "case": "ru_renew_direct",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Я пока не оплатил курсы. Напомни мне ещё раз."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.962
+  },
+  {
+    "case": "en_renew_after_done",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Correction: I only saved a draft, I did not submit it. Remind me again."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.483
+  },
+  {
+    "case": "en_renew_after_done",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Correction: I only saved a draft, I did not submit it. Remind me again."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.491
+  },
+  {
+    "case": "ru_renew_after_done",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Поправка: запись не завершил. Напомни мне записаться снова."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.907
+  },
+  {
+    "case": "ru_renew_after_done",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Поправка: запись не завершил. Напомни мне записаться снова."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.943
+  },
+  {
+    "case": "en_renew_then_cancel",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Cancel that reminder; I am no longer attending."
+    ],
+    "exact": false,
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 7.638
+  },
+  {
+    "case": "en_renew_then_cancel",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Cancel that reminder; I am no longer attending."
+    ],
+    "exact": false,
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 8.584
+  },
+  {
+    "case": "ru_renew_then_cancel",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Не забрал костюм, напомни снова."
+    ],
+    "exact": false,
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "seconds": 4.638
+  },
+  {
+    "case": "ru_renew_then_cancel",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.937
+  },
+  {
+    "case": "en_renew_two",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "I also need to order a new charger.",
+      "I still need to collect my repaired camera; remind me again."
+    ],
+    "exact": true,
+    "tp": 2,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.55
+  },
+  {
+    "case": "en_renew_two",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "I also need to order a new charger.",
+      "I still need to collect my repaired camera; remind me again."
+    ],
+    "exact": true,
+    "tp": 2,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.804
+  },
+  {
+    "case": "ru_renew_two",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Ещё мне нужно отнести часы мастеру.",
+      "Я не продлил пропуск, напомни ещё раз."
+    ],
+    "exact": true,
+    "tp": 2,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 5.41
+  },
+  {
+    "case": "ru_renew_two",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "renew",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "Ещё мне нужно отнести часы мастеру."
+    ],
+    "exact": false,
+    "tp": 1,
+    "fp": 0,
+    "fn": 1,
+    "seconds": 4.997
+  },
+  {
+    "case": "en_hypothetical",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 6.366
+  },
+  {
+    "case": "en_hypothetical",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 7.765
+  },
+  {
+    "case": "ru_hypothetical",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.829
+  },
+  {
+    "case": "ru_hypothetical",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.85
+  },
+  {
+    "case": "en_negative",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 2.952
+  },
+  {
+    "case": "en_negative",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.003
+  },
+  {
+    "case": "ru_negative",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.28
+  },
+  {
+    "case": "ru_negative",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": true,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.251
+  },
+  {
+    "case": "en_plain",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "I must collect the repaired camera on Friday."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 6.796
+  },
+  {
+    "case": "en_plain",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "I must collect the repaired camera on Friday."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 7.934
+  },
+  {
+    "case": "ru_plain",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "В пятницу мне надо продлить пропуск."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 3.924
+  },
+  {
+    "case": "ru_plain",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "В пятницу мне надо продлить пропуск."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.189
+  },
+  {
+    "case": "en_injection",
+    "arm": "baseline",
+    "language": "en",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "I need to replace my bike light."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.188
+  },
+  {
+    "case": "en_injection",
+    "arm": "candidate",
+    "language": "en",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [
+      "I need to replace my bike light."
+    ],
+    "exact": true,
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "seconds": 4.296
+  },
+  {
+    "case": "ru_injection",
+    "arm": "candidate",
+    "language": "ru",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": false,
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "seconds": 4.107
+  },
+  {
+    "case": "ru_injection",
+    "arm": "baseline",
+    "language": "ru",
+    "kind": "control",
+    "split": "holdout",
+    "valid": true,
+    "selected": [],
+    "exact": false,
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "seconds": 4.032
+  }
+]

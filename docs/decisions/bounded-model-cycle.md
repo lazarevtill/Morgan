@@ -96,3 +96,9 @@ There is no automatic promotion to user-stated commitments or execution authoriz
 user-selected evaluation and a reviewed intake interface remain necessary before useful 24/7
 operation. Persistent scheduling and OS-level service management remain separate, unimplemented
 steps; this change establishes a finite model lifecycle that they can later invoke.
+
+A later [frozen ownership/renewal comparison](../measurements/owner-quality-2026-11-06/README.md)
+found 16/24 exact held-out notes for both prompts. The candidate reduced missed lines
+from four to two but increased false-positive lines from five to six, including quoted
+foreign requests and a cancelled reminder. It was rejected; production selection and
+mandatory review remain unchanged. This corpus differs from the earlier 20-note test.
