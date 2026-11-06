@@ -82,3 +82,11 @@ no executable for that complete loop is claimed here. A Mac asleep/offline/at th
 screen is not continuously available. Phone delivery requires an explicitly configured recipient
 and channel (e.g. the existing reviewed ntfy adapter); app presence alone is not configuration.
 No service, channel grant, credentials or paid process is installed by these build tools.
+
+The [Mac measurement](../measurements/2026-11-pinned-runtime.json) built the real Morgan wheel
+at `a27c6ac9403348deb0fec9cdd5ea8ef4373e9530`, installed its dependencies, and verified 98 package
+files from site-packages. Fifteen commands outside the repository, with an old editable checkout
+in PYTHONPATH, exercised synthetic task creation, renewal and STOP, then restored a second runtime
+from the same offline bundle and read the same plan/STOP state. Total scenario including recovery
+was 8.380 seconds. This proves the former editable-origin blocker is removed for that artifact;
+it does not measure inference, an actual human acknowledgement or continuous operation.

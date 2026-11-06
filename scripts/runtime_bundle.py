@@ -66,6 +66,7 @@ def build(repo: Path, revision: str, output: Path) -> dict[str, object]:
         run(
             [
                 sys.executable,
+                "-I",
                 "-m",
                 "pip",
                 "--isolated",
@@ -84,6 +85,7 @@ def build(repo: Path, revision: str, output: Path) -> dict[str, object]:
     run(
         [
             sys.executable,
+            "-I",
             "-m",
             "pip",
             "--isolated",
@@ -153,7 +155,7 @@ def install(bundle: Path, revision: str, destination: Path) -> dict[str, object]
         if sha(bundle / "wheels" / name) != digest:
             raise ValueError("wheel bytes changed")
     destination.mkdir(mode=0o700)  # Leave partial installs for inspection; restore into a new path.
-    run([sys.executable, "-m", "venv", str(destination)])
+    run([sys.executable, "-I", "-m", "venv", str(destination)])
     python = destination / "bin/python"
     run(
         [

@@ -1,0 +1,21 @@
+{
+  "revision": "a27c6ac9403348deb0fec9cdd5ea8ef4373e9530",
+  "seconds": 8.38,
+  "commands": 15,
+  "task_count": 1,
+  "restored_existing_plan": true,
+  "stop_preserved": true,
+  "outside_repository": true,
+  "old_pythonpath_ignored": true,
+  "model_calls": 0,
+  "paid_calls": 0,
+  "inference_or_notifications_started": false,
+  "data": "synthetic only",
+  "offline_recovery": true,
+  "files_verified": 98,
+  "wheel_count": 38,
+  "requirements_sha256": "c9d3948405aaed653f4e5e37431d2aa61ec2e1a9da14d86a19f5e746d0bbe91c",
+  "morgan_wheel_sha256": "6e548b7dc5a8dcc74bc2b7f4042c117478a4b4aeec09bba99f09c3738ed4e8a2",
+  "host": "macOS 15.8.2 arm64, CPython 3.12.13",
+  "interpretation": "Real Morgan non-editable wheel and dependencies; synthetic owner task data; no inference or service deployment."
+}
