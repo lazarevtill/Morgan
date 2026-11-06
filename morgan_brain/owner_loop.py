@@ -8,6 +8,8 @@ import fcntl
 import json
 import os
 import signal
+import subprocess  # nosec B404
+import sys
 import time
 from contextlib import closing, suppress
 from dataclasses import replace
@@ -188,11 +190,37 @@ async def _serve(controller: OwnerLoop) -> str:
             loop.remove_signal_handler(sig)
 
 
+def _validate_login_mode(seconds: int) -> None:
+    """Keep the installed mode restricted to the reviewed macOS seven-day invocation."""
+    if sys.platform != "darwin" or seconds != 604800:
+        raise ValueError("login agent mode requires macOS and a seven-day invocation bound")
+
+
+def _disable_login_agent() -> bool:
+    """Disable only this account's fixed pilot label after its finite lifetime is exhausted."""
+    try:
+        subprocess.run(  # noqa: S603 # nosec B603
+            ["/bin/launchctl", "disable", f"gui/{os.getuid()}/org.morgan.owner-pilot"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
+
+
 def main() -> None:
     """Explicitly run or inspect a finite headless loop; never install a launch agent."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workspace", type=Path)
     parser.add_argument("--status", action="store_true")
+    parser.add_argument(
+        "--login-agent",
+        action="store_true",
+        help="Disable the fixed login job when the pilot lifetime is exhausted",
+    )
     parser.add_argument("--server", type=Path)
     parser.add_argument("--model", type=Path)
     parser.add_argument("--seconds", type=int, default=3600)
@@ -209,13 +237,19 @@ def main() -> None:
             return
         if args.server is None or args.model is None:
             parser.error("select explicit --server and --model")
+        if args.login_agent:
+            _validate_login_mode(args.seconds)
         controller = OwnerLoop(
             args.workspace,
             ModelCycle(args.server, args.model),
             seconds=args.seconds,
             poll=args.poll,
         )
-        print(json.dumps({"reason": asyncio.run(_serve(controller))}))
+        reason = asyncio.run(_serve(controller))
+        result: dict[str, object] = {"reason": reason}
+        if args.login_agent and reason in ("expired", "finished", "launch_limit"):
+            result["autostart_disabled"] = _disable_login_agent()
+        print(json.dumps(result))
     except (OSError, ValueError, TypeError) as error:
         # Expected invalid configuration is not an invitation for launchd to retry endlessly.
         print(json.dumps({"reason": "configuration_requires_review", "error": str(error)}))

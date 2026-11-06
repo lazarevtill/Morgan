@@ -27,6 +27,7 @@ def render(python: Path, workspace: Path, server: Path, model: Path) -> bytes:
                 str(server),
                 "--model",
                 str(model),
+                "--login-agent",
                 "--seconds",
                 "604800",
             ],

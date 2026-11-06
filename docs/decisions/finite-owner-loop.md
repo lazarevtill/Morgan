@@ -65,3 +65,26 @@ loop; restarting is explicit and does not reset expiry, attempts or launch count
 
 No installed service or seven-day endurance claim follows from these tests. This is a
 bounded unattended drafting stage with manual review, not a complete 24/7 personal agent.
+
+## End of the installed pilot
+
+The rendered login plan now passes `--login-agent`. This explicit macOS-only mode requires
+its fixed 604800-second invocation bound. After cleanup, `expired`, `finished` or
+`launch_limit` invokes only `/bin/launchctl disable gui/<current uid>/org.morgan.owner-pilot`,
+with a five-second timeout. It does not delete the plist, workspace or runtime. Ordinary
+STOP/logout does not disable the job, so explicit resume remains possible within the
+original lifetime. Foreground loops without the flag never call launchctl.
+
+If the Mac sleeps or is powered off at expiry, disabling occurs on the next execution
+that can observe expiry; no model admission is allowed after that check. A successful
+`disable` prevents subsequent login launches. Failure is printed as `autostart_disabled:
+false`, without retries; the finite loop still exits and manual rollback remains available.
+This is a current-account job control, not a credential or a new service.
+
+An actual deployment on macOS stalled in Python path initialization when the runtime was
+under Documents: launchd reported a PID but no application heartbeat appeared. Moving the
+owned runtime and empty workspace into a private Application Support pilot directory
+resolved startup without granting Documents access or Full Disk Access. The file-open
+stack was observed; its underlying OS authorization cause was not conclusively diagnosed.
+Use a normal application-data directory for a login deployment and verify a fresh
+`waiting_for_owner` observation and clean STOP/restart, not merely a running launchd PID.
