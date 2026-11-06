@@ -23,7 +23,7 @@ from morgan_brain.local_notes import (
     revoke,
     run_local,
 )
-from morgan_brain.local_recurrence import Occurrence, repeat_plan
+from morgan_brain.local_recurrence import Occurrence, RepeatLimits, repeat_plan
 from morgan_brain.local_supervisor import (
     Supervision,
     SupervisorLimits,
@@ -115,9 +115,7 @@ def main() -> None:
                 occurrences = repeat_plan(
                     request,
                     start=args.start,
-                    interval_seconds=args.interval,
-                    count=args.count,
-                    window_seconds=args.window,
+                    limits=RepeatLimits(args.interval, args.count, args.window),
                     now=datetime.now(UTC),
                 )
                 preview["occurrences"] = [item.document() for item in occurrences]

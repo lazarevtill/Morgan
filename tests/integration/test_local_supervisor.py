@@ -10,7 +10,7 @@ import pytest
 
 from morgan_brain import local_supervisor as supervisor
 from morgan_brain.local_notes import ACTION, NoteWorkspace, approve, approve_occurrences
-from morgan_brain.local_recurrence import repeat_plan
+from morgan_brain.local_recurrence import RepeatLimits, repeat_plan
 from morgan_brain.local_supervisor import SupervisorLimits, supervise
 from morgan_brain.local_worker_state import scoped_counts
 from morgan_brain.tasks import TaskKey, TaskRequest
@@ -53,9 +53,7 @@ async def test_signal_crash_recovery_never_repeats_effect(
     if scheduled == "repeat":
         approve_occurrences(
             workspace,
-            repeat_plan(
-                request, start=now, interval_seconds=60, count=2, window_seconds=30, now=now
-            ),
+            repeat_plan(request, start=now, limits=RepeatLimits(60, 2, 30), now=now),
         )
     else:
         approve(

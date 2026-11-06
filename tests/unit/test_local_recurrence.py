@@ -15,7 +15,7 @@ from morgan_brain.local_notes import (
     local_status,
     run_local,
 )
-from morgan_brain.local_recurrence import repeat_plan
+from morgan_brain.local_recurrence import RepeatLimits, repeat_plan
 from morgan_brain.task_batches import TaskPermissionDenied
 from morgan_brain.tasks import TaskKey, TaskRequest
 
@@ -49,7 +49,10 @@ def plan(request, clock, **overrides):
         "now": clock.current,
     }
     args.update(overrides)
-    return repeat_plan(request, **args)
+    limits = RepeatLimits(
+        args.pop("interval_seconds"), args.pop("count"), args.pop("window_seconds")
+    )
+    return repeat_plan(request, limits=limits, **args)
 
 
 async def test_restart_skips_missed_windows_and_delivers_each_once(fixture):
@@ -140,9 +143,7 @@ def test_dst_is_elapsed_utc_time_not_wall_clock_recurrence(fixture):
     """An offset is one instant; daily intervals stay 86400 seconds across a DST boundary."""
     _workspace, request, _clock = fixture
     start = datetime.fromisoformat("2026-10-31T09:00:00-04:00")
-    entries = repeat_plan(
-        request, start=start, interval_seconds=86400, count=3, window_seconds=60, now=start
-    )
+    entries = repeat_plan(request, start=start, limits=RepeatLimits(86400, 3, 60), now=start)
     assert entries[1].not_before.isoformat() == "2026-11-01T13:00:00+00:00"
 
 
