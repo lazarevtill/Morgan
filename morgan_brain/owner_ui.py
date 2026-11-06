@@ -255,6 +255,53 @@ class OwnerUI:
             self.call("restore" if restore else "dismiss", message["identity"])
             self.dialogs.show("info", "Состояние сообщения сохранено. План не изменён.")
 
+    def read_drafts(self, state: dict[str, Any]) -> None:
+        """Read validated saved suggestions under STOP without offering execution or approval."""
+        if self.model is None:
+            return
+        drafts = []
+        unavailable = 0
+        for message in state["messages"]:
+            if message["state"] != "needs_review":
+                continue
+            try:
+                status = self.model.status(message["text"])
+            except (OSError, ValueError, TypeError):
+                unavailable += 1
+                continue
+            if status["state"] == "ready":
+                drafts.append((message, status))
+        summary = f"Недоступных черновиков: {unavailable}."
+        if not drafts:
+            self.dialogs.show(
+                "info",
+                f"Готовых черновиков ожидающих проверки сообщений нет. {summary}",
+                allow_stopped=True,
+            )
+            return
+        labels = tuple(f"{i + 1}. {message['text'][:120]}" for i, (message, _) in enumerate(drafts))
+        selected = self.dialogs.show(
+            "choose",
+            f"Сохранённые черновики — только чтение. {summary}",
+            options=labels,
+            allow_stopped=True,
+        )
+        if selected is None:
+            return
+        message, status = drafts[labels.index(selected)]
+        result = (
+            f"Предложение модели (не подтверждено): {status['lines']}"
+            if status["lines"]
+            else "Модель не нашла обязательств. Это может быть ошибкой."
+        )
+        self.dialogs.show(
+            "info",
+            f"Источник: {message['text']}\n\n{result}\n"
+            "Это сохранённый черновик, не текущее состояние задачи. "
+            "Просмотр не запускает модель, не снимает STOP и не подтверждает изменения.",
+            allow_stopped=True,
+        )
+
     def draft_state(self, message: dict[str, Any]) -> str:
         """Inspect saved draft state without inference; one bad cache must not hide the inbox."""
         if self.model is None or message["state"] != "needs_review":
@@ -409,7 +456,7 @@ class OwnerUI:
         """Run a finite foreground menu; cancel/exit never sends or confirms queued work."""
         for _ in range(30):
             state = self.call("status")
-            options = (
+            options: tuple[str, ...] = (
                 ("Продолжить после STOP", "План", "План на дату", "Найти источник", "Выход")
                 if state["stopped"]
                 else (
@@ -423,6 +470,8 @@ class OwnerUI:
                     "Выход",
                 )
             )
+            if self.model is not None:
+                options = (*options[:-1], "Читать черновики", *options[-1:])
             choice = self.dialogs.show(
                 "choose",
                 "Morgan — локальный план\n"
@@ -452,6 +501,8 @@ class OwnerUI:
                     self.preview_plan(state)
                 elif choice == "Найти источник":
                     self.search_sources()
+                elif choice == "Читать черновики":
+                    self.read_drafts(state)
                 elif choice == "Новое сообщение":
                     text = self.text("Ваше сообщение (одна строка, до 1000 символов)")
                     receipt = self.call("submit", f"ui-{uuid4().hex}", text=text)

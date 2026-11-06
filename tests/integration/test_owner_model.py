@@ -293,3 +293,53 @@ def test_draft_overview_ignores_dismissed_messages_and_preserves_stop(model):
     assert "Ожидают проверки: 1" in dialogs.seen[0]["prompt"]
     assert "Готовых черновиков: 0" in dialogs.seen[0]["prompt"]
     assert state(model.path)["stopped"] and model.thread is None
+
+
+@pytest.mark.parametrize("cache", ["ready", "empty", "invalid"])
+@pytest.mark.parametrize("guard", ["stop", "expired"])
+def test_saved_drafts_are_readable_without_any_action(model, monkeypatch, cache, guard):
+    import hashlib
+
+    note = "Нужно вернуть книгу."
+    owner_input.request(model.path, ["submit", "book"], text=note)
+    draft = {
+        "version": "morgan.note-proposal.v1",
+        "source_sha256": hashlib.sha256(note.encode()).hexdigest(),
+        "source": "agent_inferred",
+        "approved": False,
+        "review_required": True,
+        "selected_lines": [note] if cache == "ready" else [],
+    }
+    with closing(NoteWorkspace(model.path, create=False)) as workspace:
+        workspace.publish(proposal_filename(note), json.dumps([] if cache == "invalid" else draft))
+    if guard == "stop":
+        owner_input.request(model.path, ["stop"])
+    else:
+        inbox = model.path / "owner-input.json"
+        payload = json.loads(inbox.read_text())
+        payload["expires_at"] = "2000-01-01T00:00:00+00:00"
+        inbox.write_text(json.dumps(payload))
+    before = {p.name: p.read_bytes() for p in model.path.iterdir() if p.is_file()}
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("read-only draft viewing must not start or resume anything")
+
+    monkeypatch.setattr(model, "start", forbidden)
+    answers = [("choose", "Читать черновики")]
+    if cache != "invalid":
+        answers += [("choose", 0)]
+    answers += [("info", "Продолжить"), ("choose", "Выход")]
+    dialogs = DialogFixture(answers)
+    OwnerUI(model.path, dialogs, model.deadline, model).run()
+    assert not dialogs.answers
+    assert all(item["allow_stopped"] for item in dialogs.seen)
+    info = next(item["prompt"] for item in dialogs.seen if item["kind"] == "info")
+    if cache == "ready":
+        assert note in info and "не подтверждено" in info
+    elif cache == "empty":
+        assert "не нашла обязательств" in info and "ошибкой" in info
+    else:
+        assert "Недоступных черновиков: 1" in info
+    assert state(model.path)["stopped" if guard == "stop" else "expired"]
+    assert model.thread is None
+    assert before == {p.name: p.read_bytes() for p in model.path.iterdir() if p.is_file()}
