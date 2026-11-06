@@ -28,6 +28,7 @@ from morgan_brain.memory.checkpoints import (
     AmbiguousCheckpoint,
     StaleCheckpoint,
 )
+from morgan_brain.memory.credentials import refuse_credentials
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.errors import EvidenceChanged
 from morgan_brain.memory.evidence import ScopedEvidenceReader, fact_memory
@@ -238,6 +239,7 @@ class MemoryModule:
                     raise ValueError("Atomic turn events must be new; turn replay is not supported")
                 return original, None, generation
             self._check_fact_identity(original)
+        refuse_credentials(original.content)
         prepared = original.model_copy(deep=True)
         if prepared.created_at is None:
             prepared.created_at = self._clock()
@@ -372,6 +374,9 @@ class MemoryModule:
         ):
             raise ValueError("Atomic turn evidence basis must match its owner and context")
         erasure_store.require_generation(self._conn, expected_generation)
+        # Refuse the entire turn before either event can reach an embedding backend.
+        for memory in memories:
+            refuse_credentials(memory.content)
         prepared = [
             await self._prepare_event(
                 memory, allow_replay=False, expected_generation=expected_generation
@@ -694,6 +699,8 @@ class MemoryModule:
         never suspends: it is SQL on this connection, nothing else, so nothing awaits real I/O
         while the write lock is held.
         """
+        for text in (fact.subject, fact.predicate, fact.object):
+            refuse_credentials(text)
         now = now if now is not None else self._clock()
         with write_transaction(self._conn):
             if self._episodics.get(fact.id, user_id=fact.user_id, project=fact.project) is not None:

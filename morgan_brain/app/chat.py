@@ -30,6 +30,7 @@ from morgan_brain.app.strict_context import (
     strict_request,
     validate_answer,
 )
+from morgan_brain.memory.credentials import refuse_credentials
 from morgan_brain.memory.errors import EvidenceChanged
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.recall.language import of as query_language
@@ -178,6 +179,7 @@ class Chat:
         MemorySource(turn.source)
         self._gate.require_writable()
         generation = self._gate.capture_erasure_generation()
+        refuse_credentials(turn.text)
         input_at = self._clock()
         counter = await self._prepare_strict(turn) if strict_context else None
         hkey = session_key(turn.user_id, turn.session_id)

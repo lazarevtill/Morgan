@@ -2,7 +2,9 @@
 
 Every store/recall/forget passes through here. It enforces user- and project-scope (the
 basis of multi-tenant readiness) and is the one place to add redaction, consent, and audit
-later. No caller holds the ``MemoryModule`` directly.
+later. The module refuses selected credential shapes before new content is embedded or
+written; see ``credentials`` for its deliberately narrow scope. No caller holds the
+``MemoryModule`` directly.
 """
 
 from __future__ import annotations

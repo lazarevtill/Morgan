@@ -263,6 +263,16 @@ come in" are answered by the directory names.
   entity extractor, one logging configuration.
 - **Never hardcode the owner.** Everything is keyed by `user_id`; single-owner is a config fact.
 
+## Credential admission
+
+`memory/credentials.py` refuses a narrow set of explicit provider-token/private-key shapes in
+new memory content and fact text, before embedding or writes. `ask` checks its question before
+counting/recall; import checks the whole visible turn before embedding its first new piece.
+Atomic turns preflight both
+events. Accepted evidence is never redacted or reattributed; exact store replay is unchanged.
+This is not a complete secret detector or egress filter: historical data, metadata and separate
+task journals remain outside it. See `docs/decisions/credential-admission.md`.
+
 ## Known limitations
 
 - `recall` declines to answer only when `MORGAN_RECALL_FLOOR_MARGIN` is set. The value belongs
