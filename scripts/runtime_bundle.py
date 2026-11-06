@@ -8,7 +8,7 @@ import hashlib
 import json
 import platform
 import re
-import subprocess
+import subprocess  # nosec B404 -- trusted build tools, fixed argv, no shell
 import sys
 import tarfile
 import tempfile
@@ -18,7 +18,10 @@ from pathlib import Path
 
 def run(args: list[str], *, cwd: Path | None = None) -> bytes:
     """Run a fixed argv with finite timeout; no shell, editable install or global mutation."""
-    return subprocess.run(args, cwd=cwd, check=True, capture_output=True, timeout=600).stdout  # noqa: S603
+    # Arguments are assembled only by build/install below; source commits are explicitly trusted.
+    return subprocess.run(  # noqa: S603 # nosec B603 -- fixed internal argv, no shell
+        args, cwd=cwd, check=True, capture_output=True, timeout=600
+    ).stdout
 
 
 def sha(path: Path) -> str:
@@ -32,6 +35,31 @@ def commit(value: str) -> str:
     if re.fullmatch(r"[0-9a-f]{40}", value) is None:
         raise ValueError("revision requires a full lowercase commit SHA")
     return value
+
+
+def lock_wheels(wheels: Path, lock: Path) -> dict[str, str]:
+    """Freeze one verified wheel per distribution into a hash-enforced requirements file."""
+    requirements = []
+    archives = {}
+    names = set()
+    for wheel in sorted(wheels.glob("*.whl")):
+        with zipfile.ZipFile(wheel) as zipped:
+            metadata = [name for name in zipped.namelist() if name.endswith(".dist-info/METADATA")]
+            if len(metadata) != 1:
+                raise ValueError("wheel requires one distribution metadata record")
+            info = email.message_from_bytes(zipped.read(metadata[0]))
+        name, version = info["Name"], info["Version"]
+        if not name or not version or re.fullmatch(r"[A-Za-z0-9_.+-]+", name + version) is None:
+            raise ValueError("invalid dependency metadata")
+        normalized = re.sub(r"[-_.]+", "-", name).lower()
+        if normalized in names:
+            raise ValueError("bundle contains duplicate distribution versions")
+        names.add(normalized)
+        digest = sha(wheel)
+        archives[wheel.name] = digest
+        requirements.append(f"{name}=={version} --hash=sha256:{digest}")
+    lock.write_text("\n".join(requirements) + "\n")
+    return archives
 
 
 def build(repo: Path, revision: str, output: Path) -> dict[str, object]:
@@ -98,27 +126,8 @@ def build(repo: Path, revision: str, output: Path) -> dict[str, object]:
             str(candidates[0]),
         ]
     )
-    requirements = []
-    archives = {}
-    names = set()
-    for wheel in sorted(wheels.glob("*.whl")):
-        with zipfile.ZipFile(wheel) as zipped:
-            metadata = [name for name in zipped.namelist() if name.endswith(".dist-info/METADATA")]
-            if len(metadata) != 1:
-                raise ValueError("wheel requires one distribution metadata record")
-            info = email.message_from_bytes(zipped.read(metadata[0]))
-        name, version = info["Name"], info["Version"]
-        if not name or not version or re.fullmatch(r"[A-Za-z0-9_.+-]+", name + version) is None:
-            raise ValueError("invalid dependency metadata")
-        normalized = re.sub(r"[-_.]+", "-", name).lower()
-        if normalized in names:
-            raise ValueError("bundle contains duplicate distribution versions")
-        names.add(normalized)
-        digest = sha(wheel)
-        archives[wheel.name] = digest
-        requirements.append(f"{name}=={version} --hash=sha256:{digest}")
     lock = output / "requirements.txt"
-    lock.write_text("\n".join(requirements) + "\n")
+    archives = lock_wheels(wheels, lock)
     receipt = {
         "version": 1,
         "revision": revision,

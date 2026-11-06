@@ -90,3 +90,10 @@ in PYTHONPATH, exercised synthetic task creation, renewal and STOP, then restore
 from the same offline bundle and read the same plan/STOP state. Total scenario including recovery
 was 8.380 seconds. This proves the former editable-origin blocker is removed for that artifact;
 it does not measure inference, an actual human acknowledgement or continuous operation.
+
+Primary references checked on 2026-11-06: Apple's
+[launchd guide](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html)
+places user agents in the logged-in user's lifecycle; it is not an always-available host.
+Apple's [dialog guide](https://developer.apple.com/library/archive/documentation/LanguagesUtilities/Conceptual/MacAutomationScriptingGuide/DisplayDialogsandAlerts.html)
+distinguishes button responses from automatic timeout. The proposed review driver must preserve
+that distinction and must not treat a timeout or ordinary alert acknowledgement as approval.
