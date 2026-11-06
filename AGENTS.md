@@ -314,6 +314,15 @@ come in" are answered by the directory names.
   compose two of them; measured recall@8 is 0.62 against 0.90 for single-hop
   (`qwen3-embedding:8b`).
 
+## Pinned local deployment
+
+`scripts/runtime_bundle.py` exports one exact trusted Git commit into a normal wheel and
+hash-pinned offline dependency bundle, then installs only into a new private runtime directory.
+`python -I -m morgan_brain.runtime_check --expected-revision SHA` verifies installed origin,
+revision and package hashes. Never deploy the editable development environment or infer a
+revision from cwd. No runtime is activated and no service is installed automatically. See
+`docs/decisions/pinned-runtime.md` for recovery and trust boundaries.
+
 ## Build, test, run
 
 ```bash
