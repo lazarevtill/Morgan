@@ -1,0 +1,14 @@
+{
+  "scenario": "synthetic RU local owner message -> explicit task -> reviewed renewal -> STOP",
+  "commands": 13,
+  "seconds": 3.003,
+  "owner_decision_submissions_per_message": 3,
+  "model_calls": 0,
+  "external_calls": 0,
+  "tasks_before": 1,
+  "tasks_after": 1,
+  "unreviewed_mutations": 0,
+  "stop_blocked_confirmation": true,
+  "language_matching": "not attempted; explicit owner selection",
+  "fixture_decisions_not_real_owner_usability": true
+}

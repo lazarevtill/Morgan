@@ -59,6 +59,11 @@ Its `--preview-day DATE` option evaluates current evidence for an explicit day w
 the saved session date. See `docs/decisions/guided-status.md` and the bounded personal pilot plan;
 it installs no user messaging channel or service.
 
+`owner_input` provides one-shot local message submission, exact review/confirmation and STOP
+without a model, listener or service. It reuses the private guided workspace and MemoryGate;
+messages alone grant no task changes. The finite pilot is capped at 14 messages, eight tasks
+and seven days. See `docs/decisions/local-owner-input.md`; no automatic language matching is added.
+
 `local_alert_cli` explicitly displays one bounded macOS dialog with account-approved text,
 STOP and journal fencing; see `docs/decisions/local-alert.md`. A timeout is not a read receipt.
 It installs no service or standing permission and never retries a started attempt.
