@@ -134,8 +134,8 @@ For a concrete installation review, the remaining configuration/actions are:
 ## Evidence
 
 Twenty tests cover matched/mismatched receipts, redirects, oversized/lost replies, STOP before
-and during requests, exact replay, changed destinations, credential exclusion, refusal of echoed token input,
-whitespace preflight and plist bounds.
+and during requests, exact replay, changed destinations, credential exclusion,
+refusal of echoed token input, whitespace preflight and plist bounds.
 A real loopback HTTP server exercised request bytes and response parsing with a test-only
 transport mapping; no external TLS/service or phone was exercised. A separate subprocess test
 ran the generated worker argv twice with a temporary finite synthetic note grant, then with
