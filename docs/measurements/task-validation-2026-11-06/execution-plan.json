@@ -1,0 +1,6 @@
+{
+  "before_first_corpus_run": true,
+  "stop_rule": "Stop that model arm after two baseline operational/invalid response failures; no retries; unattempted cases remain unmeasured.",
+  "shared_lane": "Use installed pilot model lock, same STOP, never parallel models. Defer remaining cycles when owner inbox gets any message.",
+  "measurement": "CPU is cumulative child user+system after reaping each cycle; RSS is child-tree peak in macOS bytes, not per-request or total machine RSS. Granite validation CPU includes baseline and second pass."
+}

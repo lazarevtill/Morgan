@@ -1,0 +1,12 @@
+{
+  "model": "ornith",
+  "weights_digest": "852922174ee4f76621df26105333f1dfe2171cdfb60ebe5a4b013836681a8a77",
+  "load_seconds": 15.328,
+  "selected": [
+    "I need to collect my repaired umbrella."
+  ],
+  "valid": true,
+  "wall_seconds": 31.419,
+  "child_cpu_seconds": 72.962,
+  "child_maxrss_bytes": 8946024448
+}

@@ -1,0 +1,194 @@
+[
+  {
+    "name": "en_other_named",
+    "language": "en",
+    "kind": "owner",
+    "note": "Owen still needs to renew his parking permit. His sister will remind him.",
+    "expected": []
+  },
+  {
+    "name": "ru_other_named",
+    "language": "ru",
+    "kind": "owner",
+    "note": "Жене ещё нужно забрать её планшет. Ей напомнит отец.",
+    "expected": []
+  },
+  {
+    "name": "en_my_commitment",
+    "language": "en",
+    "kind": "owner",
+    "note": "My neighbour asked me to feed her fish. I agreed and still need to do it.",
+    "expected": [
+      1
+    ]
+  },
+  {
+    "name": "ru_my_commitment",
+    "language": "ru",
+    "kind": "owner",
+    "note": "Сосед попросил меня проверить его почту. Я согласился и ещё не сделал это.",
+    "expected": [
+      1
+    ]
+  },
+  {
+    "name": "en_nested_quote",
+    "language": "en",
+    "kind": "owner",
+    "note": "I copied a note from Mia: \"Please remind me to register my car.\" This is her request, not mine.",
+    "expected": []
+  },
+  {
+    "name": "ru_nested_quote",
+    "language": "ru",
+    "kind": "owner",
+    "note": "Пересылаю слова Ромы: «Напомни мне заказать линзы». Это его просьба, не моя.",
+    "expected": []
+  },
+  {
+    "name": "en_owner_mixed",
+    "language": "en",
+    "kind": "owner",
+    "note": "My brother needs to return his uniform.\nI must pick up my prescription.",
+    "expected": [
+      2
+    ]
+  },
+  {
+    "name": "ru_owner_mixed",
+    "language": "ru",
+    "kind": "owner",
+    "note": "Брату нужно сдать его форму.\nМне нужно получить рецепт.",
+    "expected": [
+      2
+    ]
+  },
+  {
+    "name": "en_cancel_latest",
+    "language": "en",
+    "kind": "cancel",
+    "note": "I need to reserve a rehearsal room.\nUpdate: cancel that reservation task; the rehearsal is off.",
+    "expected": []
+  },
+  {
+    "name": "ru_cancel_latest",
+    "language": "ru",
+    "kind": "cancel",
+    "note": "Мне надо заказать торт.\nОтмена: праздник не состоится, торт не заказываем.",
+    "expected": []
+  },
+  {
+    "name": "en_not_cancelled",
+    "language": "en",
+    "kind": "cancel",
+    "note": "I have NOT cancelled the tyre appointment. I still need to attend it.",
+    "expected": [
+      1
+    ]
+  },
+  {
+    "name": "ru_not_cancelled",
+    "language": "ru",
+    "kind": "cancel",
+    "note": "Я НЕ отменял запись к мастеру. Мне всё ещё нужно прийти.",
+    "expected": [
+      1
+    ]
+  },
+  {
+    "name": "en_done_correction",
+    "language": "en",
+    "kind": "cancel",
+    "note": "I have to send the rental documents.\nCorrection: I sent them this morning; nothing remains.",
+    "expected": []
+  },
+  {
+    "name": "ru_done_correction",
+    "language": "ru",
+    "kind": "cancel",
+    "note": "Надо отправить заявление.\nУточнение: утром уже отправил, вопрос закрыт.",
+    "expected": []
+  },
+  {
+    "name": "en_replaced_task",
+    "language": "en",
+    "kind": "cancel",
+    "note": "I must order a large frame.\nCancel the large frame; I need to order a small one instead.",
+    "expected": [
+      2
+    ]
+  },
+  {
+    "name": "ru_replaced_task",
+    "language": "ru",
+    "kind": "cancel",
+    "note": "Мне надо купить большую полку.\nБольшую отменяю; вместо неё мне нужно купить маленькую.",
+    "expected": [
+      2
+    ]
+  },
+  {
+    "name": "en_renew_explicit",
+    "language": "en",
+    "kind": "renew",
+    "note": "I still have not collected the dry cleaning. Remind me again.",
+    "expected": [
+      1
+    ]
+  },
+  {
+    "name": "ru_renew_explicit",
+    "language": "ru",
+    "kind": "renew",
+    "note": "Я так и не получил посылку из ремонта. Напомни мне снова.",
+    "expected": [
+      1
+    ]
+  },
+  {
+    "name": "en_renew_negation",
+    "language": "en",
+    "kind": "renew",
+    "note": "Remind me again to renew my gym membership.\nActually do not remind me; I am quitting the gym.",
+    "expected": []
+  },
+  {
+    "name": "ru_renew_negation",
+    "language": "ru",
+    "kind": "renew",
+    "note": "Напомни ещё раз продлить подписку.\nНет, не напоминай: я больше ей не пользуюсь.",
+    "expected": []
+  },
+  {
+    "name": "en_renew_completed",
+    "language": "en",
+    "kind": "renew",
+    "note": "I have not booked my train ticket. Remind me again.\nUpdate: ticket booked, no reminder needed.",
+    "expected": []
+  },
+  {
+    "name": "ru_renew_completed",
+    "language": "ru",
+    "kind": "renew",
+    "note": "Не купил билеты в театр, напомни снова.\nУже купил, напоминать больше не нужно.",
+    "expected": []
+  },
+  {
+    "name": "en_renew_reopened",
+    "language": "en",
+    "kind": "renew",
+    "note": "I cancelled my request to repair the suitcase.\nI changed my mind: I still need the repair. Remind me again.",
+    "expected": [
+      2
+    ]
+  },
+  {
+    "name": "ru_renew_reopened",
+    "language": "ru",
+    "kind": "renew",
+    "note": "Я отменил ремонт зонта.\nПередумал: зонт всё же нужно починить. Напомни снова.",
+    "expected": [
+      2
+    ]
+  }
+]

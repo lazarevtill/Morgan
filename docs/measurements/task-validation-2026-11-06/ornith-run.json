@@ -1,0 +1,16 @@
+{
+  "model": "ornith",
+  "digest": "852922174ee4f76621df26105333f1dfe2171cdfb60ebe5a4b013836681a8a77",
+  "status": "operational_failures",
+  "wall_seconds": 55.562,
+  "cycles": [
+    {
+      "batch": 0,
+      "load_seconds": 15.212,
+      "wall_seconds": 55.562,
+      "child_cpu_seconds": 164.069,
+      "child_maxrss_bytes": 8987738112
+    }
+  ],
+  "rows": 2
+}

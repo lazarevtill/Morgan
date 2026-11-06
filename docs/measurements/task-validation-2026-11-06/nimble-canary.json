@@ -1,0 +1,12 @@
+{
+  "model": "nimble",
+  "weights_digest": "0e228c45932655a4b97b175eba79a578e180778ce0d576a10b86f8726962d993",
+  "load_seconds": 18.782,
+  "selected": [
+    "I need to collect my repaired umbrella."
+  ],
+  "valid": true,
+  "wall_seconds": 34.968,
+  "child_cpu_seconds": 72.537,
+  "child_maxrss_bytes": 8700805120
+}
