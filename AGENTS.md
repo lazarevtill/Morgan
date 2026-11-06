@@ -22,6 +22,8 @@ notes into a private workspace with finite limits, STOP control and receipt-base
 It does not start a service or call a model. `enqueue` appends exact account-approved notes;
 `status`, `revoke`, STOP/resume and SIGTERM manage its finite lifecycle. See
 `docs/decisions/local-approved-notes.md` and `docs/decisions/local-note-intake.md`.
+`approve --not-before TIMESTAMP` adds one explicit delivery window; STOP, expiry and receipts
+still govern resumed runs. See `docs/decisions/scheduled-local-notes.md`; no service is installed.
 `diagnose --user OWNER --project PROJECT` reads payload-free run observations and scoped journal
 counts; it never retries or changes tasks. See `docs/decisions/local-worker-diagnostics.md`.
 `supervise` explicitly owns a finite fixed worker subprocess with bounded crash restarts and

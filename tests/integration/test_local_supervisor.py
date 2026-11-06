@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import sys
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -40,13 +41,17 @@ async def phase(workspace, expected):
             await asyncio.sleep(0.01)
 
 
+@pytest.mark.parametrize("scheduled", [True, False])
 @pytest.mark.parametrize("after_effect", [True, False])
-async def test_signal_crash_recovery_never_repeats_effect(workspace, monkeypatch, after_effect):
+async def test_signal_crash_recovery_never_repeats_effect(
+    workspace, monkeypatch, after_effect, scheduled
+):
     """Kill a real worker around publication and verify receipt recovery never replays it."""
     approve(
         workspace,
         [TaskRequest(TaskKey("owner", "personal", "one"), ACTION, "# Private note")],
         ttl_seconds=60,
+        not_before=datetime.now(UTC) - timedelta(seconds=1) if scheduled else None,
     )
     script = """
 import asyncio, os, signal, sys

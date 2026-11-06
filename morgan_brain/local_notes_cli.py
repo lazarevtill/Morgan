@@ -8,6 +8,7 @@ import json
 import signal
 import sys
 from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 
 from morgan_brain.local_notes import (
@@ -60,6 +61,12 @@ def main() -> None:
         approval.add_argument("--task", required=True)
         approval.add_argument("--note", required=True, type=Path)
         approval.add_argument("--ttl", type=int, default=3600)
+        if command == "approve":
+            approval.add_argument(
+                "--not-before",
+                type=datetime.fromisoformat,
+                help="earliest delivery ISO timestamp with UTC offset; TTL starts now",
+            )
         approval.add_argument(
             "--yes", action="store_true", help="explicit trusted automation approval"
         )
@@ -93,7 +100,10 @@ def main() -> None:
             with args.note.open("rb") as source:
                 text = source.read(16385).decode("utf-8")
             request = TaskRequest(TaskKey(args.user, args.project, args.task), ACTION, text)
-            print(json.dumps(asdict(request), ensure_ascii=False), file=sys.stderr)
+            preview = {"request": asdict(request), "ttl_seconds": args.ttl}
+            if args.command == "approve" and args.not_before is not None:
+                preview["not_before"] = args.not_before.isoformat()
+            print(json.dumps(preview, ensure_ascii=False), file=sys.stderr)
             if not args.yes:
                 print("Approve this exact note? Type APPROVE: ", end="", file=sys.stderr)
                 if input() != "APPROVE":
@@ -101,7 +111,7 @@ def main() -> None:
             if args.command == "enqueue":
                 enqueue(workspace, request, ttl_seconds=args.ttl)
             else:
-                approve(workspace, [request], ttl_seconds=args.ttl)
+                approve(workspace, [request], ttl_seconds=args.ttl, not_before=args.not_before)
             print(json.dumps({"approved": True}))
         elif args.command in ("run", "supervise"):
             limits = RunLimits(args.actions, args.cycles, args.seconds, args.poll)

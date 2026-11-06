@@ -182,13 +182,21 @@ def _requests(raw: object) -> tuple[TaskRequest, ...]:
 
 
 def _write_approval(
-    workspace: NoteWorkspace, requests: Sequence[TaskRequest], expiry: datetime
+    workspace: NoteWorkspace,
+    requests: Sequence[TaskRequest],
+    expiry: datetime,
+    not_before: datetime | None = None,
 ) -> None:
     """Publish one validated policy atomically while the caller holds the approval lock."""
     checked = _requests([asdict(r) for r in requests])
+    if not_before is not None:
+        if not_before.utcoffset() is None or not_before >= expiry:
+            raise ValueError("not-before must have a timezone and precede expiry")
+        not_before = not_before.astimezone(UTC)
     document = json.dumps(
         {
-            "version": "morgan.local-approval.v1",
+            "version": "morgan.local-approval.v2" if not_before else "morgan.local-approval.v1",
+            **({"not_before": not_before.isoformat()} if not_before else {}),
             "workspace": workspace.provider_id,
             "expires_at": expiry.isoformat(),
             "requests": [asdict(r) for r in checked],
@@ -207,10 +215,16 @@ def _expiry(ttl_seconds: int) -> datetime:
     return datetime.now(UTC) + timedelta(seconds=ttl_seconds)
 
 
-def approve(workspace: NoteWorkspace, requests: Sequence[TaskRequest], *, ttl_seconds: int) -> None:
+def approve(
+    workspace: NoteWorkspace,
+    requests: Sequence[TaskRequest],
+    *,
+    ttl_seconds: int,
+    not_before: datetime | None = None,
+) -> None:
     """Explicitly replace all active grants; never derive this operation from planner output."""
     with workspace.locked(approval=True):
-        _write_approval(workspace, requests, _expiry(ttl_seconds))
+        _write_approval(workspace, requests, _expiry(ttl_seconds), not_before)
 
 
 def enqueue(workspace: NoteWorkspace, request: TaskRequest, *, ttl_seconds: int) -> None:
@@ -222,7 +236,9 @@ def enqueue(workspace: NoteWorkspace, request: TaskRequest, *, ttl_seconds: int)
     with workspace.locked(approval=True):
         expiry = _expiry(ttl_seconds)
         try:
-            requests, previous_expiry = FileApproval(workspace).snapshot()
+            requests, previous_expiry, not_before = FileApproval(workspace).window()
+            if not_before is not None:
+                raise TaskPermissionDenied("replace scheduled approval explicitly; cannot append")
         except FileNotFoundError:
             requests = ()
         else:
@@ -261,7 +277,7 @@ def local_status(workspace: NoteWorkspace) -> dict[str, str | bool | int | None]
     except StopRequested:
         stopped = True
     try:
-        requests, expiry = FileApproval(workspace).snapshot()
+        requests, expiry, not_before = FileApproval(workspace).window()
     except FileNotFoundError:
         return {
             "worker_active": active,
@@ -276,6 +292,8 @@ def local_status(workspace: NoteWorkspace) -> dict[str, str | bool | int | None]
         "approval": "valid" if expiry > datetime.now(UTC) else "expired",
         "approved_tasks": len(requests),
         "expires_at": expiry.isoformat(),
+        **({"not_before": not_before.isoformat()} if not_before else {}),
+        **({"approval": "scheduled"} if not_before and datetime.now(UTC) < not_before else {}),
     }
 
 
@@ -287,29 +305,44 @@ class FileApproval:
         self.workspace = workspace
 
     def snapshot(self) -> tuple[tuple[TaskRequest, ...], datetime]:
-        """Read and validate a policy without granting authority or requiring a running state."""
+        """Read exact approved requests and expiry, including work not yet due."""
+        requests, expiry, _ = self.window()
+        return requests, expiry
+
+    def window(self) -> tuple[tuple[TaskRequest, ...], datetime, datetime | None]:
+        """Validate legacy immediate grants or an explicit timezone-aware delivery window."""
         raw = json.loads(self.workspace.read(".approval.json", _MAX_APPROVAL))
+        fields = {"version", "workspace", "expires_at", "requests"}
+        if not isinstance(raw, dict):
+            raise TaskPermissionDenied("invalid approval")
+        scheduled = raw.get("version") == "morgan.local-approval.v2"
+        if scheduled:
+            fields.add("not_before")
         if (
-            not isinstance(raw, dict)
-            or set(raw) != {"version", "workspace", "expires_at", "requests"}
-            or raw["version"] != "morgan.local-approval.v1"
+            set(raw) != fields
+            or raw["version"] not in ("morgan.local-approval.v1", "morgan.local-approval.v2")
             or raw["workspace"] != self.workspace.provider_id
         ):
             raise TaskPermissionDenied("approval does not belong to this workspace")
         expiry = datetime.fromisoformat(raw["expires_at"])
         if expiry.utcoffset() is None:
             raise TaskPermissionDenied("approval lacks a timezone")
-        return _requests(raw["requests"]), expiry
+        not_before = datetime.fromisoformat(raw["not_before"]) if scheduled else None
+        if not_before is not None and (not_before.utcoffset() is None or not_before >= expiry):
+            raise TaskPermissionDenied("invalid approval delivery window")
+        return _requests(raw["requests"]), expiry, not_before
 
     def load(self) -> tuple[tuple[TaskRequest, ...], TaskPermissions]:
         """Fail closed on STOP, expiry, malformed policy, or another workspace's approval."""
         self.workspace.check_stop()
         try:
-            requests, expiry = self.snapshot()
+            requests, expiry, not_before = self.window()
         except FileNotFoundError:
             return (), TaskPermissions()
         if expiry <= datetime.now(UTC):
             raise TaskPermissionDenied("approval has expired")
+        if not_before is not None and datetime.now(UTC) < not_before:
+            return (), TaskPermissions()
         permissions = TaskPermissions()
         for request in requests:
             permissions.grant(TaskPermit(request, "local-account-file", expiry))
