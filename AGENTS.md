@@ -32,6 +32,10 @@ evidence through the gate, without model calls. See `docs/decisions/memory-backe
 `python -m morgan_brain.eval.note_selection` is an explicit synthetic-only Ollama experiment.
 It neither reads memory nor authorizes tasks; see `docs/decisions/synthetic-note-selection.md`.
 
+`note_proposal_cli` makes an explicit local-model draft from piped text, without memory writes.
+`morgan commitment` validates reviewed planning fields and reuses `remember` capture. See
+`docs/decisions/personal-note-intake.md`; neither path grants execution authority.
+
 Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
 `docs/ROADMAP.md` (what is not in the code and why, what retrieval measures, what is next),
 `docs/decisions/` (decisions, and what the code does about each). The archived agent kernel is
