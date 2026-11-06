@@ -18,7 +18,7 @@ from uuid import uuid4
 from morgan_brain.memory.store.transactions import write_transaction
 
 _APPLICATION_ID = 0x4D54534B  # MTSK, distinct from the memory database.
-_VERSION = 1
+_VERSION = 2
 _MAX_TEXT_BYTES = 16_384
 TaskStatus = Literal["pending", "running", "succeeded", "cancelled", "outcome_unknown"]
 
@@ -68,6 +68,7 @@ class Task:
     attempt_id: str | None
     cancel_requested: bool
     result: str | None
+    receipt_json: str | None = None
 
 
 @dataclass(frozen=True)
@@ -115,11 +116,13 @@ class TaskJournal:
                     "status TEXT NOT NULL CHECK(status IN "
                     "('pending','running','succeeded','cancelled','outcome_unknown')), "
                     "attempt_id TEXT, cancel_requested INTEGER NOT NULL DEFAULT 0, result TEXT, "
+                    "receipt_json TEXT, "
                     "created_at TEXT NOT NULL, started_at TEXT, finished_at TEXT, "
                     "PRIMARY KEY(user_id, project, task_id))"
                 )
+                self._add_receipt_column()
                 self._conn.execute("PRAGMA application_id=0x4D54534B")
-                self._conn.execute("PRAGMA user_version=1")
+                self._conn.execute("PRAGMA user_version=2")
         except BaseException:
             self._conn.close()
             raise
@@ -128,10 +131,16 @@ class TaskJournal:
         application = self._conn.execute("PRAGMA application_id").fetchone()[0]
         version = self._conn.execute("PRAGMA user_version").fetchone()[0]
         tables = self._conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        if (application, version) != (_APPLICATION_ID, _VERSION) and (
-            application != 0 or version != 0 or tables
-        ):
+        supported = application == _APPLICATION_ID and version in (1, _VERSION)
+        if not supported and (application != 0 or version != 0 or tables):
             raise ValueError("not a supported task journal; refusing to alter this database")
+
+    def _add_receipt_column(self) -> None:
+        columns = {row[1] for row in self._conn.execute("PRAGMA table_info(tasks)")}
+        if "receipt_json" not in columns:
+            if self._conn.execute("PRAGMA user_version").fetchone()[0] != 1:
+                raise ValueError("task journal is missing its receipt column")
+            self._conn.execute("ALTER TABLE tasks ADD COLUMN receipt_json TEXT")
 
     def close(self) -> None:
         self._conn.close()
@@ -150,6 +159,7 @@ class TaskJournal:
             row["attempt_id"],
             bool(row["cancel_requested"]),
             row["result"],
+            row["receipt_json"],
         )
 
     def _require(self, key: TaskKey) -> Task:
@@ -226,6 +236,35 @@ class TaskJournal:
         is refused. The caller must reconcile the external outcome separately.
         """
         return self._end(key, attempt_id=attempt_id, status="outcome_unknown", result=None)
+
+    def confirm_receipt(
+        self, key: TaskKey, *, attempt_id: str, result: str, receipt_json: str
+    ) -> Task:
+        """Commit caller-validated adapter evidence and success together; never retry an effect.
+
+        This low-level write trusts its caller. Use reconcile_task for request/receipt matching.
+        """
+        _text(result)
+        if not isinstance(receipt_json, str) or not 0 < len(receipt_json.encode("utf-8")) <= 32768:
+            raise ValueError("receipt evidence requires 1 to 32768 UTF-8 bytes")
+        with write_transaction(self._conn):
+            task = self._require(key)
+            if task.attempt_id != attempt_id:
+                raise TaskConflict("receipt belongs to another task attempt")
+            if (
+                task.status == "succeeded"
+                and task.result == result
+                and task.receipt_json == receipt_json
+            ):
+                return task
+            if task.status != "outcome_unknown":
+                raise TaskConflict("only an unknown outcome can accept a new receipt")
+            self._conn.execute(
+                "UPDATE tasks SET status='succeeded',result=?,receipt_json=?,finished_at=? "
+                "WHERE user_id=? AND project=? AND task_id=?",
+                (result, receipt_json, _now(), *key.sql()),
+            )
+            return self._require(key)
 
     def _end(
         self, key: TaskKey, *, attempt_id: str, status: TaskStatus, result: str | None

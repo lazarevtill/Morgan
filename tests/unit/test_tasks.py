@@ -206,7 +206,7 @@ def test_future_journal_version_is_refused(tmp_path):
     path = tmp_path / "tasks.db"
     TaskJournal(path).close()
     conn = sqlite3.connect(path)
-    conn.execute("PRAGMA user_version=2")
+    conn.execute("PRAGMA user_version=3")
     conn.close()
     with pytest.raises(ValueError, match="supported task journal"):
         TaskJournal(path)
