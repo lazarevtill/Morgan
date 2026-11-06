@@ -638,6 +638,7 @@ async def _apply_renewal(workspace: NoteWorkspace, session: Session) -> None:
     update = session.pending_renewal
     if update is None:
         raise ValueError("no pending renewal")
+    workspace.check_stop()
     await _check_renewal(workspace, session, update)
     digest = hashlib.sha256(
         json.dumps(
@@ -648,6 +649,7 @@ async def _apply_renewal(workspace: NoteWorkspace, session: Session) -> None:
         (update.source_id, update.source_text, []),
         (update.event_id, update.after.model_dump_json(), [update.parent_id]),
     ):
+        workspace.check_stop()
         await cmd_remember(
             argparse.Namespace(
                 text=content,
