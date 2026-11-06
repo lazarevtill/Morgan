@@ -215,3 +215,81 @@ def test_ui_keeps_exclusive_session_lock_until_model_cleanup(model, monkeypatch)
     )
     owner_ui.main()
     assert closed == [True]
+
+
+@pytest.mark.parametrize(
+    "draft_state", ["ready", "failed", "interrupted", "not_started", "unavailable"]
+)
+def test_pending_draft_visibility_never_runs_or_confirms(model, monkeypatch, draft_state):
+    import hashlib
+
+    note = "Return the library book."
+    owner_input.request(model.path, ["submit", "book"], text=note)
+    with closing(NoteWorkspace(model.path, create=False)) as workspace:
+        filename = proposal_filename(note)
+        if draft_state == "ready":
+            workspace.publish(
+                filename,
+                json.dumps(
+                    {
+                        "version": "morgan.note-proposal.v1",
+                        "source_sha256": hashlib.sha256(note.encode()).hexdigest(),
+                        "source": "agent_inferred",
+                        "approved": False,
+                        "review_required": True,
+                        "selected_lines": [note],
+                    }
+                ),
+            )
+        elif draft_state == "failed":
+            workspace.publish("failure-" + filename, json.dumps({"version": 1, "code": "timeout"}))
+        elif draft_state == "interrupted":
+            workspace.publish("attempt-" + filename, "Synthetic interrupted attempt")
+        elif draft_state == "unavailable":
+            workspace.publish(filename, "[]")
+    before = [(model.path / n).read_bytes() for n in ("session.json", "owner-input.json")]
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("viewing pending results must not start inference")
+
+    monkeypatch.setattr(model, "start", unexpected)
+    dialogs = DialogFixture(
+        [("choose", "Проверить сообщения"), ("choose", None), ("choose", "Выход")]
+    )
+    OwnerUI(model.path, dialogs, model.deadline, model).run()
+    labels = {
+        "ready": "черновик готов, не подтверждён",
+        "failed": "ошибка модели",
+        "interrupted": "попытка прервана",
+        "not_started": "модель ещё не запускалась",
+        "unavailable": "состояние черновика недоступно",
+    }
+    assert "Ожидают проверки: 1" in dialogs.seen[0]["prompt"]
+    assert f"Готовых черновиков: {int(draft_state == 'ready')}" in dialogs.seen[0]["prompt"]
+    assert labels[draft_state] in dialogs.seen[1]["options"][0]
+    assert before == [(model.path / n).read_bytes() for n in ("session.json", "owner-input.json")]
+    assert not state(model.path)["plan"]["tasks"]
+    assert model.thread is None
+
+
+def test_draft_visibility_names_shared_busy_lane_without_claiming_message_is_running(model):
+    owner_input.request(model.path, ["submit", "waiting"], text="Water plants.")
+    dialogs = DialogFixture(
+        [("choose", "Проверить сообщения"), ("choose", None), ("choose", "Выход")]
+    )
+    with closing(NoteWorkspace(model.path, create=False)) as workspace, workspace.locked():
+        OwnerUI(model.path, dialogs, model.deadline, model).run()
+    assert "общий канал модели занят" in dialogs.seen[1]["options"][0]
+    assert model.thread is None
+
+
+def test_draft_overview_ignores_dismissed_messages_and_preserves_stop(model):
+    owner_input.request(model.path, ["submit", "ignored"], text="Just a quote.")
+    owner_input.request(model.path, ["dismiss", "ignored"])
+    owner_input.request(model.path, ["submit", "pending"], text="Return book.")
+    owner_input.request(model.path, ["stop"])
+    dialogs = DialogFixture([("choose", "Выход")])
+    OwnerUI(model.path, dialogs, model.deadline, model).run()
+    assert "Ожидают проверки: 1" in dialogs.seen[0]["prompt"]
+    assert "Готовых черновиков: 0" in dialogs.seen[0]["prompt"]
+    assert state(model.path)["stopped"] and model.thread is None
