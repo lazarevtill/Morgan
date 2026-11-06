@@ -106,8 +106,8 @@ This is an operator-driven personal planning conversation, not an autonomous 24/
 Task selection and planning fields remain explicit. There is no conversational free-form editing,
 calendar integration, desktop notification, or automatic discovery of all commitments. The day
 and budget belong to this session; changing them currently needs a new session or existing brief CLI.
-Memory uses explicit workspace-local hash embeddings for this bounded workflow; it does not
-claim semantic-search quality. No configured cloud embedding/provider destination is used.
+Memory uses explicit workspace-local 1024-dimensional hash embeddings. It does not claim
+semantic-search quality. No configured cloud embedding/provider destination is used.
 
 The workspace retains the original note, proposal, session journal, memory and plan drafts.
 Before real data, choose the exact input file, private destination, owner/project, and retention

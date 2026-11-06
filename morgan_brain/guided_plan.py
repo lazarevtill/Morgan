@@ -74,6 +74,7 @@ def _settings(workspace: NoteWorkspace, session: Session) -> Settings:
         data_dir=str(workspace.path / "memory"),
         temporal_db_url=f"sqlite:///{workspace.path / 'memory/morgan.db'}",
         embedding_backend="hash",
+        embedding_dim=1024,
     )
 
 

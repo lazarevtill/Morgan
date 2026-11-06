@@ -63,7 +63,7 @@ def inputs(root, note, selected):
     ]
 
 
-def run(root, answers, args=(), *, script=None):
+def run(root, answers, args=(), *, script=None, overrides=None):
     """Run the actual foreground CLI with explicitly scripted fixture decisions."""
     command = (
         [sys.executable, "-m", "morgan_brain.guided_plan"]
@@ -77,7 +77,7 @@ def run(root, answers, args=(), *, script=None):
         text=True,
         timeout=15,
         check=False,
-        env={"PATH": "/usr/bin:/bin", "HOME": str(root)},
+        env={"PATH": "/usr/bin:/bin", "HOME": str(root), **(overrides or {})},
     )
 
 
@@ -192,3 +192,19 @@ def test_second_session_fails_instead_of_waiting_for_another_users_prompt(tmp_pa
             assert not (tmp_path / "session/memory").exists()
         finally:
             first.communicate("\n", timeout=5)
+
+
+def test_embedding_environment_change_cannot_break_resumed_completion(tmp_path):
+    """Pin local hash-vector width rather than inheriting a different width on resume."""
+    note = "I need to water the plants."
+    args = inputs(tmp_path, note, [note])
+    first = run(
+        tmp_path,
+        "1\n10 normal 2026-11-06\nCONFIRM\nquit\n",
+        args,
+        overrides={"MORGAN_EMBEDDING_DIM": "8"},
+    )
+    assert first.returncode == 0, first.stderr
+    resumed = run(tmp_path, "done 1\nquit\n", overrides={"MORGAN_EMBEDDING_DIM": "4096"})
+    assert resumed.returncode == 0, resumed.stderr
+    assert "planned: 0 min" in resumed.stdout
