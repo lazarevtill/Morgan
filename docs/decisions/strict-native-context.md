@@ -30,6 +30,11 @@ Citation identity checks do not prove semantic entailment. Any unresolved retrie
 conservatively abstains in the first slice. A valid abstention may persist atomically;
 invalid citations do not persist a positive reply.
 
+A quoted instruction has produced a false task-completion answer with a valid citation in a
+local model experiment. General `ask` remains vulnerable to this semantic failure. For an
+owner-reviewed task use the deterministic [verified task state](verified-task-state.md) path;
+neither generated prose nor a citation grants authority to change the task.
+
 Carry bounded evidence snapshots into atomic store_turn. Under its existing write lock,
 re-read the exact scoped records and compare current revision/support state and source
 fields before committing any event/index/history row. A correction, conflict, fact update,
