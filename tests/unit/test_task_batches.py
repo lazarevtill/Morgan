@@ -247,17 +247,32 @@ async def test_permission_rechecked_after_claim_before_handler(journal):
     assert journal.get(b.key).attempt_id is None
 
 
-async def test_timeout_is_shared_across_handlers_not_reset_for_each(journal):
+async def test_timeout_is_shared_across_handlers_not_reset_for_each(journal, monkeypatch):
     requests = [request(str(i)) for i in range(3)]
     journal.create_many(requests)
+    loop = asyncio.get_running_loop()
+    elapsed = [loop.time()]
+    calls = []
 
     async def slow(task, control):
-        await asyncio.sleep(0.03)
+        calls.append(task.key)
+        elapsed[0] += 0.03
+        if len(calls) == 2:
+            # Yield until the real asyncio timeout fires at the controlled clock time.
+            # A reset per-handler budget would incorrectly let this handler finish.
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
         control.check_ready()
         return "done"
 
-    outcome = await process(journal, requests, allow(*requests), slow, seconds=0.05)
+    # Wall-clock scheduling and SQLite latency must not decide which handler times out.
+    with monkeypatch.context() as patch:
+        patch.setattr(loop, "time", lambda: elapsed[0])
+        outcome = await process(journal, requests, allow(*requests), slow, seconds=0.05)
     assert outcome.reason == "needs_reconciliation"
+    assert calls == [item.key for item in requests[:2]]
+    assert journal.get(requests[0].key).status == "succeeded"
+    assert journal.get(requests[1].key).status == "outcome_unknown"
     assert journal.get(requests[-1].key).attempt_id is None
 
 
