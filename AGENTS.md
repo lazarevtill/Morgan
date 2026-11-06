@@ -339,3 +339,8 @@ Python 3.12+, line length 100, `ruff` is the linter and formatter, `mypy --stric
 `owner_ui` is an opt-in bounded macOS dialog adapter over `owner_input`, with explicit
 review, STOP and saved-review recovery. No listener or service is added; see
 `docs/decisions/native-owner-review.md`.
+
+`owner_ui --server PATH --model PATH` explicitly offers a bounded local draft within the
+same review. `owner_model` reuses model-cycle guardian locks and the owner STOP marker;
+source-keyed draft recovery never grants task authority. See
+`docs/decisions/integrated-owner-model.md`. No service or automatic retry is added.
