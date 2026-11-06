@@ -329,9 +329,13 @@ revision from cwd. No runtime is activated and no service is installed automatic
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 690 passed, 4 skipped (the live ones)
+pytest -q                     # See the latest CI run for verified totals
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 
 Python 3.12+, line length 100, `ruff` is the linter and formatter, `mypy --strict`. Keep
 `main` green. Root-cause fixes only; a workaround gets flagged, not silently applied.
+
+`owner_ui` is an opt-in bounded macOS dialog adapter over `owner_input`, with explicit
+review, STOP and saved-review recovery. No listener or service is added; see
+`docs/decisions/native-owner-review.md`.

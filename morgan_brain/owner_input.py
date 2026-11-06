@@ -11,7 +11,7 @@ import os
 import sys
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NoReturn
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -293,11 +293,28 @@ async def _confirm(
     _save(workspace, inbox)
 
 
-def _parser() -> argparse.ArgumentParser:
+class RequestParser(argparse.ArgumentParser):
+    """Keep embedded callers alive even on Python versions with partial exit_on_error support."""
+
+    def error(self, message: str) -> NoReturn:
+        """Convert missing arguments and unknown options into ordinary validation failures."""
+        raise ValueError(message)
+
+    def exit(self, status: int = 0, message: str | None = None) -> NoReturn:
+        """Never terminate the embedding process, including help requests."""
+        raise ValueError(message or f"parser requested exit {status}")
+
+
+def _parser(*, exit_on_error: bool = True) -> argparse.ArgumentParser:
     """Expose finite one-shot commands with separate submission, review and confirmation."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser_class = argparse.ArgumentParser if exit_on_error else RequestParser
+    parser = parser_class(description=__doc__, exit_on_error=exit_on_error)
     parser.add_argument("workspace", type=Path)
-    commands = parser.add_subparsers(dest="command", required=True)
+    commands = parser.add_subparsers(
+        dest="command",
+        required=True,
+        parser_class=parser_class,
+    )
     init = commands.add_parser("init")
     init.add_argument("--user", required=True)
     init.add_argument("--project", required=True)
@@ -320,6 +337,8 @@ def _parser() -> argparse.ArgumentParser:
     confirm.add_argument("--digest", required=True)
     for name in ("status", "stop", "resume"):
         commands.add_parser(name)
+    for command_parser in commands.choices.values():
+        command_parser.exit_on_error = exit_on_error
     return parser
 
 
@@ -390,28 +409,45 @@ def _dispatch(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, o
     }
 
 
+def execute(args: argparse.Namespace) -> dict[str, object]:
+    """Execute one parsed local account request without stdin or presentation side effects."""
+    if args.command == "submit" and args.text.strip().casefold() in ("stop", "стоп"):
+        args.command = "stop"
+    workspace = NoteWorkspace(args.workspace, create=args.command == "init")
+    try:
+        # STOP remains available while a cooperating writer owns the dialogue lock.
+        if args.command == "stop":
+            workspace.stop()
+            return {"state": "stopped"}
+        with os.fdopen(workspace.open_file(".guided.lock", os.O_RDWR | os.O_CREAT), "r+") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return _dispatch(workspace, args)
+    finally:
+        workspace.close()
+
+
+def request(workspace: Path, arguments: list[str], *, text: str = "") -> dict[str, object]:
+    """Reuse the CLI contract for a trusted local interface; text never supplies arguments."""
+    parser = _parser(exit_on_error=False)
+    try:
+        args = parser.parse_args([str(workspace), *arguments])
+    except argparse.ArgumentError as error:
+        raise ValueError(str(error)) from error
+    if args.command == "submit":
+        args.text = text
+    return execute(args)
+
+
 def main() -> None:
     """Execute one local account command and exit; never prompt or consume model authority."""
     parser = _parser()
     args = parser.parse_args()
     if args.command == "submit":
         args.text = sys.stdin.read(1002).removesuffix("\n")
-        if args.text.strip().casefold() in ("stop", "стоп"):
-            args.command = "stop"
-    workspace = NoteWorkspace(args.workspace, create=args.command == "init")
     try:
-        # STOP must remain available while a cooperating writer owns the dialogue lock.
-        if args.command == "stop":
-            workspace.stop()
-            print(json.dumps({"state": "stopped"}))
-            return
-        with os.fdopen(workspace.open_file(".guided.lock", os.O_RDWR | os.O_CREAT), "r+") as lock:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            print(json.dumps(_dispatch(workspace, args), ensure_ascii=True))
+        print(json.dumps(execute(args), ensure_ascii=True))
     except (ValueError, OSError, StopRequested, TaskConflict) as error:
         parser.exit(2, f"Error: {error}\n")
-    finally:
-        workspace.close()
 
 
 if __name__ == "__main__":
