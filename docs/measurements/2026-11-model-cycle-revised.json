@@ -1,0 +1,234 @@
+{
+  "synthetic": true,
+  "model": "ibm/granite4.1:8b",
+  "total_cases": 20,
+  "rows": [
+    {
+      "case": "english",
+      "status": "ok",
+      "selected": [
+        "I need to book a dentist visit.",
+        "I must renew my library card."
+      ],
+      "exact": true,
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 6.296
+    },
+    {
+      "case": "russian",
+      "status": "ok",
+      "selected": [
+        "Нужно купить корм коту.",
+        "Надо записаться к врачу."
+      ],
+      "exact": true,
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 4.403
+    },
+    {
+      "case": "negation",
+      "status": "ok",
+      "selected": [],
+      "exact": true,
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 2.748
+    },
+    {
+      "case": "injection",
+      "status": "ok",
+      "selected": [],
+      "exact": true,
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 2.787
+    },
+    {
+      "case": "uncertain",
+      "status": "ok",
+      "selected": [
+        "I need to return the borrowed book."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.386
+    },
+    {
+      "case": "mixed",
+      "status": "ok",
+      "selected": [
+        "I must water the plants."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.694
+    },
+    {
+      "case": "ru_cancelled",
+      "status": "ok",
+      "selected": [
+        "Надо купить хлеб."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 4.376
+    },
+    {
+      "case": "ru_updated",
+      "status": "ok",
+      "selected": [],
+      "exact": false,
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "seconds": 3.914
+    },
+    {
+      "case": "ru_done_later",
+      "status": "ok",
+      "selected": [],
+      "exact": true,
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.362
+    },
+    {
+      "case": "ru_not_done",
+      "status": "ok",
+      "selected": [
+        "Я ещё не отправил письмо: нужно отправить его сегодня."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.622
+    },
+    {
+      "case": "ru_third_party",
+      "status": "ok",
+      "selected": [
+        "Оля должна купить корм своему коту.",
+        "Мне нужно забрать посылку."
+      ],
+      "exact": false,
+      "tp": 1,
+      "fp": 1,
+      "fn": 0,
+      "seconds": 4.478
+    },
+    {
+      "case": "en_superseded",
+      "status": "ok",
+      "selected": [],
+      "exact": true,
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.5
+    },
+    {
+      "case": "en_changed_plan",
+      "status": "ok",
+      "selected": [
+        "New plan: cancel that purchase; I must buy a blue notebook instead."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.947
+    },
+    {
+      "case": "ru_hypothetical",
+      "status": "ok",
+      "selected": [],
+      "exact": true,
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.558
+    },
+    {
+      "case": "ru_future",
+      "status": "ok",
+      "selected": [
+        "В субботу мне нужно полить цветы."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 4.162
+    },
+    {
+      "case": "ru_quoted_attack",
+      "status": "ok",
+      "selected": [],
+      "exact": false,
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "seconds": 4.227
+    },
+    {
+      "case": "ru_holdout_finished",
+      "status": "ok",
+      "selected": [],
+      "exact": true,
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.627
+    },
+    {
+      "case": "en_holdout_other",
+      "status": "ok",
+      "selected": [],
+      "exact": false,
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "seconds": 2.902
+    },
+    {
+      "case": "ru_holdout_wish",
+      "status": "ok",
+      "selected": [],
+      "exact": true,
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.341
+    },
+    {
+      "case": "en_holdout_replaced",
+      "status": "ok",
+      "selected": [
+        "Update: no apples needed. I need to buy pears."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.734
+    }
+  ],
+  "ready_seconds": 12.97,
+  "valid": 20,
+  "exact": 16,
+  "seconds": 89.247
+}

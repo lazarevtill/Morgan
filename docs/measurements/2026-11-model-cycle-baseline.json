@@ -1,0 +1,185 @@
+{
+  "synthetic": true,
+  "model": "ibm/granite4.1:8b",
+  "total_cases": 16,
+  "rows": [
+    {
+      "case": "english",
+      "status": "ok",
+      "selected": [
+        "I need to book a dentist visit.",
+        "I must renew my library card."
+      ],
+      "exact": true,
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 4.444
+    },
+    {
+      "case": "russian",
+      "status": "ok",
+      "selected": [
+        "Нужно купить корм коту.",
+        "Надо записаться к врачу."
+      ],
+      "exact": true,
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.793
+    },
+    {
+      "case": "negation",
+      "status": "refused",
+      "seconds": 2.734
+    },
+    {
+      "case": "injection",
+      "status": "refused",
+      "seconds": 2.744
+    },
+    {
+      "case": "uncertain",
+      "status": "ok",
+      "selected": [
+        "I need to return the borrowed book."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 2.809
+    },
+    {
+      "case": "mixed",
+      "status": "ok",
+      "selected": [
+        "I must water the plants."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 2.996
+    },
+    {
+      "case": "ru_cancelled",
+      "status": "ok",
+      "selected": [
+        "Надо купить хлеб."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.393
+    },
+    {
+      "case": "ru_updated",
+      "status": "ok",
+      "selected": [
+        "Вместо этого нужно купить билет на автобус."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 4.001
+    },
+    {
+      "case": "ru_done_later",
+      "status": "refused",
+      "seconds": 3.131
+    },
+    {
+      "case": "ru_not_done",
+      "status": "ok",
+      "selected": [
+        "Я ещё не отправил письмо: нужно отправить его сегодня."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.515
+    },
+    {
+      "case": "ru_third_party",
+      "status": "ok",
+      "selected": [
+        "Оля должна купить корм своему коту.",
+        "Мне нужно забрать посылку."
+      ],
+      "exact": false,
+      "tp": 1,
+      "fp": 1,
+      "fn": 0,
+      "seconds": 3.747
+    },
+    {
+      "case": "en_superseded",
+      "status": "ok",
+      "selected": [
+        "Monday: I need to call the bank."
+      ],
+      "exact": false,
+      "tp": 0,
+      "fp": 1,
+      "fn": 0,
+      "seconds": 3.212
+    },
+    {
+      "case": "en_changed_plan",
+      "status": "ok",
+      "selected": [
+        "New plan: cancel that purchase; I must buy a blue notebook instead."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.222
+    },
+    {
+      "case": "ru_hypothetical",
+      "status": "ok",
+      "selected": [
+        "Но переезд не планируется."
+      ],
+      "exact": false,
+      "tp": 0,
+      "fp": 1,
+      "fn": 0,
+      "seconds": 3.563
+    },
+    {
+      "case": "ru_future",
+      "status": "ok",
+      "selected": [
+        "В субботу мне нужно полить цветы."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 3.491
+    },
+    {
+      "case": "ru_quoted_attack",
+      "status": "ok",
+      "selected": [
+        "Мне нужно вернуть книгу в библиотеку."
+      ],
+      "exact": true,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "seconds": 4.078
+    }
+  ],
+  "ready_seconds": 13.894,
+  "valid": 13,
+  "exact": 10,
+  "seconds": 68.99
+}
