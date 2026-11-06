@@ -108,7 +108,6 @@ revision checks and digest-bound confirmation still govern changes; the displaye
 quote does not authorize an operation. This is a scripted interface check, not a
 human usability study or verification of physical macOS dialog rendering.
 
-
 Source lookup remains available after STOP: the owner can inspect exact quotes and
 current verified task state without resuming processing. Cancelling a search returns
 to the menu. Search, empty results and errors do not clear STOP or authorize writes.
