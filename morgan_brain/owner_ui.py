@@ -1,4 +1,4 @@
-"""A bounded native owner review session; no listener, background service or model calls."""
+"""A bounded native owner review session with optional explicit local-model drafts."""
 
 from __future__ import annotations
 
@@ -15,21 +15,28 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from morgan_brain import owner_input
 from morgan_brain.local_notes import NoteWorkspace, StopRequested
+from morgan_brain.model_cycle import ModelCycle
 from morgan_brain.native_dialog import DialogClosed, Dialogs, NativeDialogs
+from morgan_brain.owner_model import OwnerModel
 from morgan_brain.tasks import TaskConflict
 
 
 class OwnerUI:
     """Present existing receipts and exact reviews without a second persistence mechanism."""
 
-    def __init__(self, workspace: Path, dialogs: Dialogs, deadline: float) -> None:
+    def __init__(
+        self, workspace: Path, dialogs: Dialogs, deadline: float, model: OwnerModel | None = None
+    ) -> None:
         """Bind one foreground session to one private owner-input workspace."""
         self.workspace, self.dialogs, self.deadline = workspace, dialogs, deadline
+        self.model = model
 
     def call(self, *arguments: str, text: str = "") -> dict[str, Any]:
         """Keep command scope fixed and reject mutations after the foreground deadline."""
         if time.monotonic() >= self.deadline:
             raise DialogClosed("UI session deadline reached")
+        if arguments == ("stop",) and self.model is not None:
+            self.model.stop()
         return owner_input.request(self.workspace, list(arguments), text=text)
 
     def text(self, prompt: str, initial: str = "") -> str:
@@ -58,6 +65,59 @@ class OwnerUI:
         self.call("confirm", message["identity"], "--digest", message["digest"])
         self.dialogs.show("info", "Изменение сохранено в плане.")
 
+    def model_review(self, note: str) -> bool:
+        """Show model progress/results without turning suggestions into approval."""
+        if self.model is None:
+            return False
+        while time.monotonic() < self.deadline:
+            status = self.model.status(note)
+            if status["state"] == "ready":
+                summary = (
+                    f"Сохранённое предложение модели (не подтверждено): {status['lines']}"
+                    if status["lines"]
+                    else "Модель не нашла обязательств. Это может быть ошибкой."
+                )
+                return (
+                    self.dialogs.show(
+                        "choose",
+                        f"{summary}\n"
+                        "Проверьте владельца, отрицания и выполненные задачи. "
+                        "Модель может ошибаться. Поля и запись подтверждаются отдельно.",
+                        options=("Заполнить задачу вручную", "Оставить на проверку"),
+                    )
+                    == "Заполнить задачу вручную"
+                )
+            if status["state"] != "running":
+                label = {
+                    "not_started": "ещё не запускалась",
+                    "stopped": "остановлена",
+                    "failed": "ошибка; результат не получен",
+                    "interrupted": "предыдущий запуск прерван; результата нет",
+                }[str(status["state"])]
+                if (
+                    self.dialogs.show(
+                        "confirm",
+                        f"Состояние модели: {label}.\n"
+                        "Запустить или повторить локальное предложение для этого сообщения? "
+                        "До 90 секунд, 4 CPU threads, без внешних API. "
+                        "Задача не будет подтверждена автоматически.",
+                    )
+                    != "Подтвердить"
+                ):
+                    return False
+                self.model.start(note)
+            choice = self.dialogs.show(
+                "choose",
+                "Модель выполняется. Можно проверить результат или остановить её. "
+                "Предыдущее прерванное обращение не повторяется автоматически.",
+                options=("Обновить состояние", "STOP: остановить модель и ввод"),
+            )
+            if choice != "Обновить состояние":
+                self.model.stop()
+                return False
+        self.model.stop()
+        raise DialogClosed("foreground session ended during model review")
+
     def review(self, message: dict[str, Any], state: dict[str, Any]) -> None:
         """Resume exact attempted reviews or collect explicitly chosen new planning fields."""
         envelope = {
@@ -82,8 +142,13 @@ class OwnerUI:
         action = self.dialogs.show(
             "choose",
             f"Ваше сообщение:\n{message['text']}\n\nЧто сделать?",
-            options=("Новая задача", "Перенести задачу", "Оставить на проверку"),
+            options=("Новая задача", "Перенести задачу", "Оставить на проверку")
+            + (("Предложение локальной модели",) if self.model is not None else ()),
         )
+        if action == "Предложение локальной модели":
+            if not self.model_review(message["text"]):
+                return
+            action = "Новая задача"
         day = state["plan"]["planning_day"]
         if action == "Новая задача":
             title = self.text("Название вашей задачи", message["text"][:240])
@@ -215,13 +280,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workspace", type=Path)
     parser.add_argument("--seconds", type=int, default=600)
+    parser.add_argument("--server", type=Path)
+    parser.add_argument("--model", type=Path)
     parser.add_argument("--init-user")
     parser.add_argument("--init-project")
     parser.add_argument("--init-timezone")
     args = parser.parse_args()
     if not 5 <= args.seconds <= 1800:
         parser.error("select a foreground lifetime of 5..1800 seconds")
+    if (args.server is None) != (args.model is None):
+        parser.error("local model requires both --server and --model")
     workspace = None
+    model = None
     try:
         if any((args.init_user, args.init_project, args.init_timezone)):
             if not all((args.init_user, args.init_project, args.init_timezone)):
@@ -247,7 +317,15 @@ def main() -> None:
         with os.fdopen(workspace.open_file(".owner-ui.lock", os.O_RDWR | os.O_CREAT), "r+") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             deadline = time.monotonic() + args.seconds
-            OwnerUI(args.workspace, NativeDialogs(args.workspace, deadline), deadline).run()
+            if args.server is not None:
+                model = OwnerModel(args.workspace, ModelCycle(args.server, args.model), deadline)
+            try:
+                OwnerUI(
+                    args.workspace, NativeDialogs(args.workspace, deadline), deadline, model
+                ).run()
+            finally:
+                if model is not None:
+                    model.close()
     except (DialogClosed, StopRequested, KeyboardInterrupt):
         print("UI closed; pending messages remain unconfirmed.")
     except (ValueError, OSError, TaskConflict, ZoneInfoNotFoundError, sqlite3.Error) as error:

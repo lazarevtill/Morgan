@@ -162,12 +162,20 @@ def _check_existing(existing: object, digest: str, note: str) -> None:
         raise ValueError("existing selections are not grounded")
 
 
-async def run_cycle(workspace: NoteWorkspace, config: ModelCycle, note: str) -> dict[str, object]:
+def proposal_filename(note: str) -> str:
+    """Address a local draft by exact source bytes, never by caller-supplied path text."""
+    return f"proposal-{hashlib.sha256(note.encode('utf-8')).hexdigest()}.json"
+
+
+async def run_cycle(
+    workspace: NoteWorkspace, config: ModelCycle, note: str, *, cache_by_source: bool = False
+) -> dict[str, object]:
     """Publish one immutable unapproved draft; a matching prior publication needs no inference."""
     _validate_note(note)
     digest = hashlib.sha256(note.encode("utf-8")).hexdigest()
+    filename = proposal_filename(note) if cache_by_source else "proposal.json"
     try:
-        existing = json.loads(workspace.read("proposal.json", 16384))
+        existing = json.loads(workspace.read(filename, 16384))
     except FileNotFoundError:
         pass
     else:
@@ -176,7 +184,7 @@ async def run_cycle(workspace: NoteWorkspace, config: ModelCycle, note: str) -> 
     async with managed_model(workspace, config) as session:
         selected = await session.select(note)
         workspace.publish(
-            "proposal.json",
+            filename,
             json.dumps(
                 {
                     "version": "morgan.note-proposal.v1",
