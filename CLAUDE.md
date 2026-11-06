@@ -17,6 +17,10 @@ trusted handlers. It has no service, scheduler, retry or provider client. See
 The one-database invariant below applies to memory; task receipts have a separate lifecycle and
 are not erased by `morgan forget`. Never derive execution authority from remembered text.
 
+The opt-in `python -m morgan_brain.local_notes_cli` workflow delivers account-approved Markdown
+notes into a private workspace with finite limits, STOP control and receipt-based recovery.
+It does not start a service or call a model. See `docs/decisions/local-approved-notes.md`.
+
 Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
 `docs/ROADMAP.md` (what is not in the code and why, what retrieval measures, what is next),
 `docs/decisions/` (decisions, and what the code does about each). The archived agent kernel is
