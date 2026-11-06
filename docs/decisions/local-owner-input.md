@@ -94,7 +94,6 @@ preserves message IDs, obtains genuine review and handles expiry/STOP/conflicts.
 exits after one command; putting it in KeepAlive would not create a useful always-on agent.
 No LaunchAgent or credentials were installed. Local JSON output is not phone delivery.
 
-
 ## Reversible non-task review
 
 `dismiss ID` marks an unreviewed message as `dismissed`; `restore ID` returns it to
@@ -115,3 +114,8 @@ unapproved draft. Use STOP to interrupt the model and intake.
 Tests cover EN/RU source display, cancellation, restart/replay, retained expiry and
 quota, STOP, forbidden reviewed/attempted states and background attempt fencing.
 These are scripted interface checks, not native button or usability measurements.
+
+Deploy readers and writers together as one pinned revision. Older runtimes reject the
+new `dismissed` state; do not downgrade a journal that contains it or erase receipts to
+make an older reader accept it. Normal restore retains STOP/expiry restrictions. This
+change does not automatically upgrade an installed pilot or mutate its existing inputs.
