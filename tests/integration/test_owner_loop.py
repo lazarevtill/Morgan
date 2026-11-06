@@ -131,6 +131,7 @@ def test_render_is_disabled_exact_and_has_no_shell(tmp_path):
     paths = [tmp_path / name for name in ("python", "workspace", "server", "weights")]
     payload = plistlib.loads(render(*paths))
     assert payload["Disabled"] is True
+    assert payload["ProcessType"] == "Standard"
     assert payload["ProgramArguments"][:5] == [
         str(paths[0]),
         "-I",
