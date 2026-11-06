@@ -289,11 +289,19 @@ class OwnerUI:
 
     def search_sources(self) -> None:
         """Show exact source quotations and verified task state without calling a model."""
-        query = self.text("Поиск по фрагменту текста или названию задачи (не по смыслу)")
+        query = self.dialogs.show(
+            "text",
+            "Поиск по фрагменту текста или названию задачи (не по смыслу)",
+            allow_stopped=True,
+        )
+        if query is None:
+            return
         try:
             found = self.call("find", "--", query)
         except (ValueError, OSError, sqlite3.Error) as error:
-            self.dialogs.show("info", f"Поиск не завершён: {error}\nДанные не изменены.")
+            self.dialogs.show(
+                "info", f"Поиск не завершён: {error}\nДанные не изменены.", allow_stopped=True
+            )
             return
         results = found["results"]
         summary = (
@@ -302,11 +310,13 @@ class OwnerUI:
         )
         if not results:
             self.dialogs.show(
-                "info", summary + "\nСовпадений нет; это не доказывает отсутствие задачи."
+                "info",
+                summary + "\nСовпадений нет; это не доказывает отсутствие задачи.",
+                allow_stopped=True,
             )
             return
         labels = tuple(f"{i + 1}. {item['quote'][:100]}" for i, item in enumerate(results))
-        selected = self.dialogs.show("choose", summary, options=labels)
+        selected = self.dialogs.show("choose", summary, options=labels, allow_stopped=True)
         if selected is None:
             return
         item = results[labels.index(selected)]
@@ -334,6 +344,7 @@ class OwnerUI:
             f"Цитата: {item['quote']}\nПроверка сообщения: {review}\n\n"
             f"{current}\nЗапись состояния: {item['current_evidence_id']}\n"
             f"Проверено на: {found['as_of']}\nЭто сведения, не разрешение на действие.",
+            allow_stopped=True,
         )
 
     def preview_plan(self, state: dict[str, Any]) -> None:
@@ -362,7 +373,7 @@ class OwnerUI:
         for _ in range(30):
             state = self.call("status")
             options = (
-                ("Продолжить после STOP", "План", "План на дату", "Выход")
+                ("Продолжить после STOP", "План", "План на дату", "Найти источник", "Выход")
                 if state["stopped"]
                 else (
                     "Новое сообщение",

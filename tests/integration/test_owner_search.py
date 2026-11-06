@@ -243,3 +243,29 @@ def test_ui_passes_leading_dash_literally_and_names_search_errors(tmp_path):
     assert "-foo is a literal example." in info[0]
     assert "Поиск не завершён" in info[1]
     assert "Изменение не завершено" not in info[1]
+
+
+@pytest.mark.parametrize("query", ["книг", "absent", "", None])
+def test_stopped_ui_can_read_sources_without_resuming(tmp_path, query):
+    root = tmp_path / "pilot"
+    initialize(root)
+    capture(root)
+    owner_input.request(root, ["stop"])
+    paths = [root / "owner-input.json", root / "session.json", root / "memory/morgan.db"]
+    before = [p.read_bytes() for p in paths]
+    answers = [("choose", "Найти источник"), ("text", query)]
+    if query == "книг":
+        answers += [("choose", 0), ("info", "Продолжить")]
+    elif query is not None:
+        answers += [("info", "Продолжить")]
+    answers += [("choose", "Выход")]
+    dialogs = drive(root, answers)
+    assert all(d["allow_stopped"] for d in dialogs.seen)
+    assert owner_input.request(root, ["status"])["stopped"]
+    assert before == [p.read_bytes() for p in paths]
+    if query == "книг":
+        assert any(
+            "Цитата: Мне нужно вернуть библиотечную книгу." in d["prompt"]
+            and "Текущее состояние: открыта" in d["prompt"]
+            for d in dialogs.seen
+        )
