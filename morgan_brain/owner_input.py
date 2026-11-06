@@ -367,11 +367,8 @@ def _status(workspace: NoteWorkspace, session: guided.Session, inbox: Inbox) -> 
     }
 
 
-def _dispatch(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, object]:
-    """Enforce scope, expiry and recovery boundaries before routing a local command."""
-    if args.command == "init":
-        workspace.check_stop()
-        return _init(workspace, args)
+def load_pilot(workspace: NoteWorkspace) -> tuple[guided.Session, Inbox]:
+    """Read validated owner/project and finite admission state without opening memory or a model."""
     session = guided.Session.model_validate_json(workspace.read("session.json", 32768))
     guided_read_inputs(workspace, session)
     inbox = Inbox.model_validate_json(workspace.read("owner-input.json", 262144))
@@ -379,6 +376,15 @@ def _dispatch(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, o
         raise ValueError("inbox owner/project does not match session")
     if inbox.expires_at.utcoffset() is None:
         raise ValueError("pilot expiry requires a timezone")
+    return session, inbox
+
+
+def _dispatch(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, object]:
+    """Enforce scope, expiry and recovery boundaries before routing a local command."""
+    if args.command == "init":
+        workspace.check_stop()
+        return _init(workspace, args)
+    session, inbox = load_pilot(workspace)
     if args.command not in ("status", "resume") and datetime.now(UTC) >= inbox.expires_at:
         raise ValueError("seven-day pilot expired; preserve journal")
     if args.command == "resume":

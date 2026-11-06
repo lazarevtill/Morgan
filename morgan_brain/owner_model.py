@@ -99,15 +99,8 @@ class OwnerModel:
             workspace.stop()
 
     def close(self) -> None:
-        """Request cancellation on UI exit; the independent guardian retains its finite expiry."""
-        with closing(NoteWorkspace(self.path, create=False)) as workspace:
-            active = self.thread is not None and self.thread.is_alive()
-            try:
-                with workspace.locked(supervisor=True), workspace.locked():
-                    pass
-            except BlockingIOError:
-                active = True
-            if active:
-                self.stop()
+        """Cancel only this UI's owned cycle; do not stop a separate background loop."""
+        if self.thread is not None and self.thread.is_alive():
+            self.stop()
         if self.thread is not None:
             self.thread.join(timeout=6)
