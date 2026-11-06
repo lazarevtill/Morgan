@@ -36,7 +36,8 @@ For the synthetic note “water plants; bread already bought; call library”, t
 6. Read the refreshed plan and enter `quit` or `выход`.
 
 Russian priorities `высокий`, `обычный`, `низкий` are also accepted. Typos in task numbers,
-planning fields or completion commands are re-prompted, up to five attempts per prompt. Each source selection,
+planning fields or completion commands are re-prompted, up to five attempts per prompt. Each
+source selection,
 planning-field entry, confirmation and menu command is one answer submission. The model does
 not supply ownership, deadlines or priority by authority. Its suggestions may be wrong.
 
@@ -106,7 +107,8 @@ source tampering, partial capture and completion acknowledgement loss, and concu
 This is an operator-driven personal planning conversation, not an autonomous 24/7 agent.
 Task selection and planning fields remain explicit. There is no conversational free-form editing,
 calendar integration, desktop notification, or automatic discovery of all commitments. The day
-and budget belong to this session; changing them currently needs a new session or existing brief CLI.
+and budget belong to this session; changing them currently needs a new session or existing brief
+CLI.
 Memory uses explicit workspace-local 1024-dimensional hash embeddings. It does not claim
 semantic-search quality. No configured cloud embedding/provider destination is used.
 
