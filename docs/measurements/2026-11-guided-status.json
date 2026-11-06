@@ -1,0 +1,21 @@
+{
+  "synthetic": true,
+  "model_calls": 0,
+  "external_actions": 0,
+  "human_usability_study": false,
+  "measurement": {
+    "case": "synthetic-constrained",
+    "state": "ready",
+    "plan_available": true,
+    "pending_reviews": [],
+    "tasks": 1,
+    "completed_tasks": 1,
+    "planned_minutes": 0,
+    "day_relation": "future",
+    "durable_files_unchanged": true,
+    "elapsed_seconds": 0.246,
+    "command_launches": 1,
+    "answer_submissions": 0
+  },
+  "sqlite_coordination_files_excluded_from_hashes": true
+}

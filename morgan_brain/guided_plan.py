@@ -18,7 +18,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from morgan_brain.availability import Unavailability
+from morgan_brain.availability import Unavailability, planning_zone
 from morgan_brain.composition import open_evidence_context
 from morgan_brain.config import Settings
 from morgan_brain.daily_brief import BriefDraft, BriefRequest, Commitment, prepare_brief
@@ -278,8 +278,8 @@ class PlanView:
     constraints: list[tuple[str, Unavailability]]
 
 
-async def _plan(workspace: NoteWorkspace, session: Session) -> PlanView:
-    """Show and save a derived plan, reading current commitments through MemoryGate only."""
+async def _read_plan(workspace: NoteWorkspace, session: Session) -> tuple[BriefDraft, PlanView]:
+    """Resolve a current snapshot through MemoryGate without writing or rendering anything."""
     context = open_evidence_context(workspace.path / "memory/morgan.db")
     try:
         request = BriefRequest(
@@ -307,6 +307,13 @@ async def _plan(workspace: NoteWorkspace, session: Session) -> PlanView:
         constraints = await _constraint_view(context.gate, session, draft)
     finally:
         context.conn.close()
+    return draft, PlanView(items, constraints)
+
+
+async def _plan(workspace: NoteWorkspace, session: Session) -> PlanView:
+    """Show and save the same snapshot used by read-only status."""
+    draft, view = await _read_plan(workspace, session)
+    items, constraints = view.tasks, view.constraints
     filename = f"plan-{uuid4().hex}.md"
     workspace.publish(filename, draft.task.payload)
     print(f"План / Plan — budget: {session.budget} min; planned: {draft.planned_minutes} min")
@@ -544,6 +551,100 @@ def _edit_availability(
     asyncio.run(_apply_availability(workspace, session))
 
 
+def _pending_reviews(session: Session) -> list[str]:
+    """Do not turn unacknowledged writes into an authoritative ready plan."""
+    pending = []
+    if not session.captured:
+        pending.append("task_confirmation" if session.captures else "task_selection")
+    if session.pending_done is not None:
+        pending.append("completion_confirmation")
+    if session.pending_availability is not None:
+        pending.append("unavailability_confirmation")
+    return pending
+
+
+def _day_relation(session: Session, as_of: datetime) -> str:
+    """Report fixed-session day freshness only when the planning timezone is explicit."""
+    if session.timezone is None:
+        return "unknown_timezone"
+    today = as_of.astimezone(planning_zone(session.timezone)).date()
+    if session.day == today:
+        return "today"
+    return "past" if session.day < today else "future"
+
+
+async def _status_payload(workspace: NoteWorkspace, session: Session) -> dict[str, object]:
+    """Read exact current evidence, never the latest saved Markdown file or a model guess."""
+    _read_inputs(workspace, session)
+    pending = _pending_reviews(session)
+    as_of = datetime.now(UTC)
+    payload: dict[str, object] = {
+        "version": "morgan.guided-status.v1",
+        "state": "needs_review" if pending else "ready",
+        "owner": session.user,
+        "project": session.project,
+        "planning_day": session.day.isoformat(),
+        "timezone": session.timezone,
+        "as_of": as_of.isoformat(),
+        "day_relation": _day_relation(session, as_of),
+        "scope_complete": False,
+        "pending_reviews": pending,
+        "plan_available": not pending,
+        "execution_authorized": False,
+    }
+    if pending:
+        return payload
+    draft, view = await _read_plan(workspace, session)
+    payload.update(
+        {
+            "as_of": draft.as_of.isoformat(),
+            "day_relation": _day_relation(session, draft.as_of),
+            "budget_minutes": session.budget,
+            "planned_minutes": draft.planned_minutes,
+            "tasks": [
+                {"evidence_id": identity, "commitment": item.model_dump(mode="json")}
+                for identity, item in view.tasks
+            ],
+            "selected_ids": draft.selected_ids,
+            "deferred_ids": draft.deferred_ids,
+            "excluded_ids": draft.excluded_ids,
+            "blocked_ids": draft.blocked_ids,
+            "resolved_sources": dict(draft.resolved_ids),
+            "unavailability": [
+                {"evidence_id": identity, "interval": item.model_dump(mode="json")}
+                for identity, item in view.constraints
+            ],
+            "resolved_unavailability": dict(draft.unavailability_resolved_ids),
+        }
+    )
+    return payload
+
+
+def _print_status(args: argparse.Namespace) -> None:
+    """Read an existing private workspace under a shared lock; create no dialogue files."""
+    if any(
+        value is not None
+        for name, value in vars(args).items()
+        if name not in ("workspace", "status")
+    ):
+        raise ValueError(
+            "status uses only workspace and --status; it does not change session inputs"
+        )
+    workspace = NoteWorkspace(args.workspace, create=False)
+    try:
+        with os.fdopen(workspace.open_file(".guided.lock", os.O_RDONLY), "r") as lock:
+            try:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise ValueError(
+                    "session is busy; retry status after the dialogue exits"
+                ) from error
+            session = Session.model_validate_json(workspace.read("session.json", 32768))
+            print(json.dumps(asyncio.run(_status_payload(workspace, session))))
+    finally:
+        workspace.close()
+
+
 def main() -> None:
     """Start/resume one foreground conversation; no service, credentials or notifications."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -556,7 +657,18 @@ def main() -> None:
     parser.add_argument("--project")
     parser.add_argument("--day", type=date.fromisoformat)
     parser.add_argument("--budget", type=int)
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Read existing session status as JSON; no prompts or memory updates.",
+    )
     args = parser.parse_args()
+    if args.status:
+        try:
+            _print_status(args)
+        except (ValueError, OSError) as error:
+            parser.exit(2, f"Ошибка / Error: {error}\n")
+        return
     workspace = NoteWorkspace(args.workspace)
     try:
         with os.fdopen(workspace.open_file(".guided.lock", os.O_RDWR | os.O_CREAT), "r+") as lock:
