@@ -95,8 +95,8 @@ class TaskJournal:
                     "created_at TEXT NOT NULL, started_at TEXT, finished_at TEXT, "
                     "PRIMARY KEY(user_id, project, task_id))"
                 )
-                self._conn.execute(f"PRAGMA application_id={_APPLICATION_ID}")
-                self._conn.execute(f"PRAGMA user_version={_VERSION}")
+                self._conn.execute("PRAGMA application_id=0x4D54534B")
+                self._conn.execute("PRAGMA user_version=1")
         except BaseException:
             self._conn.close()
             raise
@@ -242,7 +242,9 @@ async def run_task(
     """
     if not 0 < timeout_seconds <= 3600:
         raise ValueError("task timeout must be positive and at most 3600 seconds")
-    task = journal._require(key)
+    task = journal.get(key)
+    if task is None:
+        raise TaskConflict("task does not exist in this owner/project scope")
     handler = handlers.get(task.action)
     if handler is None:
         raise ValueError("no explicitly registered handler for this task action")
