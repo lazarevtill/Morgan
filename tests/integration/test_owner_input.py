@@ -367,3 +367,21 @@ def test_expired_review_cannot_be_confirmed_or_renewed_by_resume(tmp_path):
     good(run(tmp_path, "resume"))
     assert confirm(tmp_path, message).returncode == 2
     assert status(tmp_path)["plan"]["tasks"] == []
+
+
+def test_reviewed_task_over_capacity_does_not_poison_recovery(tmp_path):
+    initial(tmp_path)
+    for index in range(1, 7):
+        identity = f"task-{index}"
+        good(run(tmp_path, "submit", identity, text="Return another book"))
+        good(confirm(tmp_path, review_new(tmp_path, identity)))
+    good(run(tmp_path, "submit", "eighth", text="Return another book"))
+    eighth = review_new(tmp_path, "eighth")
+    good(run(tmp_path, "submit", "excess", text="Return another book"))
+    excess = review_new(tmp_path, "excess")
+    good(confirm(tmp_path, eighth))
+    assert confirm(tmp_path, excess).returncode == 2
+    assert status(tmp_path)["messages"][-1]["state"] == "reviewed"
+    renewal = renew(tmp_path)
+    good(confirm(tmp_path, renewal))
+    assert len(status(tmp_path)["plan"]["tasks"]) == 8

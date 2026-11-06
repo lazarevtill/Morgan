@@ -21,6 +21,30 @@ from morgan_brain.availability import planning_zone
 from morgan_brain.composition import build_memory_context
 from morgan_brain.daily_brief import Commitment
 from morgan_brain.guided_availability import source_statement
+from morgan_brain.guided_plan import (
+    _apply_renewal as guided_apply_renewal,
+)
+from morgan_brain.guided_plan import (
+    _check_renewal as guided_check_renewal,
+)
+from morgan_brain.guided_plan import (
+    _pending_reviews as guided_pending_reviews,
+)
+from morgan_brain.guided_plan import (
+    _read_inputs as guided_read_inputs,
+)
+from morgan_brain.guided_plan import (
+    _read_plan as guided_read_plan,
+)
+from morgan_brain.guided_plan import (
+    _save as guided_save,
+)
+from morgan_brain.guided_plan import (
+    _settings as guided_settings,
+)
+from morgan_brain.guided_plan import (
+    _status_payload as guided_status_payload,
+)
 from morgan_brain.guided_renewal import RenewalUpdate
 from morgan_brain.local_notes import NoteWorkspace, StopRequested
 from morgan_brain.surfaces.cli.commands import cmd_remember
@@ -97,9 +121,9 @@ def _init(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, objec
     )
     workspace.publish("source.txt", note)
     workspace.publish("proposal.json", proposal)
-    context = build_memory_context(guided._settings(workspace, session))
+    context = build_memory_context(guided_settings(workspace, session))
     context.conn.close()
-    guided._save(workspace, session)
+    guided_save(workspace, session)
     _save(
         workspace,
         Inbox(
@@ -142,7 +166,7 @@ async def _review(
 ) -> None:
     if message.state in ("applying", "applied"):
         raise ValueError("review cannot change an attempted operation")
-    if guided._pending_reviews(session):
+    if guided_pending_reviews(session):
         raise ValueError("resolve pending guided review first")
     capture = None
     renewal = None
@@ -150,7 +174,7 @@ async def _review(
     if args.target:
         if args.title is not None or args.minutes is not None or args.priority is not None:
             raise ValueError("renewal accepts target and due only")
-        _, view = await guided._read_plan(workspace, session)
+        _, view = await guided_read_plan(workspace, session)
         matches = [task for identity, task in view.tasks if identity == args.target]
         if len(matches) != 1:
             raise ValueError("select one exact current task ID from status")
@@ -185,7 +209,8 @@ async def _review(
     message.state = "reviewed"
 
 
-async def _add(workspace: NoteWorkspace, session: guided.Session, message: Message) -> None:
+def _checked_capture(session: guided.Session, message: Message) -> tuple[guided.Capture, bool, str]:
+    """Validate local capacity before journalling an attempted memory operation."""
     capture = message.capture
     if message.digest is None:
         raise ValueError("missing review digest")
@@ -196,6 +221,11 @@ async def _add(workspace: NoteWorkspace, session: guided.Session, message: Messa
         raise ValueError("capture identity conflict")
     if not known and len(session.captures) >= 8:
         raise ValueError("pilot task limit reached")
+    return capture, bool(known), message.digest
+
+
+async def _add(workspace: NoteWorkspace, session: guided.Session, message: Message) -> None:
+    capture, known, digest = _checked_capture(session, message)
     for identity, content in (
         (f"{capture.event_id}-source", message.text),
         (capture.event_id, capture.commitment.model_dump_json()),
@@ -211,14 +241,14 @@ async def _add(workspace: NoteWorkspace, session: guided.Session, message: Messa
                 revises_event_ids=[],
                 assert_session_id=True,
             ),
-            guided._settings(workspace, session),
+            guided_settings(workspace, session),
             session.project,
             client="owner-input-v1",
-            session_id=message.digest,
+            session_id=digest,
         )
     if not known:
         session.captures.append(capture)
-        guided._save(workspace, session)
+        guided_save(workspace, session)
 
 
 async def _confirm(
@@ -230,7 +260,7 @@ async def _confirm(
         return
     if message.state not in ("reviewed", "applying"):
         raise ValueError("review before confirmation")
-    pending = guided._pending_reviews(session)
+    pending = guided_pending_reviews(session)
     own_pending = (
         message.renewal is not None
         and session.pending_renewal == message.renewal
@@ -240,13 +270,15 @@ async def _confirm(
         raise ValueError("another guided review is pending")
     workspace.check_stop()
     if message.renewal is not None:
-        await guided._check_renewal(workspace, session, message.renewal)
+        await guided_check_renewal(workspace, session, message.renewal)
+    else:
+        _checked_capture(session, message)
     message.state = "applying"
     _save(workspace, inbox)
     if message.renewal is not None:
         session.pending_renewal = message.renewal
-        guided._save(workspace, session)
-        await guided._apply_renewal(workspace, session)
+        guided_save(workspace, session)
+        await guided_apply_renewal(workspace, session)
     else:
         await _add(workspace, session, message)
     message.state = "applied"
@@ -303,7 +335,7 @@ def _status(workspace: NoteWorkspace, session: guided.Session, inbox: Inbox) -> 
         "expired": expired,
         "expires_at": inbox.expires_at.isoformat(),
         "messages": [message.model_dump(mode="json") for message in inbox.messages],
-        "plan": asyncio.run(guided._status_payload(workspace, session)),
+        "plan": asyncio.run(guided_status_payload(workspace, session)),
     }
 
 
@@ -312,7 +344,7 @@ def _dispatch(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, o
         workspace.check_stop()
         return _init(workspace, args)
     session = guided.Session.model_validate_json(workspace.read("session.json", 32768))
-    guided._read_inputs(workspace, session)
+    guided_read_inputs(workspace, session)
     inbox = Inbox.model_validate_json(workspace.read("owner-input.json", 262144))
     if (inbox.user, inbox.project) != (session.user, session.project):
         raise ValueError("inbox owner/project does not match session")
