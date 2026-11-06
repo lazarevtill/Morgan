@@ -145,6 +145,25 @@ class TaskJournal:
                 raise ValueError("task journal is missing its receipt column")
             self._conn.execute("ALTER TABLE tasks ADD COLUMN receipt_json TEXT")
 
+    @staticmethod
+    def status_counts(path: Path, *, user_id: str, project: str) -> dict[str, int]:
+        """Read only scoped state counts without creating a database or upgrading its schema."""
+        _identity(user_id)
+        _identity(project)
+        conn = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True, timeout=1)
+        try:
+            application = conn.execute("PRAGMA application_id").fetchone()[0]
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if application != _APPLICATION_ID or version not in (1, _VERSION):
+                raise ValueError("not a supported task journal")
+            rows = conn.execute(
+                "SELECT status,COUNT(*) FROM tasks WHERE user_id=? AND project=? GROUP BY status",
+                (user_id, project),
+            ).fetchall()
+            return {str(row[0]): int(row[1]) for row in rows}
+        finally:
+            conn.close()
+
     def close(self) -> None:
         self._conn.close()
 
