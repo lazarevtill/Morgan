@@ -124,6 +124,10 @@ and Bandit passed. Repeating the example returned the identical persisted attemp
 
 ## Next stages
 
+The [bounded batch extension](bounded-task-batches.md) adds atomic worklist submission and
+exact, expiring, revocable in-process permits. It keeps scheduling and provider integration
+explicit and stops the worklist on uncertainty.
+
 1. Choose one real provider/action with a documented receipt lookup or idempotency key. Test
    remote acceptance followed by a lost response and cancellation races in an isolated sandbox.
 2. Define explicit authorization and revocation, data retention/backup, bounded call counts and
