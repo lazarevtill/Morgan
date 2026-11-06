@@ -74,6 +74,11 @@ two categories that do not yet work.
 
 ## Documentation
 
+- [Personal agent 24/7 research](docs/research/2026-11-06-personal-agent-memory/REPORT.md) —
+  the owner's product direction, memory/runtime comparison and staged validation plan;
+  research, not a deployed always-on agent. See the [main comparison](docs/research/2026-11-06-personal-agent-memory/COMPARISON.md)
+  for the checked source revision and existing opt-in controls.
+
 - [`docs/ALWAYS_ON_MEMORY_EXAMPLE.md`](docs/ALWAYS_ON_MEMORY_EXAMPLE.md) — zero-model
   scoped continuation with explicit source IDs and uncertainty.
 - [`docs/measurements/2026-10-memory-scale.md`](docs/measurements/2026-10-memory-scale.md) —

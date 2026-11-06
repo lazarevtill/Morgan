@@ -1,0 +1,29 @@
+{
+  "checked_on": "2026-11-06",
+  "repositories": [
+    {
+      "repo": "openclaw/openclaw",
+      "sha": "0947d02be82f53560936c656311acd43fb965f7c",
+      "date": "2026-11-06T03:24:57Z",
+      "url": "https://github.com/openclaw/openclaw/commit/0947d02be82f53560936c656311acd43fb965f7c"
+    },
+    {
+      "repo": "HKUDS/nanobot",
+      "sha": "92e6608e6e6cbd0324d18d214932a03a7efa11be",
+      "date": "2026-11-06T03:19:04Z",
+      "url": "https://github.com/HKUDS/nanobot/commit/92e6608e6e6cbd0324d18d214932a03a7efa11be"
+    },
+    {
+      "repo": "letta-ai/letta",
+      "sha": "8816d3a8516893bfdc0fa14bfb1235226012e295",
+      "date": "2026-10-18T22:28:01Z",
+      "url": "https://github.com/letta-ai/letta/commit/8816d3a8516893bfdc0fa14bfb1235226012e295"
+    },
+    {
+      "repo": "letta-ai/letta-code",
+      "sha": "67f3bbc867fcce4e6f4849dcb6cbd3ab179c190d",
+      "date": "2026-11-06T02:51:02Z",
+      "url": "https://github.com/letta-ai/letta-code/commit/67f3bbc867fcce4e6f4849dcb6cbd3ab179c190d"
+    }
+  ]
+}
