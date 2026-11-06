@@ -344,3 +344,8 @@ review, STOP and saved-review recovery. No listener or service is added; see
 same review. `owner_model` reuses model-cycle guardian locks and the owner STOP marker;
 source-keyed draft recovery never grants task authority. See
 `docs/decisions/integrated-owner-model.md`. No service or automatic retry is added.
+
+`owner_loop` is an explicitly invoked finite background drafting stage over owner_input.
+It prepares unapproved local proposals, never confirms tasks, and preserves the pilot's
+seven-day expiry, STOP and attempt markers across restart. `owner_loop_plan` only renders
+an uninstalled disabled login-agent plist. See `docs/decisions/finite-owner-loop.md`.
