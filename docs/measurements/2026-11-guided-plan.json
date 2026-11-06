@@ -1,0 +1,80 @@
+{
+  "synthetic": true,
+  "model": "ibm/granite4.1:8b",
+  "model_seconds": 39.239,
+  "rows": [
+    {
+      "case": "ru",
+      "selected": [
+        "Нужно полить растения.",
+        "Надо позвонить в библиотеку."
+      ],
+      "expected": [
+        "Нужно полить растения.",
+        "Надо позвонить в библиотеку."
+      ],
+      "model_exact": true,
+      "command_launches": 1,
+      "answer_submissions": 6,
+      "cli_seconds": 0.259,
+      "confirmed_tasks": 2,
+      "open_tasks_after_done": 1,
+      "correct_after_review": true
+    },
+    {
+      "case": "en",
+      "selected": [
+        "I need to water the plants.",
+        "I need to call the library."
+      ],
+      "expected": [
+        "I need to water the plants.",
+        "I need to call the library."
+      ],
+      "model_exact": true,
+      "command_launches": 1,
+      "answer_submissions": 6,
+      "cli_seconds": 0.253,
+      "confirmed_tasks": 2,
+      "open_tasks_after_done": 1,
+      "correct_after_review": true
+    },
+    {
+      "case": "owner_ru",
+      "selected": [
+        "Антон планирует почистить велосипед."
+      ],
+      "expected": [
+        "Мне нужно забрать посылку."
+      ],
+      "model_exact": false,
+      "command_launches": 1,
+      "answer_submissions": 5,
+      "cli_seconds": 0.252,
+      "confirmed_tasks": 1,
+      "open_tasks_after_done": 0,
+      "correct_after_review": true
+    },
+    {
+      "case": "owner_en",
+      "selected": [
+        "Anton plans to clean his bicycle.",
+        "I need to collect my parcel."
+      ],
+      "expected": [
+        "I need to collect my parcel."
+      ],
+      "model_exact": false,
+      "command_launches": 1,
+      "answer_submissions": 5,
+      "cli_seconds": 0.252,
+      "confirmed_tasks": 1,
+      "open_tasks_after_done": 0,
+      "correct_after_review": true
+    }
+  ],
+  "model_exact": 2,
+  "reviewed_workflows_correct": 4,
+  "human_usability_study": false,
+  "setup_note": "Measured guided CLI imports fresh proposals; direct model mode is also supported. Setup paths/flags are excluded from answer counts."
+}
