@@ -17,9 +17,11 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from pathlib import Path
 from uuid import uuid4
 
+from morgan_brain.local_recurrence import Occurrence
 from morgan_brain.local_worker_state import RunObservation
 from morgan_brain.task_batches import TaskPermissionDenied, TaskPermissions, TaskPermit
 from morgan_brain.task_receipts import (
@@ -227,6 +229,64 @@ def approve(
         _write_approval(workspace, requests, _expiry(ttl_seconds), not_before)
 
 
+def approve_occurrences(workspace: NoteWorkspace, occurrences: Sequence[Occurrence]) -> None:
+    """Replace grants with the exact finite plan reviewed by the trusted caller."""
+    document: dict[str, object] = {
+        "version": "morgan.local-approval.v3",
+        "workspace": workspace.provider_id,
+        "occurrences": [item.document() for item in occurrences],
+    }
+    checked = _recurring_entries(document)
+    now = datetime.now(UTC)
+    if not now < checked[-1].expires_at <= now + timedelta(days=7):
+        raise ValueError("repeat must end in the future within seven days")
+    text = json.dumps(document, ensure_ascii=False)
+    if len(text.encode("utf-8")) > _MAX_APPROVAL:
+        raise ValueError("approval exceeds size limit")
+    with workspace.locked(approval=True):
+        workspace.publish(".approval.json", text, replace=True)
+
+
+def _recurring_entries(raw: dict[str, object]) -> tuple[Occurrence, ...]:
+    """Validate exact nonoverlapping occurrence windows and a bounded single-scope worklist."""
+    if set(raw) != {"version", "workspace", "occurrences"}:
+        raise TaskPermissionDenied("invalid recurring approval fields")
+    values = raw["occurrences"]
+    if not isinstance(values, list) or not 2 <= len(values) <= 16:
+        raise TaskPermissionDenied("repeat requires 2..16 occurrences")
+    entries: list[Occurrence] = []
+    for value in values:
+        if not isinstance(value, dict) or set(value) != {"request", "not_before", "expires_at"}:
+            raise TaskPermissionDenied("invalid occurrence fields")
+        request = _requests([value["request"]])[0]
+        due = datetime.fromisoformat(value["not_before"])
+        expiry = datetime.fromisoformat(value["expires_at"])
+        if due.utcoffset() is None or expiry.utcoffset() is None or due >= expiry:
+            raise TaskPermissionDenied("invalid occurrence window")
+        if entries and due < entries[-1].expires_at:
+            raise TaskPermissionDenied("occurrence windows overlap or are unordered")
+        entries.append(Occurrence(request, due, expiry))
+    _requests([asdict(item.request) for item in entries])
+    first = entries[0].not_before
+    if first is None or entries[-1].expires_at - first > timedelta(days=7):
+        raise TaskPermissionDenied("repeat span exceeds seven days")
+    _check_repeat_spacing(entries)
+    return tuple(entries)
+
+
+def _check_repeat_spacing(entries: Sequence[Occurrence]) -> None:
+    """Reject unbounded frequencies or inconsistent intervals even in edited policies."""
+    times = [item.not_before for item in entries if item.not_before is not None]
+    gaps = {later - earlier for earlier, later in pairwise(times)}
+    if len(gaps) != 1:
+        raise TaskPermissionDenied("repeat requires a fixed interval")
+    interval = gaps.pop()
+    if not timedelta(seconds=60) <= interval <= timedelta(days=1):
+        raise TaskPermissionDenied("repeat interval must be 60..86400 seconds")
+    if any(item.expires_at - due > interval for item, due in zip(entries, times, strict=True)):
+        raise TaskPermissionDenied("repeat delivery window exceeds its interval")
+
+
 def enqueue(workspace: NoteWorkspace, request: TaskRequest, *, ttl_seconds: int) -> None:
     """Append an exact owner-approved note, preserving prior grants and their earliest expiry.
 
@@ -277,7 +337,9 @@ def local_status(workspace: NoteWorkspace) -> dict[str, str | bool | int | None]
     except StopRequested:
         stopped = True
     try:
-        requests, expiry, not_before = FileApproval(workspace).window()
+        entries = FileApproval(workspace).entries()
+        requests = tuple(item.request for item in entries)
+        expiry, not_before = entries[-1].expires_at, entries[0].not_before
     except FileNotFoundError:
         return {
             "worker_active": active,
@@ -286,7 +348,16 @@ def local_status(workspace: NoteWorkspace) -> dict[str, str | bool | int | None]
             "approved_tasks": 0,
             "expires_at": None,
         }
+    now = datetime.now(UTC)
+    timing = {}
+    if len({item.expires_at for item in entries}) > 1:
+        future = [item.not_before for item in entries if item.not_before and item.not_before > now]
+        timing = {
+            "next_due": min(future).isoformat() if future else None,
+            "elapsed_windows": sum(item.expires_at <= now for item in entries),
+        }
     return {
+        **timing,
         "worker_active": active,
         "stop_requested": stopped,
         "approval": "valid" if expiry > datetime.now(UTC) else "expired",
@@ -311,7 +382,20 @@ class FileApproval:
 
     def window(self) -> tuple[tuple[TaskRequest, ...], datetime, datetime | None]:
         """Validate legacy immediate grants or an explicit timezone-aware delivery window."""
+        entries = self.entries()
+        return (
+            tuple(item.request for item in entries),
+            entries[-1].expires_at,
+            entries[0].not_before,
+        )
+
+    def entries(self) -> tuple[Occurrence, ...]:
+        """Read one immutable policy snapshot; legacy grants share one window."""
         raw = json.loads(self.workspace.read(".approval.json", _MAX_APPROVAL))
+        if isinstance(raw, dict) and raw.get("version") == "morgan.local-approval.v3":
+            if raw.get("workspace") != self.workspace.provider_id:
+                raise TaskPermissionDenied("approval does not belong to this workspace")
+            return _recurring_entries(raw)
         fields = {"version", "workspace", "expires_at", "requests"}
         if not isinstance(raw, dict):
             raise TaskPermissionDenied("invalid approval")
@@ -330,23 +414,27 @@ class FileApproval:
         not_before = datetime.fromisoformat(raw["not_before"]) if scheduled else None
         if not_before is not None and (not_before.utcoffset() is None or not_before >= expiry):
             raise TaskPermissionDenied("invalid approval delivery window")
-        return _requests(raw["requests"]), expiry, not_before
+        return tuple(
+            Occurrence(request, not_before, expiry) for request in _requests(raw["requests"])
+        )
 
     def load(self) -> tuple[tuple[TaskRequest, ...], TaskPermissions]:
         """Fail closed on STOP, expiry, malformed policy, or another workspace's approval."""
         self.workspace.check_stop()
         try:
-            requests, expiry, not_before = self.window()
+            entries = self.entries()
         except FileNotFoundError:
             return (), TaskPermissions()
-        if expiry <= datetime.now(UTC):
+        now = datetime.now(UTC)
+        if entries[-1].expires_at <= now:
             raise TaskPermissionDenied("approval has expired")
-        if not_before is not None and datetime.now(UTC) < not_before:
-            return (), TaskPermissions()
         permissions = TaskPermissions()
-        for request in requests:
-            permissions.grant(TaskPermit(request, "local-account-file", expiry))
-        return requests, permissions
+        ready = []
+        for item in entries:
+            if item.expires_at > now and (item.not_before is None or item.not_before <= now):
+                permissions.grant(TaskPermit(item.request, "local-account-file", item.expires_at))
+                ready.append(item.request)
+        return tuple(ready), permissions
 
     def check(self, task: Task) -> None:
         """Re-read the policy so removal or replacement revokes future effects."""
@@ -441,6 +529,20 @@ async def _recover_local_attempt(
     return result.outcome != "unresolved"
 
 
+def _has_dormant_uncertainty(
+    policy: FileApproval, journal: TaskJournal, ready: Sequence[TaskRequest]
+) -> bool:
+    """Do not advance a series past an unresolved attempt outside its current window."""
+    if not ready:
+        return False
+    active = {request.key for request in ready}
+    for item in policy.entries():
+        task = journal.get(item.request.key)
+        if task and task.key not in active and task.status in ("running", "outcome_unknown"):
+            return True
+    return False
+
+
 async def _work(
     workspace: NoteWorkspace, journal: TaskJournal, limits: RunLimits, observation: RunObservation
 ) -> LocalRun:
@@ -456,6 +558,8 @@ async def _work(
             if asyncio.get_running_loop().time() >= deadline:
                 return LocalRun("deadline", actions, recovered)
             requests, _ = policy.load()
+            if _has_dormant_uncertainty(policy, journal, requests):
+                return LocalRun("needs_reconciliation", actions, recovered)
             tasks = journal.create_many(requests) if requests else ()
             for task in tasks:
                 workspace.check_stop()
