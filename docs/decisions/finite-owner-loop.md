@@ -89,7 +89,6 @@ stack was observed; its underlying OS authorization cause was not conclusively d
 Use a normal application-data directory for a login deployment and verify a fresh
 `waiting_for_owner` observation and clean STOP/restart, not merely a running launchd PID.
 
-
 ## Launchd inference failure diagnosis (2026-11-06)
 
 The installed Background job accepted a synthetic message but produced no proposal.
