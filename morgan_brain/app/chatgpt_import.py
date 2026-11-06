@@ -194,7 +194,10 @@ def _visible_role(message: dict[str, Any]) -> str | None:
         or role not in _SOURCE_BY_ROLE
         or author.get("name") not in (None, "", role)
         or not _stable_id(message.get("id"))
-        or message.get("recipient") not in (None, "all")
+    ):
+        return None
+    if (
+        message.get("recipient") not in (None, "all")
         or metadata.get("is_visually_hidden_from_conversation")
         or content.get("content_type") not in (None, "text", "multimodal_text")
         or message.get("tool_calls")
