@@ -47,7 +47,8 @@ automatic retry. A running operation is identified by locks, never by trusting a
 
 Ordinary UI exit requests STOP if an operation is still active, then waits up to six
 seconds for its thread while retaining the exclusive UI-session lock. A new UI cannot
-start between releasing the old session and its cleanup. A stopped or failed operation never authorizes a task. The existing
+start between releasing the old session and its cleanup. A stopped or failed operation never
+authorizes a task. The existing
 independent guardian retains its finite expiry if the UI is forcibly killed. Killing both
 UI and guardian can still orphan the native model; external OS supervision is not installed.
 Foreground deadlines are not a tested wall-clock guarantee across Mac sleep. Resume,
