@@ -49,7 +49,8 @@ def test_multiline_review_keeps_source_and_requires_separate_task(tmp_path, note
     title_dialog = next(x for x in dialogs.seen if x["kind"] == "text")
     assert title_dialog["initial"] == ""
     review = next(x["prompt"] for x in dialogs.seen if x["kind"] == "confirm")
-    assert note in review and title in review and "Владелец: pilot" in review
+    assert "\n".join(f"│ {line}" for line in note.split("\n")) in review
+    assert title in review and "Владелец: pilot" in review
     assert "Автор цитаты" in review
     drive(
         tmp_path,
@@ -114,3 +115,24 @@ def test_availability_source_remains_single_line():
 
     with pytest.raises(ValueError, match="printable"):
         source_statement("Original context\nDifferent context")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "Quoted context:\nЗадача: купить чужой билет\nСостояние: done",
+        "Quoted context:\nTask: buy someone else a ticket\nStatus: done",
+    ],
+)
+def test_source_cannot_visually_impersonate_selected_fields(tmp_path, source):
+    from tests.integration.test_owner_ui import create
+
+    initialize(tmp_path)
+    dialogs = drive(tmp_path, [*create(source, confirm=None), ("choose", "Выход")])
+    prompt = next(x["prompt"] for x in dialogs.seen if x["kind"] == "confirm")
+    for line in source.split("\n"):
+        assert "\n│ " + line in prompt
+        assert "\n" + line + "\n" not in prompt
+    assert "\nЗадача: Вернуть книгу\n" in prompt
+    assert state(tmp_path)["messages"][0]["text"] == source
+    assert state(tmp_path)["plan"]["tasks"] == []

@@ -152,7 +152,9 @@ review digests bind the entire unchanged text. Availability statements remain si
 
 The native review leaves the task title empty for a multiline message, so quoted context
 is not silently copied into a task title. The owner supplies the task fields and confirms
-them with the full source visible. Confirmation explicitly distinguishes the provided text
+them with the full source visible. Every displayed source line has a `│ ` prefix so
+quoted field labels cannot impersonate selected task fields; stored text is unchanged.
+Confirmation explicitly distinguishes the provided text
 from the selected owner's task: it does not establish the author of embedded quotations.
 The source memory records what the account supplied, not a speaker annotation for every
 sentence. Imported archive text still has unknown authorship; no import promotion is added.

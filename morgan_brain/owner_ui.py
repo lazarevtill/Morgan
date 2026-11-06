@@ -79,10 +79,12 @@ class OwnerUI:
         if renewal:
             target = renewal["parent_id"]
             quote = self.task_source(target, renewal["before"]["title"])
-            context = f"ID задачи: {target}\nСохранённый источник задачи: {quote}\n\n"
+            quoted = "\n".join(f"│ {line}" for line in quote.split("\n"))
+            context = f"ID задачи: {target}\nСохранённый источник задачи:\n{quoted}\n\n"
+        quoted_source = "\n".join(f"│ {line}" for line in message["text"].split("\n"))
         prompt = (
             f"Владелец: {envelope['owner']}\nПроект: {envelope['project']}\n"
-            f"Предоставленный текст: {message['text']}\n"
+            f"Предоставленный текст:\n{quoted_source}\n"
             "Автор цитаты не определяется. Вы подтверждаете выбранную задачу владельца.\n\n"
             f"{context}{action}\n"
             f"Задача: {item['title']}\nСрок: {item['due']}\n"
