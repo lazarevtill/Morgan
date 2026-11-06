@@ -159,7 +159,7 @@ def test_failed_process_is_visible_and_restart_never_retries(model):
     assert model.status("Return book.")["state"] == "failed"
     assert model.status("Other message.")["state"] == "not_started"
     restored = OwnerModel(model.path, model.config, model.deadline)
-    assert restored.status("Return book.")["state"] == "interrupted"
+    assert restored.status("Return book.") == {"state": "failed", "reason": "model_start_failed"}
     assert restored.thread is None
     restored.close()
 

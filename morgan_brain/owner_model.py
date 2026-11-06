@@ -13,7 +13,13 @@ from pathlib import Path
 
 from morgan_brain import owner_input
 from morgan_brain.local_notes import NoteWorkspace, StopRequested
-from morgan_brain.model_cycle import ModelCycle, _check_existing, proposal_filename, run_cycle
+from morgan_brain.model_cycle import (
+    FAILURE_CODES,
+    ModelCycle,
+    _check_existing,
+    proposal_filename,
+    run_cycle,
+)
 from morgan_brain.providers.note_probe import ProbeFailure
 
 
@@ -52,6 +58,19 @@ class OwnerModel:
                 workspace.check_stop()
             except StopRequested:
                 return {"state": "stopped"}
+            try:
+                failure = json.loads(workspace.read("failure-" + proposal_filename(note), 1024))
+            except FileNotFoundError:
+                pass
+            else:
+                if (
+                    not isinstance(failure, dict)
+                    or failure.get("version") != 1
+                    or not isinstance(failure.get("code"), str)
+                    or failure.get("code") not in FAILURE_CODES
+                ):
+                    raise ValueError("invalid model failure record")
+                return {"state": "failed", "reason": failure["code"]}
             if self.failure is not None and self.current_note == note:
                 return {"state": "failed", "reason": self.failure}
             try:

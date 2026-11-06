@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
@@ -101,7 +102,7 @@ async def _ready(child: asyncio.subprocess.Process, session: ModelSession) -> No
         if await private_model_ready(session.socket):
             return
         await asyncio.sleep(0.1)
-    raise ProbeFailure("deadline")
+    raise ProbeFailure("startup_deadline")
 
 
 @asynccontextmanager
@@ -167,6 +168,33 @@ def proposal_filename(note: str) -> str:
     return f"proposal-{hashlib.sha256(note.encode('utf-8')).hexdigest()}.json"
 
 
+FAILURE_CODES = frozenset(
+    {
+        "timeout",
+        "unavailable",
+        "invalid_response",
+        "incomplete",
+        "refused",
+        "http_error",
+        "oversized",
+        "deadline",
+        "startup_deadline",
+        "model_start_failed",
+        "stopped",
+        "cycle_failed",
+    }
+)
+
+
+def failure_code(error: Exception) -> str:
+    """Reduce errors to an allowlisted code without paths, notes or provider payloads."""
+    if isinstance(error, StopRequested):
+        return "stopped"
+    if isinstance(error, ProbeFailure) and str(error) in FAILURE_CODES:
+        return str(error)
+    return "cycle_failed"
+
+
 async def run_cycle(
     workspace: NoteWorkspace, config: ModelCycle, note: str, *, cache_by_source: bool = False
 ) -> dict[str, object]:
@@ -181,23 +209,40 @@ async def run_cycle(
     else:
         _check_existing(existing, digest, note)
         return {"reason": "already_written", "approved": False}
-    async with managed_model(workspace, config) as session:
-        selected = await session.select(note)
+    started = time.monotonic()
+    try:
+        async with managed_model(workspace, config) as session:
+            selected = await session.select(note)
+            workspace.publish(
+                filename,
+                json.dumps(
+                    {
+                        "version": "morgan.note-proposal.v1",
+                        "source_sha256": digest,
+                        "source": "agent_inferred",
+                        "approved": False,
+                        "review_required": True,
+                        "selected_lines": selected,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+            )
+    except (OSError, ValueError, TypeError, ProbeFailure, StopRequested) as error:
+        # Persist only a fixed vocabulary, never exception text or native server output.
         workspace.publish(
-            filename,
+            "failure-" + filename,
             json.dumps(
                 {
-                    "version": "morgan.note-proposal.v1",
-                    "source_sha256": digest,
-                    "source": "agent_inferred",
-                    "approved": False,
-                    "review_required": True,
-                    "selected_lines": selected,
-                },
-                ensure_ascii=False,
-                indent=2,
+                    "version": 1,
+                    "code": failure_code(error),
+                    "elapsed_seconds": round(time.monotonic() - started, 3),
+                }
             ),
+            replace=True,
         )
+        raise
+
     return {"reason": "written", "proposals": len(selected), "approved": False}
 
 

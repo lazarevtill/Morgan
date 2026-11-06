@@ -88,3 +88,23 @@ resolved startup without granting Documents access or Full Disk Access. The file
 stack was observed; its underlying OS authorization cause was not conclusively diagnosed.
 Use a normal application-data directory for a login deployment and verify a fresh
 `waiting_for_owner` observation and clean STOP/restart, not merely a running launchd PID.
+
+## Launchd inference failure diagnosis (2026-11-06)
+
+The installed Background job accepted a synthetic message but produced no proposal.
+A separate, finite launchd probe reproduced a request timeout: model readiness took
+25.243 seconds and the request exceeded its 20-second bound (46.309 seconds total).
+With the same runtime, model, four CPU threads, private socket, note and 90-second
+cycle bound, changing only ProcessType to Standard produced one grounded selection:
+16.231 seconds to readiness, 23.515 seconds total. This paired observation supports
+Background scheduling as the cause in this environment; it is not a general model
+benchmark or a guarantee under every machine load. The rendered plan now uses Standard;
+no timing, CPU, lifetime, STOP or authorization limit is relaxed.
+
+Model-cycle failures now persist a source-addressed failure record containing only
+an allowlisted code and elapsed seconds. No raw exception, path, source text or native
+server output is recorded. The review UI displays the code after restart. A successful
+proposal takes precedence over an older failure record. Failed/interrupted automatic
+attempts still require explicit review; recording an error never authorizes a retry.
+A process killed before recording its failure remains interrupted rather than inventing
+an error cause. Existing pre-upgrade attempts cannot be diagnosed retrospectively.

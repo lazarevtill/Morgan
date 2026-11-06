@@ -36,7 +36,7 @@ def render(python: Path, workspace: Path, server: Path, model: Path) -> bytes:
             "KeepAlive": {"SuccessfulExit": False},
             "ThrottleInterval": 60,
             "ExitTimeOut": 10,
-            "ProcessType": "Background",
+            "ProcessType": "Standard",
             "Umask": 0o077,
             "StandardOutPath": str(workspace / "loop.stdout.log"),
             "StandardErrorPath": str(workspace / "loop.stderr.log"),
