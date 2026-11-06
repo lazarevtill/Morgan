@@ -24,6 +24,8 @@ It does not start a service or call a model. `enqueue` appends exact account-app
 `docs/decisions/local-approved-notes.md` and `docs/decisions/local-note-intake.md`.
 `diagnose --user OWNER --project PROJECT` reads payload-free run observations and scoped journal
 counts; it never retries or changes tasks. See `docs/decisions/local-worker-diagnostics.md`.
+`supervise` explicitly owns a finite fixed worker subprocess with bounded crash restarts and
+sequential shutdown; it installs no service. See `docs/decisions/bounded-local-supervisor.md`.
 
 Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
 `docs/ROADMAP.md` (what is not in the code and why, what retrieval measures, what is next),

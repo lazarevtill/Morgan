@@ -118,9 +118,13 @@ class NoteWorkspace:
                 os.unlink(temporary, dir_fd=self.fd)
 
     @contextmanager
-    def locked(self, *, approval: bool = False) -> Iterator[None]:
-        """Lock workers without waiting, or serialize short approval writes on a separate lock."""
-        name = ".approval.lock" if approval else ".worker.lock"
+    def locked(self, *, approval: bool = False, supervisor: bool = False) -> Iterator[None]:
+        """Exclude workers/supervisors immediately; serialize short approval writes separately."""
+        if approval and supervisor:
+            raise ValueError("select one lock role")
+        name = (
+            ".approval.lock" if approval else ".supervisor.lock" if supervisor else ".worker.lock"
+        )
         fd = self.open_file(name, os.O_RDWR | os.O_CREAT)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | (0 if approval else fcntl.LOCK_NB))
@@ -143,7 +147,7 @@ class NoteWorkspace:
 
     def resume(self) -> None:
         """Explicitly remove STOP only while no cooperating worker holds the lock."""
-        with self.locked():
+        with self.locked(supervisor=True), self.locked():
             with suppress(FileNotFoundError):
                 os.unlink("STOP", dir_fd=self.fd)
             os.fsync(self.fd)

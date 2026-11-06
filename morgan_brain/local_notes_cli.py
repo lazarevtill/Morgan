@@ -21,15 +21,25 @@ from morgan_brain.local_notes import (
     revoke,
     run_local,
 )
+from morgan_brain.local_supervisor import (
+    Supervision,
+    SupervisorLimits,
+    supervise,
+    supervisor_status,
+)
 from morgan_brain.local_worker_state import read_observation, scoped_counts
 from morgan_brain.tasks import TaskKey, TaskRequest
 
 
-async def _run_with_stop_signal(workspace: NoteWorkspace, limits: RunLimits) -> LocalRun:
+async def _run_with_stop_signal(
+    workspace: NoteWorkspace, limits: RunLimits, supervisor: SupervisorLimits | None = None
+) -> LocalRun | Supervision:
     """Translate SIGTERM into persistent cooperative STOP for this explicit invocation."""
     loop = asyncio.get_running_loop()
     loop.add_signal_handler(signal.SIGTERM, workspace.stop)
     try:
+        if supervisor is not None:
+            return await supervise(workspace, worker_limits=limits, limits=supervisor)
         return await run_local(workspace, limits)
     finally:
         loop.remove_signal_handler(signal.SIGTERM)
@@ -53,11 +63,22 @@ def main() -> None:
         approval.add_argument(
             "--yes", action="store_true", help="explicit trusted automation approval"
         )
-    run = commands.add_parser("run")
-    run.add_argument("--actions", type=int, default=1)
-    run.add_argument("--cycles", type=int, default=1)
-    run.add_argument("--seconds", type=float, default=10)
-    run.add_argument("--poll", type=float, default=1)
+    for name in ("run", "supervise"):
+        run = commands.add_parser(name)
+        run.add_argument(
+            "--actions",
+            type=int,
+            default=1,
+            help="per-worker dispatch limit; supervised maximum is starts times actions",
+        )
+        run.add_argument("--cycles", type=int, default=1)
+        run.add_argument("--seconds", type=float, default=10)
+        run.add_argument("--poll", type=float, default=1)
+        if name == "supervise":
+            run.add_argument("--starts", type=int, default=3)
+            run.add_argument("--supervisor-seconds", type=float, default=60)
+            run.add_argument("--stop-grace", type=float, default=2)
+            run.add_argument("--restart-delay", type=float, default=0.1)
     commands.add_parser("stop")
     commands.add_parser("resume")
     commands.add_parser("status")
@@ -82,11 +103,18 @@ def main() -> None:
             else:
                 approve(workspace, [request], ttl_seconds=args.ttl)
             print(json.dumps({"approved": True}))
-        elif args.command == "run":
+        elif args.command in ("run", "supervise"):
             limits = RunLimits(args.actions, args.cycles, args.seconds, args.poll)
-            result = asyncio.run(_run_with_stop_signal(workspace, limits))
+            supervisor = (
+                SupervisorLimits(
+                    args.starts, args.supervisor_seconds, args.stop_grace, args.restart_delay
+                )
+                if args.command == "supervise"
+                else None
+            )
+            result = asyncio.run(_run_with_stop_signal(workspace, limits, supervisor))
             print(json.dumps(asdict(result)))
-            if result.reason not in ("cycle_limit", "action_limit"):
+            if result.reason not in ("cycle_limit", "action_limit", "complete"):
                 raise SystemExit(2)
         elif args.command == "stop":
             workspace.stop()
@@ -97,6 +125,7 @@ def main() -> None:
                 json.dumps(
                     {
                         "controls": state,
+                        "supervisor": supervisor_status(workspace),
                         "last_run": read_observation(
                             workspace, active=bool(state["worker_active"])
                         ),
