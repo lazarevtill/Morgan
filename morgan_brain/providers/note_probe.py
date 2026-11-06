@@ -47,17 +47,12 @@ def validate_endpoint(endpoint: str) -> str:
         address in ipaddress.ip_network(network)
         for network in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")
     )
-    if (
-        not allowed
-        or parsed.scheme != "http"
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.path not in ("", "/")
-        or parsed.query
-        or parsed.fragment
-        or parsed.port is None
-    ):
+    if not allowed or parsed.scheme != "http" or parsed.port is None:
         raise ValueError("Explicit local HTTP address and port required")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("Embedded credentials are not accepted")
+    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        raise ValueError("Endpoint must have no path, query or fragment")
     return endpoint.rstrip("/")
 
 
