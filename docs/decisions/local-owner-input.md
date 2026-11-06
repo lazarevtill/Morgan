@@ -160,9 +160,13 @@ The source memory records what the account supplied, not a speaker annotation fo
 sentence. Imported archive text still has unknown authorship; no import promotion is added.
 
 Renewal/completion/cancellation journals also accept LF in their exact source text, allowing
-review to resume after restart. Older runtimes reject these pending multiline revisions:
-update every reader before allowing this input in a deployed workspace. This change does
-not update or restart an existing pilot automatically.
+review to resume after restart. Older runtimes reject retained multiline revisions, including
+already applied ones:
+update every reader before allowing this input in a deployed workspace. Returning to a
+pre-feature runtime after a multiline revision is not a lossless rollback. Preserve the
+whole workspace and use a compatible runtime; do not flatten sources or delete receipts.
+See [the compatibility audit](../measurements/2026-11-06-multiline-compatibility.md).
+This change does not update or restart an existing pilot automatically.
 
 Eight new paired EN/RU mixed-context inputs previously failed at submission; all eight now
 complete scripted source-preserving review, rejection, resume and explicit confirmation.
