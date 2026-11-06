@@ -20,10 +20,10 @@ def read_transaction(conn: sqlite3.Connection) -> Iterator[None]:
     conn.execute("BEGIN")
     try:
         yield
+        conn.commit()
     except BaseException:
         conn.rollback()
         raise
-    conn.commit()
 
 
 @contextmanager
@@ -58,7 +58,7 @@ def write_transaction(conn: sqlite3.Connection) -> Iterator[None]:
     conn.execute("BEGIN IMMEDIATE")
     try:
         yield
+        conn.commit()
     except BaseException:
         conn.rollback()
         raise
-    conn.commit()
