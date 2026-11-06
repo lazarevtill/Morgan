@@ -54,6 +54,10 @@ and carries them into each session plan; see `docs/decisions/guided-unavailabili
 updates or model calls; pending review and fixed-day freshness remain explicit.
 See `docs/decisions/guided-status.md`; it installs no user messaging channel or service.
 
+`local_alert_cli` explicitly displays one bounded macOS dialog with account-approved text,
+STOP and journal fencing; see `docs/decisions/local-alert.md`. A timeout is not a read receipt.
+It installs no service or standing permission and never retries a started attempt.
+
 `note_proposal_cli` makes an explicit local-model draft from piped text, without memory writes.
 `morgan commitment` validates reviewed planning fields and reuses `remember` capture. See
 `docs/decisions/personal-note-intake.md`; neither path grants execution authority.
