@@ -1,0 +1,12 @@
+{
+  "synthetic": true,
+  "mode": "direct-local-model",
+  "command_launches": 1,
+  "answer_submissions": 6,
+  "seconds": 19.343,
+  "before_minutes": 20,
+  "after_minutes": 10,
+  "human_review_time_included": false,
+  "setup_paths_excluded_from_action_count": true,
+  "permanent_process_installed": false
+}
