@@ -74,6 +74,8 @@ two categories that do not yet work.
 
 ## Documentation
 
+- [Explicit conversation exports](docs/decisions/explicit-conversation-export.md) — user text and
+  final answers only, stable provenance, replay safety, and offline validation limits.
 - [Explicit task execution SDK](docs/decisions/explicit-task-execution.md) — opt-in single-attempt
   tasks with an isolated journal and tested crash recovery; no deployed worker or scheduler.
 - [Bounded task batches](docs/decisions/bounded-task-batches.md) — atomic submission, exact
