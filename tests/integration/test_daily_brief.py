@@ -93,7 +93,8 @@ async def test_memory_to_budgeted_brief_to_managed_delivery(context, tmp_path):
 @pytest.mark.parametrize(
     "case", ["missing", "other_project", "other_owner", "inferred", "quarantined", "instructions"]
 )
-async def test_unavailable_or_untrusted_evidence_fails_closed(context, case):
+@pytest.mark.parametrize("follow", [False, True])
+async def test_unavailable_or_untrusted_evidence_fails_closed(context, case, follow):
     """Do not silently omit missing sources or treat inferred/unusable records as commitments."""
     _, gate = context
     record = memory("one")
@@ -112,7 +113,9 @@ async def test_unavailable_or_untrusted_evidence_fails_closed(context, case):
     if case != "missing":
         await gate.store(record)
     with pytest.raises(ValueError):
-        await prepare_brief(gate, request(["one"]), as_of=CUTOFF)
+        from dataclasses import replace
+
+        await prepare_brief(gate, replace(request(["one"]), follow_revisions=follow), as_of=CUTOFF)
 
 
 async def test_revised_old_source_is_not_planned(context):
@@ -229,3 +232,100 @@ def test_invalid_selection_is_refused(ids, budget):
     """Reject implicit, duplicate, nonprintable or unbounded planning requests."""
     with pytest.raises(ValueError):
         request(ids, budget)
+
+
+async def test_follow_done_and_rescheduled_tasks_from_original_ids(context):
+    """The same selected task IDs now exclude completed work and apply corrected estimates."""
+    from dataclasses import replace
+
+    _, gate = context
+    for identity in ("plants", "library"):
+        await gate.store(memory(identity))
+    done = memory("plants-done", status="done")
+    done.revises_event_ids = ["plants"]
+    done.created_at = datetime(2026, 11, 2, tzinfo=UTC)
+    changed = memory("library-current", minutes=10, priority="high")
+    changed.revises_event_ids = ["library"]
+    changed.created_at = datetime(2026, 11, 2, tzinfo=UTC)
+    await gate.store(done)
+    await gate.store(changed)
+    draft = await prepare_brief(
+        gate, replace(request(["plants", "library"]), follow_revisions=True), as_of=CUTOFF
+    )
+    assert draft.selected_ids == ("library-current",)
+    assert draft.excluded_ids == ("plants-done",) and draft.planned_minutes == 10
+    assert dict(draft.resolved_ids) == {"plants": "plants-done", "library": "library-current"}
+    assert "Updated source versions" in draft.task.payload
+
+
+async def test_same_family_selected_twice_is_not_double_budgeted(context):
+    """Selecting an ancestor and its current version resolves to one commitment."""
+    from dataclasses import replace
+
+    _, gate = context
+    await gate.store(memory("old"))
+    new = memory("new")
+    new.revises_event_ids = ["old"]
+    new.created_at = datetime(2026, 11, 2, tzinfo=UTC)
+    await gate.store(new)
+    draft = await prepare_brief(
+        gate, replace(request(["old", "new"]), follow_revisions=True), as_of=CUTOFF
+    )
+    assert draft.selected_ids == ("new",) and draft.planned_minutes == 20
+
+
+async def test_conflicting_task_updates_are_not_silently_chosen(context):
+    """Two corrections need explicit reconciliation, not a planner's guessed winner."""
+    from dataclasses import replace
+
+    _, gate = context
+    await gate.store(memory("old"))
+    for identity in ("done", "still-open"):
+        update = memory(identity, status="done" if identity == "done" else "open")
+        update.revises_event_ids = ["old"]
+        update.created_at = datetime(2026, 11, 2, tzinfo=UTC)
+        await gate.store(update)
+    with pytest.raises(ValueError, match="ambiguous"):
+        await prepare_brief(gate, replace(request(["old"]), follow_revisions=True), as_of=CUTOFF)
+
+
+async def test_follow_respects_snapshot_and_future_source(context):
+    """A future completion cannot change an earlier snapshot or become a selected source."""
+    from dataclasses import replace
+
+    _, gate = context
+    await gate.store(memory("old"))
+    future = memory("future", status="done")
+    future.revises_event_ids = ["old"]
+    future.created_at = datetime(2026, 11, 7, tzinfo=UTC)
+    await gate.store(future)
+    draft = await prepare_brief(
+        gate, replace(request(["old"]), follow_revisions=True), as_of=CUTOFF
+    )
+    assert draft.selected_ids == ("old",)
+    with pytest.raises(ValueError, match="future-dated"):
+        await prepare_brief(gate, replace(request(["future"]), follow_revisions=True), as_of=CUTOFF)
+
+
+async def test_follow_refuses_revision_changed_between_reads(context):
+    """A concurrent correction after resolution invalidates the selected leaf."""
+    from dataclasses import replace
+
+    _, gate = context
+    await gate.store(memory("old"))
+    original = gate.evidence
+    calls = 0
+
+    async def racing_read(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            update = memory("new", status="done")
+            update.revises_event_ids = ["old"]
+            update.created_at = datetime(2026, 11, 2, tzinfo=UTC)
+            await gate.store(update)
+        return await original(**kwargs)
+
+    gate.evidence = racing_read
+    with pytest.raises(ValueError, match="changed during planning"):
+        await prepare_brief(gate, replace(request(["old"]), follow_revisions=True), as_of=CUTOFF)

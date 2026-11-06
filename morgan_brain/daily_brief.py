@@ -13,7 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from morgan_brain.local_notes import ACTION
 from morgan_brain.memory.continuation_context import ineligible
 from morgan_brain.memory.gate import MemoryGate
-from morgan_brain.models import MemoryKind, MemorySource
+from morgan_brain.memory.revisions import instant
+from morgan_brain.models import Memory, MemoryKind, MemorySource, MemoryStatus
 from morgan_brain.tasks import TaskKey, TaskRequest
 
 _PRIORITY_RANK = {"high": 0, "normal": 1, "low": 2}
@@ -47,9 +48,12 @@ class BriefRequest:
     evidence_ids: tuple[str, ...]
     day: date
     budget_minutes: int
+    follow_revisions: bool = False
 
     def __post_init__(self) -> None:
         """Bound exact evidence selection and reject implicit or duplicate source selection."""
+        if not isinstance(self.follow_revisions, bool):
+            raise TypeError("follow_revisions must be a boolean")
         if not 1 <= len(self.evidence_ids) <= 8 or len(set(self.evidence_ids)) != len(
             self.evidence_ids
         ):
@@ -78,6 +82,7 @@ class BriefDraft:
     planned_minutes: int
     as_of: datetime
     planner: str = "controlled-priority-v1"
+    resolved_ids: tuple[tuple[str, str], ...] = ()
 
 
 def _literal(value: str) -> str:
@@ -132,6 +137,69 @@ def _render(
     return "\n".join(lines) + "\n"
 
 
+def _current_leaf(memory: Memory, cutoff: datetime) -> str:
+    """Follow only a trusted commitment with one complete, unambiguous revision family."""
+    if (
+        memory.kind != MemoryKind.EPISODIC
+        or memory.source != MemorySource.USER_STATED
+        or memory.status != MemoryStatus.STORED
+        or memory.instruction_like
+    ):
+        raise ValueError("select trusted commitment sources")
+    if memory.created_at is not None and instant(memory.created_at) > instant(cutoff):
+        raise ValueError("selected commitment is future-dated")
+    if memory.revision_truncated or memory.eligible_leaf_count != 1:
+        raise ValueError("commitment revisions are ambiguous or incomplete")
+    if len(memory.eligible_leaf_ids) != 1 or len(memory.content.encode("utf-8")) > 4096:
+        raise ValueError("invalid commitment revision source")
+    Commitment.model_validate_json(memory.content)
+    return memory.eligible_leaf_ids[0]
+
+
+async def _sources(
+    gate: MemoryGate, request: BriefRequest, cutoff: datetime
+) -> tuple[list[Memory], tuple[tuple[str, str], ...]]:
+    """Resolve only explicitly selected families through scoped gate reads at one cutoff."""
+    original = await gate.evidence(
+        user_id=request.task_key.user_id,
+        project=request.task_key.project,
+        evidence_ids=list(request.evidence_ids),
+        effective_at=cutoff,
+    )
+    if original.missing_ids:
+        raise ValueError("selected evidence is unavailable in this scope")
+    if not request.follow_revisions:
+        return original.records, tuple((item.id, item.id) for item in original.records)
+    links = tuple((item.id, _current_leaf(item, cutoff)) for item in original.records)
+    current = await gate.evidence(
+        user_id=request.task_key.user_id,
+        project=request.task_key.project,
+        evidence_ids=list(dict.fromkeys(target for _, target in links)),
+        effective_at=cutoff,
+    )
+    if current.missing_ids:
+        raise ValueError("current commitment revision is unavailable")
+    by_id = {item.id: item for item in current.records}
+    for source, (_, target) in zip(original.records, links, strict=True):
+        leaf = by_id[target]
+        if (
+            leaf.revision_root_id != source.revision_root_id
+            or _current_leaf(leaf, cutoff) != target
+        ):
+            raise ValueError("commitment revisions changed during planning; retry")
+    return current.records, links
+
+
+def _render_resolutions(links: tuple[tuple[str, str], ...]) -> str:
+    """Expose followed revisions without presenting the plan as an exhaustive task search."""
+    changed = [(source, target) for source, target in links if source != target]
+    if not changed:
+        return ""
+    lines = ["", "## Updated source versions", ""]
+    lines.extend(f"- {_literal(source)} → {_literal(target)}" for source, target in changed)
+    return "\n".join(lines) + "\n"
+
+
 async def prepare_brief(
     gate: MemoryGate, request: BriefRequest, *, as_of: datetime | None = None
 ) -> BriefDraft:
@@ -143,17 +211,10 @@ async def prepare_brief(
     cutoff = as_of if as_of is not None else datetime.now(UTC)
     if cutoff.utcoffset() is None:
         raise ValueError("brief snapshot requires a timezone")
-    evidence = await gate.evidence(
-        user_id=request.task_key.user_id,
-        project=request.task_key.project,
-        evidence_ids=list(request.evidence_ids),
-        effective_at=cutoff,
-    )
-    if evidence.missing_ids:
-        raise ValueError("selected evidence is unavailable in this scope")
+    records, resolved = await _sources(gate, request, cutoff)
     candidates: list[tuple[str, Commitment]] = []
     excluded: list[tuple[str, Commitment]] = []
-    for memory in evidence.records:
+    for memory in records:
         if (
             memory.kind != MemoryKind.EPISODIC
             or memory.source != MemorySource.USER_STATED
@@ -180,7 +241,7 @@ async def prepare_brief(
             remaining -= item[1].minutes
         else:
             deferred.append(item)
-    payload = _render(request, selected, deferred, excluded, cutoff)
+    payload = _render(request, selected, deferred, excluded, cutoff) + _render_resolutions(resolved)
     return BriefDraft(
         task=TaskRequest(request.task_key, ACTION, payload),
         selected_ids=tuple(identity for identity, _ in selected),
@@ -188,4 +249,5 @@ async def prepare_brief(
         excluded_ids=tuple(identity for identity, _ in excluded),
         planned_minutes=request.budget_minutes - remaining,
         as_of=cutoff,
+        resolved_ids=resolved,
     )

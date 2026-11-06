@@ -1,0 +1,48 @@
+{
+  "synthetic": true,
+  "model": "ibm/granite4.1:8b",
+  "rows": [
+    {
+      "name": "workflow",
+      "selected": [
+        "Нужно полить растения.",
+        "Надо позвонить в библиотеку."
+      ],
+      "expected": [
+        "Нужно полить растения.",
+        "Надо позвонить в библиотеку."
+      ],
+      "exact": true
+    },
+    {
+      "name": "negation",
+      "selected": [
+        "Нужно зарядить фонарик."
+      ],
+      "expected": [
+        "Нужно зарядить фонарик."
+      ],
+      "exact": true
+    },
+    {
+      "name": "ownership",
+      "selected": [
+        "Антон планирует почистить велосипед."
+      ],
+      "expected": [
+        "Мне нужно забрать посылку."
+      ],
+      "exact": false
+    },
+    {
+      "name": "correction",
+      "selected": [],
+      "expected": [],
+      "exact": true
+    }
+  ],
+  "ready_seconds": 15.333,
+  "seconds": 32.989,
+  "exact": 3,
+  "scoring_note": "Normalized tuple selection to list for equality; computed from saved raw selections, no inference rerun."
+}
