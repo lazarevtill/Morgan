@@ -599,7 +599,8 @@ def _confirm_renewal(session: Session, update: RenewalUpdate) -> bool:
     print(f"Владелец / Owner: {_quote(session.user)}; project: {_quote(session.project)}")
     print(f"Задача / Task: {_quote(update.before.title)}; ID {_quote(update.parent_id)}")
     print(f"Источник / Statement: {_quote(update.source_text)}; ID {_quote(update.source_id)}")
-    print(f"Срок / Date: {update.before.due} → {update.after.due}; status remains open.")
+    print(f"Срок / Date: {update.before.due} → {update.after.due}")
+    print(f"Состояние / Status: {update.before.status} → {update.after.status}")
     print("Это изменение плана, не доставка напоминания / Plan change, not notification delivery.")
     return input("Подтвердить / Confirm: CONFIRM / ПОДТВЕРЖДАЮ (else cancel): ").strip() in (
         "CONFIRM",

@@ -1,4 +1,4 @@
-"""Explicit reviewed renewal of one current task; message text cannot select a target."""
+"""Reviewed date renewal or completion; message text cannot select a target."""
 
 from datetime import datetime
 from typing import Self
@@ -28,15 +28,23 @@ class RenewalUpdate(BaseModel):
 
     @model_validator(mode="after")
     def valid_review(self) -> Self:
-        """Renew only the date of an open task; never reopen or silently alter another field."""
-        if self.before.status != "open" or self.after.status != "open":
+        """Validate either a date renewal or an explicit completion, never arbitrary edits."""
+        completion = self.event_id.startswith("guided-complete-")
+        if completion:
+            if self.before.status != "open" or self.after != self.before.model_copy(
+                update={"status": "done"}
+            ):
+                raise ValueError("completion may only mark an open task done")
+        elif self.before.status != "open" or self.after.status != "open":
             raise ValueError("renewal requires an open task")
-        if self.before.model_copy(update={"due": self.after.due}) != self.after:
+        if not completion and self.before.model_copy(update={"due": self.after.due}) != self.after:
             raise ValueError("renewal may change only the reviewed date")
         for identity, limit in ((self.event_id, 200), (self.parent_id, 256)):
             if not identity.strip() or len(identity) > limit or not identity.isprintable():
                 raise ValueError("invalid renewal identities")
-        if not self.event_id.startswith("guided-renew-") or self.parent_id in (
+        if not self.event_id.startswith(
+            ("guided-renew-", "guided-complete-")
+        ) or self.parent_id in (
             self.event_id,
             self.source_id,
         ):
