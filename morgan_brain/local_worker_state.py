@@ -116,7 +116,7 @@ def _validate_metadata(raw: dict[str, object]) -> None:
         raise ValueError("invalid observation reason")
     for field in ("actions", "recovered"):
         value = raw[field]
-        if type(value) is not int or not 0 <= value <= 960:
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 960:
             raise ValueError("invalid observation count")
     limits = raw["limits"]
     bounds = {
@@ -129,9 +129,13 @@ def _validate_metadata(raw: dict[str, object]) -> None:
         raise ValueError("invalid observation limits")
     for name, (lower, upper) in bounds.items():
         value = limits[name]
-        if type(value) not in (int, float) or not lower <= value <= upper:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not lower <= value <= upper
+        ):
             raise ValueError("invalid observation limit value")
-        if name in ("max_actions", "max_cycles") and type(value) is not int:
+        if name in ("max_actions", "max_cycles") and not isinstance(value, int):
             raise ValueError("invalid observation integer limit")
         if name == "seconds" and value == 0:
             raise ValueError("invalid observation duration")

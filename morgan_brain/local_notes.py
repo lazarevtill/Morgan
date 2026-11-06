@@ -385,6 +385,24 @@ class LocalRun:
     recovered: int
 
 
+async def _recover_local_attempt(
+    journal: TaskJournal, task: Task, access: ReceiptAccess, timeout_seconds: float
+) -> bool:
+    """Fence under the caller's worker lock and look up once, without repeating the effect."""
+    if task.attempt_id is None:
+        raise TaskConflict("interrupted local task lacks an attempt ID")
+    if task.status == "running":
+        journal.mark_unknown(task.key, attempt_id=task.attempt_id)
+    result = await reconcile_task(
+        journal,
+        task.key,
+        expected_attempt_id=task.attempt_id,
+        access=access,
+        timeout_seconds=min(60, timeout_seconds),
+    )
+    return result.outcome != "unresolved"
+
+
 async def _work(
     workspace: NoteWorkspace, journal: TaskJournal, limits: RunLimits, observation: RunObservation
 ) -> LocalRun:
@@ -411,18 +429,9 @@ async def _work(
                     return LocalRun("deadline", actions, recovered)
                 if task.status in ("running", "outcome_unknown"):
                     observation.progress("reconciling", actions, recovered)
-                if task.status == "running" and task.attempt_id is not None:
-                    # Holding the workspace lock excludes the previous cooperating worker.
-                    task = journal.mark_unknown(task.key, attempt_id=task.attempt_id)
-                if task.status == "outcome_unknown" and task.attempt_id is not None:
-                    result = await reconcile_task(
-                        journal,
-                        task.key,
-                        expected_attempt_id=task.attempt_id,
-                        access=ReceiptAccess(adapter, policy.check),
-                        timeout_seconds=min(60, remaining),
-                    )
-                    if result.outcome == "unresolved":
+                    if not await _recover_local_attempt(
+                        journal, task, ReceiptAccess(adapter, policy.check), remaining
+                    ):
                         return LocalRun("needs_reconciliation", actions, recovered)
                     recovered += 1
                     continue
