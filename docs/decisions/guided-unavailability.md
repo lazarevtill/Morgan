@@ -9,7 +9,7 @@ No separate memory ID selection or JSON authoring is needed for these intervals.
 After the ordinary task review, the menu accepts:
 
 - `busy` / `недоступность`: add an interval.
-- `change N` / `изменить N`: replace the displayed constraint U<number> with a reviewed version.
+- `change N` / `изменить N`: replace a displayed constraint such as U1 with a reviewed version.
 - `cancel N` / `отменить N`: explicitly cancel that constraint.
 - Existing `done N` / `готово N` and `quit` / `выход` retain their task meanings.
 
