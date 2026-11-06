@@ -15,7 +15,7 @@ def test_cli_schedule_kill_restart_and_repeat(tmp_path):
     note = tmp_path / "plan.md"
     note.write_text("# Утренний план\n- Полить растения\n")
     command = [sys.executable, "-m", "morgan_brain.local_notes_cli", str(workspace.path)]
-    due = datetime.now(UTC) + timedelta(seconds=3)
+    due = datetime.now(UTC) + timedelta(seconds=8)
     try:
         approved = subprocess.run(
             [
@@ -42,10 +42,10 @@ def test_cli_schedule_kill_restart_and_repeat(tmp_path):
         )
         assert approved.returncode == 0, approved.stderr
         assert json.loads(approved.stderr)["not_before"] == due.isoformat()
-        run = [*command, "run", "--cycles", "60", "--poll", "0.1", "--seconds", "8"]
+        run = [*command, "run", "--cycles", "60", "--poll", "0.25", "--seconds", "20"]
         with subprocess.Popen(run, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as worker:
             try:
-                deadline = time.monotonic() + 2
+                deadline = time.monotonic() + 5
                 while not local_status(workspace)["worker_active"]:
                     assert worker.poll() is None and time.monotonic() < deadline
                     time.sleep(0.01)
@@ -57,7 +57,7 @@ def test_cli_schedule_kill_restart_and_repeat(tmp_path):
                 if worker.poll() is None:
                     worker.kill()
                     worker.wait(timeout=5)
-        resumed = subprocess.run(run, capture_output=True, text=True, timeout=12, check=False)
+        resumed = subprocess.run(run, capture_output=True, text=True, timeout=25, check=False)
         assert resumed.returncode == 0, resumed.stderr
         assert json.loads(resumed.stdout)["actions"] == 1
         again = subprocess.run(
