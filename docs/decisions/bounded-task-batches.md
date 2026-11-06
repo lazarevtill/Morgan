@@ -36,7 +36,8 @@ partially executed handlers.
 The registry is deliberately not stored in the journal: reopening pending tasks grants no
 permission to execute them. The application must obtain current authority again. An approval
 ID is an audit label supplied by the caller, not a signature or proof. The permission clock and
-issuer are trusted. No model output, memory or checkpoint can mint a permit through this SDK.
+issuer are trusted. The application must never construct permits from model output, memory
+or checkpoints; the SDK does not authenticate the issuer.
 
 This is an in-process policy boundary, not authentication or a sandbox against malicious Python
 code. The existing low-level `run_task` remains a trusted-caller primitive with an optional
