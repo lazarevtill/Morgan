@@ -98,5 +98,5 @@ external action was involved in this replay.
 The tests run preview/accept in separate CLI processes and cover stale source/proposal files,
 all editable planning/provenance fields, changed owner/database/project, corrected wording,
 missing/symlinked/malformed inputs, exact replay, planner integration and safe readable output.
-The full suite before the final renderer and provenance tests passed 1,584 tests with four live tests skipped;
-all 25 focused review tests passed afterward. CI runs the final combined set.
+The final combined CI suite passed 1,586 tests with four live tests skipped (152.27 seconds).
+All 25 focused review tests also passed locally.
