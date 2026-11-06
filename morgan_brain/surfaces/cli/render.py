@@ -6,6 +6,7 @@ string; none of them reach for a store, a setting or a model.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -365,9 +366,49 @@ def _render_evidence(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _review_quote(value: str) -> str:
+    """Keep readable Unicode while escaping controls and directional formatting characters."""
+    encoded = json.dumps(value, ensure_ascii=False)
+    return "".join(char if char.isprintable() else f"\\u{ord(char):04x}" for char in encoded)
+
+
+def _render_review(data: dict[str, Any]) -> str:
+    """Show source context and the exact proposed claim before its confirmation digest."""
+    if data["stored"]:
+        return f"Stored reviewed commitment {_review_quote(data['id'])}. No execution authorized."
+    review = data["review"]
+    commitment = review["commitment"]
+    lines = ["Review only: nothing stored.", "", "Original note (quoted lines):"]
+    lines.extend(
+        f"  {index}. {_review_quote(line)}"
+        for index, line in enumerate(review["source_note"].splitlines(), 1)
+    )
+    lines.extend(
+        [
+            "",
+            f"Selected proposal: {review['selection']}",
+            f"Original line: {_review_quote(review['original_line'])}",
+            f"Reviewed title: {_review_quote(commitment['title'])}",
+            f"Due: {commitment['due']}; time: {commitment['minutes']} min; "
+            f"priority: {commitment['priority']}; status: {commitment['status']}.",
+            f"Owner: {_review_quote(review['owner'])}; "
+            f"project: {_review_quote(review['project'])}.",
+            f"Database: {_review_quote(review['database'])}",
+            f"Reported author: {_review_quote(review['author_id'])}",
+            f"Event: {_review_quote(review['event_id'])}; effective at: {review['effective_at']}.",
+            "",
+            "Only after reviewing these details, repeat with:",
+            f"  --accept {data['review_sha256']}",
+            "This confirms a user-stated commitment in memory, not permission to execute it.",
+        ]
+    )
+    return "\n".join(lines)
+
+
 RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "remember": _render_remember,
     "commitment": _render_remember,
+    "review-proposal": _render_review,
     "recall": _render_recall,
     "facts": _render_facts,
     "evidence": _render_evidence,
