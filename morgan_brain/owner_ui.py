@@ -517,7 +517,7 @@ class OwnerUI:
                 elif choice == "Читать черновики":
                     self.read_drafts(state)
                 elif choice == "Новое сообщение":
-                    text = self.text("Ваше сообщение (до 1000 символов, переносы строк разрешены)")
+                    text = self.text("Ваше сообщение (до 1000 символов)")
                     receipt = self.call("submit", f"ui-{uuid4().hex}", text=text)
                     if "message" in receipt:
                         self.review(receipt["message"], self.call("status"))
