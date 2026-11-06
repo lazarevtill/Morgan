@@ -48,7 +48,8 @@ incompatible data before admission. Protected journals, STOP and expiry were unc
 These were isolated counters, not deployment launches. With a seeded count of eight,
 the new stopped startup recorded nine; the old loader rejected before incrementing. Even
 a STOP-startup probe consumes a launch, so run it on a copy, never as a live preflight.
-Source-keyed model-cache status returned `stopped` in all twelve copies. No model process or network call was made.
+Source-keyed model-cache status returned `stopped` in all twelve copies. No model process
+or network call was made.
 The old emergency `owner_input stop` command was separately verified to bypass parsing
 and set STOP without modifying the incompatible journals or memory.
 
