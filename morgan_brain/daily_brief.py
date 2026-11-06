@@ -70,10 +70,10 @@ class BriefRequest:
                 raise ValueError("invalid unavailability ID")
         if not isinstance(self.follow_revisions, bool):
             raise TypeError("follow_revisions must be a boolean")
-        if not 1 <= len(self.evidence_ids) <= 8 or len(set(self.evidence_ids)) != len(
+        if not 0 <= len(self.evidence_ids) <= 8 or len(set(self.evidence_ids)) != len(
             self.evidence_ids
         ):
-            raise ValueError("select 1 to 8 distinct evidence IDs")
+            raise ValueError("select 0 to 8 distinct evidence IDs")
         if any(
             not isinstance(i, str) or not i.strip() or len(i) > 256 or not i.isprintable()
             for i in self.evidence_ids
@@ -178,6 +178,8 @@ async def _sources(
     gate: MemoryGate, request: BriefRequest, cutoff: datetime, schema: type[BaseModel] = Commitment
 ) -> tuple[list[Memory], tuple[tuple[str, str], ...]]:
     """Resolve only explicitly selected families through scoped gate reads at one cutoff."""
+    if not request.evidence_ids:
+        return [], ()
     original = await gate.evidence(
         user_id=request.task_key.user_id,
         project=request.task_key.project,

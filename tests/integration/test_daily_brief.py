@@ -226,10 +226,10 @@ async def test_cli_prepares_private_draft_without_approval(context, tmp_path):
 
 @pytest.mark.parametrize(
     "ids,budget",
-    [([], 30), (["one", "one"], 30), (["one"], 0), (["one"], 481), (["one\nheading"], 30)],
+    [(["one", "one"], 30), (["one"], 0), (["one"], 481), (["one\nheading"], 30)],
 )
 def test_invalid_selection_is_refused(ids, budget):
-    """Reject implicit, duplicate, nonprintable or unbounded planning requests."""
+    """Reject duplicate, nonprintable or unbounded planning requests."""
     with pytest.raises(ValueError):
         request(ids, budget)
 

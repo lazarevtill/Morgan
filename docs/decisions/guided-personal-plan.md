@@ -136,3 +136,7 @@ policy. One note is capped at 4 KiB/32 lines; at most eight tasks can be selecte
 limit is 8 GB, not a hard RSS quota. Real data and each task/completion remain the user's choice.
 No permanent access, paid process or background service is installed by this command.
 
+
+A note without open tasks can be reviewed with `none` / `нет задач`, then `CONFIRM` /
+`ПОДТВЕРЖДАЮ`. The availability menu remains usable without inventing a commitment.
+Blank selection still exits without review. See [reviewed empty plans](reviewed-empty-plan.md).
