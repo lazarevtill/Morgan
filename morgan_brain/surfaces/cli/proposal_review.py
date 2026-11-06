@@ -143,6 +143,7 @@ async def cmd_review_proposal(
         event_id=review["event_id"],
         effective_at=review["effective_at"],
         revises_event_ids=None,
+        assert_session_id=True,
     )
     result = await cmd_remember(
         capture,

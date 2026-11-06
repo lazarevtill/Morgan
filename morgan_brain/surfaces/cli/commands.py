@@ -158,7 +158,10 @@ async def cmd_remember(
                 if captured.origin_kind is OriginKind.REMEMBER and captured.client == client:
                     # Retry capture context is historical metadata, not caller identity.
                     # The core still checks every assertion field before accepting replay.
-                    memory.session_id = captured.session_id
+                    # Reviewed intake asserts its session digest as immutable provenance.
+                    # Other capture clients keep treating the session as historical context.
+                    if not getattr(args, "assert_session_id", False):
+                        memory.session_id = captured.session_id
                     memory.cwd = captured.cwd
         memory_id = await ctx.gate.store(memory)
         stored_memory = await ctx.gate.get(memory_id, user_id=settings.owner_user_id)

@@ -248,3 +248,17 @@ def test_human_preview_preserves_unicode_and_escapes_controls(proposal, tmp_path
     assert "--accept " in result.stdout
     assert all(control not in result.stdout for control in ("\x1b", "\x07", "\u202e"))
     assert not (tmp_path / "memory").exists()
+
+
+def test_new_review_cannot_reuse_old_event_provenance(proposal, tmp_path):
+    """Even unchanged commitment text cannot replace the review digest on an existing event."""
+    env = _hash_env(tmp_path / "memory")
+    args = arguments(proposal)
+    first = preview(args, env, tmp_path)
+    assert preview([*args, "--accept", first["review_sha256"]], env, tmp_path)["stored"]
+    proposal.write_text(proposal.read_text() + "\n")
+    changed = preview(args, env, tmp_path)
+    assert changed["review_sha256"] != first["review_sha256"]
+    result = _run([*args, "--accept", changed["review_sha256"]], env, tmp_path)
+    assert result.returncode != 0
+    assert "session_id" in result.stdout
