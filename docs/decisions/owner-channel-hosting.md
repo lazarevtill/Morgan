@@ -74,8 +74,10 @@ Receipt meanings:
   automatic workaround: the original message may already have been published.
 
 The request has a 12-second overall adapter deadline (10-second HTTP operation timeouts).
-STOP is polled every 0.1 seconds while awaiting the response. It cannot retract a message
-already accepted by a server. STOP before send prevents journal creation and the request.
+STOP is polled every 0.1 seconds while awaiting the response. The CLI persists STOP on
+SIGTERM during the send; see the [shutdown pilot](owner-push-shutdown-pilot.md).
+It cannot retract a message already accepted by a server. STOP before send prevents journal
+creation and the request.
 The existing `local_alert_cli OUTBOX stop` and `resume` manage the same workspace marker;
 resume sends nothing. Journals retain text separately from Morgan's memory/forget lifecycle.
 
