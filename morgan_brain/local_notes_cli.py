@@ -21,6 +21,7 @@ from morgan_brain.local_notes import (
     revoke,
     run_local,
 )
+from morgan_brain.local_worker_state import read_observation, scoped_counts
 from morgan_brain.tasks import TaskKey, TaskRequest
 
 
@@ -61,6 +62,9 @@ def main() -> None:
     commands.add_parser("resume")
     commands.add_parser("status")
     commands.add_parser("revoke")
+    diagnosis = commands.add_parser("diagnose")
+    diagnosis.add_argument("--user", required=True)
+    diagnosis.add_argument("--project", required=True)
     args = parser.parse_args()
     workspace = NoteWorkspace(args.workspace)
     try:
@@ -87,6 +91,21 @@ def main() -> None:
         elif args.command == "stop":
             workspace.stop()
             print(json.dumps({"stopped": True}))
+        elif args.command == "diagnose":
+            state = local_status(workspace)
+            print(
+                json.dumps(
+                    {
+                        "controls": state,
+                        "last_run": read_observation(
+                            workspace, active=bool(state["worker_active"])
+                        ),
+                        "task_counts": scoped_counts(
+                            workspace, user_id=args.user, project=args.project
+                        ),
+                    }
+                )
+            )
         elif args.command == "status":
             print(json.dumps(local_status(workspace)))
         elif args.command == "revoke":

@@ -20,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
+from morgan_brain.local_worker_state import RunObservation
 from morgan_brain.task_batches import TaskPermissionDenied, TaskPermissions, TaskPermit
 from morgan_brain.task_receipts import (
     ReceiptAccess,
@@ -298,7 +299,10 @@ class FileApproval:
     def load(self) -> tuple[tuple[TaskRequest, ...], TaskPermissions]:
         """Fail closed on STOP, expiry, malformed policy, or another workspace's approval."""
         self.workspace.check_stop()
-        requests, expiry = self.snapshot()
+        try:
+            requests, expiry = self.snapshot()
+        except FileNotFoundError:
+            return (), TaskPermissions()
         if expiry <= datetime.now(UTC):
             raise TaskPermissionDenied("approval has expired")
         permissions = TaskPermissions()
@@ -308,10 +312,7 @@ class FileApproval:
 
     def check(self, task: Task) -> None:
         """Re-read the policy so removal or replacement revokes future effects."""
-        try:
-            _, permissions = self.load()
-        except FileNotFoundError as exc:
-            raise TaskPermissionDenied("approval was revoked") from exc
+        _, permissions = self.load()
         permissions.check(task)
 
 
@@ -384,7 +385,27 @@ class LocalRun:
     recovered: int
 
 
-async def _work(workspace: NoteWorkspace, journal: TaskJournal, limits: RunLimits) -> LocalRun:
+async def _recover_local_attempt(
+    journal: TaskJournal, task: Task, access: ReceiptAccess, timeout_seconds: float
+) -> bool:
+    """Fence under the caller's worker lock and look up once, without repeating the effect."""
+    if task.attempt_id is None:
+        raise TaskConflict("interrupted local task lacks an attempt ID")
+    if task.status == "running":
+        journal.mark_unknown(task.key, attempt_id=task.attempt_id)
+    result = await reconcile_task(
+        journal,
+        task.key,
+        expected_attempt_id=task.attempt_id,
+        access=access,
+        timeout_seconds=min(60, timeout_seconds),
+    )
+    return result.outcome != "unresolved"
+
+
+async def _work(
+    workspace: NoteWorkspace, journal: TaskJournal, limits: RunLimits, observation: RunObservation
+) -> LocalRun:
     """Execute bounded current approvals and reconcile interrupted attempts without replay."""
     policy = FileApproval(workspace)
     adapter = LocalNoteAdapter(workspace)
@@ -392,31 +413,22 @@ async def _work(workspace: NoteWorkspace, journal: TaskJournal, limits: RunLimit
     actions = recovered = 0
     try:
         for cycle in range(limits.max_cycles):
+            observation.progress("polling", actions, recovered)
             workspace.check_stop()
             if asyncio.get_running_loop().time() >= deadline:
                 return LocalRun("deadline", actions, recovered)
-            try:
-                requests, _ = policy.load()
-            except FileNotFoundError:
-                requests = ()
+            requests, _ = policy.load()
             tasks = journal.create_many(requests) if requests else ()
             for task in tasks:
                 workspace.check_stop()
                 remaining = deadline - asyncio.get_running_loop().time()
                 if remaining <= 0:
                     return LocalRun("deadline", actions, recovered)
-                if task.status == "running" and task.attempt_id is not None:
-                    # Holding the workspace lock excludes the previous cooperating worker.
-                    task = journal.mark_unknown(task.key, attempt_id=task.attempt_id)
-                if task.status == "outcome_unknown" and task.attempt_id is not None:
-                    result = await reconcile_task(
-                        journal,
-                        task.key,
-                        expected_attempt_id=task.attempt_id,
-                        access=ReceiptAccess(adapter, policy.check),
-                        timeout_seconds=min(60, remaining),
-                    )
-                    if result.outcome == "unresolved":
+                if task.status in ("running", "outcome_unknown"):
+                    observation.progress("reconciling", actions, recovered)
+                    if not await _recover_local_attempt(
+                        journal, task, ReceiptAccess(adapter, policy.check), remaining
+                    ):
                         return LocalRun("needs_reconciliation", actions, recovered)
                     recovered += 1
                     continue
@@ -428,6 +440,7 @@ async def _work(workspace: NoteWorkspace, journal: TaskJournal, limits: RunLimit
                     return LocalRun("action_limit", actions, recovered)
                 policy.check(task)
                 actions += 1
+                observation.progress("dispatching", actions, recovered)
                 await run_task(
                     journal,
                     task.key,
@@ -449,8 +462,17 @@ async def _work(workspace: NoteWorkspace, journal: TaskJournal, limits: RunLimit
 async def run_local(workspace: NoteWorkspace, limits: RunLimits = RunLimits()) -> LocalRun:
     """Hold exclusive ownership through execution/recovery, then close the isolated journal."""
     with workspace.locked():
-        journal = workspace.journal()
+        observation = RunObservation(workspace, asdict(limits))
         try:
-            return await _work(workspace, journal, limits)
-        finally:
-            journal.close()
+            journal = workspace.journal()
+            try:
+                result = await _work(workspace, journal, limits, observation)
+            finally:
+                journal.close()
+        except BaseException as exc:
+            # A diagnostic write failure must not mask the original execution/storage error.
+            with suppress(OSError):
+                observation.failed(exc)
+            raise
+        observation.finished(result.reason, result.actions, result.recovered)
+        return result

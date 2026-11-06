@@ -8,6 +8,7 @@ import sys
 import pytest
 
 from morgan_brain.local_notes import ACTION, NoteWorkspace, approve, run_local
+from morgan_brain.local_worker_state import read_observation, scoped_counts
 from morgan_brain.tasks import TaskKey, TaskRequest
 
 
@@ -42,10 +43,17 @@ asyncio.run(run_local(NoteWorkspace(Path(sys.argv[1]))))
             check=False,
         )
         assert process.returncode == 23, process.stderr
+        diagnosis = read_observation(workspace, active=False)
+        assert diagnosis["observed_state"] == "interrupted"
+        assert diagnosis["phase"] == "dispatching"
+        assert scoped_counts(workspace, user_id="owner", project="personal") == {"running": 1}
         before = list(workspace.path.glob("note-*.md"))
         inode = before[0].stat().st_ino if before else None
         result = asyncio.run(run_local(workspace))
         assert result.actions == 0
+        diagnosis = read_observation(workspace, active=False)
+        assert diagnosis["observed_state"] == "finished"
+        assert diagnosis["recovered"] == (1 if after_effect else 0)
         if after_effect:
             assert result.recovered == 1
             after = list(workspace.path.glob("note-*.md"))
@@ -95,6 +103,10 @@ def test_cli_end_to_end(tmp_path):
     first = cli("run")
     assert first.returncode == 0, first.stderr
     assert json.loads(first.stdout)["actions"] == 1
+    diagnosis = cli("diagnose", "--user", "me", "--project", "personal")
+    assert diagnosis.returncode == 0, diagnosis.stderr
+    assert json.loads(diagnosis.stdout)["task_counts"] == {"succeeded": 1}
+    assert "Morning plan" not in diagnosis.stdout
     assert json.loads(cli("run").stdout)["actions"] == 0
     assert cli("stop").returncode == 0
     stopped = cli("run")
