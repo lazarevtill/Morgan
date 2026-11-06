@@ -114,6 +114,12 @@ See [guided unavailability](guided-unavailability.md) for confirmation, source p
 correction, cancellation and recovery. Any overlap conservatively defers the whole day
 because this planner does not assign task hours.
 
+## Read current status
+
+`python -m morgan_brain.guided_plan /private/session --status` returns current scoped JSON
+without entering the dialogue or approving pending work. It identifies the fixed planning day
+and its freshness when a timezone is known. See [status semantics](guided-status.md).
+
 ## Limits and next real-data pilot
 
 This is an operator-driven personal planning conversation, not an autonomous 24/7 agent.

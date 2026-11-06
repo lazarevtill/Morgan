@@ -50,6 +50,9 @@ model cycle, capture path and current-revision planner. It uses a separate priva
 workspace and explicit confirmation; see `docs/decisions/guided-personal-plan.md`.
 Its `busy` / `change N` / `cancel N` dialogue journals reviewed source statements and intervals
 and carries them into each session plan; see `docs/decisions/guided-unavailability.md`.
+`guided_plan WORKSPACE --status` reads current scoped state as JSON without prompts, memory
+updates or model calls; pending review and fixed-day freshness remain explicit.
+See `docs/decisions/guided-status.md`; it installs no user messaging channel or service.
 
 `note_proposal_cli` makes an explicit local-model draft from piped text, without memory writes.
 `morgan commitment` validates reviewed planning fields and reuses `remember` capture. See
