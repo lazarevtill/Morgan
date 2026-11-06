@@ -23,7 +23,7 @@ Each process asserted its loaded module came from the selected exported revision
 All 80 new-version reads succeeded. Every probe preserved session, inbox and memory bytes.
 
 | State | Old inbox/UI/worker loader | Old guided status | New readers |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Single-line applied baseline | Read | Read | Read |
 | Multiline message, not reviewed | Read | Read | Read |
 | Multiline new task, reviewed | Read | Read | Read |
