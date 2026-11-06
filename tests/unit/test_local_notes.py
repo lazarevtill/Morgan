@@ -77,9 +77,9 @@ async def test_second_worker_and_resume_refused_with_lock(workspace):
         other.close()
 
 
-async def test_missing_approval_fails_closed(workspace):
-    with pytest.raises(FileNotFoundError):
-        await run_local(workspace)
+async def test_missing_approval_waits_without_authority(workspace):
+    result = await run_local(workspace)
+    assert result.actions == 0 and result.reason == "cycle_limit"
     assert not list(workspace.path.glob("note-*.md"))
 
 

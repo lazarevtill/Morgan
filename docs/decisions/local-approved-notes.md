@@ -10,7 +10,7 @@ actual file and reconciles the journal without writing it again. This exercises 
 execution, restart and stop controls without credentials, a model, or an external service.
 
 This is a useful execution stage toward a personal agent. It is not yet an always-on assistant:
-there is no planner, launchd service, inbox ingestion, notification delivery, or unattended paid
+there is no planner, launchd service, untrusted inbox ingestion, notification delivery, or paid
 provider. Existing memory CLI/MCP behavior is unchanged.
 
 ## Trust and authority
@@ -107,6 +107,7 @@ missing/mismatched effects, action limits and deadline checks. Process tests kil
 and after the real effect, then verify no replay and persisted reconciliation evidence. A CLI
 integration test runs approve, delivery, repeat, stop and resume in an isolated directory.
 
-Next useful step: a concrete owner-controlled task intake and separately isolated planner that
-cannot write approvals. Continuous operation also needs a chosen supervisor, health reporting,
+Owner-controlled `enqueue` intake and lifecycle observation are described in
+[local note intake](local-note-intake.md). Next: a separately isolated planner that cannot write
+approvals. Continuous operation also needs a chosen supervisor, health reporting,
 and explicit operational/budget policy for any real provider. None is silently activated here.
