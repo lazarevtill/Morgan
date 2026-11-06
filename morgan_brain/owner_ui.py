@@ -47,6 +47,24 @@ class OwnerUI:
             raise DialogClosed("form cancelled; saved messages remain pending")
         return result
 
+    def task_source(self, identity: str, title: str) -> str:
+        """Read a verified quote for this exact task, never substitute an inbox receipt."""
+        query = title.strip().splitlines()[0][:200]
+        found = self.call("find", "--", query)
+        for item in found["results"]:
+            if item["source_kind"] == "verified_memory" and (
+                item["current_evidence_id"] == identity or item["source_id"] == f"{identity}-source"
+            ):
+                return str(item["quote"])
+        return "Проверенный источник недоступен"
+
+    def task_label(self, index: int, task: dict[str, Any]) -> str:
+        """Keep every candidate visible; shorten only the clearly marked source excerpt."""
+        item = task["commitment"]
+        quote = " ".join(self.task_source(task["evidence_id"], item["title"]).split())
+        excerpt = quote[:120] + ("…" if len(quote) > 120 else "")
+        return f"{index + 1}. {item['title']} — {item['due']} — открыта — Источник: {excerpt}"
+
     def confirm(self, envelope: dict[str, Any]) -> None:
         """Display the exact persisted proposal and bind only an explicit button to its digest."""
         message = envelope["message"]
@@ -55,9 +73,14 @@ class OwnerUI:
         action = "Создать задачу" if not renewal else f"Перенести с {renewal['before']['due']}"
         if renewal and item["status"] == "done":
             action = "Отметить выполненной"
+        context = ""
+        if renewal:
+            target = renewal["parent_id"]
+            quote = self.task_source(target, renewal["before"]["title"])
+            context = f"ID задачи: {target}\nСохранённый источник задачи: {quote}\n\n"
         prompt = (
             f"Владелец: {envelope['owner']}\nПроект: {envelope['project']}\n"
-            f"Источник: {message['text']}\n\n{action}\n"
+            f"Источник: {message['text']}\n\n{context}{action}\n"
             f"Задача: {item['title']}\nСрок: {item['due']}\n"
             f"Минуты: {item['minutes']}\nПриоритет: {item['priority']}\n"
             f"Состояние: {item['status']}\n\n"
@@ -191,10 +214,7 @@ class OwnerUI:
             if not tasks:
                 self.dialogs.show("info", "Нет открытых задач для изменения.")
                 return
-            labels = tuple(
-                f"{i + 1}. {item['commitment']['title']} — {item['commitment']['due']}"
-                for i, item in enumerate(tasks)
-            )
+            labels = tuple(self.task_label(i, item) for i, item in enumerate(tasks))
             selected = self.dialogs.show("choose", "Выберите конкретную задачу", options=labels)
             if selected is None:
                 return

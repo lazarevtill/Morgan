@@ -90,3 +90,20 @@ LLM by default, infer ownership, deliver reminders, install launchd jobs or demo
 ## Evidence
 
 See [the measured synthetic workflow](../measurements/2026-11-06-native-owner-review.md).
+
+## Distinguishing existing tasks by their sources
+
+The explicit renewal/completion picker keeps every open task in the existing order.
+Alongside title and date it shows open status and a source excerpt read through the
+scoped, verified owner-source lookup. Equal titles and dates therefore need not be
+identified by an arbitrary list number alone. Excerpts flatten whitespace and mark
+truncation at 120 characters with an ellipsis; the exact full quote and target ID
+are shown again in the final confirmation. No text-similarity ranking, preselection,
+model call or automatic target matching is added.
+
+Source lookup accepts only verified memory for the exact current task (or its exact
+source companion when resuming a saved transition). It never substitutes an
+unconfirmed inbox receipt. Missing evidence is labelled unavailable. The existing
+revision checks and digest-bound confirmation still govern changes; the displayed
+quote does not authorize an operation. This is a scripted interface check, not a
+human usability study or verification of physical macOS dialog rendering.
