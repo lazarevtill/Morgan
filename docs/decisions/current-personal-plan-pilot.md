@@ -44,7 +44,7 @@ morgan commitment 'Нужно полить растения.' \
   --event-id plants-done --revises-event-id plants --effective-at 2026-11-02T08:00:00Z
 ```
 
-5. Reuse the original IDs, adding `--follow-revisions`, and use a new output file:
+After recording completion, reuse the original IDs with `--follow-revisions` and a new output file:
 
 ```sh
 python -m morgan_brain.daily_brief_cli \
@@ -53,8 +53,8 @@ python -m morgan_brain.daily_brief_cli \
   --day 2026-11-06 --budget 30 --follow-revisions --output /path/to/pilot/after.md
 ```
 
-6. Inspect the new plan before a separate explicit local-note approval. STOP prevents delivery;
-   resume plus a new finite run delivers once, and another run does not repeat the effect.
+Finally, inspect the new plan before a separate explicit local-note approval. STOP prevents
+delivery; resume plus a new finite run delivers once, and another run does not repeat the effect.
 
 Dates and identities above are synthetic fixtures, not instructions to backdate real events.
 `tests/integration/test_personal_plan_pilot.py` executes this whole sequence in fresh CLI
