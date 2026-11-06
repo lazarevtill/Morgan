@@ -329,7 +329,7 @@ revision from cwd. No runtime is activated and no service is installed automatic
 pip install -e ".[dev]"
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env   # MORGAN_LLM_ENDPOINT
 morgan doctor
-pytest -q                     # 690 passed, 4 skipped (the live ones)
+pytest -q                     # See the latest CI run for verified totals
 ruff check . && ruff format --check . && mypy morgan_brain && bandit -c pyproject.toml -r morgan_brain
 ```
 

@@ -314,3 +314,79 @@ def test_deadline_blocks_ui_commands(tmp_path):
     with pytest.raises(DialogClosed):
         OwnerUI(root, DialogFixture([]), time.monotonic() - 1).run()
     assert state(root)["messages"] == []
+
+
+@pytest.mark.parametrize(
+    "arguments", [[], ["unknown"], ["review", "x", "--new"], ["status", "--bogus"]]
+)
+def test_embedded_parser_never_exits(tmp_path, arguments):
+    with pytest.raises(ValueError):
+        owner_input.request(tmp_path / "unused", arguments)
+
+
+@pytest.mark.parametrize("title", ["--due", "-x"])
+def test_dash_title_is_literal_data(tmp_path, title):
+    root = tmp_path / "pilot"
+    initialize(root)
+    answers = create()
+    answers[3] = ("text", title)
+    drive(root, [*answers, ("choose", "Выход")])
+    assert state(root)["plan"]["tasks"][0]["commitment"]["title"] == title
+
+
+@pytest.mark.parametrize("existing,zone", [(True, "Europe/Belgrade"), (False, "Invalid/Zone")])
+def test_initialization_errors_are_reported(tmp_path, monkeypatch, capsys, existing, zone):
+    import sys
+
+    from morgan_brain.owner_ui import main
+
+    root = tmp_path / "pilot"
+    if existing:
+        initialize(root)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "owner_ui",
+            str(root),
+            "--init-user",
+            "pilot",
+            "--init-project",
+            "personal",
+            "--init-timezone",
+            zone,
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
+    assert "Owner UI failed:" in capsys.readouterr().err
+
+
+def test_sqlite_failure_preserves_review_and_exits_before_status(tmp_path, monkeypatch):
+    import sqlite3
+
+    root = tmp_path / "pilot"
+    initialize(root)
+    original = owner_input._add
+
+    async def unavailable(*args, **kwargs):
+        raise sqlite3.OperationalError("synthetic unavailable")
+
+    monkeypatch.setattr(owner_input, "_add", unavailable)
+    answers = create()[:-1]
+    dialogs = drive(root, [*answers, ("info", "Продолжить")])
+    assert "Хранилище недоступно" in dialogs.seen[-1]["prompt"]
+    assert state(root)["messages"][0]["state"] == "applying"
+    monkeypatch.setattr(owner_input, "_add", original)
+    drive(
+        root,
+        [
+            ("choose", "Проверить сообщения"),
+            ("choose", 0),
+            ("confirm", "Подтвердить"),
+            ("info", "Продолжить"),
+            ("choose", "Выход"),
+        ],
+    )
+    assert len(state(root)["plan"]["tasks"]) == 1

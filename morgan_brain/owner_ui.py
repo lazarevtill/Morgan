@@ -5,12 +5,13 @@ from __future__ import annotations
 import argparse
 import fcntl
 import os
+import sqlite3
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from morgan_brain import owner_input
 from morgan_brain.local_notes import NoteWorkspace, StopRequested
@@ -97,8 +98,7 @@ class OwnerUI:
                 "review",
                 message["identity"],
                 "--new",
-                "--title",
-                title,
+                f"--title={title}",
                 "--minutes",
                 minutes,
                 "--priority",
@@ -193,6 +193,15 @@ class OwnerUI:
                         self.review(receipt["message"], self.call("status"))
                 elif choice == "Проверить сообщения":
                     self.pending(state)
+            except sqlite3.Error:
+                self.dialogs.show(
+                    "info",
+                    "Хранилище недоступно. Сохранённую проверку можно возобновить "
+                    "после восстановления. "
+                    "Сеанс закрывается без автоматического повтора.",
+                    allow_stopped=True,
+                )
+                return
             except (ValueError, OSError, TaskConflict) as error:
                 self.dialogs.show(
                     "info",
@@ -212,38 +221,40 @@ def main() -> None:
     args = parser.parse_args()
     if not 5 <= args.seconds <= 1800:
         parser.error("select a foreground lifetime of 5..1800 seconds")
-    if any((args.init_user, args.init_project, args.init_timezone)):
-        if not all((args.init_user, args.init_project, args.init_timezone)):
-            parser.error("initialization requires user, project and timezone")
-        day = datetime.now(ZoneInfo(args.init_timezone)).date().isoformat()
-        owner_input.request(
-            args.workspace,
-            [
-                "init",
-                "--user",
-                args.init_user,
-                "--project",
-                args.init_project,
-                "--timezone",
-                args.init_timezone,
-                "--day",
-                day,
-                "--budget",
-                "30",
-            ],
-        )
-    workspace = NoteWorkspace(args.workspace, create=False)
+    workspace = None
     try:
+        if any((args.init_user, args.init_project, args.init_timezone)):
+            if not all((args.init_user, args.init_project, args.init_timezone)):
+                parser.error("initialization requires user, project and timezone")
+            day = datetime.now(ZoneInfo(args.init_timezone)).date().isoformat()
+            owner_input.request(
+                args.workspace,
+                [
+                    "init",
+                    "--user",
+                    args.init_user,
+                    "--project",
+                    args.init_project,
+                    "--timezone",
+                    args.init_timezone,
+                    "--day",
+                    day,
+                    "--budget",
+                    "30",
+                ],
+            )
+        workspace = NoteWorkspace(args.workspace, create=False)
         with os.fdopen(workspace.open_file(".owner-ui.lock", os.O_RDWR | os.O_CREAT), "r+") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             deadline = time.monotonic() + args.seconds
             OwnerUI(args.workspace, NativeDialogs(args.workspace, deadline), deadline).run()
     except (DialogClosed, StopRequested, KeyboardInterrupt):
         print("UI closed; pending messages remain unconfirmed.")
-    except (ValueError, OSError, TaskConflict) as error:
+    except (ValueError, OSError, TaskConflict, ZoneInfoNotFoundError, sqlite3.Error) as error:
         parser.exit(2, f"Owner UI failed: {error}\n")
     finally:
-        workspace.close()
+        if workspace is not None:
+            workspace.close()
 
 
 if __name__ == "__main__":

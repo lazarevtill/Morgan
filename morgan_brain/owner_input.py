@@ -11,7 +11,7 @@ import os
 import sys
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NoReturn
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -293,13 +293,27 @@ async def _confirm(
     _save(workspace, inbox)
 
 
+class RequestParser(argparse.ArgumentParser):
+    """Keep embedded callers alive even on Python versions with partial exit_on_error support."""
+
+    def error(self, message: str) -> NoReturn:
+        """Convert missing arguments and unknown options into ordinary validation failures."""
+        raise ValueError(message)
+
+    def exit(self, status: int = 0, message: str | None = None) -> NoReturn:
+        """Never terminate the embedding process, including help requests."""
+        raise ValueError(message or f"parser requested exit {status}")
+
+
 def _parser(*, exit_on_error: bool = True) -> argparse.ArgumentParser:
     """Expose finite one-shot commands with separate submission, review and confirmation."""
-    parser = argparse.ArgumentParser(description=__doc__, exit_on_error=exit_on_error)
+    parser_class = argparse.ArgumentParser if exit_on_error else RequestParser
+    parser = parser_class(description=__doc__, exit_on_error=exit_on_error)
     parser.add_argument("workspace", type=Path)
     commands = parser.add_subparsers(
         dest="command",
         required=True,
+        parser_class=parser_class,
     )
     init = commands.add_parser("init")
     init.add_argument("--user", required=True)

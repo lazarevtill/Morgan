@@ -47,3 +47,8 @@ invocation used a Python path containing `..`. The existing launch-plan validato
 rejected it; rerunning that test with a canonical absolute interpreter path passed.
 The Linux type check additionally exposed platform-dependent inference after the Darwin
 constructor guard; explicit field annotations fix it without changing runtime behavior.
+
+Review follow-up added nine regression cases: embedded parser failures never exit callers,
+dash-prefixed titles remain literal values, initialization failures are reported, and a SQLite
+failure preserves `applying` state, exits without a second storage read, and recovers after
+explicit reconfirmation. All 31 UI/native tests pass after those fixes.
