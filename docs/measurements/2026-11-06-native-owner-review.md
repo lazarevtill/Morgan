@@ -34,3 +34,16 @@ Manually open a pinned build, create/renew a synthetic task, cancel and reopen a
 then STOP and resume. Inspect the full preview at the maximum supported source length.
 A persistent owner channel, host restart policy and real notification delivery are still
 separate deployment decisions; this bounded foreground UI does not resolve them.
+
+## Runtime and regression evidence
+
+A normal wheel of PR revision `1175e043072a5b4e5309a79bc8e6ed14d30a2045` was
+built and installed offline into a fresh workspace runtime. Verification checked 100
+package files with `editable: false`; `python -I -m morgan_brain.owner_ui --help`
+resolved the installed module independently of the checkout. This does not activate it.
+
+The initial Mac suite produced 1841 passes, four skips and one failure because the test
+invocation used a Python path containing `..`. The existing launch-plan validator correctly
+rejected it; rerunning that test with a canonical absolute interpreter path passed.
+The Linux type check additionally exposed platform-dependent inference after the Darwin
+constructor guard; explicit field annotations fix it without changing runtime behavior.

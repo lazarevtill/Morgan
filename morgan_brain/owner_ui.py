@@ -83,7 +83,6 @@ class OwnerUI:
             f"Ваше сообщение:\n{message['text']}\n\nЧто сделать?",
             options=("Новая задача", "Перенести задачу", "Оставить на проверку"),
         )
-        identity = message["identity"]
         day = state["plan"]["planning_day"]
         if action == "Новая задача":
             title = self.text("Название вашей задачи", message["text"][:240])
@@ -96,7 +95,7 @@ class OwnerUI:
             due = self.text("Срок задачи: ГГГГ-ММ-ДД", day)
             envelope = self.call(
                 "review",
-                identity,
+                message["identity"],
                 "--new",
                 "--title",
                 title,
@@ -125,7 +124,7 @@ class OwnerUI:
                 return
             target = tasks[labels.index(selected)]["evidence_id"]
             due = self.text("Новый срок: ГГГГ-ММ-ДД", day)
-            envelope = self.call("review", identity, "--target", target, "--due", due)
+            envelope = self.call("review", message["identity"], "--target", target, "--due", due)
         else:
             return
         self.confirm(envelope)

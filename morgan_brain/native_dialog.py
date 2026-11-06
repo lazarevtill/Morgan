@@ -57,11 +57,13 @@ class Dialogs(Protocol):
         allow_stopped: bool = False,
     ) -> str | None:
         """Return an explicit response or cancellation; never synthesize approval."""
-        ...
 
 
 class NativeDialogs:
     """Own one osascript child at a time and enforce STOP/deadline while awaiting UI."""
+
+    workspace: Path
+    deadline: float
 
     def __init__(self, workspace: Path, deadline: float) -> None:
         """Use the existing private workspace and a finite monotonic session deadline."""
@@ -102,41 +104,41 @@ class NativeDialogs:
                 "seconds": max(1, int(expires - time.monotonic())),
             }
         )
-        process = subprocess.Popen(  # noqa: S603 # nosec B603 -- fixed executable/script, JSON data argv
+        with subprocess.Popen(  # noqa: S603 # nosec B603 -- fixed script, JSON argv
             ["/usr/bin/osascript", "-l", "JavaScript", "-", payload],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-        )
-        script: bytes | None = _SCRIPT.encode()
-        try:
-            while True:
+        ) as process:
+            script: bytes | None = _SCRIPT.encode()
+            try:
+                while True:
+                    self.check(allow_stopped)
+                    if time.monotonic() >= expires:
+                        return None
+                    try:
+                        output, _ = process.communicate(script, timeout=0.1)
+                        break
+                    except subprocess.TimeoutExpired:
+                        script = None
                 self.check(allow_stopped)
                 if time.monotonic() >= expires:
                     return None
-                try:
-                    output, _ = process.communicate(script, timeout=0.1)
-                    break
-                except subprocess.TimeoutExpired:
-                    script = None
-            self.check(allow_stopped)
-            if time.monotonic() >= expires:
-                return None
-            if process.returncode != 0:
-                raise ValueError("native dialog failed; no response accepted")
-            value = json.loads(output)["value"]
-            if value is not None and not isinstance(value, str):
-                raise ValueError("invalid native dialog response")
-            if kind == "choose" and value is not None and value not in options:
-                raise ValueError("dialog returned an unknown selection")
-            if kind == "confirm" and value not in (None, "Подтвердить"):
-                raise ValueError("dialog did not explicitly confirm")
-            return value
-        finally:
-            if process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=1)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=1)
+                if process.returncode != 0:
+                    raise ValueError("native dialog failed; no response accepted")
+                value = json.loads(output)["value"]
+                if value is not None and not isinstance(value, str):
+                    raise ValueError("invalid native dialog response")
+                if kind == "choose" and value is not None and value not in options:
+                    raise ValueError("dialog returned an unknown selection")
+                if kind == "confirm" and value not in (None, "Подтвердить"):
+                    raise ValueError("dialog did not explicitly confirm")
+                return value
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=1)
