@@ -1,7 +1,8 @@
 # One foreground conversation for a personal plan
 
 The previous validation pilot required 14 CLI invocations, including delivery and STOP/replay
-checks. Its comparable review/plan/completion core required seven invocations. `python -m morgan_brain.guided_plan`
+checks. Its comparable review/plan/completion core required seven invocations.
+`python -m morgan_brain.guided_plan`
 now exposes its useful core in one foreground conversation: select your tasks, review their
 planning fields, confirm, view a plan, report completion and see the updated plan. It reuses
 the bounded local-model runner, normal MemoryGate capture and current-revision daily brief.
@@ -95,8 +96,9 @@ answers explicitly corrected ownership. This does not improve or supersede earli
 
 A separate direct-mode run included model startup and the entire two-task dialogue in one
 command: 19.343 seconds, six scripted answers, 20 planned minutes becoming 10. Human thinking
-and typing time were excluded. CLI launches and answer submissions are different units. The comparable core is seven launches
-versus one after setup. The old 14-call validation also included a stale-source refusal test and
+and typing time were excluded. CLI launches and answer submissions are different units.
+The comparable core is seven launches versus one after setup. The old 14-call validation also
+included a stale-source refusal test and
 delivery/STOP/replay operations that this guided interface does not expose.
 
 Evidence: [four workflows](../measurements/2026-11-guided-plan.json),
@@ -119,3 +121,4 @@ Before real data, choose the exact input file, private destination, owner/projec
 policy. One note is capped at 4 KiB/32 lines; at most eight tasks can be selected. The model file
 limit is 8 GB, not a hard RSS quota. Real data and each task/completion remain the user's choice.
 No permanent access, paid process or background service is installed by this command.
+
