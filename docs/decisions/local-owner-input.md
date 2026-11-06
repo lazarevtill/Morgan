@@ -93,3 +93,29 @@ A real continuous pilot still needs an owner-facing UI/channel and a noninteract
 preserves message IDs, obtains genuine review and handles expiry/STOP/conflicts. `owner_input`
 exits after one command; putting it in KeepAlive would not create a useful always-on agent.
 No LaunchAgent or credentials were installed. Local JSON output is not phone delivery.
+
+## Reversible non-task review
+
+`dismiss ID` marks an unreviewed message as `dismissed`; `restore ID` returns it to
+`needs_review`. Both require the local account, an unexpired unstopped pilot and the
+existing dialogue lock. Only `needs_review` and `dismissed` receipts are eligible:
+reviewed, applying and applied task changes cannot be hidden this way. The source,
+identity, model attempt/cache and expiry remain intact. Duplicate delivery of the same
+ID does not undo dismissal. Dismissed messages still count toward the fourteen-message
+limit; this is classification, not deletion or quota recycling.
+
+The native review offers «Не задача» with the complete source and confirmation. The
+«Не задачи» menu lets the owner read and explicitly restore a source. Pending review
+omits dismissed messages. Restoration may admit a first background draft if none was
+attempted; it never clears an existing attempt marker or confirms a task. Dismissal
+is not cancellation of an already running model: that operation may finish its
+unapproved draft. Use STOP to interrupt the model and intake.
+
+Tests cover EN/RU source display, cancellation, restart/replay, retained expiry and
+quota, STOP, forbidden reviewed/attempted states and background attempt fencing.
+These are scripted interface checks, not native button or usability measurements.
+
+Deploy readers and writers together as one pinned revision. Older runtimes reject the
+new `dismissed` state; do not downgrade a journal that contains it or erase receipts to
+make an older reader accept it. Normal restore retains STOP/expiry restrictions. This
+change does not automatically upgrade an installed pilot or mutate its existing inputs.

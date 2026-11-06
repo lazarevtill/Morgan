@@ -118,6 +118,16 @@ class OwnerUI:
         self.model.stop()
         raise DialogClosed("foreground session ended during model review")
 
+    def review_action(self, message: dict[str, Any]) -> str | None:
+        """Show source context and only the actions allowed for its saved state."""
+        return self.dialogs.show(
+            "choose",
+            f"Ваше сообщение:\n{message['text']}\n\nЧто сделать?",
+            options=("Новая задача", "Перенести задачу", "Оставить на проверку")
+            + (("Не задача",) if message["state"] == "needs_review" else ())
+            + (("Предложение локальной модели",) if self.model is not None else ()),
+        )
+
     def review(self, message: dict[str, Any], state: dict[str, Any]) -> None:
         """Resume exact attempted reviews or collect explicitly chosen new planning fields."""
         envelope = {
@@ -139,12 +149,10 @@ class OwnerUI:
                 return
             if choice != "Изменить поля":
                 return
-        action = self.dialogs.show(
-            "choose",
-            f"Ваше сообщение:\n{message['text']}\n\nЧто сделать?",
-            options=("Новая задача", "Перенести задачу", "Оставить на проверку")
-            + (("Предложение локальной модели",) if self.model is not None else ()),
-        )
+        action = self.review_action(message)
+        if action == "Не задача":
+            self.classify(message, restore=False)
+            return
         if action == "Предложение локальной модели":
             if not self.model_review(message["text"]):
                 return
@@ -194,18 +202,53 @@ class OwnerUI:
             return
         self.confirm(envelope)
 
-    def pending(self, state: dict[str, Any]) -> None:
+    def classify(self, message: dict[str, Any], *, restore: bool) -> None:
+        """Show the exact retained source before changing only its inbox classification."""
+        explanation = (
+            "Вернуть на проверку? Фоновый пилот может подготовить черновик, "
+            "если попытки ещё не было."
+            if restore
+            else "Отметить «не задача»? Источник сохранится; можно вернуть его на проверку. "
+            "Текущий запуск модели не отменяется; для остановки используйте STOP."
+        )
+        if (
+            self.dialogs.show("confirm", f"Источник: {message['text']}\n\n{explanation}")
+            == "Подтвердить"
+        ):
+            self.call("restore" if restore else "dismiss", message["identity"])
+            self.dialogs.show("info", "Состояние сообщения сохранено. План не изменён.")
+
+    def pending(self, state: dict[str, Any], *, dismissed: bool = False) -> None:
         """Select by a stable receipt identity even when two messages have identical text."""
-        messages = [item for item in state["messages"] if item["state"] != "applied"]
+        messages = [
+            item
+            for item in state["messages"]
+            if (
+                item["state"] == "dismissed"
+                if dismissed
+                else item["state"] not in ("applied", "dismissed")
+            )
+        ]
         if not messages:
-            self.dialogs.show("info", "Нет сообщений, ожидающих проверки.")
+            self.dialogs.show(
+                "info",
+                "Нет сообщений «не задача»." if dismissed else "Нет сообщений, ожидающих проверки.",
+            )
             return
         labels = tuple(
             f"{i + 1}. {item['text'][:120]} [{item['state']}]" for i, item in enumerate(messages)
         )
-        selected = self.dialogs.show("choose", "Сообщения для проверки", options=labels)
+        selected = self.dialogs.show(
+            "choose",
+            "Отмеченные «не задача»" if dismissed else "Сообщения для проверки",
+            options=labels,
+        )
         if selected is not None:
-            self.review(messages[labels.index(selected)], state)
+            message = messages[labels.index(selected)]
+            if dismissed:
+                self.classify(message, restore=True)
+            else:
+                self.review(message, state)
 
     def run(self) -> None:
         """Run a finite foreground menu; cancel/exit never sends or confirms queued work."""
@@ -214,7 +257,14 @@ class OwnerUI:
             options = (
                 ("Продолжить после STOP", "План", "Выход")
                 if state["stopped"]
-                else ("Новое сообщение", "Проверить сообщения", "План", "STOP", "Выход")
+                else (
+                    "Новое сообщение",
+                    "Проверить сообщения",
+                    "Не задачи",
+                    "План",
+                    "STOP",
+                    "Выход",
+                )
             )
             choice = self.dialogs.show(
                 "choose",
@@ -256,8 +306,8 @@ class OwnerUI:
                     receipt = self.call("submit", f"ui-{uuid4().hex}", text=text)
                     if "message" in receipt:
                         self.review(receipt["message"], self.call("status"))
-                elif choice == "Проверить сообщения":
-                    self.pending(state)
+                elif choice in ("Проверить сообщения", "Не задачи"):
+                    self.pending(state, dismissed=choice == "Не задачи")
             except sqlite3.Error:
                 self.dialogs.show(
                     "info",
