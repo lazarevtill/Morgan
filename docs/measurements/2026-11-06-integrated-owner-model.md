@@ -33,9 +33,10 @@ negation and ownership inference are reliable.
 
 ## Regression scope and remaining limits
 
-47 focused tests passed, covering previous UI/model behavior and ten new integrated cases:
+48 focused tests passed, covering previous UI/model behavior and eleven new integrated cases:
 shared STOP, resource lane contention, multiple source caches, interrupted recovery, malformed
-cache refusal, expiry, process failure, cancellation, separate task review and idle close.
+cache refusal, expiry, process failure, cancellation, separate task review, idle close and
+retaining the UI-session lock until model cleanup finishes.
 Full-suite and CI outcomes are recorded in the PR.
 
 The operation remains finite and requires a logged-in foreground session. Sleep/reboot,

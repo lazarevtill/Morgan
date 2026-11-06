@@ -319,14 +319,18 @@ def main() -> None:
             deadline = time.monotonic() + args.seconds
             if args.server is not None:
                 model = OwnerModel(args.workspace, ModelCycle(args.server, args.model), deadline)
-            OwnerUI(args.workspace, NativeDialogs(args.workspace, deadline), deadline, model).run()
+            try:
+                OwnerUI(
+                    args.workspace, NativeDialogs(args.workspace, deadline), deadline, model
+                ).run()
+            finally:
+                if model is not None:
+                    model.close()
     except (DialogClosed, StopRequested, KeyboardInterrupt):
         print("UI closed; pending messages remain unconfirmed.")
     except (ValueError, OSError, TaskConflict, ZoneInfoNotFoundError, sqlite3.Error) as error:
         parser.exit(2, f"Owner UI failed: {error}\n")
     finally:
-        if model is not None:
-            model.close()
         if workspace is not None:
             workspace.close()
 

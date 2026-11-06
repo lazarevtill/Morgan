@@ -172,3 +172,46 @@ def test_expired_inbox_cannot_start_inference(model):
     with pytest.raises(ValueError, match="expired"):
         model.start("Return book.")
     assert model.thread is None
+
+
+def test_ui_keeps_exclusive_session_lock_until_model_cleanup(model, monkeypatch):
+    import fcntl
+    import os
+
+    from morgan_brain import owner_ui
+    from morgan_brain.native_dialog import DialogClosed
+
+    closed = []
+
+    class CheckedModel(OwnerModel):
+        def close(self):
+            with closing(NoteWorkspace(self.path, create=False)) as workspace:
+                fd = workspace.open_file(".owner-ui.lock", os.O_RDWR)
+                try:
+                    with pytest.raises(BlockingIOError):
+                        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(fd)
+            closed.append(True)
+            super().close()
+
+    def cancel(_self):
+        raise DialogClosed("synthetic close")
+
+    monkeypatch.setattr(owner_ui, "OwnerModel", CheckedModel)
+    monkeypatch.setattr(owner_ui, "NativeDialogs", lambda *args: DialogFixture([]))
+    monkeypatch.setattr(owner_ui.OwnerUI, "run", cancel)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "owner_ui",
+            str(model.path),
+            "--server",
+            str(model.config.server),
+            "--model",
+            str(model.config.model),
+        ],
+    )
+    owner_ui.main()
+    assert closed == [True]
