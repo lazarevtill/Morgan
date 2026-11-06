@@ -8,7 +8,7 @@ import json
 import signal
 import sys
 from dataclasses import asdict
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from morgan_brain.local_notes import (
@@ -17,11 +17,13 @@ from morgan_brain.local_notes import (
     NoteWorkspace,
     RunLimits,
     approve,
+    approve_occurrences,
     enqueue,
     local_status,
     revoke,
     run_local,
 )
+from morgan_brain.local_recurrence import Occurrence, repeat_plan
 from morgan_brain.local_supervisor import (
     Supervision,
     SupervisorLimits,
@@ -53,6 +55,7 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     for command, help_text in (
         ("approve", "replace all grants with one exact note"),
+        ("repeat", "replace grants with a finite interval plan for one exact note"),
         ("enqueue", "append one exact approved note without losing queued work"),
     ):
         approval = commands.add_parser(command, help=help_text)
@@ -60,7 +63,13 @@ def main() -> None:
         approval.add_argument("--project", required=True)
         approval.add_argument("--task", required=True)
         approval.add_argument("--note", required=True, type=Path)
-        approval.add_argument("--ttl", type=int, default=3600)
+        if command == "repeat":
+            approval.add_argument("--start", type=datetime.fromisoformat, required=True)
+            approval.add_argument("--interval", type=int, required=True)
+            approval.add_argument("--count", type=int, required=True)
+            approval.add_argument("--window", type=int, required=True)
+        else:
+            approval.add_argument("--ttl", type=int, default=3600)
         if command == "approve":
             approval.add_argument(
                 "--not-before",
@@ -96,11 +105,24 @@ def main() -> None:
     args = parser.parse_args()
     workspace = NoteWorkspace(args.workspace)
     try:
-        if args.command in ("approve", "enqueue"):
+        if args.command in ("approve", "enqueue", "repeat"):
             with args.note.open("rb") as source:
                 text = source.read(16385).decode("utf-8")
             request = TaskRequest(TaskKey(args.user, args.project, args.task), ACTION, text)
-            preview = {"request": asdict(request), "ttl_seconds": args.ttl}
+            occurrences: tuple[Occurrence, ...] = ()
+            preview: dict[str, object] = {"request": asdict(request)}
+            if args.command == "repeat":
+                occurrences = repeat_plan(
+                    request,
+                    start=args.start,
+                    interval_seconds=args.interval,
+                    count=args.count,
+                    window_seconds=args.window,
+                    now=datetime.now(UTC),
+                )
+                preview["occurrences"] = [item.document() for item in occurrences]
+            else:
+                preview["ttl_seconds"] = args.ttl
             if args.command == "approve" and args.not_before is not None:
                 preview["not_before"] = args.not_before.isoformat()
             print(json.dumps(preview, ensure_ascii=False), file=sys.stderr)
@@ -108,7 +130,9 @@ def main() -> None:
                 print("Approve this exact note? Type APPROVE: ", end="", file=sys.stderr)
                 if input() != "APPROVE":
                     parser.exit(1, "Not approved.\n")
-            if args.command == "enqueue":
+            if args.command == "repeat":
+                approve_occurrences(workspace, occurrences)
+            elif args.command == "enqueue":
                 enqueue(workspace, request, ttl_seconds=args.ttl)
             else:
                 approve(workspace, [request], ttl_seconds=args.ttl, not_before=args.not_before)

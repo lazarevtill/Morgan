@@ -24,6 +24,9 @@ It does not start a service or call a model. `enqueue` appends exact account-app
 `docs/decisions/local-approved-notes.md` and `docs/decisions/local-note-intake.md`.
 `approve --not-before TIMESTAMP` adds one explicit delivery window; STOP, expiry and receipts
 still govern resumed runs. See `docs/decisions/scheduled-local-notes.md`; no service is installed.
+`repeat` compiles an explicitly approved finite UTC interval plan into exact occurrences.
+Missed windows are skipped; unresolved attempts block later occurrences in the same plan.
+See `docs/decisions/finite-recurring-notes.md`; no automatic renewal or service is added.
 `diagnose --user OWNER --project PROJECT` reads payload-free run observations and scoped journal
 counts; it never retries or changes tasks. See `docs/decisions/local-worker-diagnostics.md`.
 `supervise` explicitly owns a finite fixed worker subprocess with bounded crash restarts and

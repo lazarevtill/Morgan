@@ -9,7 +9,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from morgan_brain import local_supervisor as supervisor
-from morgan_brain.local_notes import ACTION, NoteWorkspace, approve
+from morgan_brain.local_notes import ACTION, NoteWorkspace, approve, approve_occurrences
+from morgan_brain.local_recurrence import repeat_plan
 from morgan_brain.local_supervisor import SupervisorLimits, supervise
 from morgan_brain.local_worker_state import scoped_counts
 from morgan_brain.tasks import TaskKey, TaskRequest
@@ -41,18 +42,28 @@ async def phase(workspace, expected):
             await asyncio.sleep(0.01)
 
 
-@pytest.mark.parametrize("scheduled", [True, False])
+@pytest.mark.parametrize("scheduled", ["immediate", "once", "repeat"])
 @pytest.mark.parametrize("after_effect", [True, False])
 async def test_signal_crash_recovery_never_repeats_effect(
     workspace, monkeypatch, after_effect, scheduled
 ):
     """Kill a real worker around publication and verify receipt recovery never replays it."""
-    approve(
-        workspace,
-        [TaskRequest(TaskKey("owner", "personal", "one"), ACTION, "# Private note")],
-        ttl_seconds=60,
-        not_before=datetime.now(UTC) - timedelta(seconds=1) if scheduled else None,
-    )
+    request = TaskRequest(TaskKey("owner", "personal", "one"), ACTION, "# Private note")
+    now = datetime.now(UTC)
+    if scheduled == "repeat":
+        approve_occurrences(
+            workspace,
+            repeat_plan(
+                request, start=now, interval_seconds=60, count=2, window_seconds=30, now=now
+            ),
+        )
+    else:
+        approve(
+            workspace,
+            [request],
+            ttl_seconds=60,
+            not_before=now - timedelta(seconds=1) if scheduled == "once" else None,
+        )
     script = """
 import asyncio, os, signal, sys
 from pathlib import Path
