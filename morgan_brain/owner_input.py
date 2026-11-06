@@ -75,10 +75,12 @@ class Inbox(BaseModel):
 
 
 def _save(workspace: NoteWorkspace, inbox: Inbox) -> None:
+    """Atomically persist the bounded workflow journal, outside the memory database."""
     workspace.publish("owner-input.json", inbox.model_dump_json(indent=2), replace=True)
 
 
 def _digest(inbox: Inbox, message: Message) -> str:
+    """Bind explicit owner review to scope, source identity and exact proposed fields."""
     payload = [
         inbox.user,
         inbox.project,
@@ -91,6 +93,7 @@ def _digest(inbox: Inbox, message: Message) -> str:
 
 
 def _init(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, object]:
+    """Initialize a fresh private pilot without reading existing personal data or a model."""
     planning_zone(args.timezone)
     # Do not overwrite or adopt a partially initialized/existing guided workspace.
     for name in ("session.json", "source.txt", "proposal.json", "owner-input.json"):
@@ -136,6 +139,7 @@ def _init(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, objec
 
 
 def _find(inbox: Inbox, identity: str) -> Message:
+    """Resolve only the caller-supplied receipt ID; never infer a target from its text."""
     for message in inbox.messages:
         if message.identity == identity:
             return message
@@ -143,6 +147,7 @@ def _find(inbox: Inbox, identity: str) -> Message:
 
 
 def _submit(inbox: Inbox, identity: str, text: str) -> Message:
+    """Deduplicate exact delivery IDs while leaving all semantic decisions unapproved."""
     if not identity.strip() or not identity.isprintable() or len(identity) > 128:
         raise ValueError("message ID requires 1..128 printable characters")
     for existing in inbox.messages:
@@ -164,6 +169,7 @@ async def _review(
     message: Message,
     args: argparse.Namespace,
 ) -> None:
+    """Prepare explicit owner-selected fields without changing memory or granting execution."""
     if message.state in ("applying", "applied"):
         raise ValueError("review cannot change an attempted operation")
     if guided_pending_reviews(session):
@@ -225,6 +231,7 @@ def _checked_capture(session: guided.Session, message: Message) -> tuple[guided.
 
 
 async def _add(workspace: NoteWorkspace, session: guided.Session, message: Message) -> None:
+    """Replay paired source/task writes and register one root in the existing planner."""
     capture, known, digest = _checked_capture(session, message)
     for identity, content in (
         (f"{capture.event_id}-source", message.text),
@@ -254,6 +261,7 @@ async def _add(workspace: NoteWorkspace, session: guided.Session, message: Messa
 async def _confirm(
     workspace: NoteWorkspace, session: guided.Session, inbox: Inbox, message: Message, digest: str
 ) -> None:
+    """Validate before marking an attempt, then apply or replay its exact reviewed writes."""
     if message.digest is None or digest != message.digest or digest != _digest(inbox, message):
         raise ValueError("confirmation must match the exact displayed review digest")
     if message.state == "applied":
@@ -286,6 +294,7 @@ async def _confirm(
 
 
 def _parser() -> argparse.ArgumentParser:
+    """Expose finite one-shot commands with separate submission, review and confirmation."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workspace", type=Path)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -340,6 +349,7 @@ def _status(workspace: NoteWorkspace, session: guided.Session, inbox: Inbox) -> 
 
 
 def _dispatch(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, object]:
+    """Enforce scope, expiry and recovery boundaries before routing a local command."""
     if args.command == "init":
         workspace.check_stop()
         return _init(workspace, args)
