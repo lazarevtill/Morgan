@@ -62,15 +62,17 @@ local-evidence.json, test-run.txt, test-results.xml, test-environment.json и ru
 | Общая память для разных клиентов | CLI и MCP используют MemoryGate; архитектура отделяет providers от памяти | Основное направление уже совпадает |
 | Долговечное хранение | SQLite, FTS5, vectors, session_history, snapshots, проектная область | Не нужен отдельный сервер БД |
 | Чтение без inference | `composition.py::build_evidence_context` открывает read-only контекст без построения модели или индекса | Подходит для выдачи найденных точных источников |
-| Поиск без модели | `memory/module.py::recall` сначала вызывает embedder; ProviderUnreachable/ProviderRefused пробрасываются | Отдельный lexical-only путь или надёжный fallback пока не подтверждён; сбой embedding не должен останавливать базовый архивный поиск |
+| Поиск без модели | `morgan_brain/memory/module.py::recall` сначала вызывает embedder; ProviderUnreachable/ProviderRefused пробрасываются | Отдельный lexical-only путь или надёжный fallback пока не подтверждён; сбой embedding не должен останавливать базовый архивный поиск |
 | Hash backend | Детерминированный режим и zero-model пример | Это не семантическое понимание. Нельзя выдавать его за замену качественным embeddings |
-| История внешних агентов | Есть `app/chatgpt_import.py`, но не найден общий persisted-history reader Codex/Claude | Нужен узкий ingestion-контракт, отдельный от генерации и консолидации |
+| История внешних агентов | Есть `morgan_brain/app/chatgpt_import.py`, но не найден общий persisted-history reader Codex/Claude | Нужен узкий ingestion-контракт, отдельный от генерации и консолидации |
 | Точный состав импортируемого текста | ChatGPT importer выбирает роли user/assistant; `_messages` сортирует все узлы mapping по create_time | Этот путь нельзя объявлять готовым final-only reader: он не восстанавливает выбранную ветку, а роль assistant сама по себе не гарантирует конечный ответ |
 | Атрибуция и исправления | Источник, автор, scope, immutable revisions, временные границы | Сохранить; обнаруженный текст не становится истинным фактом или разрешением действовать |
 | Забвение | Регистрация проектных таблиц, атомарное удаление, erasure generation; snapshots сохраняют копии | Новый архив обязан участвовать в общей политике удаления и не воскрешать удалённое при backfill |
 
-Кодовые ориентиры: `morgan_brain/composition.py:98`, `memory/module.py:444`, `memory/store/fts.py`,
-`memory/store/history.py`, `app/chatgpt_import.py:190`, `app/chatgpt_import.py:252`. Все пути здесь
+Кодовые ориентиры: `morgan_brain/composition.py:98`, `morgan_brain/memory/module.py:444`,
+`morgan_brain/memory/store/fts.py`,
+`morgan_brain/memory/store/history.py`, `morgan_brain/app/chatgpt_import.py:190`,
+`morgan_brain/app/chatgpt_import.py:252`. Все пути здесь
 относительно корня найденного Morgan.
 
 В `docs/ALWAYS_ON_MEMORY_EXAMPLE.md` чётко разделены source capture, выбор релевантных ID,
