@@ -816,7 +816,7 @@ def _human_status(payload: dict[str, object]) -> str:
             "task_confirmation": "подтвердить выбранные задачи",
             "completion_confirmation": "подтвердить завершение",
             "unavailability_confirmation": "подтвердить недоступность",
-            "renewal_confirmation": "подтвердить повторное поручение",
+            "renewal_confirmation": "подтвердить изменение задачи",
         }
         lines.append("Нужно подтверждение в диалоге: " + ", ".join(labels[p] for p in pending))
         lines.append("План не сформирован: незавершённая проверка не считается подтверждением.")

@@ -40,7 +40,14 @@ Choose **Новое сообщение**, enter a short message, explicitly choo
 review fields and press **Подтвердить** on the complete source/owner/project/action preview.
 Renewal requires selection of an exact open task. Ambiguous text does not choose a task.
 **Проверить сообщения** resumes saved messages and exact unfinished reviews.
-**План** displays current tasks. To mark a task done, submit the completion statement, choose
+**План** displays the existing scoped status: planning date/timezone and freshness, budget,
+selected/deferred/blocked/excluded tasks, current constraints and unfinished confirmations.
+An unfinished write is not presented as an empty plan. **План на дату** explicitly previews
+another date through the same planner without changing the session date, task dates, memory,
+STOP or expiry. It remains read-only after STOP/expiry; cancel changes nothing. CLI equivalent:
+`owner_input WORKSPACE status --preview-day YYYY-MM-DD`. This is not automatic daily scheduling.
+
+To mark a task done, submit the completion statement, choose
 **Завершить задачу**, select one exact open task and confirm the complete review. Completion
 changes only status; title, date, priority and minutes stay fixed. Cancel leaves it open.
 The saved review can be resumed through **Проверить сообщения** after interruption.

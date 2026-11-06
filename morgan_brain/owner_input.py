@@ -347,14 +347,18 @@ def _parser(*, exit_on_error: bool = True) -> argparse.ArgumentParser:
     confirm = commands.add_parser("confirm")
     confirm.add_argument("identity")
     confirm.add_argument("--digest", required=True)
-    for name in ("status", "stop", "resume"):
+    status = commands.add_parser("status")
+    status.add_argument("--preview-day", type=date.fromisoformat)
+    for name in ("stop", "resume"):
         commands.add_parser(name)
     for command_parser in commands.choices.values():
         command_parser.exit_on_error = exit_on_error
     return parser
 
 
-def _status(workspace: NoteWorkspace, session: guided.Session, inbox: Inbox) -> dict[str, object]:
+def _status(
+    workspace: NoteWorkspace, session: guided.Session, inbox: Inbox, preview_day: date | None = None
+) -> dict[str, object]:
     """Show admission expiry and pending receipts alongside the explicitly scoped plan."""
     try:
         workspace.check_stop()
@@ -375,7 +379,7 @@ def _status(workspace: NoteWorkspace, session: guided.Session, inbox: Inbox) -> 
         "expired": expired,
         "expires_at": inbox.expires_at.isoformat(),
         "messages": [message.model_dump(mode="json") for message in inbox.messages],
-        "plan": asyncio.run(guided_status_payload(workspace, session)),
+        "plan": asyncio.run(guided_status_payload(workspace, session, preview_day)),
     }
 
 
@@ -410,7 +414,7 @@ def _dispatch(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, o
         workspace.resume()
         return {"state": "resumed", "automatic_processing": False}
     if args.command == "status":
-        return _status(workspace, session, inbox)
+        return _status(workspace, session, inbox, args.preview_day)
     if args.command == "find":
         return asyncio.run(search(workspace, session, inbox, args.query))
     workspace.check_stop()
