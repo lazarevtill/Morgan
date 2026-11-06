@@ -78,6 +78,8 @@ class TaskJournal:
     """
 
     def __init__(self, path: Path) -> None:
+        if not isinstance(path, Path) or str(path) == ":memory:":
+            raise ValueError("task journal requires an explicit on-disk Path")
         self._conn = sqlite3.connect(path, timeout=5)
         self._conn.row_factory = sqlite3.Row
         try:

@@ -2,6 +2,7 @@
 
 import asyncio
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +15,12 @@ from morgan_brain.tasks import (
 )
 
 KEY = TaskKey("owner", "synthetic", "one")
+
+
+@pytest.mark.parametrize("path", [Path(":memory:"), "", ":memory:"])
+def test_ephemeral_journal_is_refused(path):
+    with pytest.raises(ValueError, match="on-disk"):
+        TaskJournal(path)
 
 
 @pytest.fixture

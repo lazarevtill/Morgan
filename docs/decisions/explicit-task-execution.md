@@ -22,7 +22,8 @@ and a cooperative timeout of at most one hour. There is no dynamic import, shell
 provider client, memory-to-task conversion, background loop, scheduler or default wiring.
 
 The journal uses SQLite WAL with `synchronous=FULL`, a format/application marker and a version.
-It refuses existing foreign databases before changing their journal mode. Writes use Morgan's
+It requires an on-disk `Path` and refuses `:memory:` or existing foreign databases before
+changing their journal mode. Writes use Morgan's
 existing `BEGIN IMMEDIATE` transaction primitive. A claim commits a random attempt ID before
 the handler is invoked. Other connections cannot claim that task again. Payload and result are
 limited to 16,384 UTF-8 bytes each. Error strings are not persisted or logged by this SDK.
@@ -116,8 +117,9 @@ timeouts, lost result acknowledgements, format rejection and reopening. Spawned 
 without cleanup before claim, after claim, after a synthetic fsynced external effect, and after
 result commit. The receipt remains a single effect; unresolved attempts cannot be rerun.
 
-Local validation on Python 3.12.13: **1328 passed, 4 live tests skipped** in 86.42 seconds.
-The 28 new task tests use isolated data and synthetic handlers. Ruff lint/format, strict mypy
+The initial full run on Python 3.12.13 completed with **1328 passed, 4 live tests skipped**
+in 86.42 seconds. After adding explicit rejection of ephemeral journal paths, all **31 task
+tests passed**. They use isolated data and synthetic handlers. Ruff lint/format, strict mypy
 and Bandit passed. Repeating the example returned the identical persisted attempt and result.
 
 ## Next stages
