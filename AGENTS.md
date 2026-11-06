@@ -58,6 +58,11 @@ See `docs/decisions/guided-status.md`; it installs no user messaging channel or 
 STOP and journal fencing; see `docs/decisions/local-alert.md`. A timeout is not a read receipt.
 It installs no service or standing permission and never retries a started attempt.
 
+`owner_push_cli` explicitly publishes one reviewed ntfy message with a transient prompted token;
+server acceptance is not phone delivery or reading. `launch_agent_plan` only renders a disabled
+plan for the bounded local-note worker. See `docs/decisions/owner-channel-hosting.md`.
+Neither installs credentials, services or recurring external-send authority.
+
 `note_proposal_cli` makes an explicit local-model draft from piped text, without memory writes.
 `morgan commitment` validates reviewed planning fields and reuses `remember` capture. See
 `docs/decisions/personal-note-intake.md`; neither path grants execution authority.
