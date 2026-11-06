@@ -84,3 +84,21 @@ files are written, and no model is called. All existing scope and execution limi
 Resuming the dialogue still uses the original session day. Use the ordinary dialogue to report
 completion; a preview cannot confirm anything. `--preview-day` without `--status` is rejected
 before creating a workspace. Other input overrides remain forbidden.
+
+## Readable local view
+
+Add `--human` to the same read-only query:
+
+```sh
+python -m morgan_brain.guided_plan /private/session --status --human
+python -m morgan_brain.guided_plan /private/session --status --human --preview-day 2026-11-07
+```
+
+It renders the same verified snapshot in Russian: explicit planning date, timezone/freshness,
+owner/project, original session date for previews, minute budget, task states and selection
+reasons, and current evidence IDs. Unconfirmed tasks are not shown as an available plan.
+Stored scope/title text is escaped for terminal controls. The default remains machine-readable
+JSON; the readable flag cannot be used to initialize or modify an interactive session.
+
+This is a foreground view, not a notification channel. It adds no service, credentials, model
+calls or writes. Resume the ordinary dialogue to report completion; close the view to stop.
