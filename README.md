@@ -76,6 +76,8 @@ two categories that do not yet work.
 
 - [Explicit task execution SDK](docs/decisions/explicit-task-execution.md) — opt-in single-attempt
   tasks with an isolated journal and tested crash recovery; no deployed worker or scheduler.
+- [Bounded task batches](docs/decisions/bounded-task-batches.md) — atomic submission, exact
+  expiring permits and explicit stops for uncertain outcomes.
 
 - [Personal agent 24/7 research](docs/research/2026-11-06-personal-agent-memory/REPORT.md) —
   the owner's product direction, memory/runtime comparison and staged validation plan;

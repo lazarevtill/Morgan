@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -68,6 +68,27 @@ class Task:
     attempt_id: str | None
     cancel_requested: bool
     result: str | None
+
+
+@dataclass(frozen=True)
+class TaskRequest:
+    key: TaskKey
+    action: str
+    payload: str
+
+    def __post_init__(self) -> None:
+        _identity(self.action)
+        _text(self.payload)
+
+
+def bounded_task_keys(keys: Sequence[TaskKey]) -> tuple[TaskKey, ...]:
+    """One explicit, ordered scope; no unbounded scan or duplicate invocation requests."""
+    frozen = tuple(keys)
+    if not 1 <= len(frozen) <= 16 or len(set(frozen)) != len(frozen):
+        raise ValueError("a task batch requires 1 to 16 distinct task keys")
+    if len({(key.user_id, key.project) for key in frozen}) != 1:
+        raise ValueError("a task batch must belong to one owner and project")
+    return frozen
 
 
 class TaskJournal:
@@ -167,6 +188,16 @@ class TaskJournal:
             )
             return self._require(key)
 
+    def create_many(self, requests: Sequence[TaskRequest]) -> tuple[Task, ...]:
+        """Atomically submit a bounded set; a conflicting existing ID rolls back all new rows."""
+        frozen = tuple(requests)
+        bounded_task_keys([request.key for request in frozen])
+        with write_transaction(self._conn):
+            return tuple(
+                self.create(request.key, action=request.action, payload=request.payload)
+                for request in frozen
+            )
+
     def cancel(self, key: TaskKey) -> Task:
         """Pending cancellation prevents execution. Running cancellation is only a request."""
         with write_transaction(self._conn):
@@ -215,6 +246,7 @@ class TaskJournal:
 class TaskControl:
     journal: TaskJournal
     task: Task
+    authorize: Callable[[Task], None] | None = None
 
     def check_cancelled(self) -> None:
         current = self.journal.get(self.task.key)
@@ -226,6 +258,12 @@ class TaskControl:
         ):
             raise TaskCancellationRequested("task cancelled or attempt no longer active")
 
+    def check_ready(self) -> None:
+        """Cooperative cancellation and current permission check, immediately before an effect."""
+        self.check_cancelled()
+        if self.authorize is not None:
+            self.authorize(self.task)
+
 
 TaskHandler = Callable[[Task, TaskControl], Awaitable[str]]
 
@@ -236,6 +274,7 @@ async def run_task(
     *,
     handlers: Mapping[str, TaskHandler],
     timeout_seconds: float,
+    authorize: Callable[[Task], None] | None = None,
 ) -> Task:
     """Explicitly run one pending task using a caller-selected, trusted handler.
 
@@ -250,12 +289,14 @@ async def run_task(
     handler = handlers.get(task.action)
     if handler is None:
         raise ValueError("no explicitly registered handler for this task action")
+    if authorize is not None:
+        authorize(task)
     claimed = journal.claim(key, action=task.action)
     if claimed.attempt_id is None:
         raise RuntimeError("claimed task is missing its attempt ID")
     try:
-        control = TaskControl(journal, claimed)
-        control.check_cancelled()
+        control = TaskControl(journal, claimed, authorize)
+        control.check_ready()
         async with asyncio.timeout(timeout_seconds):
             result = await handler(claimed, control)
         return journal.finish(key, attempt_id=claimed.attempt_id, result=result)
