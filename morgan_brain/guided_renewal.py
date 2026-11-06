@@ -30,20 +30,24 @@ class RenewalUpdate(BaseModel):
     def valid_review(self) -> Self:
         """Validate either a date renewal or an explicit completion, never arbitrary edits."""
         completion = self.event_id.startswith("guided-complete-")
-        if completion:
+        cancellation = self.event_id.startswith("guided-cancel-")
+        if completion or cancellation:
             if self.before.status != "open" or self.after != self.before.model_copy(
-                update={"status": "done"}
+                update={"status": "done" if completion else "cancelled"}
             ):
-                raise ValueError("completion may only mark an open task done")
+                raise ValueError("completion/cancellation may only close an open task")
         elif self.before.status != "open" or self.after.status != "open":
             raise ValueError("renewal requires an open task")
-        if not completion and self.before.model_copy(update={"due": self.after.due}) != self.after:
+        if (
+            not (completion or cancellation)
+            and self.before.model_copy(update={"due": self.after.due}) != self.after
+        ):
             raise ValueError("renewal may change only the reviewed date")
         for identity, limit in ((self.event_id, 200), (self.parent_id, 256)):
             if not identity.strip() or len(identity) > limit or not identity.isprintable():
                 raise ValueError("invalid renewal identities")
         if not self.event_id.startswith(
-            ("guided-renew-", "guided-complete-")
+            ("guided-renew-", "guided-complete-", "guided-cancel-")
         ) or self.parent_id in (
             self.event_id,
             self.source_id,
