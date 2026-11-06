@@ -105,6 +105,49 @@ def row(case, arm, selected, seconds, error=None):
     }
 
 
+async def evaluate_case(session, case, rows):
+    """Record baseline and optional validator, returning only baseline failure count."""
+    failed = 0
+    start = time.monotonic()
+    try:
+        selected = await session.select(case["note"])
+        elapsed = time.monotonic() - start
+        rows.append(row(case, NAME, selected, elapsed))
+        if NAME == "granite":
+            try:
+                checked, extra = await validate(session, case["note"], selected)
+                rows.append(row(case, "granite_validated", checked, elapsed + extra))
+            except (
+                note_probe.ProbeFailure,
+                ValueError,
+                TimeoutError,
+                httpx.HTTPError,
+            ) as error:
+                rows.append(
+                    row(
+                        case,
+                        "granite_validated",
+                        (),
+                        time.monotonic() - start,
+                        type(error).__name__,
+                    )
+                )
+    except (note_probe.ProbeFailure, ValueError, TimeoutError) as error:
+        failed = 1
+        rows.append(row(case, NAME, (), time.monotonic() - start, type(error).__name__))
+        if NAME == "granite":
+            rows.append(
+                row(
+                    case,
+                    "granite_validated",
+                    (),
+                    time.monotonic() - start,
+                    "baseline_failed",
+                )
+            )
+    return failed
+
+
 async def main():
     raw = (ROOT / "cases.json").read_bytes()
     protocol = json.loads((ROOT / "protocol.json").read_text())
@@ -131,47 +174,7 @@ async def main():
                 async with managed_model(workspace, CONFIG) as session:
                     load = time.monotonic() - cycle_start
                     for case in cases[batch : batch + 4]:
-                        start = time.monotonic()
-                        try:
-                            selected = await session.select(case["note"])
-                            elapsed = time.monotonic() - start
-                            rows.append(row(case, NAME, selected, elapsed))
-                            if NAME == "granite":
-                                try:
-                                    checked, extra = await validate(session, case["note"], selected)
-                                    rows.append(
-                                        row(case, "granite_validated", checked, elapsed + extra)
-                                    )
-                                except (
-                                    note_probe.ProbeFailure,
-                                    ValueError,
-                                    TimeoutError,
-                                    httpx.HTTPError,
-                                ) as error:
-                                    rows.append(
-                                        row(
-                                            case,
-                                            "granite_validated",
-                                            (),
-                                            time.monotonic() - start,
-                                            type(error).__name__,
-                                        )
-                                    )
-                        except (note_probe.ProbeFailure, ValueError, TimeoutError) as error:
-                            failures += 1
-                            rows.append(
-                                row(case, NAME, (), time.monotonic() - start, type(error).__name__)
-                            )
-                            if NAME == "granite":
-                                rows.append(
-                                    row(
-                                        case,
-                                        "granite_validated",
-                                        (),
-                                        time.monotonic() - start,
-                                        "baseline_failed",
-                                    )
-                                )
+                        failures += await evaluate_case(session, case, rows)
                         (OUTPUT / (NAME + "-results.json")).write_text(
                             json.dumps(rows, ensure_ascii=False, indent=2) + "\n"
                         )
