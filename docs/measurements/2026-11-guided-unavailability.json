@@ -1,0 +1,49 @@
+{
+  "synthetic": true,
+  "human_usability_study": false,
+  "model_calls": 0,
+  "external_actions": 0,
+  "setup_paths_excluded": true,
+  "rows": [
+    {
+      "language": "en",
+      "workflow_launches": 1,
+      "workflow_answers": 17,
+      "elapsed_seconds": 0.324,
+      "planned_minutes": [
+        10,
+        0,
+        10,
+        10,
+        0
+      ],
+      "resume_launches": 1,
+      "resume_answers": 1,
+      "resumed_minutes": 0,
+      "resumed_constraint": "cancelled",
+      "correct": true
+    },
+    {
+      "language": "ru",
+      "workflow_launches": 1,
+      "workflow_answers": 17,
+      "elapsed_seconds": 0.288,
+      "planned_minutes": [
+        10,
+        0,
+        10,
+        10,
+        0
+      ],
+      "resume_launches": 1,
+      "resume_answers": 1,
+      "resumed_minutes": 0,
+      "resumed_constraint": "cancelled",
+      "correct": true
+    }
+  ],
+  "first_interval_answers_after_command": 4,
+  "correction_answers_after_command": 3,
+  "cancellation_answers_after_command": 2,
+  "policy": "any overlap conservatively defers the whole daily plan"
+}

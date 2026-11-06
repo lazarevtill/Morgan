@@ -48,6 +48,8 @@ see `docs/decisions/confirmed-unavailability.md`. It does not infer location or 
 `guided_plan` provides one foreground review/plan/completion conversation over the existing
 model cycle, capture path and current-revision planner. It uses a separate private session
 workspace and explicit confirmation; see `docs/decisions/guided-personal-plan.md`.
+Its `busy` / `change N` / `cancel N` dialogue journals reviewed source statements and intervals
+and carries them into each session plan; see `docs/decisions/guided-unavailability.md`.
 
 `note_proposal_cli` makes an explicit local-model draft from piped text, without memory writes.
 `morgan commitment` validates reviewed planning fields and reuses `remember` capture. See
