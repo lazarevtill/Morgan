@@ -169,8 +169,8 @@ async def run_cycle(workspace: NoteWorkspace, config: ModelCycle, note: str) -> 
     try:
         existing = json.loads(workspace.read("proposal.json", 16384))
     except FileNotFoundError:
-        existing = None
-    if existing is not None:
+        pass
+    else:
         _check_existing(existing, digest, note)
         return {"reason": "already_written", "approved": False}
     async with managed_model(workspace, config) as session:

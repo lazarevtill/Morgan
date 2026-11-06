@@ -252,10 +252,11 @@ async def test_invalid_input_never_launches(fixture):
     assert not (workspace.path / ".supervisor.lock").exists()
 
 
-async def test_corrupt_recovery_refused(fixture):
+@pytest.mark.parametrize("payload", ["[]", "null"])
+async def test_corrupt_recovery_refused(fixture, payload):
     """A matching hash without the proposal schema cannot masquerade as completed work."""
     workspace, config = fixture
-    workspace.publish("proposal.json", "[]")
+    workspace.publish("proposal.json", payload)
     with pytest.raises(TypeError, match="malformed"):
         await run_cycle(workspace, config, "Water plants.")
 

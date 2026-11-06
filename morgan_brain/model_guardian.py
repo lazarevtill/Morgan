@@ -38,11 +38,22 @@ def _command(config: ModelCycle, socket: Path) -> list[str]:
     ]
 
 
+def _reap(child: subprocess.Popen[bytes]) -> None:
+    """Stop the owned native child and escalate once before releasing its context."""
+    with suppress(ProcessLookupError):
+        child.terminate()
+    try:
+        child.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        child.wait(timeout=1)
+
+
 def guard(workspace: NoteWorkspace, config: ModelCycle, socket: Path) -> None:
     """Retain the worker lock, stop on expiry/STOP/signals and reap the owned native child."""
     stopped = False
 
-    def request_stop(signum: int, frame: object) -> None:
+    def request_stop(_signum: int, _frame: object) -> None:
         """Translate termination signals into sequential child cleanup."""
         nonlocal stopped
         stopped = True
@@ -51,37 +62,42 @@ def guard(workspace: NoteWorkspace, config: ModelCycle, socket: Path) -> None:
     signal.signal(signal.SIGINT, request_stop)
     end = time.monotonic() + config.seconds
     launch_at = time.monotonic() + config.delay
-    child = None
+
+    def should_stop() -> bool:
+        """Combine independent expiry, signals and the persistent workspace marker."""
+        if stopped or time.monotonic() >= end:
+            return True
+        try:
+            workspace.check_stop()
+        except StopRequested:
+            return True
+        return False
+
     with workspace.locked():
         try:
-            while not stopped and time.monotonic() < end:
-                workspace.check_stop()
-                if child is None and time.monotonic() >= launch_at:
-                    child = subprocess.Popen(  # noqa: S603 # nosec B603
-                        _command(config, socket),
-                        stdin=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        env={
-                            "PATH": "/usr/bin:/bin",
-                            "HOME": str(socket.parent),
-                            "TMPDIR": str(socket.parent),
-                        },
-                    )
-                if child is not None and child.poll() is not None:
-                    break
+            while time.monotonic() < launch_at:
+                if should_stop():
+                    return
                 time.sleep(0.05)
-        except StopRequested:
-            pass
-        finally:
-            if child is not None:
-                with suppress(ProcessLookupError):
-                    child.terminate()
+            if should_stop():
+                return
+            with subprocess.Popen(  # noqa: S603 # nosec B603
+                _command(config, socket),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env={
+                    "PATH": "/usr/bin:/bin",
+                    "HOME": str(socket.parent),
+                    "TMPDIR": str(socket.parent),
+                },
+            ) as child:
                 try:
-                    child.wait(timeout=1)
-                except subprocess.TimeoutExpired:
-                    child.kill()
-                    child.wait(timeout=1)
+                    while child.poll() is None and not should_stop():
+                        time.sleep(0.05)
+                finally:
+                    _reap(child)
+        finally:
             with suppress(FileNotFoundError):
                 os.unlink(socket)
 
