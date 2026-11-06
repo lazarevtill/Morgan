@@ -253,7 +253,11 @@ class OwnerUI:
     def search_sources(self) -> None:
         """Show exact source quotations and verified task state without calling a model."""
         query = self.text("Поиск по фрагменту текста или названию задачи (не по смыслу)")
-        found = self.call("find", query)
+        try:
+            found = self.call("find", "--", query)
+        except (ValueError, OSError, sqlite3.Error) as error:
+            self.dialogs.show("info", f"Поиск не завершён: {error}\nДанные не изменены.")
+            return
         results = found["results"]
         summary = (
             "Поиск только в сообщениях этого пилота. Не вся личная память.\n"

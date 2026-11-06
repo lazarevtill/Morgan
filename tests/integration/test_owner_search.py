@@ -185,3 +185,61 @@ def test_read_only_search_remains_available_after_expiry(tmp_path):
     before = path.read_bytes()
     assert find(root, "Synthetic")["results"][0]["current_task"] is None
     assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("unavailable", ["missing", "bad_schema"])
+def test_unavailable_database_keeps_non_applied_results(tmp_path, unavailable):
+    import sqlite3
+
+    root = tmp_path / "pilot"
+    initialize(root)
+    capture(root)
+    owner_input.request(root, ["submit", "pending"], text="Unconfirmed book note.")
+    database = root / "memory/morgan.db"
+    if unavailable == "missing":
+        database.rename(database.with_suffix(".backup"))
+    else:
+        with sqlite3.connect(database) as conn:
+            conn.execute("PRAGMA user_version=999999")
+    result = find(root, "book")
+    assert result["unavailable_confirmed_sources"] == 1
+    assert len(result["results"]) == 1
+    assert result["results"][0]["source_kind"] == "inbox_receipt"
+    assert result["results"][0]["quote"] == "Unconfirmed book note."
+
+
+def test_receipt_only_lookup_never_opens_evidence(tmp_path, monkeypatch):
+    from morgan_brain import owner_search
+
+    root = tmp_path / "pilot"
+    initialize(root)
+    owner_input.request(root, ["submit", "pending"], text="Book note.")
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("receipt lookup must not open evidence")
+
+    monkeypatch.setattr(owner_search, "open_evidence_context", unexpected)
+    assert len(find(root, "book")["results"]) == 1
+
+
+def test_ui_passes_leading_dash_literally_and_names_search_errors(tmp_path):
+    root = tmp_path / "pilot"
+    initialize(root)
+    owner_input.request(root, ["submit", "pending"], text="-foo is a literal example.")
+    dialogs = drive(
+        root,
+        [
+            ("choose", "Найти источник"),
+            ("text", "-foo"),
+            ("choose", 0),
+            ("info", "Продолжить"),
+            ("choose", "Найти источник"),
+            ("text", ""),
+            ("info", "Продолжить"),
+            ("choose", "Выход"),
+        ],
+    )
+    info = [d["prompt"] for d in dialogs.seen if d["kind"] == "info"]
+    assert "-foo is a literal example." in info[0]
+    assert "Поиск не завершён" in info[1]
+    assert "Изменение не завершено" not in info[1]

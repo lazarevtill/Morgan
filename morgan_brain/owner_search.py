@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -76,13 +78,20 @@ async def search(
     cutoff = datetime.now(UTC)
     results = []
     unavailable = 0
-    context = open_evidence_context(workspace.path / "memory/morgan.db")
+    context = None
+    if any(message.state == "applied" for message in inbox.messages):
+        # Receipt-only results remain usable without an evidence database.
+        with suppress(OSError, sqlite3.Error, ValueError):
+            context = open_evidence_context(workspace.path / "memory/morgan.db")
     try:
         for message in inbox.messages:
             if message.state == "applied":
+                if context is None:
+                    unavailable += 1
+                    continue
                 try:
                     item = await _confirmed(context.gate, session, message, cutoff)
-                except ValueError:
+                except (OSError, sqlite3.Error, ValueError):
                     unavailable += 1
                     continue  # Never resurrect missing memory from the workflow journal.
             else:
@@ -99,7 +108,8 @@ async def search(
                     {"message_id": message.identity, "review_state": message.state, **item}
                 )
     finally:
-        context.conn.close()
+        if context is not None:
+            context.conn.close()
     return {
         "query": query,
         "match": "literal_casefold_fragment",
