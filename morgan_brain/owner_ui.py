@@ -14,6 +14,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from morgan_brain import owner_input
+from morgan_brain.guided_plan import _human_status as render_plan_status
 from morgan_brain.local_notes import NoteWorkspace, StopRequested
 from morgan_brain.model_cycle import ModelCycle
 from morgan_brain.native_dialog import DialogClosed, Dialogs, NativeDialogs
@@ -305,12 +306,33 @@ class OwnerUI:
             f"Проверено на: {found['as_of']}\nЭто сведения, не разрешение на действие.",
         )
 
+    def preview_plan(self, state: dict[str, Any]) -> None:
+        """Read another day's existing evidence without changing dates, approval or STOP."""
+        day = self.dialogs.show(
+            "text",
+            "Дата предпросмотра: ГГГГ-ММ-ДД. Сохранённый план не изменится.",
+            initial=state["plan"]["planning_day"],
+            allow_stopped=True,
+        )
+        if day is None:
+            return
+        try:
+            snapshot = self.call("status", "--preview-day", day)
+        except (ValueError, OSError, sqlite3.Error) as error:
+            self.dialogs.show(
+                "info",
+                f"Предпросмотр не завершён: {error}\nДанные не изменены.",
+                allow_stopped=True,
+            )
+            return
+        self.dialogs.show("info", render_plan_status(snapshot["plan"]), allow_stopped=True)
+
     def run(self) -> None:
         """Run a finite foreground menu; cancel/exit never sends or confirms queued work."""
         for _ in range(30):
             state = self.call("status")
             options = (
-                ("Продолжить после STOP", "План", "Выход")
+                ("Продолжить после STOP", "План", "План на дату", "Выход")
                 if state["stopped"]
                 else (
                     "Новое сообщение",
@@ -318,6 +340,7 @@ class OwnerUI:
                     "Не задачи",
                     "Найти источник",
                     "План",
+                    "План на дату",
                     "STOP",
                     "Выход",
                 )
@@ -346,17 +369,9 @@ class OwnerUI:
                     ):
                         self.call("resume")
                 elif choice == "План":
-                    tasks = state["plan"].get("tasks", [])
-                    lines = [
-                        f"{item['commitment']['title']} — {item['commitment']['due']} "
-                        f"({item['commitment']['status']})"
-                        for item in tasks
-                    ]
-                    self.dialogs.show(
-                        "info",
-                        "\n".join(lines) or "Нет доступных задач; проверьте сообщения.",
-                        allow_stopped=True,
-                    )
+                    self.dialogs.show("info", render_plan_status(state["plan"]), allow_stopped=True)
+                elif choice == "План на дату":
+                    self.preview_plan(state)
                 elif choice == "Найти источник":
                     self.search_sources()
                 elif choice == "Новое сообщение":
