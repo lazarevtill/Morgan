@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from morgan_brain.config import DEFAULT_IMPORT_CANARY_EVERY
+from morgan_brain.memory.credentials import refuse_credentials
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.memory.store.episodic import EventIdentityConflict
 from morgan_brain.memory.store.erasure import StoreInterruptedByForget
@@ -332,6 +333,7 @@ async def import_chatgpt(
             author_id = "" if role == "user" else f"chatgpt:{role}"
             unresolved += role == "user"
             message_id = str(message["id"])
+            screened = False
             for part, piece in enumerate(split_for_embedding(text)):
                 memory_id = _memory_id(message_id, part)
                 # Already imported, unchanged: skip it. Every piece costs an embedding call
@@ -383,6 +385,11 @@ async def import_chatgpt(
                     skipped += 1
                     wrote_any = True
                     continue
+                if not screened:
+                    # Whole source, not this piece: a token can cross a split boundary.
+                    # Exact replay above remains unchanged and requires no new embedding.
+                    refuse_credentials(text)
+                    screened = True
                 await gate.store(
                     Memory(
                         id=memory_id,
