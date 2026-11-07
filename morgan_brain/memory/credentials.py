@@ -36,6 +36,7 @@ class CredentialRefused(ValueError):
     """Only a fixed rule name is retained, never the matching text or its position."""
 
     def __init__(self, rule: str) -> None:
+        """Report the fixed rule name without retaining the matched source or its position."""
         self.rule = rule
         super().__init__(f"Credential-shaped text refused ({rule}); remove it before retrying")
 

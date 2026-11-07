@@ -176,6 +176,7 @@ class Chat:
         self, turn: TurnRequest, *, strict_context: bool = False
     ) -> tuple[str, AnswerResult | None, str]:
         # Admission and erasure capture precede every asynchronous operation.
+        """Admit the question before backend work and persist the answer as one atomic turn."""
         MemorySource(turn.source)
         self._gate.require_writable()
         generation = self._gate.capture_erasure_generation()

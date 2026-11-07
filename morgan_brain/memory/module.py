@@ -223,6 +223,7 @@ class MemoryModule:
     async def _prepare_event(
         self, memory: Memory, *, allow_replay: bool, expected_generation: int | None = None
     ) -> tuple[Memory, Memory | None, int]:
+        """Validate identity, then screen and embed a copy under its erasure generation."""
         if self._conn.in_transaction:
             raise ValueError("Event preparation requires no active transaction")
         with read_transaction(self._conn):

@@ -21,6 +21,7 @@ NOW = datetime(2026, 10, 1, tzinfo=UTC)
 
 
 def token():
+    """Build a synthetic supported shape without keeping a credential literal in source."""
     return "gh" + "p_" + "A" * 36
 
 
@@ -35,6 +36,7 @@ def token():
     ],
 )
 def test_supported_shapes_are_refused_without_retaining_the_value(prefix, payload, rule):
+    """Pin supported families and adjacency while keeping exception payloads value-free."""
     value = prefix + payload
     for text in (value, f'{{"key":"{value}"}}', f"_{value}_", f"слово{value}."):
         with pytest.raises(CredentialRefused) as caught:
@@ -47,6 +49,7 @@ def test_supported_shapes_are_refused_without_retaining_the_value(prefix, payloa
 
 @pytest.mark.parametrize("kind", ["", "RSA ", "EC ", "OPENSSH ", "DSA ", "ENCRYPTED ", "PGP "])
 def test_armored_private_keys_and_truncated_bodies_are_refused(kind):
+    """Refuse sufficient private-key bodies even without closure or beside placeholder text."""
     label = kind + "PRIVATE KEY" + (" BLOCK" if kind == "PGP " else "")
     for ending in ("", "\n[redacted:jwt]\n-----END " + label + "-----"):
         value = "-----BEGIN " + label + "-----\r\n" + "A" * 40 + ending
@@ -55,6 +58,7 @@ def test_armored_private_keys_and_truncated_bodies_are_refused(kind):
 
 
 def test_long_input_is_scanned_whole_without_window_or_placeholder_exemptions():
+    """Prevent long input and existing redaction labels from hiding a supported token."""
     value = "[redacted:github_token] " + "x" * 100_000 + token() + "y" * 100_000
     with pytest.raises(CredentialRefused, match="github_token"):
         refuse_credentials(value)
@@ -77,31 +81,41 @@ def test_long_input_is_scanned_whole_without_window_or_placeholder_exemptions():
     ],
 )
 def test_ordinary_text_and_out_of_scope_shapes_are_not_rewritten(text):
+    """Keep documented negatives outside this deliberately narrow refusal policy."""
     assert refuse_credentials(text) is None
 
 
 class CountingEmbedder(FakeEmbedder):
+    """Count synthetic embedding requests to detect premature outbound preparation."""
+
     def __init__(self):
+        """Use deterministic four-dimensional embeddings and an initially empty call count."""
         super().__init__(dim=4)
         self.calls = 0
 
     async def embed(self, text):
+        """Record an embedding attempt before delegating to the deterministic fake."""
         self.calls += 1
         return await super().embed(text)
 
 
 class ReplyClient:
+    """Return a controlled synthetic answer without contacting a model backend."""
+
     def __init__(self, reply="Synthetic answer"):
+        """Keep the selected synthetic reply and start with no generation calls."""
         self.reply = reply
         self.calls = 0
 
     async def agenerate(self, messages, *, model):
+        """Count a generation request and return the chosen reply under the requested model."""
         self.calls += 1
         return ChatResult(text=self.reply, model=model)
 
 
 @pytest.fixture
 def stack():
+    """Create isolated in-memory stores and fakes, then close their shared connection."""
     conn = open_db(":memory:")
     embedder = CountingEmbedder()
     gate = MemoryGate(build_memory_module(conn, embedder=embedder, dim=4, clock=lambda: NOW))
@@ -111,6 +125,7 @@ def stack():
 
 
 async def test_new_event_refuses_before_embedding_and_leaves_caller_and_database_unchanged(stack):
+    """Make refusal side-effect-free for the caller, every index and the embedding backend."""
     gate, conn, embedder, _ = stack
     memory = Memory(id="new", user_id="owner", content=token(), source=MemorySource.UNKNOWN)
     original, before = memory.model_dump(), conn.serialize()
@@ -121,6 +136,7 @@ async def test_new_event_refuses_before_embedding_and_leaves_caller_and_database
 
 
 async def test_exact_replay_and_changed_identity_preserve_existing_contract(stack):
+    """Preserve canonical replay and identity-conflict precedence without changing attribution."""
     gate, conn, embedder, _ = stack
     memory = Memory(id="source", user_id="owner", content="Synthetic exact source", author_id="x")
     await gate.store(memory)
@@ -136,6 +152,7 @@ async def test_exact_replay_and_changed_identity_preserve_existing_contract(stac
 
 
 async def test_historical_exact_replay_is_not_a_rescan_or_a_rewrite(stack):
+    """Keep an exact legacy replay read-only even when its stored text matches a new rule."""
     gate, conn, embedder, _ = stack
     memory = Memory(id="legacy", user_id="owner", content="old source")
     await gate.store(memory)
@@ -149,6 +166,7 @@ async def test_historical_exact_replay_is_not_a_rescan_or_a_rewrite(stack):
 
 
 async def test_refused_revision_cannot_close_or_replace_its_source(stack):
+    """Leave the current source active when a proposed successor fails admission."""
     gate, conn, embedder, _ = stack
     source = Memory(
         id="A",
@@ -171,6 +189,7 @@ async def test_refused_revision_cannot_close_or_replace_its_source(stack):
 
 @pytest.mark.parametrize("field", ["subject", "predicate", "object"])
 async def test_fact_fields_refuse_without_partial_fact_or_project_write(stack, field):
+    """Check each persisted fact field without mutating the caller or registering a project."""
     gate, conn, _, _ = stack
     fact = TemporalFact(user_id="owner", subject="user", predicate="likes", object="tea")
     fact = fact.model_copy(update={field: token()})
@@ -181,6 +200,7 @@ async def test_fact_fields_refuse_without_partial_fact_or_project_write(stack, f
 
 
 async def test_both_atomic_turn_events_are_screened_before_either_embedding(stack):
+    """Reject a bad answer before embedding its otherwise acceptable paired question."""
     gate, conn, embedder, history = stack
     memories = [
         Memory(id="q", user_id="owner", content="Question"),
@@ -203,11 +223,13 @@ async def test_both_atomic_turn_events_are_screened_before_either_embedding(stac
 
 @pytest.mark.parametrize("strict", [False, True])
 async def test_ask_refuses_before_strict_counting_recall_and_model(stack, strict, monkeypatch):
+    """Apply question admission before any default or strict-context backend work."""
     gate, conn, embedder, history = stack
     client = ReplyClient()
     chat = Chat(gate=gate, history=history, client=client, model="fake", clock=lambda: NOW)
 
     async def unexpected(*args, **kwargs):
+        """Fail immediately if refused input reaches strict-context preparation."""
         pytest.fail("strict preparation must not run")
 
     monkeypatch.setattr(chat, "_prepare_strict", unexpected)
@@ -218,6 +240,7 @@ async def test_ask_refuses_before_strict_counting_recall_and_model(stack, strict
 
 
 async def test_model_reply_refusal_leaves_no_question_history_or_event(stack):
+    """Allow the completed model call but persist neither half of a refused answer turn."""
     gate, conn, embedder, history = stack
     client = ReplyClient(token())
     chat = Chat(gate=gate, history=history, client=client, model="fake", clock=lambda: NOW)
@@ -229,6 +252,7 @@ async def test_model_reply_refusal_leaves_no_question_history_or_event(stack):
 
 
 async def test_import_checks_whole_visible_turn_before_any_piece_embedding(stack, tmp_path):
+    """Catch a source token split across two individually acceptable embedding pieces."""
     gate, conn, embedder, _ = stack
     path = tmp_path / "synthetic.json"
     path.write_text(
@@ -273,6 +297,7 @@ async def test_import_checks_whole_visible_turn_before_any_piece_embedding(stack
 )
 @pytest.mark.parametrize("label", ["PGP PRIVATE KEY BLOCK", "RSA PRIVATE KEY"])
 def test_standard_private_key_armor_headers_and_blank_lines_refuse(armor, label):
+    """Accept standard armor framing for detection rather than letting it bypass refusal."""
     text = "-----BEGIN " + label + "-----\n" + armor + "A" * 64
     with pytest.raises(CredentialRefused, match="private_key"):
         refuse_credentials(text)
@@ -281,6 +306,7 @@ def test_standard_private_key_armor_headers_and_blank_lines_refuse(armor, label)
 async def test_import_legacy_exact_resume_preserves_provenance_and_does_not_embed(
     stack, tmp_path, monkeypatch
 ):
+    """Resume legacy assertions unchanged while rejecting reuse of their IDs for new text."""
     gate, conn, embedder, _ = stack
     path = tmp_path / "legacy-synthetic.json"
     value = token()
@@ -317,6 +343,7 @@ async def test_import_legacy_exact_resume_preserves_provenance_and_does_not_embe
 
 
 def export_message(path, text):
+    """Write one synthetic visible user turn with stable conversation and message IDs."""
     conversation = {
         "id": "synthetic-conversation",
         "mapping": {
@@ -337,6 +364,7 @@ def export_message(path, text):
 async def test_partial_legacy_import_checks_whole_source_before_new_piece(
     stack, tmp_path, monkeypatch
 ):
+    """Rescan the complete source before adding any missing piece of a legacy import."""
     gate, conn, embedder, _ = stack
     path = tmp_path / "partial.json"
     text = "x" * 5990 + token()
@@ -357,6 +385,7 @@ async def test_partial_legacy_import_checks_whole_source_before_new_piece(
 
 
 async def test_import_replay_cannot_change_provenance(stack, tmp_path):
+    """Reject attribution changes even when an imported assertion keeps the same text."""
     gate, conn, embedder, _ = stack
     path = tmp_path / "provenance.json"
     source = export_message(path, "Synthetic source")
@@ -370,6 +399,7 @@ async def test_import_replay_cannot_change_provenance(stack, tmp_path):
 
 
 async def test_import_replay_cannot_resurrect_after_forget(stack, tmp_path, monkeypatch):
+    """Retain the original erasure fence across a replay read interrupted by forget."""
     from morgan_brain.memory.store.erasure import StoreInterruptedByForget
 
     gate, conn, embedder, _ = stack
@@ -380,6 +410,7 @@ async def test_import_replay_cannot_resurrect_after_forget(stack, tmp_path, monk
     after_forget = []
 
     async def forget_after_read(identity, *, user_id):
+        """Erase after fetching the replay candidate and retain the post-erasure baseline."""
         existing = await original_get(identity, user_id=user_id)
         await gate.forget(user_id=user_id, project=existing.project)
         after_forget.append(conn.serialize())
