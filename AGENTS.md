@@ -355,3 +355,8 @@ explicit reviewed open-to-cancelled transition. It is distinct from completion;
 never infer cancellation authority from message text. Older runtimes cannot read
 cancelled commitments or pending cancellations: update every pilot reader before
 exposing the action. See `docs/decisions/reviewed-task-cancellation.md`.
+
+`owner_input review --reopen CURRENT_COMPLETED_ID --due DATE` and the native reopen action
+explicitly revise a completed task back to open while preserving its family and sources.
+Older readers reject persisted reopen reviews even after application; update all readers before
+enabling it. See `docs/decisions/reopen-completed-task.md`. No installed pilot is updated.
