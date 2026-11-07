@@ -47,7 +47,7 @@ from morgan_brain.guided_plan import (
 )
 from morgan_brain.guided_renewal import RenewalUpdate
 from morgan_brain.local_notes import NoteWorkspace, StopRequested
-from morgan_brain.owner_search import search
+from morgan_brain.owner_search import search, task_state
 from morgan_brain.surfaces.cli.commands import cmd_remember
 from morgan_brain.surfaces.cli.proposal_review import Proposal
 from morgan_brain.tasks import TaskConflict
@@ -178,15 +178,23 @@ async def _review(
     capture = None
     renewal = None
     effective = datetime.now(UTC).isoformat()
-    if args.target or args.complete or args.cancel:
+    if args.target or args.complete or args.cancel or args.reopen:
         if args.title is not None or args.minutes is not None or args.priority is not None:
             raise ValueError("renewal accepts target and due only")
         if (args.complete or args.cancel) and args.due is not None:
             raise ValueError("completion/cancellation preserves the existing due date")
-        if args.target and args.due is None:
+        if (args.target or args.reopen) and args.due is None:
             raise ValueError("renewal requires an explicit due date")
-        target = args.complete or args.cancel or args.target
-        operation = "complete" if args.complete else ("cancel" if args.cancel else "renew")
+        target = args.complete or args.cancel or args.reopen or args.target
+        operation = (
+            "complete"
+            if args.complete
+            else "cancel"
+            if args.cancel
+            else "reopen"
+            if args.reopen
+            else "renew"
+        )
         _, view = await guided_read_plan(workspace, session)
         matches = [task for identity, task in view.tasks if identity == target]
         if len(matches) != 1:
@@ -202,6 +210,8 @@ async def _review(
                 update=(
                     {"status": "done" if args.complete else "cancelled"}
                     if args.complete or args.cancel
+                    else {"due": args.due, "status": "open"}
+                    if args.reopen
                     else {"due": args.due}
                 )
             ),
@@ -335,6 +345,9 @@ def _parser(*, exit_on_error: bool = True) -> argparse.ArgumentParser:
     init.add_argument("--budget", required=True, type=int)
     init.add_argument("--timezone", required=True)
     commands.add_parser("find").add_argument("query")
+    commands.add_parser(
+        "task-state", help="Read verified state by reviewed title fragment"
+    ).add_argument("query")
     submit = commands.add_parser("submit", help="Read one bounded owner message from stdin")
     submit.add_argument("identity")
     review = commands.add_parser("review")
@@ -344,6 +357,9 @@ def _parser(*, exit_on_error: bool = True) -> argparse.ArgumentParser:
     action.add_argument("--target")
     action.add_argument("--complete", help="Review completion of one exact current task")
     action.add_argument("--cancel", help="Review cancellation of one exact current task")
+    action.add_argument(
+        "--reopen", help="Review reopening one exact completed task with a due date"
+    )
     review.add_argument("--title")
     review.add_argument("--minutes", type=int)
     review.add_argument("--priority", choices=("high", "normal", "low"))
@@ -414,7 +430,10 @@ def _dispatch(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, o
         workspace.check_stop()
         return _init(workspace, args)
     session, inbox = load_pilot(workspace)
-    if args.command not in ("status", "resume", "find") and datetime.now(UTC) >= inbox.expires_at:
+    if (
+        args.command not in ("status", "resume", "find", "task-state")
+        and datetime.now(UTC) >= inbox.expires_at
+    ):
         raise ValueError("seven-day pilot expired; preserve journal")
     if args.command == "resume":
         workspace.resume()
@@ -423,6 +442,8 @@ def _dispatch(workspace: NoteWorkspace, args: argparse.Namespace) -> dict[str, o
         return _status(workspace, session, inbox, args.preview_day)
     if args.command == "find":
         return asyncio.run(search(workspace, session, inbox, args.query))
+    if args.command == "task-state":
+        return asyncio.run(task_state(workspace, session, inbox, args.query))
     workspace.check_stop()
     if any(
         m.state == "applying" and m.identity != getattr(args, "identity", None)

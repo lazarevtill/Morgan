@@ -30,6 +30,11 @@ Citation identity checks do not prove semantic entailment. Any unresolved retrie
 conservatively abstains in the first slice. A valid abstention may persist atomically;
 invalid citations do not persist a positive reply.
 
+A quoted instruction has produced a false task-completion answer with a valid citation in a
+local model experiment. General `ask` remains vulnerable to this semantic failure. For an
+owner-reviewed task use the deterministic [verified task state](verified-task-state.md) path;
+neither generated prose nor a citation grants authority to change the task.
+
 Carry bounded evidence snapshots into atomic store_turn. Under its existing write lock,
 re-read the exact scoped records and compare current revision/support state and source
 fields before committing any event/index/history row. A correction, conflict, fact update,
@@ -72,10 +77,14 @@ template or option changes. The configured server is a trusted counting capabili
 this contract does not authenticate a hot-swapped model behind a reused model ID.
 
 Strict CLI/MCP success adds the `morgan.answer.v1` contract: schema_version, user_id,
-project, model, answer, evidence_ids, abstained and budget. Existing response/provenance
+project, model, answer, evidence_ids, abstained, semantic_verification and budget. The
+additive `semantic_verification` field is always `not_performed`, including abstentions;
+it is application-owned metadata, not a model confidence score. Strict consumers with
+closed field allowlists must accept this added field. Existing response/provenance
 fields remain available. The budget reports verified input_tokens, provider-reported
 output tokens, total/output/safety reserves, template label and counter-call count.
-Human CLI output prints citation IDs or explicit abstention. Clients can pass those IDs
+Human CLI output labels positive answers as unverified before printing their text and citation
+IDs, or prints explicit abstention. Clients can pass those IDs
 to scoped evidence lookup for progressive verification. These checks establish identity
 and availability, not entailment. `Chat.ask()` retains its string result; SDK callers
 use `Chat.ask_evidence(TurnRequest(user_id=..., project=..., text=...))` for the detailed
