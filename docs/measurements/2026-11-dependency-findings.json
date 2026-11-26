@@ -1,6 +1,6 @@
 {
   "audit_date": "2026-11-26",
-  "image_id": "sha256:277f6bf96c16e9bd053f23a5f2280453e7c7f1ae6030ffa196a85d2c0d1dec2c",
+  "image_id": "sha256:74c29bff0bfc677dc539d79371059534a4d8478025caff1298af329d644db4af",
   "image_scanner": "Trivy 0.76.2",
   "image_database": {
     "Version": 2,

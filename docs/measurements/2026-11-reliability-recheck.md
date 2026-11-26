@@ -46,6 +46,13 @@ service is used. Historical measurements elsewhere retain their original dates.
 2. **Failed canaries retained prior trust.** An explicit mismatch left the successful cache
    entry behind. Checks now revoke it before the request, so subsequent calls recheck until
    recovery. Four cache/canary regressions failed before these fixes.
+   PR review then exposed overlapping requests: an older success could restore a proof
+   after a newer failure. Monotonic revocation stamps now fence completion against both
+   the request's initial identity and its recorded fingerprint identity, including NULL
+   initialization. Failed requests and cancellations revoke all tolerance variants of that
+   same proof. Sixteen controlled cases cover check/first-call overlap, initialization,
+   stored-sample refusal, cancellation, tolerance changes and isolation; 11 reproduced
+   failures before this follow-up, and all 51 fingerprint-wrapper tests now pass.
 3. **Concurrent fingerprint initialization overwrote the winner.** Two first requests could
    both observe NULL before model I/O. A short immediate transaction now rereads and compares
    the winner instead of overwriting it. Separate-connection tests cover matching and
@@ -66,6 +73,10 @@ service is used. Historical measurements elsewhere retain their original dates.
    read timeouts and truncated streams, each before and after partial text. Delivered text
    is not replayed; chat still makes one attempt. The broader provider checks passed 89 cases
    on both OpenAI 3.60.0 and the declared minimum 3.59.0 after this correction.
+   Subsequent PR review reproduced a malformed chunked 401 body escaping the SDK as a raw
+   HTTPX2 exception on the streaming path. Public HTTPX2 request errors now enter the same
+   redacted boundary; complete 401 responses retain their refusal classification. The
+   ordinary completion path was already safe and remains covered by the paired regression.
 5. **Authenticated remote MCP returned 421.** FastMCP was constructed with its default
    loopback Host policy; changing the bind later retained that policy. `run_http_async`
    now sets the policy for the actual bind after the API-key guard. Two full-ASGI remote
@@ -84,12 +95,23 @@ service is used. Historical measurements elsewhere retain their original dates.
    capture a selection. New reviews and first confirmations now preflight all new payloads
    before journalling attempts. Existing started attempts retain their fence and historical
    replay semantics. Existing journals already stranded by older code are not reset or
-   automatically repaired. Seven public CLI cases reproduced the defect before the fixes; further
+   automatically repaired. An older, unstarted `reviewed` receipt with a forbidden source
+   is also retained: confirmation writes nothing, but the existing unreviewed-only dismissal
+   rule prevents hiding it. Its pending status lasts until expiry; other messages remain
+   usable. A forbidden title can instead be corrected by another explicit review. The
+   decision document now distinguishes this historical case from newly refused input.
+   Seven public CLI cases reproduced the defect before the fixes; further
    regressions cover corrected reviews, renewals, completion and historical replay.
 8. **Fractional/bool run limits violated finite-count contracts.** `RunLimits(max_actions=1.5)`
    allowed two effects and wrote metadata diagnostics refused to read. Counts now require
    integers and durations require nonboolean numbers before existing range/finite checks.
    Eight negative cases cover this public SDK boundary; CLI integer arguments are unchanged.
+9. **Owned chat transports were not explicitly closed.** Supplying an HTTP client to disable
+   redirects bypassed the SDK's implicit finalizer, while `Chat.aclose()` closed only its
+   optional strict backend. The adapter now closes its owned SDK client, and chat cleanup
+   closes both clients even when strict cleanup raises. Actual repeated ask/consolidate
+   command tests cover success, refusal and released database connections; transport-free
+   test clients remain supported. Five lifecycle regressions failed before the correction.
 
 The source changes introduce no schema migration, new tool, execution authority or automatic
 retry. Existing accepted evidence and execution receipts are not rewritten. New integration
@@ -127,7 +149,7 @@ that archive with `PYTHONPATH=/tmp/morgan-recheck-baseline` and the checkout's a
 | Unmodified archive `python -m pytest -q --tb=short` | 2112 passed, 4 skipped in 1001.26s |
 | macOS checkout `.venv/bin/python -m pytest -q -n 4 --dist worksteal --tb=short` | 2181 passed, 4 skipped in 721.20s, before final config/dependency/runtime follow-ups |
 | `.venv/bin/ruff check .` | Passed, baseline and final |
-| `.venv/bin/ruff format --check .` | Passed: 328 baseline / 334 final files |
+| `.venv/bin/ruff format --check .` | Passed: 328 baseline / 335 final files |
 | `.venv/bin/mypy morgan_brain` | Passed: 104 baseline / 105 final source files |
 | `.venv/bin/bandit -c pyproject.toml -r morgan_brain` | Zero findings, baseline and final; existing nosec-comment warnings remain |
 | `git diff --check` | Passed |
@@ -141,6 +163,13 @@ Pytest emits the existing unspecified async fixture-loop-scope deprecation warni
 The later [dependency audit](2026-11-dependency-audit.md) records the final runtime/tool
 versions, minimum-version checks, image scans and Linux test result. Subsequent configuration
 and provider follow-ups passed 55 focused tests on macOS; these overlap the whole suite.
+The later malformed-body/client-lifecycle follow-up passed 451 provider/app/strict-surface
+cases on current dependencies and 120 selected cases on the minimum OpenAI SDK graph.
+The concurrent-canary follow-up passed 51 wrapper cases and 652 broader memory/import/
+migration/restore cases. Before these last PR-review corrections, GitHub's whole-tree
+Python 3.12.16 runs passed 2199 tests with four skips (348.36s and 369.66s). Those runs
+belong to their earlier PR revisions, not the later corrected tree; final-head CI is
+recorded on the [pull request](https://github.com/lazarevtill/Morgan/pull/129).
 
 ## End-to-end evidence
 

@@ -21,6 +21,7 @@ changed version during this audit.
 | Pydantic | `>=2.9` | `>=2.14.2,<3`; current 2.14.4 |
 | pydantic-settings | `>=2.6` | `>=2.16.3,<3`; current 2.16.3 |
 | OpenAI SDK | `>=1.0` | `>=3.59.0,<4`; current 3.60.0 |
+| HTTPX2 | Transitive through OpenAI, resolved 2.16.2 | Explicit `>=2.16.2,<3` for public transport-error handling; resolved version unchanged |
 | MCP SDK | `>=1.0,<2.0` | `>=1.30.0,<2.0`; current 1.30.0 |
 | Hatchling build backend | Unbounded | `>=1.33.0,<2`; isolated builds use 1.33.0 |
 | Ruff | `>=0.16,<0.17`; baseline 0.16.10; hook 0.16.5 | `>=0.17.6,<0.18`; hook and environment 0.17.6 |
@@ -39,6 +40,13 @@ pytest-asyncio 1.5.0 and Hypothesis 6.170.17. There is no evidence requiring an 
 migration for these packages. The hadolint hook now pins its actual container digest as
 well as its Git revision. The old `check-yaml --safe` argument was invalid (exit 2);
 safe parsing is already the hook's default, so the argument was removed.
+
+HTTPX2 was already present in both checked OpenAI graphs. It is now a direct dependency
+because malformed HTTP error-body reads can escape the SDK as public HTTPX2 transport
+exceptions. Catching those explicitly avoids a broad exception handler or reliance on SDK
+internals. The selected [HTTPX2 2.16.2 release](https://github.com/pydantic/httpx2/blob/main/src/httpx2/CHANGELOG.md)
+restores runtime type aliases and includes 2.16.1's invalid-redirect-header correction;
+this does not migrate Morgan's separate HTTPX-based embedding/MCP adapters.
 
 Pinning the setup-buildx action alone did not pin its downloaded CLI; the explicit version
 closes that gap. All four repository workflows explicitly limit `GITHUB_TOKEN` to
@@ -101,25 +109,27 @@ silently treating that earlier run as the final tree.
 
 | Check | Observed result |
 | --- | --- |
-| Ruff 0.17.6 lint / format | Pass; 334 Python files formatted |
+| Ruff 0.17.6 lint / format | Pass; 335 Python files formatted |
 | mypy 2.4.1, strict | Pass; 105 source files |
 | Bandit 1.9.4 | Zero findings; existing nosec-comment warnings remain |
 | `python -m pip check` | No broken requirements |
-| `python -m build --outdir /tmp/morgan-final-build` | sdist and wheel built with isolated Hatchling 1.33.0 |
-| Exact committed runtime bundle, offline install and isolated check | Revision `f97a75242671613c58988258960d4198e45752ec`; 106 package files verified, non-editable, pip 26.3, `pip check` passed |
+| `python -m build --outdir /tmp/morgan-reviewed-final-build` | sdist and wheel built with isolated Hatchling 1.33.0 |
+| Exact committed runtime bundle, offline install and isolated check | Revision `d43888ddbb64573ca661ad0f5e3a2ab95922b456`; 106 package files verified, non-editable, pip 26.3, `pip check` passed |
 | `pip-audit --cache-dir /tmp/morgan-recheck-pip-audit-cache --format json` | 81 installed Python distributions audited, zero known vulnerabilities; Morgan itself skipped because it is not published on PyPI |
 | Build-tool graph: Hatchling 1.33.0, build 1.6.1, pip 26.3 | Nine resolved distributions audited, zero known vulnerabilities |
 | Exact offline runtime graph | 38 distributions audited, zero known vulnerabilities; one unpublished Morgan skip |
 | Declared security-minimum graph | 57 distributions audited, zero known vulnerabilities; one unpublished Morgan skip |
 | Minimum-version provider/config/CLI/MCP/owner tests | 397 passed, one 15-second subprocess timeout in 1556.38s; unchanged failing case passed separately on minimum and current dependencies |
 | Final streaming-error correction, current OpenAI 3.60.0 / minimum 3.59.0 | 89 provider tests passed on each graph; six real-socket SSE/read regressions failed before the fix |
-| Rebuilt final Docker image, installed package | 32 chat failure regressions passed; CLI/MCP scope, persistence, conflict, snapshot and restore smoke passed |
+| PR review: malformed error-body and client lifecycle corrections | 451 provider/app/strict-surface cases passed on current dependencies; 120 selected cases passed with minimum OpenAI 3.59.0 |
+| PR review: overlapping canary revocation | 51 focused and 652 broader memory/import/migration/restore checks passed |
+| Rebuilt final Docker image, installed package | 178 provider/lifecycle/cache cases passed in 8.67s, offline; all 105 installed source files match; CLI/MCP scope, persistence, conflict, snapshot and restore smoke passed |
 | First Linux 3.12.16 full suite, four workers over host bind mount | 2147 passed, 40 failed, four skipped in 1422.87s; deadline/contention failures retained for serial investigation |
 | Native Linux serial rerun of failed nodes, retry-budget probe and builder preflight | 43 passed, three failed in 324.37s; no selected node absent |
 | Same native environment, unchanged baseline's three persistent nodes | Two passed; fact-writer contention reproduced in 40.97s |
 | Final native Linux serial checks after the test-contract correction | 16 passed in 40.06s: both model-cycle cases, both writer races and all 12 database units |
 | New CI dependency-job installation, isolated host environment | 63 distributions audited, zero known vulnerabilities; one unpublished Morgan skip |
-| Actionlint / YAML / pre-commit config / Hadolint | Pass; nine scanner range/failure/redaction fixtures pass |
+| Actionlint / YAML / pre-commit config / Hadolint | Pass; 34 final scanner range/merge/failure/metadata fixtures pass (nine earlier baseline fixtures also passed) |
 
 The pip-audit environment includes runtime, development and audit-tool dependencies.
 Its clean result applies to the resolved versions and advisory database at this date;
@@ -128,17 +138,18 @@ The requirements-mode build scan initially hit a macOS `ensurepip` subprocess SI
 Creating a separate environment with the already available uv, resolving the same exact
 build tools, and scanning its installed `site-packages` succeeded. This is an audit-tool
 environment failure, not a Morgan regression.
+The final container test setup initially selected a macOS Hypothesis wheel from the host's
+download cache. Supplying the matching Linux ARM64 wheel allowed the offline installed-package
+test run to execute and pass; no application assertion ran in that failed setup attempt.
 
 The final application revision was exported with `scripts/runtime_bundle.py build --repo .
---revision f97a75242671613c58988258960d4198e45752ec --output <new-bundle>`, then installed
+--revision d43888ddbb64573ca661ad0f5e3a2ab95922b456 --output <new-bundle>`, then installed
 into a new private temporary directory using the matching explicit revision. Running
 `python -I -m morgan_brain.runtime_check --expected-revision
-f97a75242671613c58988258960d4198e45752ec` from outside the checkout verified all 106 package
+d43888ddbb64573ca661ad0f5e3a2ab95922b456` from outside the checkout verified all 106 package
 files and the non-editable origin. The install used only the bundle's verified wheels,
-including pip 26.3. No runtime was activated. Subsequent report-only commits do not change
-the application represented by this artifact. Later CI permission declarations and the
-equivalent explicit resource-opening sequence in the CLI/MCP integration test also leave
-that application artifact unchanged.
+including pip 26.3. No runtime was activated. Artifact checks refer to this exact revision;
+subsequent CI-only and report-only commits do not change its packaged application code.
 
 The minimum-version test environment pins Pydantic 2.14.2, Settings 2.16.3, OpenAI 3.59.0,
 MCP 1.30.0 and HTTPX 0.29.0; remaining transitives resolve current versions. Its only
@@ -184,7 +195,7 @@ Debian packages removes all six pip findings and the libzstd1 / passwd / login.d
 findings (CVE-2026-124851 and CVE-2026-135901).
 
 The final local image is
-`sha256:277f6bf96c16e9bd053f23a5f2280453e7c7f1ae6030ffa196a85d2c0d1dec2c`.
+`sha256:74c29bff0bfc677dc539d79371059534a4d8478025caff1298af329d644db4af`.
 It still has **222 Debian matches, 99 distinct CVEs: 53 HIGH, 79 MEDIUM, 77 LOW,
 13 UNKNOWN and zero CRITICAL**. No match has an available fixed trixie version in this
 scan. The 53 HIGH matches represent 13 distinct CVEs, repeated across binary packages:
@@ -232,9 +243,23 @@ or unsupported dependency override was introduced. All advisory IDs are in the i
 The latest Gitleaks action wrapper also reports 22 affected npm packages/dependents,
 including one CRITICAL. Calling the checksum-verified official scanner directly removes
 that JavaScript tree while retaining failure-on-findings and redaction. PR/push checks
-scan changed history; manual/scheduled runs scan full history. Wrapper PR comments and
-annotations are no longer produced. A new pip-audit job checks runtime dependencies in
-the existing security workflow.
+scan changed history; manual/scheduled runs scan full history. Merge patches are included
+without restricting traversal to first parents: a synthetic credential introduced only
+by merge resolution escaped the old range and full-history modes, then failed both corrected
+modes. Merged side-branch findings remain covered.
+
+A zero-before push skips scanning only for an explicitly empty branch-creation event whose
+head is proven already reachable from a different fetched default-branch ref. Other initial
+or uncertain pushes scan all ancestors of the validated head, never unrelated refs. The
+payload's commit list is not treated as complete because GitHub can truncate it. This is a
+conservative fallback, not a claim to reconstruct every initial push's exact new range.
+
+Scoped PR/push findings print only JSON-escaped commit/path/line/rule metadata, with no
+matched text or commit message. Full-history and initial-head scans keep historical locations
+private and print a local reproduction command. Temporary reports/logs are private and
+removed on exit; no raw report is uploaded. Findings, incomplete scans, invalid refs and
+invalid reports still fail. Wrapper PR comments and annotations are no longer produced.
+A new pip-audit job checks runtime dependencies in the existing security workflow.
 
 The scanner binary itself is **not vulnerability-free**. Official Gitleaks 8.30.1 was
 built with Go 1.24.11. govulncheck 1.10.0 against `vuln.go.dev` reports 73 unique module
@@ -246,17 +271,21 @@ Binary symbol matches do not prove invocation during the configured local Git sc
 An upstream scanner rebuild/update remains required; building a private fork was deferred.
 
 Current-source Gitleaks scanning is clean after two narrowly annotated synthetic test-key
-constants. Full-history scanning still reports 15 pre-existing redacted findings across
-719 commits. Local context review classifies ten as synthetic fixtures and two as
-non-credential false positives. **Three findings represent two unresolved historical
-tokens:** one provider key and a duplicated browser-embedded third-party token whose
+constants. The original full-history run reported 15 redacted rows (14 unique scanner
+fingerprints) across its baseline history. On the later refs, the same old options still
+report 15 rows; merge-aware scanning reports 18 rows (17 fingerprints), adding only three
+merge-commit findings. Exact historical-context review identifies those additions as two
+repeated synthetic fixtures and one repeated false positive. Final triage is therefore
+12 synthetic rows, three non-credential false positives and **three rows representing the
+same two unresolved historical tokens:** one provider key and a duplicated browser-embedded
+third-party token whose
 authorization scope is unknown. Exact locations and rationale are retained in the private
 audit artifacts; no payload or credential locator is republished here. No authentication
 request was made to test either token. The owner must verify revocation or rotate any
 still-valid credential before treating the history as cleared, consistent with
 [GitHub's guidance](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository).
 No history was rewritten and no blanket allowlist was added. Manual/scheduled scans
-continue reporting the original findings; no compromise is asserted.
+continue failing on the documented historical findings; no compromise is asserted.
 
 ## Deferred changes
 
@@ -269,8 +298,9 @@ continue reporting the original findings; no compromise is asserted.
   [Engine release notes](https://docs.docker.com/engine/release-notes/29/),
   [Buildx release](https://github.com/docker/buildx/releases/tag/v0.39.1) and
   [Compose release](https://github.com/docker/compose/releases/tag/v5.8.0).
-- **MCP 2.3.0:** a separate transport migration, including the incompatible httpx2 package
-  and SDK API changes. The maintained 1.x security line supplies the relevant fixes;
+- **MCP 2.3.0:** a separate migration from HTTPX to HTTPX2 transport objects and changed
+  SDK APIs. OpenAI's use of HTTPX2 does not migrate the MCP adapters. The maintained 1.x
+  security line supplies the relevant fixes;
   see the [SDK roadmap](https://github.com/modelcontextprotocol/python-sdk/blob/main/ROADMAP.md).
 - **Python feature-version migration:** 3.12.16 retains the tested ABI and supported
   security line. Python 3.13–3.15, Windows and alternate sqlite-vec wheel combinations
