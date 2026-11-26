@@ -1,5 +1,8 @@
 name: Deploy
 
+permissions:
+  contents: read
+
 # Manual-only. Real deployment (push to a private registry + SSH to hosts)
 # depends on infrastructure reachable only over a private overlay network, and
 # must be re-wired before re-enabling on push.

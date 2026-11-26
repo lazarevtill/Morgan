@@ -400,7 +400,8 @@ own working directory means nothing to a client). A call that names no project w
 `personal`: `remember` says so with `project_defaulted: true`, and `forget` without a
 `project` erases `personal`. Every tool declares MCP's hints: `recall`, `facts`,
 `evidence` and `inspect_context` are read-only. `remember` and `ask_morgan` write (a turn
-stores the exchange); `forget` is destructive. Errors come back as the tool's error result, carrying the message the CLI prints: an
+stores the exchange); `forget` is destructive. Errors come back as the tool's error result,
+carrying the message the CLI prints: an
 unreachable, slow or refusing model server, an `EmbeddingSpaceMismatch`, or a database waiting
 for `morgan migrate`, which refuses the three tools that write while `recall` and `facts`
 still answer.

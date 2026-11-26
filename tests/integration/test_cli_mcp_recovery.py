@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import sys
+from contextlib import AsyncExitStack
 from datetime import timedelta
 
 from mcp import ClientSession, StdioServerParameters
@@ -63,10 +64,11 @@ async def test_cli_to_stdio_to_reopened_cli_and_snapshot_recovery(tmp_path):
         env=env,
         cwd=str(tmp_path),
     )
-    async with (
-        stdio_client(parameters) as (read, write),
-        ClientSession(read, write, read_timeout_seconds=timedelta(seconds=30)) as client,
-    ):
+    async with AsyncExitStack() as stack:
+        read, write = await stack.enter_async_context(stdio_client(parameters))
+        client = await stack.enter_async_context(
+            ClientSession(read, write, read_timeout_seconds=timedelta(seconds=30))
+        )
         await client.initialize()
         tools = {tool.name: tool for tool in (await client.list_tools()).tools}
         readers = {"recall", "facts", "evidence", "inspect_context"}

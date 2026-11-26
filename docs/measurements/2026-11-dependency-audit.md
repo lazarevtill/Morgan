@@ -41,7 +41,9 @@ well as its Git revision. The old `check-yaml --safe` argument was invalid (exit
 safe parsing is already the hook's default, so the argument was removed.
 
 Pinning the setup-buildx action alone did not pin its downloaded CLI; the explicit version
-closes that gap. Buildx 0.39.1 was exercised from temporary plugin/config/state directories
+closes that gap. All four repository workflows explicitly limit `GITHUB_TOKEN` to
+`contents: read`; none of their jobs requires repository write permissions. Buildx 0.39.1
+was exercised from temporary plugin/config/state directories
 against the existing engine, without replacing the owner's plugin. The Dockerfile frontend
 retains Docker's [recommended stable `docker/dockerfile:1` channel](https://docs.docker.com/build/buildkit/frontend/)
 for bug/security updates. That frontend and the action's default BuildKit daemon image
@@ -134,7 +136,9 @@ into a new private temporary directory using the matching explicit revision. Run
 f97a75242671613c58988258960d4198e45752ec` from outside the checkout verified all 106 package
 files and the non-editable origin. The install used only the bundle's verified wheels,
 including pip 26.3. No runtime was activated. Subsequent report-only commits do not change
-the application represented by this artifact.
+the application represented by this artifact. Later CI permission declarations and the
+equivalent explicit resource-opening sequence in the CLI/MCP integration test also leave
+that application artifact unchanged.
 
 The minimum-version test environment pins Pydantic 2.14.2, Settings 2.16.3, OpenAI 3.59.0,
 MCP 1.30.0 and HTTPX 0.29.0; remaining transitives resolve current versions. Its only
