@@ -15,34 +15,92 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
+      # Use the scanner directly: the action wrapper carries unrelated vulnerable
+      # JavaScript dependencies. Findings still fail this check and are redacted.
       - name: GitLeaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gitleaks_dir=$(mktemp -d "$RUNNER_TEMP/gitleaks.XXXXXX")
+          trap 'rm -rf "$gitleaks_dir"' EXIT
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$gitleaks_dir/gitleaks.tar.gz"
+          printf '%s  %s\n' \
+            '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb' \
+            "$gitleaks_dir/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf "$gitleaks_dir/gitleaks.tar.gz" -C "$gitleaks_dir" gitleaks
+          gitleaks_args=(git --redact --no-banner --exit-code 1)
+          # Push/PR checks scan the changed history; scheduled/manual runs scan all.
+          case "$GITHUB_EVENT_NAME" in
+            pull_request)
+              base_ref=$(jq -er '.pull_request.base.sha' "$GITHUB_EVENT_PATH")
+              head_ref=$(jq -er '.pull_request.head.sha' "$GITHUB_EVENT_PATH")
+              ;;
+            push)
+              base_ref=$(jq -er '.before' "$GITHUB_EVENT_PATH")
+              head_ref=$(jq -er '.after' "$GITHUB_EVENT_PATH")
+              ;;
+            *) base_ref=''; head_ref='' ;;
+          esac
+          if [[ -n "$base_ref" ]]; then
+            if ! [[ "$base_ref" =~ ^[0-9a-f]{40}$ && "$head_ref" =~ ^[0-9a-f]{40}$ ]]; then
+              echo '::error::Invalid commit identifiers in the event payload'
+              exit 1
+            fi
+            git rev-parse --verify "$head_ref^{commit}" >/dev/null
+            if [[ "$base_ref" != '0000000000000000000000000000000000000000' ]]; then
+              git rev-parse --verify "$base_ref^{commit}" >/dev/null
+              gitleaks_args+=(--log-opts "$base_ref..$head_ref")
+            fi
+          fi
+          "$gitleaks_dir/gitleaks" "${gitleaks_args[@]}" .
 
   code-security:
     name: Code Security Analysis (bandit)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.12"
+          python-version: "3.12.16"
 
       - name: Install bandit
-        run: pip install "bandit[toml]"
+        run: |
+          python -m pip install --upgrade "pip>=26.3,<27"
+          python -m pip install "bandit[toml]>=1.9.4,<2"
 
       # No continue-on-error and no -ll severity floor: the scan reports zero findings at
       # every severity, so anything new is a regression and should fail the build.
       - name: Run Bandit
         run: bandit -c pyproject.toml -r morgan_brain
+
+  dependency-audit:
+    name: Dependency Audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12.16"
+
+      - name: Install runtime dependencies and auditor
+        run: |
+          python -m pip install --upgrade "pip>=26.3,<27"
+          python -m pip install . "pip-audit==2.10.1"
+
+      - name: Audit installed dependencies
+        run: python -m pip_audit
 
   # Note: CodeQL runs via the repository's *default* CodeQL setup (the separate
   # "CodeQL" check), so we do not define a custom codeql job here — an advanced

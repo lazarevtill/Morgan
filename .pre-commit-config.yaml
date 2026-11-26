@@ -2,7 +2,7 @@
 #
 # Install:      pre-commit install
 # Run manually: pre-commit run --all-files
-# Update hooks: pre-commit autoupdate
+# Update hooks: pre-commit autoupdate --freeze
 #
 # This file mirrors the CI gate (.github/workflows/lint.yml + test.yml) rather than
 # running a second, differently-configured one.  Ruff is the single linter *and* the
@@ -13,14 +13,13 @@
 repos:
   # General file hygiene.
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # v6.0.0
     hooks:
       - id: trailing-whitespace
         exclude: ^(.*\.md|.*\.txt)$
       - id: end-of-file-fixer
         exclude: ^(.*\.md|.*\.txt)$
       - id: check-yaml
-        args: ['--safe']
         exclude: ^(.*\.template\.ya?ml)$
       - id: check-added-large-files
         args: ['--maxkb=1000']
@@ -40,7 +39,7 @@ repos:
   # command line, so the hook cannot drift from CI.  Bandit is not a separate hook
   # either: its checks are ruff's `S` family, already selected there.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.5
+    rev: 9026c9127e153371d7a78dfcb0c45ae2046a3d10 # v0.17.6
     hooks:
       - id: ruff-check
         args: ['--fix']
@@ -59,16 +58,19 @@ repos:
         files: ^morgan_brain/.*\.py$
 
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.33.0
+    rev: cba56bcde1fdd01c1deb3f945e69764c291a6530 # v1.38.0
     hooks:
       - id: yamllint
         args: ['-c', '.yamllint.yml']
         exclude: ^(.*\.template\.ya?ml)$
 
   - repo: https://github.com/hadolint/hadolint
-    rev: v2.12.0
+    rev: 2eece55955ced00200be9729e9728cb7dacca505 # v2.15.1
     hooks:
       - id: hadolint-docker
+        # The upstream hook otherwise runs an unversioned image, independent of rev.
+        entry: >-
+          ghcr.io/hadolint/hadolint@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d hadolint
         args: ['--ignore', 'DL3008', '--ignore', 'DL3013', '--ignore', 'DL3015']
 
 default_language_version:

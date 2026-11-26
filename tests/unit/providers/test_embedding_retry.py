@@ -169,7 +169,7 @@ async def test_a_five_hundred_and_one_is_refused_and_says_embeddings_are_not_ser
 
 
 #: A key as a base64 secret looks: a slash, a plus and padding, which encoders all rewrite.
-_KEY = "Zm9vYmFy/+bazQux7w=="
+_KEY = "Zm9vYmFy/+bazQux7w=="  # Synthetic encoding fixture. gitleaks:allow
 
 #: How a server might write a key back: every encoding a common encoder produces.
 _ENCODINGS = {
