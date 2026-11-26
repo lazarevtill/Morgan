@@ -24,8 +24,10 @@ from __future__ import annotations
 import math
 import sqlite3
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import replace
 from datetime import UTC, datetime
+from itertools import count
 
 import structlog
 
@@ -47,6 +49,12 @@ Sample = Callable[[int], list[tuple[str, list[float]]]]
 #: call is checked and refused again rather than handed a vector from the wrong model.
 _CheckKey = tuple[str, str, int, int, bytes | None, float]
 _checked: set[_CheckKey] = set()
+
+# Revocation covers every tolerance for the same space. Stamps also fence requests that
+# started before a NULL fingerprint was recorded and only learn its final identity later.
+_ProofIdentity = tuple[str, str, int, int, bytes | None]
+_revoked_at: dict[_ProofIdentity, int] = {}
+_proof_stamps = count(1)
 
 #: The (endpoint, model) pairs this process has already reported as having no active space.
 _unregistered: set[tuple[str, str]] = set()
@@ -137,43 +145,75 @@ class CheckedEmbedder:
         if space is None:
             raise EmbeddingSpaceMismatch.no_active_space(setting=self._setting)
         if space.fingerprint is None:
+            self._revoke(space)
             raise EmbeddingSpaceMismatch.no_fingerprint(
                 space_id=space.id, model=space.model, dims=space.dims, setting=self._setting
             )
         # A failed canary must revoke the earlier proof, including failures of the
         # request itself. Subsequent calls must check again before using this space.
-        key = self._check_key(space)
-        _checked.discard(key)
+        started = self._revoke(space)
         strings = list(fingerprint.STRINGS)
-        answered = await self._inner.embed_batch(strings)
-        if len(answered) != len(strings):
-            raise EmbeddingSpaceMismatch.wrong_count(
-                space_id=space.id,
-                model=space.model,
-                dims=space.dims,
-                setting=self._setting,
-                expected=len(strings),
-                got=len(answered),
-            )
-        self._require_answers(space, answered)
-        self._require_fingerprint(space, space.fingerprint, answered)
-        _checked.add(key)
+        try:
+            answered = await self._inner.embed_batch(strings)
+            self._require_answers(space, answered, expected_count=len(strings))
+            self._require_fingerprint(space, space.fingerprint, answered)
+        except BaseException:
+            self._revoke(space)
+            raise
+        self._cache_proof(space, space, started)
 
-    def _check_key(self, space: spaces.EmbeddingSpace) -> _CheckKey:
+    def _proof_identity(self, space: spaces.EmbeddingSpace) -> _ProofIdentity:
         return (
             self._url,
             self._model,
             space.dims,
             space.id,
             space.fingerprint,
-            self._tolerance,
         )
+
+    def _check_key(self, space: spaces.EmbeddingSpace) -> _CheckKey:
+        return (*self._proof_identity(space), self._tolerance)
+
+    def _revoke(self, space: spaces.EmbeddingSpace) -> int:
+        identity = self._proof_identity(space)
+        stamp = next(_proof_stamps)
+        _revoked_at[identity] = stamp
+        _checked.difference_update({key for key in _checked if key[:-1] == identity})
+        return stamp
+
+    def _cache_proof(
+        self, initial: spaces.EmbeddingSpace, verified: spaces.EmbeddingSpace, started: int
+    ) -> None:
+        if all(
+            _revoked_at.get(self._proof_identity(space), 0) <= started
+            for space in (initial, verified)
+        ):
+            _checked.add(self._check_key(verified))
 
     async def _first_call(
         self, space: spaces.EmbeddingSpace | None, texts: list[str]
     ) -> list[list[float]]:
         """Send *texts* with the five strings (and, for an unrecorded fingerprint, the stored
         sample) appended; check what came back; return the caller's own vectors."""
+        started = next(_proof_stamps)
+        try:
+            return await self._checked_first_call(space, texts, started)
+        except BaseException:
+            if space is not None:
+                self._revoke(space)
+                if space.fingerprint is None:
+                    # Another first call may have recorded this database's fingerprint
+                    # while we awaited. Revoke that proof too, without masking the failure
+                    # if the connection itself has since become unusable.
+                    with suppress(sqlite3.Error):
+                        current = spaces.active(self._conn)
+                        if current is not None and current.id == space.id:
+                            self._revoke(current)
+            raise
+
+    async def _checked_first_call(
+        self, space: spaces.EmbeddingSpace | None, texts: list[str], started: int
+    ) -> list[list[float]]:
         rows = self._sample_of(space) if space is not None and space.fingerprint is None else []
         inputs = [*texts, *(text for text, _ in rows), *fingerprint.STRINGS]
         answered = await self._inner.embed_batch(inputs)
@@ -200,11 +240,12 @@ class CheckedEmbedder:
             return own
 
         self._require_answers(space, answered)
+        initial = space
         if space.fingerprint is not None:
             self._require_fingerprint(space, space.fingerprint, fresh_strings)
         else:
             space = self._record(space, fresh_strings, rows, fresh_rows)
-        _checked.add(self._check_key(space))
+        self._cache_proof(initial, space, started)
         return own
 
     def _sample_of(self, space: spaces.EmbeddingSpace) -> list[tuple[str, list[float]]]:
@@ -214,13 +255,28 @@ class CheckedEmbedder:
             )
         return self._sample(self._sample_rows)[: self._sample_rows]
 
-    def _require_answers(self, space: spaces.EmbeddingSpace, answered: list[list[float]]) -> None:
+    def _require_answers(
+        self,
+        space: spaces.EmbeddingSpace,
+        answered: list[list[float]],
+        *,
+        expected_count: int | None = None,
+    ) -> None:
         """Every vector the model returned is the space's width and wholly finite.
 
         Checked before any cosine: a NaN component makes every cosine NaN, which no threshold
         can fail, and it would otherwise be handed to the caller or recorded as the space's
         fingerprint, after which every model would match it.
         """
+        if expected_count is not None and len(answered) != expected_count:
+            raise EmbeddingSpaceMismatch.wrong_count(
+                space_id=space.id,
+                model=space.model,
+                dims=space.dims,
+                setting=self._setting,
+                expected=expected_count,
+                got=len(answered),
+            )
         for vector in answered:
             if len(vector) != space.dims:
                 raise EmbeddingSpaceMismatch.width(

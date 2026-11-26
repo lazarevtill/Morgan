@@ -71,6 +71,10 @@ def test_older_saved_review_refuses_before_applying_and_preserves_memory(tmp_pat
     assert credential_shape() not in refused.stderr and not refused.stdout
     assert database.read_bytes() == before
     assert json.loads(path.read_text())["messages"][0]["state"] == "reviewed"
+    saved_receipt = path.read_bytes()
+    dismissal = run(tmp_path, "dismiss", "first")
+    assert dismissal.returncode == 2 and "only unreviewed" in dismissal.stderr
+    assert path.read_bytes() == saved_receipt
     good(run(tmp_path, "submit", "clean", text="A different safe message."))
     if field == "title":
         corrected = review_new(tmp_path)

@@ -9,10 +9,10 @@ Implements the ``ChatClient`` protocol. Embeddings live in ``embeddings.py``.
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from typing import Any
 
-import httpx
+import httpx2
 
 from morgan_brain.providers.redaction import ResponseRedactor
 from morgan_brain.providers.request_budget import (
@@ -92,11 +92,6 @@ class OpenAICompatAdapter:
         self._base_url = base_url
         self._setting = setting
         self._redact = ResponseRedactor(api_key)
-        # Early 1.x SDKs accept httpx clients but do not export their own default client.
-        # New SDKs may use another transport package, so prefer the SDK's public factory.
-        http_client_factory: Callable[..., Any] = getattr(
-            openai, "DefaultAsyncHttpxClient", httpx.AsyncClient
-        )
         self._client = openai.AsyncOpenAI(
             base_url=base_url,
             api_key=api_key,
@@ -104,7 +99,8 @@ class OpenAICompatAdapter:
             timeout=timeout,
             # The SDK defaults to following redirects, which can forward the complete
             # prompt to a different endpoint. Treat them as refusals, like embeddings.
-            http_client=http_client_factory(follow_redirects=False),
+            # Use the supported public HTTPX2 client and exception types consistently.
+            http_client=openai.DefaultAsyncHttpx2Client(follow_redirects=False),
         )
         # Connection refused, DNS failure, and a request that timed out all subclass this
         # one SDK error. Held on the instance so the SDK stays imported in exactly one place.
@@ -135,12 +131,15 @@ class OpenAICompatAdapter:
         self, exc: Exception, *, connected: bool = False
     ) -> ProviderUnreachable:
         detail = self._redact(str(exc)) or type(exc).__name__
-        timed_out = isinstance(exc, (self._timeout_error, httpx.TimeoutException))
+        timed_out = isinstance(exc, (self._timeout_error, httpx2.TimeoutException))
+        connected = connected or isinstance(
+            exc, (httpx2.ReadError, httpx2.RemoteProtocolError, httpx2.DecodingError)
+        )
         verdict = None
         if timed_out:
             verdict = f"did not answer in time ({detail})"
         elif connected:
-            verdict = f"dropped its answer while streaming ({detail})"
+            verdict = f"returned an incomplete or malformed answer ({detail})"
         return ProviderUnreachable(
             self._base_url,
             detail,
@@ -153,6 +152,10 @@ class OpenAICompatAdapter:
     def request_options(self) -> ChatRequestOptions | None:
         """Immutable opt-in controls used by every request and structured re-ask."""
         return self._request_options
+
+    async def aclose(self) -> None:
+        """Release the owned SDK client and its HTTP connection pool."""
+        await self._client.close()
 
     # ------------------------------------------------------------------
     # ChatClient protocol
@@ -183,8 +186,8 @@ class OpenAICompatAdapter:
             # SDK exception text can include the unredacted response body. Suppress that
             # cause too: FastMCP logs tool exceptions, not just the safe result we return.
             raise self._status_failure(exc.status_code, exc.response.text) from None
-        except (self._connection_error, httpx.TimeoutException) as exc:
-            # Early 1.x SDKs re-raise httpx read timeouts instead of APITimeoutError.
+        except (self._connection_error, httpx2.RequestError) as exc:
+            # Error-body reads may escape the SDK before it constructs APIStatusError.
             raise self._connection_failure(exc) from None
         choice = response.choices[0]
         msg = choice.message
@@ -285,8 +288,8 @@ class OpenAICompatAdapter:
                         )
         except self._status_error as exc:
             raise self._status_failure(exc.status_code, exc.response.text) from None
-        except (self._connection_error, httpx.TimeoutException) as exc:
-            # The SDK also wraps transport failures raised after the response headers.
+        except (self._connection_error, httpx2.RequestError) as exc:
+            # Include raw error-body read failures as well as SDK-wrapped stream failures.
             # Previously yielded deltas remain delivered; there is no retry or replay.
             raise self._connection_failure(exc, connected=connected) from None
         except self._api_error as exc:

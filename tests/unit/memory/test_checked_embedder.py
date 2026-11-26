@@ -6,6 +6,7 @@ embedded stored rows match the vectors already in the database.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
 import sqlite3
@@ -332,6 +333,242 @@ async def test_a_failed_canary_revokes_cached_trust_until_the_model_recovers(con
     assert await embedder.embed("recovered") == _unit("model-a", "recovered", 4)
     await embedder.embed("cached again")
     assert inner.calls[-1] == ["cached again"]
+
+
+@pytest.mark.parametrize("older_method", ["check", "embed_batch"])
+@pytest.mark.parametrize("newer_method", ["check", "embed_batch"])
+@pytest.mark.parametrize("failure", ["mismatch", "request"])
+async def test_an_older_success_cannot_restore_proof_after_a_newer_failure(
+    conn, settings, monkeypatch, older_method, newer_method, failure
+):
+    _a_space_with_a_recorded_fingerprint(conn, dims=4)
+    delayed = _DelayedEmbedder()
+    older = CheckedEmbedder(delayed, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING)
+    bad = _other_model(dims=4)
+    newer = CheckedEmbedder(bad, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING)
+
+    async def request_failure(texts):
+        raise ConnectionError("model unavailable")
+
+    if failure == "request":
+        monkeypatch.setattr(bad, "embed_batch", request_failure)
+    error = ConnectionError if failure == "request" else EmbeddingSpaceMismatch
+    pending = asyncio.create_task(
+        older.check() if older_method == "check" else older.embed_batch(["older request"])
+    )
+    try:
+        await asyncio.wait_for(delayed.started.wait(), timeout=5)
+        with pytest.raises(error):
+            if newer_method == "check":
+                await newer.check()
+            else:
+                await newer.embed_batch(["newer request"])
+    finally:
+        delayed.release.set()
+        await pending
+
+    assert checked_embedder._checked == set()
+    with pytest.raises(EmbeddingSpaceMismatch):
+        await CheckedEmbedder(
+            _other_model(dims=4),
+            conn=conn,
+            settings=settings,
+            endpoint=_URL,
+            setting=_SETTING,
+        ).embed("after the failed check")
+
+
+async def test_an_initial_request_cannot_restore_proof_after_a_recorded_space_canary_fails(
+    conn, settings, tmp_path
+):
+    spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
+    delayed = _DelayedEmbedder()
+    older = CheckedEmbedder(delayed, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING)
+    other = build_memory_module(str(tmp_path / "m.db"))._conn
+    pending = asyncio.create_task(older.embed_batch(["before fingerprint recording"]))
+    try:
+        await asyncio.wait_for(delayed.started.wait(), timeout=5)
+        await CheckedEmbedder(
+            _recording_embedder(dims=4),
+            conn=other,
+            settings=settings,
+            endpoint=_URL,
+            setting=_SETTING,
+        ).embed("record the fingerprint")
+        with pytest.raises(EmbeddingSpaceMismatch):
+            await CheckedEmbedder(
+                _other_model(dims=4),
+                conn=other,
+                settings=settings,
+                endpoint=_URL,
+                setting=_SETTING,
+            ).check()
+    finally:
+        delayed.release.set()
+        await pending
+        other.close()
+
+    assert spaces.active(conn).fingerprint is not None
+    assert checked_embedder._checked == set()
+
+
+@pytest.mark.parametrize("method", ["check", "embed_batch"])
+async def test_a_cancelled_verification_revokes_a_proof_completed_while_it_waited(
+    conn, settings, method
+):
+    _a_space_with_a_recorded_fingerprint(conn, dims=4)
+    delayed = _DelayedEmbedder()
+    pending_check = CheckedEmbedder(
+        delayed, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING
+    )
+    pending = asyncio.create_task(
+        pending_check.check() if method == "check" else pending_check.embed_batch(["cancelled"])
+    )
+    try:
+        await asyncio.wait_for(delayed.started.wait(), timeout=5)
+        await CheckedEmbedder(
+            _recording_embedder(dims=4),
+            conn=conn,
+            settings=settings,
+            endpoint=_URL,
+            setting=_SETTING,
+        ).embed("a proof completed while the earlier request waited")
+        assert checked_embedder._checked
+    finally:
+        pending.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+
+    assert checked_embedder._checked == set()
+
+
+async def test_a_missing_fingerprint_canary_fences_an_inflight_initial_request(conn, settings):
+    spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
+    delayed = _DelayedEmbedder()
+    older = CheckedEmbedder(delayed, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING)
+    pending = asyncio.create_task(older.embed_batch(["initial request"]))
+    try:
+        await asyncio.wait_for(delayed.started.wait(), timeout=5)
+        with pytest.raises(EmbeddingSpaceMismatch):
+            await CheckedEmbedder(
+                _recording_embedder(dims=4),
+                conn=conn,
+                settings=settings,
+                endpoint=_URL,
+                setting=_SETTING,
+            ).check()
+    finally:
+        delayed.release.set()
+        await pending
+
+    assert spaces.active(conn).fingerprint is not None
+    assert checked_embedder._checked == set()
+
+
+async def test_a_failed_initial_request_revokes_a_concurrently_recorded_proof(conn, settings):
+    spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
+    delayed = _DelayedEmbedder()
+    delayed._model = "model-b"
+    older = CheckedEmbedder(delayed, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING)
+    pending = asyncio.create_task(older.embed_batch(["wrong initial request"]))
+    try:
+        await asyncio.wait_for(delayed.started.wait(), timeout=5)
+        await CheckedEmbedder(
+            _recording_embedder(dims=4),
+            conn=conn,
+            settings=settings,
+            endpoint=_URL,
+            setting=_SETTING,
+        ).embed("record and prove the correct model")
+        assert checked_embedder._checked
+    finally:
+        delayed.release.set()
+        with pytest.raises(EmbeddingSpaceMismatch):
+            await pending
+
+    assert checked_embedder._checked == set()
+
+
+async def test_an_initial_request_cannot_cache_after_a_newer_stored_sample_mismatch(conn, settings):
+    spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
+    delayed = _DelayedEmbedder()
+
+    def sample(n):
+        return [("stored memory", _unit("model-a", "stored memory", 4))]
+
+    older = CheckedEmbedder(
+        delayed, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING, sample=sample
+    )
+    pending = asyncio.create_task(older.embed_batch(["older initial request"]))
+    try:
+        await asyncio.wait_for(delayed.started.wait(), timeout=5)
+        with pytest.raises(EmbeddingSpaceMismatch):
+            await CheckedEmbedder(
+                _other_model(dims=4),
+                conn=conn,
+                settings=settings,
+                endpoint=_URL,
+                setting=_SETTING,
+                sample=sample,
+            ).embed("newer initial request")
+    finally:
+        delayed.release.set()
+        await pending
+
+    assert spaces.active(conn).fingerprint is not None
+    assert checked_embedder._checked == set()
+
+
+async def test_a_failed_canary_revokes_proof_at_other_tolerances(conn, settings):
+    _a_space_with_a_recorded_fingerprint(conn, dims=4)
+    inner = _recording_embedder(dims=4)
+    loose = CheckedEmbedder(
+        inner,
+        conn=conn,
+        settings=settings.model_copy(update={"embedding_fingerprint_tolerance": 0.95}),
+        endpoint=_URL,
+        setting=_SETTING,
+    )
+    strict = CheckedEmbedder(inner, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING)
+    await loose.embed("prove loose tolerance")
+    await strict.embed("prove strict tolerance")
+    inner._model = "model-b"
+
+    with pytest.raises(EmbeddingSpaceMismatch):
+        await strict.check()
+    with pytest.raises(EmbeddingSpaceMismatch):
+        await loose.embed("still wrong at the looser tolerance")
+
+
+async def test_canary_revocation_does_not_drop_another_databases_distinct_fingerprint(
+    conn, settings, tmp_path
+):
+    _a_space_with_a_recorded_fingerprint(conn, dims=4)
+    other = build_memory_module(str(tmp_path / "other.db"))._conn
+    try:
+        space = spaces.register(
+            other, model="model-b", dims=4, table_name="vec_items", clock=_clock
+        )
+        spaces.record_fingerprint(
+            other, space.id, [_unit("model-b", s, 4) for s in fingerprint.STRINGS], clock=_clock
+        )
+        inner = _other_model(dims=4)
+        proven = CheckedEmbedder(
+            inner, conn=other, settings=settings, endpoint=_URL, setting=_SETTING
+        )
+        await proven.embed("other database")
+        with pytest.raises(EmbeddingSpaceMismatch):
+            await CheckedEmbedder(
+                _other_model(dims=4),
+                conn=conn,
+                settings=settings,
+                endpoint=_URL,
+                setting=_SETTING,
+            ).check()
+        await proven.embed("still proven for its own fingerprint")
+        assert inner.calls[-1] == ["still proven for its own fingerprint"]
+    finally:
+        other.close()
 
 
 @pytest.mark.parametrize("winning_model", ["model-a", "model-b"])
@@ -697,6 +934,21 @@ class _RecordingEmbedder:
             return [[math.nan] * self._dims for _ in texts]
         answered = [self._answers.get(t) or _unit(self._model, t, self._dims) for t in texts]
         return answered[: len(answered) - self._short_by] if self._short_by else answered
+
+
+class _DelayedEmbedder(_RecordingEmbedder):
+    """Capture a good response, then let a newer request finish before returning it."""
+
+    def __init__(self) -> None:
+        super().__init__(dims=4, model="model-a")
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        answered = await super().embed_batch(texts)
+        self.started.set()
+        await self.release.wait()
+        return answered
 
 
 def _recording_embedder(*, dims: int) -> _RecordingEmbedder:

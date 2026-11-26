@@ -13,11 +13,13 @@ dependencies = [
     "pydantic>=2.14.2,<3",
     "pydantic-settings>=2.16.3,<3",
     "httpx>=0.27",
+    # The OpenAI 3.x transport can expose public HTTPX2 errors while reading error bodies.
+    "httpx2>=2.16.2,<3",
     "openai>=3.59.0,<4",
     "structlog>=24.4",
     "sqlite-vec>=0.1.9",
-    # The MCP server is a primary surface, not an extra. Capped below 2.0: mcp 2.0 swaps
-    # httpx for an incompatible httpx2 package.
+    # The MCP server is a primary surface, not an extra. MCP 2.x changes transport/API
+    # types from HTTPX to HTTPX2 and needs a separate adapter migration.
     "mcp>=1.30.0,<2.0",
 ]
 

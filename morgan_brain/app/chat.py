@@ -117,10 +117,16 @@ class Chat:
         self._strict_config = strict_config or StrictContextConfig()
 
     async def aclose(self) -> None:
-        """Release the optional counted backend's per-context HTTP client."""
-        close = getattr(self._strict_backend, "aclose", _no_backend_to_close)
-        if callable(close):
-            await close()
+        """Release both per-context clients, including when one cleanup fails."""
+        try:
+            close = getattr(self._strict_backend, "aclose", _no_backend_to_close)
+            if callable(close):
+                await close()
+        finally:
+            # Cleanup stays optional for ChatClient implementations without a transport.
+            close = getattr(self._client, "aclose", _no_backend_to_close)
+            if callable(close):
+                await close()
 
     async def ask(
         self,

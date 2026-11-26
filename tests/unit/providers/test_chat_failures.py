@@ -192,6 +192,39 @@ async def test_malformed_http_does_not_log_a_raw_exception_chain(stream):
 
 
 @pytest.mark.parametrize("stream", [False, True])
+async def test_malformed_refusal_body_does_not_escape_with_a_credential_echo(stream):
+    calls = []
+
+    def reply(request):
+        calls.append(request)
+        return (
+            b"HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\n"
+            b"Transfer-Encoding: chunked\r\n\r\n"
+            + f"invalid-chunk-{_KEY}-{quote(_KEY, safe='')}\r\n".encode()
+        )
+
+    with raw_model_server(reply) as url:
+        adapter = OpenAICompatAdapter(
+            base_url=url, api_key=_KEY, provider="synthetic", setting="MORGAN_LLM_ENDPOINT"
+        )
+        try:
+            with pytest.raises(ProviderUnreachable) as failure:
+                if stream:
+                    async for _ in adapter.astream(_MESSAGES, model="synthetic"):
+                        pytest.fail("A malformed refusal must yield nothing")
+                else:
+                    await adapter.agenerate(_MESSAGES, model="synthetic")
+        finally:
+            await adapter._client.close()
+
+    assert calls and len(calls) == 1
+    assert url in str(failure.value)
+    assert "MORGAN_LLM_ENDPOINT" in str(failure.value)
+    logged = "".join(traceback.format_exception(failure.value))
+    assert _KEY not in logged and quote(_KEY, safe="") not in logged
+
+
+@pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("status", [307, 308])
 async def test_redirects_never_forward_a_prompt_to_another_endpoint(status, stream):
     destination_requests = []
