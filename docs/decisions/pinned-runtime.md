@@ -9,6 +9,11 @@ tree or a branch name. It exports that commit, records the revision and package-
 `_runtime_build.json`, builds an ordinary wheel, and materializes its resolved binary dependencies.
 The bundle contains wheel bytes, pinned `requirements.txt` with SHA256 hashes, and `bundle.json`.
 Dirty/untracked working-tree files are excluded. No installed environment is changed by build.
+New bundles also resolve `pip>=26.3,<27` into this exact wheel/hash lock. Installation first
+upgrades the venv's seeded pip from that verified offline wheel, then installs the complete lock.
+This avoids retaining Python's older ensurepip installer in an otherwise current runtime.
+Older bundles without a pip wheel remain usable with their original artifacts and seeded pip;
+rebuild them to obtain the corrected installer. No missing artifact is downloaded during install.
 
 ```sh
 python scripts/runtime_bundle.py build --repo /absolute/Morgan \
@@ -20,7 +25,10 @@ python scripts/runtime_bundle.py install --bundle /absolute/new-bundle \
 /absolute/new-runtime/bin/python -I -m morgan_brain.owner_input --help
 ```
 
-Use Python 3.12+ with pip to operate the builder. The commit must already exist in that local
+Use a current supported Python 3.12+ patch release with stable `pip>=26.3,<27` to operate the
+builder. Before creating a bundle or resolving dependencies, build checks pip through that
+same isolated interpreter and refuses an older, missing or unsupported installer. It never
+upgrades the host automatically. The commit must already exist in that local
 Git repository and contain `runtime_check`; build never fetches refs or guesses a revision.
 Build can download build tools and binary dependencies from public PyPI. It is an explicit code
 build of a trusted repository, not a sandbox for arbitrary build backends. Wheel resolution
@@ -64,6 +72,8 @@ A ready marker is evidence of a completed check, not a substitute for re-running
 `test_pinned_runtime.py` builds a small fixture wheel with the actual verifier and uses real
 venvs/pip. It covers committed-vs-dirty source, cwd/PYTHONPATH isolation, wrong revision,
 changed package/wheel/lock, partial install without a ready marker and recovery into a new path.
+It also checks that the actual pip version matches the pinned wheel and that the offline,
+hash-enforced installer upgrade precedes application installation.
 The fixture's owner/model entrypoints are inert, not an inference or full-agent measurement.
 A separate real Morgan bundle/install/proposal-free owner-input pilot must be recorded for the
 selected host before calling that runtime operational.

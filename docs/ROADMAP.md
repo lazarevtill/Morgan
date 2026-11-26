@@ -26,8 +26,11 @@ and does not provide an autonomous assistant, scheduling or external-action reco
 - **No assistant.** No cognitive loop, persona graph, skills, tools, streaming or REST
   gateway. The owner's AI tools are the assistant; Morgan is their memory, and its surfaces are
   a CLI and an MCP server.
-- **No services.** No worker, event bus, scheduler, Redis, Qdrant or MLflow. One process and
-  one SQLite file hold everything, and consolidation runs when asked.
+- **No installed services.** The memory core has no event bus, scheduler, Redis, Qdrant or
+  MLflow; its state is in one SQLite file and consolidation runs when asked. Explicit
+  bounded workers, supervision, local notes, planning and owner review are implemented
+  separately, with their own journals and finite authority. Rendered login-agent plans are
+  disabled and uninstalled. See the [supported workflow map](../README.md#explicit-workflows).
 
 The archived agent kernel that has all of the above is at the git tag
 **`legacy-v0.1.0-kernel`**, its designs and decision records under [`archive/`](archive/);

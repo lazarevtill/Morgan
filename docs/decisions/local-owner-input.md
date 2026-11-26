@@ -173,3 +173,14 @@ complete scripted source-preserving review, rejection, resume and explicit confi
 The first review still has eight dialog responses from the main menu through confirmation
 (no new dialog); the task title is deliberately entered by the owner. This is a controller
 measurement, not a physical macOS GUI trial or evidence of improved model extraction.
+
+## Credential admission during review
+
+New reviews preflight the exact source and proposed commitment with the same narrow
+credential admission used by memory capture, before saving a review or an `applying`
+attempt. Confirmation repeats that preflight for an existing, not-yet-started review.
+A refused source stays in the separate inbox (outside memory credential admission) and
+can be dismissed; a refused proposed title can be corrected through a fresh review.
+Neither case writes a source-only orphan or blocks later messages as an uncertain effect.
+Already-started `applying` attempts retain their fence and exact replay semantics; historical
+accepted evidence is not rewritten or rescanned. This is not a general secret detector.

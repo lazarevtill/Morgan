@@ -8,7 +8,8 @@ A **project-scoped memory for the owner's AI tools**, consolidated into facts by
 model. One SQLite database under `MORGAN_DATA_DIR` holds memories, facts, vectors
 (sqlite-vec), the FTS5 index, the entity index and session history. Two surfaces, the `morgan` CLI and the `morgan-mcp` server, are thin adapters over
 one `MemoryGate`. The model server is any OpenAI-compatible endpoint (llama-server by
-default). One process, no queue, no worker, no scheduler.
+default). The memory core has no queue, worker or scheduler. Optional finite task and
+owner workflows are explicitly invoked and keep separate execution journals.
 
 The optional `morgan_brain.tasks` SDK is a separate, explicitly invoked task-execution stage.
 It uses a caller-selected execution journal, never the memory database, and runs only registered
@@ -34,7 +35,7 @@ Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
 `docs/decisions/` (decisions, and what the code does about each). The archived agent kernel is
 at the tag `legacy-v0.1.0-kernel`, its designs under `docs/archive/`.
 
-## Package map (`morgan_brain/`, ~11,200 lines)
+## Package map (`morgan_brain/`)
 
 The tree is grouped by what a file does, so "where does a write go" and "where does a request
 come in" are answered by the directory names.
@@ -103,7 +104,7 @@ come in" are answered by the directory names.
   unreachable apart, `project` resolves the enclosing git repository once -- its name, its
   root and its remote, read by parsing the repository's own git config rather than spawning
   `git` -- and holds `classify`, `install_skill` writes the packaged `skill/SKILL.md`
-  into the coding agents installed here), `mcp_server.py` (five MCP tools over stdio or
+  into the coding agents installed here), `mcp_server.py` (seven MCP tools over stdio or
   streamable-HTTP, calling those same command handlers), and `network.py`, the bind guard
   that protects the HTTP one.
 
@@ -172,8 +173,9 @@ come in" are answered by the directory names.
   regression, and so is sending the owner to check a server that works.
 - **stdout is a protocol on both surfaces.** `--json` output and the MCP stdio transport are
   parsed by machines; all logs go to stderr. Never `print()` diagnostics from library code.
-- **Nothing runs a model unasked.** `ask` and `consolidate` call the chat model; nothing else
-  does, and nothing runs on a schedule. Consolidation is on demand (or the owner's own cron).
+- **Nothing runs a model unasked.** `ask` and `consolidate` call the chat model;
+  optional proposal, guided-plan and owner-model workflows require explicit invocation too.
+  The memory core runs no model on a schedule. Consolidation is on demand (or the owner's own cron).
   Nothing embeds at open, in a hook or in a sweep. The active embedding space is fingerprinted
   at a process's first embedding call, riding on that call, or by `morgan migrate` once its
   wave has committed; `doctor` embeds when it is run, and `doctor --vectors` re-embeds a

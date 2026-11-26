@@ -1,6 +1,8 @@
 # Architecture
 
-One package, `morgan_brain`, one process, one SQLite file. Two surfaces over one gate.
+The memory core is one package, `morgan_brain`, with one SQLite file and two surfaces
+over one gate. Explicit task, note and owner workflows keep separate execution journals;
+finite workers and model guardians may own subprocesses. None installs a service.
 
 See [memory guarantees and reader boundaries](MEMORY_GUARANTEES.md) and the
 [reader capability contract](READER_CAPABILITY.md) for the limits of scoped evidence,
@@ -40,7 +42,7 @@ morgan-mcp ──┘        │                 ├─ FTS5 keyword index      o
 | `app/chatgpt_import.py` | Seeds memory from a ChatGPT export. Splits a turn too long for the embedding context, routes a fifth of conversations to a holdout project the optimizer can never mine, and runs the import canary. |
 | `app/chat.py` | One turn: recall → prompt → answer → remember both halves, attributed. The one use-case both surfaces share. |
 | `surfaces/cli/` | `morgan`: `__main__` parses and dispatches, `commands` answers, `maintenance` answers `snapshot`, `restore` and `migrate`, `payloads` shapes the result, `render` prints it, `doctor` diagnoses the install by reading only -- the file opened read-only, no store built, no table created, no migration step run -- and probes the chat and embedding servers separately, telling reachable, slow, refused and unreachable apart, `project` names the project and reads its repository's remote, `install_skill` teaches the coding agents installed here when to use Morgan. Project = the enclosing git repository's name; a linked worktree counts as the repository it came from; outside a repository it is `personal`. One resolution answers both the name and the repository, and the remote comes from parsing that repository's git config -- `origin`, else the sole remote, else none -- never from spawning `git`. The answer is three-valued: a remote, no remote, or a config that could not be read, which records nothing rather than relabelling the project. `project.classify` labels it against `MORGAN_WORK_REMOTE_GLOBS`, and `remember`, `ask` and `consolidate` record that label, the remote and the root when the project was named by the repository they ran in. |
-| `surfaces/mcp_server.py` | `morgan-mcp`: `remember`, `recall`, `facts`, `forget`, `ask_morgan` over stdio or streamable-HTTP with a bearer token. Calls the CLI's command handlers; `project` is a tool argument, and a call without one works in `personal` (`remember` says so, with `project_defaulted`). Every tool declares MCP's read-only, destructive, idempotent and open-world hints; only `recall` and `facts` claim read-only. |
+| `surfaces/mcp_server.py` | `morgan-mcp`: seven tools: `remember`, `recall`, `facts`, `forget`, `ask_morgan`, `evidence`, `inspect_context` over stdio or streamable-HTTP with a bearer token. Calls the CLI's command handlers; `project` is a tool argument, and a call without one works in `personal` (`remember` says so, with `project_defaulted`). Every tool declares MCP's read-only, destructive, idempotent and open-world hints; `recall`, `facts`, `evidence` and `inspect_context` claim read-only. Exact evidence and context inspection use an existing database read-only without model calls or migrations. |
 | `surfaces/network.py` | The bind guard: no listener beyond loopback without a real key. |
 
 ## Recall
