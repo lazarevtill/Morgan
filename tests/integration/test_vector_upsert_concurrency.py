@@ -42,7 +42,9 @@ def _vector(i: int, writer: int) -> list[float]:
 def _write_all(path: str, writer: int, start: Barrier, outcomes: Queue[str]) -> None:
     """Runs in a spawned process: upsert every id, then report how it went."""
     try:
-        conn = open_db(path)
+        # Durable commit bursts can keep the other writer contending for several seconds.
+        # Give acquisition the same budget as this atomicity test's existing worker deadline.
+        conn = open_db(path, busy_timeout_ms=_TIMEOUT_S * 1000)
         index = SqliteVectorIndex(conn, dim=_DIM)
         start.wait(timeout=_TIMEOUT_S)
 

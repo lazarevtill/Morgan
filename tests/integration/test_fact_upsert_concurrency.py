@@ -50,7 +50,9 @@ def _fact(subject: int, origin: str) -> TemporalFact:
 def _write_all(path: str, writer: int, start: Barrier, outcomes: Queue[str]) -> None:
     """Runs in a spawned process: assert a new value for every subject, then report."""
     try:
-        conn = open_db(path)
+        # Durable commit bursts can keep the other writer contending for several seconds.
+        # Give acquisition the same budget as this atomicity test's existing worker deadline.
+        conn = open_db(path, busy_timeout_ms=_TIMEOUT_S * 1000)
         store = SqliteTemporalStore(conn=conn)
         start.wait(timeout=_TIMEOUT_S)
 
