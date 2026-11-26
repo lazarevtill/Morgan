@@ -1,7 +1,7 @@
 """OpenAI-compatible adapter — wraps the official ``openai`` SDK with a configurable base_url.
 
 This covers Ollama /v1, vLLM, llama.cpp, LM Studio, OpenRouter, and remote OpenAI.
-SDK internal retries are disabled (max_retries=0) — fallback is handled by RoleFallback.
+SDK internal retries are disabled (max_retries=0); chat calls are single attempts.
 
 Implements the ``ChatClient`` protocol. Embeddings live in ``embeddings.py``.
 """
@@ -9,9 +9,12 @@ Implements the ``ChatClient`` protocol. Embeddings live in ``embeddings.py``.
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
+import httpx
+
+from morgan_brain.providers.redaction import ResponseRedactor
 from morgan_brain.providers.request_budget import (
     ChatRequestOptions,
     chat_request_payload,
@@ -20,11 +23,13 @@ from morgan_brain.providers.request_budget import (
 from morgan_brain.providers.wire import (
     ChatMessage,
     ChatResult,
+    ProviderRefused,
     ProviderUnreachable,
     StreamDelta,
     ToolCall,
     ToolSpec,
     Usage,
+    is_refusal,
 )
 
 
@@ -54,7 +59,7 @@ def _from_openai_tool_calls(raw_tool_calls: Any) -> list[ToolCall]:
 
 
 class OpenAICompatAdapter:
-    """ChatClient + Embedder over the OpenAI-compatible REST API.
+    """ChatClient over the OpenAI-compatible REST API.
 
     Args:
         base_url: Base URL of the OpenAI-compatible endpoint (e.g. ``http://localhost:8081/v1``).
@@ -86,15 +91,63 @@ class OpenAICompatAdapter:
         self._provider = provider
         self._base_url = base_url
         self._setting = setting
+        self._redact = ResponseRedactor(api_key)
+        # Early 1.x SDKs accept httpx clients but do not export their own default client.
+        # New SDKs may use another transport package, so prefer the SDK's public factory.
+        http_client_factory: Callable[..., Any] = getattr(
+            openai, "DefaultAsyncHttpxClient", httpx.AsyncClient
+        )
         self._client = openai.AsyncOpenAI(
             base_url=base_url,
             api_key=api_key,
             max_retries=0,
             timeout=timeout,
+            # The SDK defaults to following redirects, which can forward the complete
+            # prompt to a different endpoint. Treat them as refusals, like embeddings.
+            http_client=http_client_factory(follow_redirects=False),
         )
         # Connection refused, DNS failure, and a request that timed out all subclass this
         # one SDK error. Held on the instance so the SDK stays imported in exactly one place.
         self._connection_error: type[Exception] = openai.APIConnectionError
+        self._timeout_error: type[Exception] = openai.APITimeoutError
+        self._status_error = openai.APIStatusError
+        self._api_error = openai.APIError
+
+    def _status_failure(self, status: int, body: str) -> ProviderRefused | ProviderUnreachable:
+        """Keep HTTP failures actionable without exposing a gateway's credential echo."""
+        detail = self._redact(body)
+        if is_refusal(status):
+            return ProviderRefused(
+                self._base_url,
+                status,
+                "MORGAN_LLM_API_KEY" if status in (401, 403) else self._setting,
+                detail=detail,
+            )
+        return ProviderUnreachable(
+            self._base_url,
+            f"HTTP {status}",
+            setting=self._setting,
+            outcome="slow",
+            verdict=f"answered with HTTP {status}" + (f" ({detail})" if detail else ""),
+        )
+
+    def _connection_failure(
+        self, exc: Exception, *, connected: bool = False
+    ) -> ProviderUnreachable:
+        detail = self._redact(str(exc)) or type(exc).__name__
+        timed_out = isinstance(exc, (self._timeout_error, httpx.TimeoutException))
+        verdict = None
+        if timed_out:
+            verdict = f"did not answer in time ({detail})"
+        elif connected:
+            verdict = f"dropped its answer while streaming ({detail})"
+        return ProviderUnreachable(
+            self._base_url,
+            detail,
+            setting=self._setting,
+            outcome="slow" if timed_out or connected else "unreachable",
+            verdict=verdict,
+        )
 
     @property
     def request_options(self) -> ChatRequestOptions | None:
@@ -126,8 +179,13 @@ class OpenAICompatAdapter:
 
         try:
             response = await self._client.chat.completions.create(**kwargs)
-        except self._connection_error as exc:
-            raise ProviderUnreachable(self._base_url, str(exc), setting=self._setting) from exc
+        except self._status_error as exc:
+            # SDK exception text can include the unredacted response body. Suppress that
+            # cause too: FastMCP logs tool exceptions, not just the safe result we return.
+            raise self._status_failure(exc.status_code, exc.response.text) from None
+        except (self._connection_error, httpx.TimeoutException) as exc:
+            # Early 1.x SDKs re-raise httpx read timeouts instead of APITimeoutError.
+            raise self._connection_failure(exc) from None
         choice = response.choices[0]
         msg = choice.message
 
@@ -175,51 +233,69 @@ class OpenAICompatAdapter:
         )
         kwargs["stream"] = True
 
+        connected = False
         try:
             stream = await self._client.chat.completions.create(**kwargs)
-        except self._connection_error as exc:
-            raise ProviderUnreachable(self._base_url, str(exc), setting=self._setting) from exc
-        async with stream:
-            async for chunk in stream:
-                if not chunk.choices:
-                    # usage chunk (some providers send a final chunk with usage only)
-                    if hasattr(chunk, "usage") and chunk.usage:
+            connected = True
+            async with stream:
+                async for chunk in stream:
+                    if not chunk.choices:
+                        # usage chunk (some providers send a final chunk with usage only)
+                        if hasattr(chunk, "usage") and chunk.usage:
+                            yield StreamDelta(
+                                kind="usage",
+                                usage=Usage(
+                                    input_tokens=chunk.usage.prompt_tokens or 0,
+                                    output_tokens=chunk.usage.completion_tokens or 0,
+                                ),
+                            )
+                        continue
+
+                    choice = chunk.choices[0]
+                    delta = choice.delta
+
+                    # Text delta
+                    if delta.content:
+                        yield StreamDelta(kind="text_delta", text=delta.content)
+
+                    # Tool call delta
+                    if delta.tool_calls:
+                        for tc_delta in delta.tool_calls:
+                            fn = tc_delta.function
+                            try:
+                                args: dict[str, Any] = (
+                                    json.loads(fn.arguments) if fn.arguments else {}
+                                )
+                            except (json.JSONDecodeError, TypeError):
+                                args = {}
+                            yield StreamDelta(
+                                kind="tool_call_delta",
+                                tool_call=ToolCall(
+                                    id=tc_delta.id or "",
+                                    name=fn.name or "",
+                                    arguments=args,
+                                ),
+                            )
+
+                    # Finish
+                    if choice.finish_reason:
                         yield StreamDelta(
-                            kind="usage",
-                            usage=Usage(
-                                input_tokens=chunk.usage.prompt_tokens or 0,
-                                output_tokens=chunk.usage.completion_tokens or 0,
-                            ),
+                            kind="finish",
+                            finish_reason=choice.finish_reason,
                         )
-                    continue
-
-                choice = chunk.choices[0]
-                delta = choice.delta
-
-                # Text delta
-                if delta.content:
-                    yield StreamDelta(kind="text_delta", text=delta.content)
-
-                # Tool call delta
-                if delta.tool_calls:
-                    for tc_delta in delta.tool_calls:
-                        fn = tc_delta.function
-                        try:
-                            args: dict[str, Any] = json.loads(fn.arguments) if fn.arguments else {}
-                        except (json.JSONDecodeError, TypeError):
-                            args = {}
-                        yield StreamDelta(
-                            kind="tool_call_delta",
-                            tool_call=ToolCall(
-                                id=tc_delta.id or "",
-                                name=fn.name or "",
-                                arguments=args,
-                            ),
-                        )
-
-                # Finish
-                if choice.finish_reason:
-                    yield StreamDelta(
-                        kind="finish",
-                        finish_reason=choice.finish_reason,
-                    )
+        except self._status_error as exc:
+            raise self._status_failure(exc.status_code, exc.response.text) from None
+        except (self._connection_error, httpx.TimeoutException) as exc:
+            # The SDK also wraps transport failures raised after the response headers.
+            # Previously yielded deltas remain delivered; there is no retry or replay.
+            raise self._connection_failure(exc, connected=connected) from None
+        except self._api_error as exc:
+            # A 200 SSE response may contain an error event, including a credential echo.
+            detail = self._redact(str(exc)) or type(exc).__name__
+            raise ProviderUnreachable(
+                self._base_url,
+                detail,
+                setting=self._setting,
+                outcome="slow",
+                verdict=f"answered with a streaming error ({detail})",
+            ) from None

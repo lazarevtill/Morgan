@@ -37,6 +37,7 @@ from morgan_brain.guided_availability import (
 from morgan_brain.guided_renewal import RenewalUpdate
 from morgan_brain.local_notes import NoteWorkspace, StopRequested
 from morgan_brain.memory.continuation_context import ineligible
+from morgan_brain.memory.credentials import refuse_credentials
 from morgan_brain.memory.gate import MemoryGate
 from morgan_brain.model_cycle import ModelCycle, managed_model
 from morgan_brain.providers.note_probe import ProbeFailure
@@ -360,6 +361,8 @@ def _interact(workspace: NoteWorkspace, session: Session) -> None:
         selection = _select(note, proposal, session)
         if selection is None:
             return
+        for capture in selection:
+            refuse_credentials(capture.commitment.model_dump_json())
         session.captures = selection
         _save(workspace, session)
     if not session.captured:
@@ -417,12 +420,14 @@ def _interact(workspace: NoteWorkspace, session: Session) -> None:
         if item.status != "open":
             print("Задача уже закрыта / Task already closed")
             continue
-        session.pending_done = Capture(
+        completed = Capture(
             event_id=f"guided-done-{uuid4().hex}",
             effective_at=datetime.now(UTC).isoformat(),
             commitment=item.model_copy(update={"status": "done"}),
             parents=[identity],
         )
+        refuse_credentials(completed.commitment.model_dump_json())
+        session.pending_done = completed
         _save(workspace, session)
         asyncio.run(_capture(workspace, session, session.pending_done))
         session.pending_done = None
@@ -589,6 +594,8 @@ def _edit_availability(
     if not _confirm_availability(session, update):
         print("Отменено без записи / Cancelled without writing")
         return
+    refuse_credentials(update.source_text)
+    refuse_credentials(update.interval.model_dump_json())
     session.pending_availability = update
     _save(workspace, session)
     asyncio.run(_apply_availability(workspace, session))
@@ -691,6 +698,8 @@ def _renew(workspace: NoteWorkspace, session: Session, current: tuple[str, Commi
     if not _confirm_renewal(session, update):
         print("Отменено без записи / Cancelled without writing")
         return
+    refuse_credentials(update.source_text)
+    refuse_credentials(update.after.model_dump_json())
     session.pending_renewal = update
     _save(workspace, session)
     asyncio.run(_apply_renewal(workspace, session))

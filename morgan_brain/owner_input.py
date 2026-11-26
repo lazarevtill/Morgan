@@ -47,6 +47,7 @@ from morgan_brain.guided_plan import (
 )
 from morgan_brain.guided_renewal import RenewalUpdate
 from morgan_brain.local_notes import NoteWorkspace, StopRequested
+from morgan_brain.memory.credentials import refuse_credentials
 from morgan_brain.owner_search import search, task_state
 from morgan_brain.surfaces.cli.commands import cmd_remember
 from morgan_brain.surfaces.cli.proposal_review import Proposal
@@ -163,6 +164,20 @@ def _submit(inbox: Inbox, identity: str, text: str) -> Message:
     return message
 
 
+def _check_review_admission(
+    source: str, capture: guided.Capture | None, renewal: RenewalUpdate | None
+) -> None:
+    """Preflight both new writes before a review can become an unrevisable attempt."""
+    if renewal is not None:
+        source, commitment = renewal.source_text, renewal.after
+    elif capture is not None:
+        commitment = capture.commitment
+    else:
+        raise ValueError("missing reviewed capture")
+    refuse_credentials(source)
+    refuse_credentials(commitment.model_dump_json())
+
+
 async def _review(
     workspace: NoteWorkspace,
     session: guided.Session,
@@ -233,6 +248,7 @@ async def _review(
                 status="open",
             ),
         )
+    _check_review_admission(message.text, capture, renewal)
     message.capture, message.renewal = capture, renewal
     message.digest = _digest(inbox, message)
     message.state = "reviewed"
@@ -304,6 +320,10 @@ async def _confirm(
         await guided_check_renewal(workspace, session, message.renewal)
     else:
         _checked_capture(session, message)
+    if message.state == "reviewed":
+        _check_review_admission(message.text, message.capture, message.renewal)
+    # An applying review may be an exact historical replay, which the gate must resolve
+    # without rescanning already accepted evidence. Never reset or edit its attempt marker.
     message.state = "applying"
     _save(workspace, inbox)
     if message.renewal is not None:

@@ -68,12 +68,25 @@ def env_files_for(surface: Surface) -> tuple[Path, ...]:
     return (user, Path.cwd() / ".env") if surface == "cli" else (user,)
 
 
+def _expand_path(value: str, setting: str) -> Path:
+    """An unresolved home is invalid configuration, not a library traceback."""
+    try:
+        return Path(value).expanduser()
+    except RuntimeError:
+        # pathlib uses RuntimeError for an unknown ~user (or unavailable current home).
+        # ValueError makes this a normal Pydantic validation failure; omit the input path.
+        raise ValueError(f"Cannot resolve the home directory in {setting}") from None
+
+
 class Settings(BaseSettings):
     # No env_file here: which files are read is the surface's, passed at construction by
     # settings_for(). A Settings built directly reads the environment only.
     model_config = SettingsConfigDict(
         env_prefix="MORGAN_",
         extra="ignore",
+        # A model-level validation error otherwise prints all supplied settings,
+        # including provider and inbound API keys, in startup diagnostics.
+        hide_input_in_errors=True,
     )
 
     # --- Identity (single-owner now; multi-tenant-ready) ---
@@ -277,17 +290,17 @@ class Settings(BaseSettings):
     def _fill_data_dir_defaults(self) -> Settings:
         """Expand ``~`` in data_dir and derive temporal_db_url / snapshot_dir from it when not
         overridden. Also expands ``~`` in each of ``code_roots``, the same way."""
-        self.data_dir = str(Path(self.data_dir).expanduser())
+        self.data_dir = str(_expand_path(self.data_dir, "MORGAN_DATA_DIR"))
         if not self.temporal_db_url:
             # as_posix(): the path component of a URL uses forward slashes on every
             # platform. Interpolating the native path mixed separators on Windows.
             self.temporal_db_url = f"sqlite:///{(Path(self.data_dir) / 'morgan.db').as_posix()}"
         self.snapshot_dir = str(
-            Path(self.snapshot_dir).expanduser()
+            _expand_path(self.snapshot_dir, "MORGAN_SNAPSHOT_DIR")
             if self.snapshot_dir
             else Path(self.data_dir) / "snapshots"
         )
-        self.code_roots = [str(Path(p).expanduser()) for p in self.code_roots]
+        self.code_roots = [str(_expand_path(p, "MORGAN_CODE_ROOTS")) for p in self.code_roots]
         return self
 
 

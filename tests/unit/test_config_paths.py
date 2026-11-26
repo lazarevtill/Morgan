@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from morgan_brain.config import Settings, default_data_dir, user_config_file
 
@@ -53,3 +54,14 @@ def test_database_url_uses_url_separators_on_every_platform(tmp_path: Path):
 
     assert "\\" not in s.temporal_db_url
     assert s.temporal_db_url == f"sqlite:///{(tmp_path / 'morgan.db').as_posix()}"
+
+
+@pytest.mark.parametrize("field", ["data_dir", "snapshot_dir", "code_roots"])
+def test_unresolved_home_errors_do_not_echo_other_settings(field):
+    path = "~morgan-no-such-owner-9d198f/private-invalid-value"
+    values = {field: [path] if field == "code_roots" else path}
+    with pytest.raises(ValidationError) as failure:
+        Settings(api_key="k9token", **values)
+    assert f"MORGAN_{field.upper()}" in str(failure.value)
+    assert "k9token" not in str(failure.value)
+    assert "private-invalid-value" not in str(failure.value)

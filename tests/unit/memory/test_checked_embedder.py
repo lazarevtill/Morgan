@@ -254,6 +254,118 @@ async def test_a_mismatch_is_raised_again_on_the_next_call(conn, settings):
         await embedder.embed("second")
 
 
+@pytest.mark.parametrize("recorded", [False, True])
+async def test_a_verified_database_does_not_prove_another_database(
+    conn, settings, tmp_path, recorded
+):
+    _a_space_with_a_recorded_fingerprint(conn, dims=4)
+    await CheckedEmbedder(
+        _recording_embedder(dims=4),
+        conn=conn,
+        settings=settings,
+        endpoint=_URL,
+        setting=_SETTING,
+    ).embed("first database")
+
+    other = build_memory_module(str(tmp_path / "other.db"))._conn
+    try:
+        space = spaces.register(
+            other, model="model-b", dims=4, table_name="vec_items", clock=_clock
+        )
+        assert space.id == spaces.active(conn).id
+        if recorded:
+            spaces.record_fingerprint(
+                other, space.id, [_unit("model-b", s, 4) for s in fingerprint.STRINGS], clock=_clock
+            )
+        before = spaces.active(other).fingerprint
+        embedder = CheckedEmbedder(
+            _recording_embedder(dims=4),
+            conn=other,
+            settings=settings,
+            endpoint=_URL,
+            setting=_SETTING,
+            sample=lambda n: [("old memory", _unit("model-b", "old memory", 4))],
+        )
+
+        with pytest.raises(EmbeddingSpaceMismatch):
+            await embedder.embed("second database")
+        assert spaces.active(other).fingerprint == before
+    finally:
+        other.close()
+
+
+async def test_a_looser_check_does_not_prove_a_stricter_tolerance(conn, settings):
+    _a_space_with_a_recorded_fingerprint(conn, dims=4)
+    answers = {}
+    for text in fingerprint.STRINGS:
+        vector = _unit("model-a", text, 4)
+        perpendicular = [-vector[1], vector[0], -vector[3], vector[2]]
+        answers[text] = [v + 0.2 * p for v, p in zip(vector, perpendicular, strict=True)]
+    inner = _embedder_returning(answers)
+    await CheckedEmbedder(
+        inner,
+        conn=conn,
+        settings=settings.model_copy(update={"embedding_fingerprint_tolerance": 0.95}),
+        endpoint=_URL,
+        setting=_SETTING,
+    ).embed("loose check")
+
+    with pytest.raises(EmbeddingSpaceMismatch):
+        await CheckedEmbedder(
+            inner, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING
+        ).embed("strict check")
+
+
+async def test_a_failed_canary_revokes_cached_trust_until_the_model_recovers(conn, settings):
+    _a_space_with_a_recorded_fingerprint(conn, dims=4)
+    inner = _recording_embedder(dims=4)
+    embedder = CheckedEmbedder(inner, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING)
+    await embedder.embed("before model change")
+    inner._model = "model-b"
+
+    with pytest.raises(EmbeddingSpaceMismatch):
+        await embedder.check()
+    with pytest.raises(EmbeddingSpaceMismatch):
+        await embedder.embed("still wrong")
+
+    inner._model = "model-a"
+    assert await embedder.embed("recovered") == _unit("model-a", "recovered", 4)
+    await embedder.embed("cached again")
+    assert inner.calls[-1] == ["cached again"]
+
+
+@pytest.mark.parametrize("winning_model", ["model-a", "model-b"])
+async def test_a_concurrent_first_check_cannot_replace_the_winning_fingerprint(
+    conn, settings, tmp_path, monkeypatch, winning_model
+):
+    space = spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
+    inner = _recording_embedder(dims=4)
+    original_embed = inner.embed_batch
+    winner = [_unit(winning_model, s, 4) for s in fingerprint.STRINGS]
+    other = build_memory_module(str(tmp_path / "m.db"))._conn
+
+    async def finish_after_another_check(texts):
+        # The first request has already sampled the unrecorded space. While it
+        # awaits the model, another context completes the initial check.
+        spaces.record_fingerprint(other, space.id, winner, clock=_clock)
+        return await original_embed(texts)
+
+    monkeypatch.setattr(inner, "embed_batch", finish_after_another_check)
+    try:
+        embedder = CheckedEmbedder(
+            inner, conn=conn, settings=settings, endpoint=_URL, setting=_SETTING
+        )
+        if winning_model == "model-b":
+            with pytest.raises(EmbeddingSpaceMismatch):
+                await embedder.embed("later request")
+        else:
+            assert await embedder.embed("later request") == _unit("model-a", "later request", 4)
+        assert spaces.active(conn).fingerprint == fingerprint.pack(winner)
+        assert spaces.active(conn).fingerprint_recorded_at == _clock().isoformat()
+    finally:
+        other.close()
+
+
 async def test_a_fresh_space_with_no_rows_records_its_fingerprint_directly(conn, settings):
     space = spaces.register(conn, model="m", dims=4, table_name="vec_items", clock=_clock)
 

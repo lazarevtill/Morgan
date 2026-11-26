@@ -496,8 +496,18 @@ class RunLimits:
 
     def __post_init__(self) -> None:
         """Reject unbounded, nonfinite, and excessively aggressive polling requests."""
+        if any(
+            isinstance(value, bool) or not isinstance(value, int)
+            for value in (self.max_actions, self.max_cycles)
+        ):
+            raise ValueError("action and cycle limits require integers")
         if not 1 <= self.max_actions <= 16 or not 1 <= self.max_cycles <= 60:
             raise ValueError("limits require 1..16 actions and 1..60 cycles")
+        if any(
+            isinstance(value, bool) or not isinstance(value, (int, float))
+            for value in (self.seconds, self.poll_seconds)
+        ):
+            raise ValueError("runtime and polling limits require numeric durations")
         if not 0 < self.seconds <= 3600 or not 0.05 <= self.poll_seconds <= 60:
             raise ValueError("runtime must be <=3600s; polling interval must be 0.05..60s")
 

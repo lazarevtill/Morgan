@@ -19,6 +19,8 @@ import os
 import sys
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from morgan_brain.app.chatgpt_import import ImportStopped
 from morgan_brain.app.strict_context import StrictContextError
 from morgan_brain.config import Settings, settings_for
@@ -415,7 +417,26 @@ def main(argv: list[str] | None = None) -> int:
             stdout=sys.stdout,
             stderr=sys.stderr,
         )
-    settings = settings_for("cli")
+    try:
+        settings = settings_for("cli")
+    except (ValueError, OSError) as exc:
+        # Configuration is built before dispatch, but --json is still a protocol here.
+        # ValidationError's default text includes input values, which may be private.
+        if isinstance(exc, ValidationError):
+            errors = exc.errors(include_input=False, include_context=False, include_url=False)
+            detail = "; ".join(
+                f"{'MORGAN_' + str(error['loc'][0]).upper() if error['loc'] else 'settings'}: "
+                f"{error['msg']}"
+                for error in errors
+            )
+        else:
+            detail = str(exc)
+        message = f"Invalid configuration: {detail}"
+        if args.json:
+            print(json.dumps({"error": message}, ensure_ascii=False))
+        else:
+            print(f"error: {message}", file=sys.stderr)
+        return 1
     # getattr: not every verb takes --project. `import` decides the destination from the
     # holdout rule, so it deliberately has no such flag to read.
     named = getattr(args, "project", None)
