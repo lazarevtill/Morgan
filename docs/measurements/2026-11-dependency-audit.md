@@ -190,15 +190,16 @@ resolves the observed affected checks; hosted CI supplies the subsequent whole-t
 
 Trivy 0.76.2 used its database updated at `2026-11-26T19:04:08Z`, without ignoring
 unfixed vulnerabilities. The initial patched-Python image still had pip 25.0.1 and
-225 Debian package/CVE matches (101 distinct CVEs). Updating pip and the three available
+225 Debian package/advisory matches (101 distinct advisory IDs). Updating pip and the three available
 Debian packages removes all six pip findings and the libzstd1 / passwd / login.defs
 findings (CVE-2026-124851 and CVE-2026-135901).
 
 The final local image is
 `sha256:74c29bff0bfc677dc539d79371059534a4d8478025caff1298af329d644db4af`.
-It still has **222 Debian matches, 99 distinct CVEs: 53 HIGH, 79 MEDIUM, 77 LOW,
+It still has **222 Debian matches, 99 distinct advisory IDs: 53 HIGH, 79 MEDIUM, 77 LOW,
 13 UNKNOWN and zero CRITICAL**. No match has an available fixed trixie version in this
-scan. The 53 HIGH matches represent 13 distinct CVEs, repeated across binary packages:
+scan. Those 99 IDs comprise 88 CVEs and 11 Debian `TEMP-*` tracking identifiers. The
+53 HIGH matches represent 13 distinct CVEs, repeated across binary packages:
 
 | Source package | HIGH matches | Primary Debian tracking |
 | --- | --- | --- |
