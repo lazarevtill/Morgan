@@ -288,8 +288,9 @@ task journals remain outside it. See `docs/decisions/credential-admission.md`.
 - `recall` declines to answer only when `MORGAN_RECALL_FLOOR_MARGIN` is set. The value belongs
   to the embedding model: 0.08 for `qwen3-embedding:8b`, measured on a 3,010-memory archive
   with 128 labelled questions (`docs/measurements/2026-09-phase0-baseline.md`); 0.11 for
-  Qwen3-Embedding-0.6B, measured on the bundled probes and on a real archive. Other models are
-  unmeasured.
+  Qwen3-Embedding-0.6B is recorded in the real-archive fit preserved in
+  `docs/measurements/historical-retrieval-summary.md`. Its raw run artifacts were not located
+  in this repository. Other models are unmeasured.
 - `consolidate` reads a project's episodics with `recall(text="", top_k=50)`: the memories
   nearest an empty query's embedding, not the most recent, and fewer than 50 when the project
   holds facts, which take up to half of those places. With `MORGAN_RECALL_FLOOR_MARGIN` set,
@@ -327,8 +328,9 @@ task journals remain outside it. See `docs/decisions/credential-admission.md`.
   a name only where the text capitalises it away from a sentence, clause or line start, so a
   name that only ever opens sentences in a memory is not indexed. Code in a memory still
   yields words like `true` and `error`.
-- A superseded memory outranks the current one in 7 of the 10 knowledge-update probes
-  (`qwen3-embedding:8b`). These probes supply no explicit revision edges. Fusion is rank-only
+- In the November 26 run, a superseded memory outranks the current one in 7 of the 10
+  knowledge-update probes (`qwen3-embedding:8b`). These probes supply no explicit revision edges.
+  Fusion is rank-only
   and carries no recency term; implemented revision filtering handles explicit corrections only.
 - Multi-hop questions are not answered. Recall ranks memories and has no mechanism to
   compose two of them. The November 26 run measured recall@8 of 0.62 against 0.95 for

@@ -65,6 +65,8 @@ and `support_event_ids`; fetch those IDs in a subsequent bounded call. No suppor
 expanded automatically. Legacy facts can have no support IDs; missing support remains uncertainty.
 Event `created_at` and `recorded_at` distinguish asserted time from ingestion time.
 
+### Fact source protection
+
 An unknown or inferred fact cannot close a user statement selected as a predecessor, overlap
 its validity interval, or replace an unclosed user statement under the same owner/project,
 subject and predicate. This includes backdated inferences and future user intervals. Ended user

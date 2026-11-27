@@ -10,11 +10,18 @@ may require its matching Git revision. No archived feature is implied to exist i
 
 ## Revision map
 
-- `legacy-v0.1.0-kernel`: original design spec, local-first reshape, dual-brain/pattern-register
-  design, calibration scoring, and the self-learning and platform-architecture decisions.
-- `legacy-v0.0.4-full`: personal-agent-OS vision, horizons, ports, deployment/sync, voice,
-  platform foundation, self-evolving-memory research and text end-to-end benchmark.
-- `legacy-v0.0.3-monolith`: an earlier platform build, retained for source archaeology.
+Checked against the tag trees on 2026-11-27; matching filenames identify documents, not a promise
+that later edits or proposals were implemented in that runtime.
+
+- `legacy-v0.0.4-full` (`c7452b7`) contains all 18 June documents listed below under
+  `docs/superpowers/specs/`, including phases 2/3, wave 0.5, ecosystem research, voice B and fusion.
+- `legacy-v0.1.0-kernel` (`87f7f2c`) retains 14 of those June documents under `docs/archive/`.
+  The original design spec, platform-architecture decision, self-learning decision and calibration
+  scoring document are not present under their current filenames; use the earlier tag for them.
+- Neither tag contains the August reshape or dual-brain document under its current filename.
+  Use those documents' Git history for their source context.
+- `legacy-v0.0.3-monolith` (`193bc9d`) is an earlier source snapshot; none of these 20 document
+  filenames is present there.
 
 ## Documents
 

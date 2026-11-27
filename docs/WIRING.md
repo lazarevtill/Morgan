@@ -230,16 +230,24 @@ docker compose up -d
 ```
 
 The image binds to `0.0.0.0` and refuses startup without the key. Protect the published port
-with your network policy. To upgrade with a migration:
+with your network policy. For an upgrade, follow [the recovery procedure](OPERATIONS.md#upgrade-and-recover).
+Stop other database users, then snapshot using the existing image before building its replacement:
 
 ```bash
-docker compose build
 docker compose stop morgan-mcp
-docker compose run --rm morgan-mcp morgan migrate
+docker compose run --rm --no-deps morgan-mcp morgan snapshot
+docker compose build
+docker compose run --rm --no-deps morgan-mcp morgan migrate --dry-run
+```
+
+Retain the old image and snapshot. Review the pending steps before applying them and restarting:
+
+```bash
+docker compose run --rm --no-deps morgan-mcp morgan migrate
 docker compose up -d
 ```
 
-Stop other processes using the same database as well. Snapshots remain in `./data/snapshots`.
+Snapshots remain in `./data/snapshots` unless you override the configured directory.
 The [dependency audit](measurements/2026-11-dependency-audit.md) records the image's known
 unresolved findings; a pinned base image is not a claim of zero vulnerabilities.
 

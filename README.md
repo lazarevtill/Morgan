@@ -84,7 +84,7 @@ For HTTP authentication and remote access, see [operations](docs/OPERATIONS.md).
 
 ## Explicit workflows
 
-| Workflow | Python entry point | Guide |
+| Workflow | Entry point | Guide |
 | --- | --- | --- |
 | Trusted task handlers, finite batches and recovery receipts | `morgan_brain.tasks` SDK | [Task execution](docs/decisions/explicit-task-execution.md) |
 | Approved local notes, delivery windows and bounded supervision | `morgan_brain.local_notes_cli` | [Local notes](docs/decisions/local-approved-notes.md) |
@@ -93,6 +93,7 @@ For HTTP authentication and remote access, see [operations](docs/OPERATIONS.md).
 | Finite local model drafting | `morgan_brain.model_cycle` | [Model lifecycle](docs/decisions/bounded-model-cycle.md) |
 | Explicit local alerts and reviewed push messages | `morgan_brain.local_alert_cli`, `morgan_brain.owner_push_cli` | [Owner channels](docs/decisions/owner-channel-hosting.md) |
 
+Run the listed modules with `python -m MODULE`; `morgan_brain.tasks` is an imported SDK.
 These workflows do not install services or renew their authority. Memory content does not
 authorize execution. A push server accepting a message does not prove that a person received it.
 

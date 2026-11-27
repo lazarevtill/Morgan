@@ -45,15 +45,17 @@ Clients use `/mcp` and `Authorization: Bearer TOKEN`, with the same token. Keep 
 out of checked-in client configuration. Follow the client's supported secret-storage mechanism;
 a JSON string containing a shell variable is not automatically expanded by every client.
 
-For Claude Code, with the token supplied in your shell environment:
+For Claude Code behind a TLS proxy on port 443, with the token supplied in your shell environment:
 
 ```bash
 claude mcp add -s user --transport http morgan https://YOUR_HOST/mcp \
-  --header "Authorization: Bearer ${MORGAN_API_KEY}"
+  --header "Authorization: Bearer ${MORGAN_API_KEY:?Set MORGAN_API_KEY first}"
 ```
 
 The shell expands this variable before registration; treat the resulting client configuration
-as credential-bearing. Replace `YOUR_HOST` with the protected server address.
+as credential-bearing. Replace `YOUR_HOST` with the TLS proxy hostname. For a direct encrypted
+overlay connection to the listener above, use `http://OVERLAY_ADDRESS:8090/mcp` instead;
+Morgan itself serves plain HTTP, so that alternative depends on overlay encryption.
 
 A key is required beyond loopback. With a configured key, HTTP requests require it on loopback
 too. Without a key, loopback access relies on the local account/host boundary.
@@ -87,10 +89,11 @@ content later removed with `forget`.
 3. With the active runtime, run `morgan snapshot` and retain that pre-upgrade copy before any
    ordinary database open by the new runtime. Keep the old runtime and its configuration for rollback.
 4. With the intended new runtime, run `morgan doctor` and `morgan migrate --dry-run`.
-   Review pending steps. Neither command changes the database.
+   Review pending steps. Doctor is read-only. The migration dry-run applies no schema or data
+   migrations, but its writable SQLite open can switch a restored file to WAL journal mode.
 5. Run `morgan migrate` when required. It takes its own snapshot, applies pending steps in one
    transaction and checks the result. A failed migration step rolls back the wave. After commit,
-   the provider backend checks embedding identity; that check contacts the embedding endpoint.
+   when `MORGAN_EMBEDDING_BACKEND=provider`, migrate checks identity at the embedding endpoint.
    A failed post-commit identity check does not undo the migration. Resolve it before resuming use.
 6. Check doctor and the relevant scoped operations before restarting clients. Verify journal
    reader compatibility separately when upgrading owner/task workflows.
@@ -111,8 +114,8 @@ morgan restore /absolute/path/to/snapshot.db --yes
 ```
 
 Confirmation verifies the snapshot, creates a before-restore snapshot and replaces the database
-and WAL/SHM state. Concurrent
-writers can lose writes against the replaced file; online restore is unsupported.
+and WAL/SHM state. Concurrent writers can lose writes against the replaced file; online restore is
+unsupported.
 Restore with a compatible runtime and the original embedding configuration.
 
 Memory restore does not roll back separate task receipts or external effects. Follow the
