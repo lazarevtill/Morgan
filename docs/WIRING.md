@@ -250,7 +250,9 @@ Compose/configuration files privately for rollback:
 ```
 
 The subshell stops on any failed step. Do not continue after a failure. Record both the image tag
-and the snapshot's printed container path; retain both. Review the pending steps before applying
+and the snapshot's printed container path; retain both. If a failure occurred after the build
+started, do not rerun the block from the top: retain the original tag/snapshot, resolve the failure,
+and resume only the remaining steps. Review the pending steps before applying
 them and restarting:
 
 ```bash
@@ -298,7 +300,9 @@ With the matching prior configuration and restored database:
 docker compose -f docker-compose.yml -f rollback.compose.yml up --no-build -d
 ```
 
-Do not prune the saved image or snapshot until rollback is no longer needed.
+Keep using the rollback override while the old image is active; a plain `docker compose up`
+selects the newly built image. Do not prune the saved image or snapshot until rollback is no
+longer needed.
 The [dependency audit](measurements/2026-11-dependency-audit.md) records the image's known
 unresolved findings; a pinned base image is not a claim of zero vulnerabilities.
 
