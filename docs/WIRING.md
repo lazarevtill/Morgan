@@ -236,16 +236,23 @@ that image before building its replacement. Record the tag printed below and ret
 Compose/configuration files privately for rollback:
 
 ```bash
-morgan_previous_image="morgan-mcp:pre-upgrade-$(date -u +%Y%m%dT%H%M%SZ)"
-docker tag "$(docker compose images -q morgan-mcp)" "$morgan_previous_image"
-printf '%s\n' "$morgan_previous_image"
-docker compose stop morgan-mcp
-docker compose run --rm --no-deps morgan-mcp morgan snapshot
-docker compose build
-docker compose run --rm --no-deps morgan-mcp morgan migrate --dry-run
+(
+  set -eu
+  morgan_previous_image="morgan-mcp:pre-upgrade-$(date -u +%Y%m%dT%H%M%SZ)"
+  morgan_current_image="$(docker compose images -q morgan-mcp)"
+  docker tag "${morgan_current_image:?No existing container; identify and tag its image manually}" \
+    "$morgan_previous_image"
+  printf '%s\n' "$morgan_previous_image"
+  docker compose stop morgan-mcp
+  docker compose run --rm --no-deps morgan-mcp morgan snapshot
+  docker compose build
+  docker compose run --rm --no-deps morgan-mcp morgan migrate --dry-run
+)
 ```
 
-Retain the old image and snapshot. Review the pending steps before applying them and restarting:
+The subshell stops on any failed step. Do not continue after a failure. Record both the image tag
+and the snapshot's printed container path; retain both. Review the pending steps before applying
+them and restarting:
 
 ```bash
 docker compose run --rm --no-deps morgan-mcp morgan migrate
@@ -255,11 +262,25 @@ docker compose up -d
 Snapshots remain in `./data/snapshots` unless you override the configured directory. Any override
 must point to a mounted volume; files in a one-off container disappear when `--rm` removes it.
 
-For rollback, keep all database users stopped and follow the
-[restore preview and confirmation procedure](OPERATIONS.md#upgrade-and-recover) with a runtime
-compatible with both the current database and the saved snapshot. Restore the pre-upgrade
-snapshot before starting the old image; an older runtime refuses a newer schema. Use a local
-`rollback.compose.yml` selecting the exact saved image tag:
+For rollback, stop all database users, including this service. Restore using the **new image**,
+without a rollback override: it can read the migrated database and the old snapshot. An older
+runtime refuses the newer schema before it can take the required before-restore snapshot.
+Use the container path printed by the original snapshot, not the host's `./data/` path:
+
+```bash
+docker compose stop morgan-mcp
+docker compose run --rm --no-deps morgan-mcp morgan restore /app/data/snapshots/SNAPSHOT.db
+```
+
+Replace `SNAPSHOT.db` with the saved filename (or use the printed path for a custom mounted
+directory). The preview exits 2. Review the database and snapshot it names before confirming:
+
+```bash
+docker compose run --rm --no-deps morgan-mcp morgan restore /app/data/snapshots/SNAPSHOT.db --yes
+```
+
+Only after restore succeeds, start the old image with the matching prior configuration. Use a
+local `rollback.compose.yml` selecting the exact saved image tag:
 
 ```yaml
 services:
