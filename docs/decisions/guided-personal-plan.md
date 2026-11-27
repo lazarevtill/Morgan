@@ -144,3 +144,13 @@ Blank selection still exits without review. See [reviewed empty plans](reviewed-
 `renew N` / `повторить N` renews one explicitly selected open task after recording the
 source statement and confirming a new date. It preserves the task family and does not send
 a notification. See [reviewed renewal and rejected automatic matching](reviewed-task-renewal.md).
+
+## New capture admission
+
+Before journalling a new selection or completion attempt, the dialogue preflights its
+commitment text against memory credential admission. Renewal and unavailability reviews
+preflight both source and derived payload before saving pending attempts. A refusal leaves
+the session reviewable rather than partially applying a selected batch or latching an
+impossible pending review. Previously started attempts retain exact replay and STOP
+behavior; accepted historical evidence is not rewritten. This narrow text check is not
+secret detection for the separate workspace.

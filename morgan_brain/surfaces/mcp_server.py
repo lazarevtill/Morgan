@@ -7,9 +7,9 @@ library facade -- every tool here calls the exact ``cli.__main__`` command handl
 itself calls, which in turn goes through ``composition.build_memory_context`` /
 ``build_app_context`` and the one ``MemoryGate``. No memory logic is reimplemented here.
 
-Six bounded tools
+Seven bounded tools
 --------------------------------
-``remember``, ``recall``, ``evidence``, ``facts``, ``forget``, ``ask_morgan``.
+``remember``, ``recall``, ``evidence``, ``inspect_context``, ``facts``, ``forget``, ``ask_morgan``.
 Evidence is a progressive read of exact IDs in one scope, without a model call,
 so a client can fetch source roots when needed without retrieving the whole archive.
 
@@ -42,6 +42,7 @@ from uuid import uuid4
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.session import ServerSession
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -62,6 +63,7 @@ from morgan_brain.surfaces.cli.commands import (
 from morgan_brain.surfaces.network import (
     api_key_is_configured,
     assert_safe_bind,
+    is_loopback,
     unauthenticated_peer_allowed,
 )
 
@@ -136,7 +138,7 @@ _ToolFn = Callable[..., Awaitable[dict[str, Any]]]
 
 @dataclass
 class MorganMcpServer:
-    """A ``FastMCP`` instance plus a direct dispatch table for the six tools.
+    """A ``FastMCP`` instance plus a direct dispatch table for the seven tools.
 
     ``call_tool`` bypasses FastMCP's wire encoding (content blocks) and returns each tool's
     JSON-serializable dict straight through -- used both by real stdio/HTTP transports (via
@@ -161,14 +163,30 @@ class MorganMcpServer:
         """Serve over streamable-HTTP with a bearer token -- laptops reaching the homelab
         over NetBird, the normal deployment case.
 
-        Refuses to bind beyond loopback without an API key: the bearer middleware below is a
-        no-op when none is configured, and these six tools include ``forget``.
+        Refuses to bind beyond loopback without an API key: the bearer middleware below is
+        loopback-only when none is configured, and these seven tools include ``forget``.
         """
         import uvicorn
 
         assert_safe_bind(host=host, api_key=self.settings.api_key, surface="morgan-mcp (http)")
         self.mcp.settings.host = host
         self.mcp.settings.port = port
+        # FastMCP was constructed for stdio before the CLI's HTTP bind override was known.
+        # Its default loopback Host allowlist otherwise rejects every authenticated remote
+        # request. Match the SDK's remote-bind policy only after our key guard succeeds;
+        # loopback retains Host/Origin protection against DNS rebinding.
+        loopback = is_loopback(host)
+        hostname = host.strip().lower().strip("[]")
+        if ":" in hostname:
+            hostname = f"[{hostname}]"
+        local_hosts = sorted({"127.0.0.1", "localhost", "[::1]", hostname}) if loopback else []
+        self.mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=loopback,
+            allowed_hosts=[value for name in local_hosts for value in (name, f"{name}:*")],
+            allowed_origins=[
+                value for name in local_hosts for value in (f"http://{name}", f"http://{name}:*")
+            ],
+        )
         app = self.mcp.streamable_http_app()
         app.add_middleware(_BearerAuthMiddleware, settings=self.settings)
         config = uvicorn.Config(
@@ -178,10 +196,11 @@ class MorganMcpServer:
 
 
 class _BearerAuthMiddleware(BaseHTTPMiddleware):
-    """Enforce ``MORGAN_API_KEY`` as a bearer token on the streamable-HTTP transport, with the
-    exact same policy ``apps/brain_api/auth.py`` applies to ``/api/*``: a request must present
+    """Enforce ``MORGAN_API_KEY`` as a bearer token on the streamable-HTTP transport.
+
+    A request must present
     ``Authorization: Bearer <MORGAN_API_KEY>`` unless the key is empty or the ``"change-me"``
-    sentinel -- and in that open case, only from a loopback peer. These six tools include
+    sentinel -- and in that open case, only from a loopback peer. These seven tools include
     ``forget``, so an unauthenticated remote caller can erase a project."""
 
     def __init__(self, app: Any, settings: Settings) -> None:

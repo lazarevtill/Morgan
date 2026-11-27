@@ -1,5 +1,8 @@
 name: Security Scanning
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     branches: [main, develop]
@@ -15,34 +18,167 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
+      # Use the scanner directly: the action wrapper carries unrelated vulnerable
+      # JavaScript dependencies. Findings still fail this check and are redacted.
       - name: GitLeaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          gitleaks_dir=$(mktemp -d "$RUNNER_TEMP/gitleaks.XXXXXX")
+          trap 'rm -rf "$gitleaks_dir"' EXIT
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$gitleaks_dir/gitleaks.tar.gz"
+          printf '%s  %s\n' \
+            '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb' \
+            "$gitleaks_dir/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf "$gitleaks_dir/gitleaks.tar.gz" -C "$gitleaks_dir" gitleaks
+          gitleaks_args=(git --redact=100 --no-banner --exit-code 1
+            --report-format json --report-path "$gitleaks_dir/report.json")
+          # Custom log options replace Gitleaks' defaults. Keep merge patches without
+          # --first-parent traversal, which would miss secrets on merged branches.
+          log_options='--full-history --diff-filter=tuxdb --diff-merges=first-parent'
+          scan_revision='--all'
+          show_locations=false
+          # Push/PR checks scan the changed history; scheduled/manual runs scan all.
+          case "$GITHUB_EVENT_NAME" in
+            pull_request)
+              base_ref=$(jq -er '.pull_request.base.sha' "$GITHUB_EVENT_PATH")
+              head_ref=$(jq -er '.pull_request.head.sha' "$GITHUB_EVENT_PATH")
+              ;;
+            push)
+              base_ref=$(jq -er '.before' "$GITHUB_EVENT_PATH")
+              head_ref=$(jq -er '.after' "$GITHUB_EVENT_PATH")
+              ;;
+            *) base_ref=''; head_ref='' ;;
+          esac
+          if [[ "$GITHUB_EVENT_NAME" == pull_request || "$GITHUB_EVENT_NAME" == push ]]; then
+            if ! [[ "$base_ref" =~ ^[0-9a-f]{40}$ && "$head_ref" =~ ^[0-9a-f]{40}$ ]]; then
+              echo '::error::Invalid commit identifiers in the event payload'
+              exit 1
+            fi
+            if ! git rev-parse --verify "$head_ref^{commit}" >/dev/null 2>&1; then
+              echo '::error::The event head commit is unavailable'
+              exit 1
+            fi
+            if [[ "$base_ref" != '0000000000000000000000000000000000000000' ]]; then
+              if git rev-parse --verify "$base_ref^{commit}" >/dev/null 2>&1; then
+                scan_revision="$base_ref..$head_ref"
+                show_locations=true
+              elif [[ "$GITHUB_EVENT_NAME" == push ]]; then
+                # A force-push can leave its previous tip outside fetched history.
+                # Scan all ancestors of the validated head, keeping old locations private.
+                echo 'Push base is unavailable; scanning the complete head history.'
+                scan_revision="$head_ref"
+              else
+                echo '::error::The event base commit is unavailable'
+                exit 1
+              fi
+            else
+              if [[ "$GITHUB_EVENT_NAME" != push ]]; then
+                echo '::error::A pull request must have an existing base commit'
+                exit 1
+              fi
+              # A new branch may introduce no commits. Do not trust the (possibly
+              # truncated) payload list as a history boundary: prove an explicitly
+              # empty creation already belongs to a different, fetched default ref.
+              if [[ "$GITHUB_EVENT_NAME" == push ]] && jq -e '
+                .created == true and .deleted == false and
+                (.commits | type == "array" and length == 0)
+              ' "$GITHUB_EVENT_PATH" >/dev/null; then
+                default_branch=$(jq -r '.repository.default_branch // ""' "$GITHUB_EVENT_PATH")
+                event_ref=$(jq -r '.ref // ""' "$GITHUB_EVENT_PATH")
+                if git check-ref-format "refs/heads/$default_branch" >/dev/null 2>&1 &&
+                  git check-ref-format "$event_ref" >/dev/null 2>&1 &&
+                  [[ "$event_ref" == "$GITHUB_REF" &&
+                    "$event_ref" != "refs/heads/$default_branch" ]] &&
+                  git merge-base --is-ancestor "$head_ref" \
+                    "refs/remotes/origin/$default_branch" 2>/dev/null; then
+                  echo 'No new commits: created ref already belongs to the default branch.'
+                  exit 0
+                fi
+              fi
+              # Initial pushes and uncertain payloads scan every ancestor of the
+              # explicit head, never unrelated refs. Old locations stay private.
+              scan_revision="$head_ref"
+            fi
+          fi
+          gitleaks_args+=(--log-opts "$log_options $scan_revision")
+          scan_status=0
+          # Even redacted reports/logs can retain matched context or commit messages.
+          # Keep both temporary and private; never upload them as public artifacts.
+          "$gitleaks_dir/gitleaks" "${gitleaks_args[@]}" . \
+            >"$gitleaks_dir/scanner.log" 2>&1 || scan_status=$?
+          if ! finding_count=$(jq -er 'if type == "array" then length else error("report") end' \
+            "$gitleaks_dir/report.json" 2>/dev/null); then
+            echo '::error::Gitleaks did not produce a valid report; reproduce locally.'
+            exit 1
+          fi
+          echo "Gitleaks findings: $finding_count"
+          if [[ "$finding_count" != 0 ]]; then
+            if [[ "$show_locations" == true ]]; then
+              # JSON escapes newlines and starts with '{', blocking :: commands.
+              # Also escape '#' to block the runner's legacy inline ##[ commands.
+              jq -ac '.[] | {commit: .Commit, path: .File, line: .StartLine, rule: .RuleID}' \
+                "$gitleaks_dir/report.json" | sed 's/#/\\u0023/g'
+            else
+              echo 'Historical locations are private. Reproduce locally with Gitleaks 8.30.1:'
+              printf 'gitleaks git --redact=100 --report-format json --report-path /PRIVATE/DIRECTORY/gitleaks.json --log-opts "%s %s" .\n' \
+                "$log_options" "$scan_revision"
+            fi
+            exit 1
+          fi
+          if [[ "$scan_status" != 0 ]]; then
+            echo '::error::Gitleaks could not complete the scan; reproduce locally.'
+            exit "$scan_status"
+          fi
 
   code-security:
     name: Code Security Analysis (bandit)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.12"
+          python-version: "3.12.16"
 
       - name: Install bandit
-        run: pip install "bandit[toml]"
+        run: |
+          python -m pip install --upgrade "pip>=26.3,<27"
+          python -m pip install "bandit[toml]>=1.9.4,<2"
 
       # No continue-on-error and no -ll severity floor: the scan reports zero findings at
       # every severity, so anything new is a regression and should fail the build.
       - name: Run Bandit
         run: bandit -c pyproject.toml -r morgan_brain
+
+  dependency-audit:
+    name: Dependency Audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12.16"
+
+      - name: Install runtime dependencies and auditor
+        run: |
+          python -m pip install --upgrade "pip>=26.3,<27"
+          python -m pip install . "pip-audit==2.10.1"
+
+      - name: Audit installed dependencies
+        run: python -m pip_audit
 
   # Note: CodeQL runs via the repository's *default* CodeQL setup (the separate
   # "CodeQL" check), so we do not define a custom codeql job here — an advanced

@@ -20,7 +20,8 @@ overwritten. Everything lives in one SQLite file on hardware you own.
   subject-predicate-object facts with validity intervals. An update closes the old interval
   and opens a new one; nothing is overwritten, and closed intervals stay in the database.
   Every fact records who asserted it; the facts consolidation writes are marked as the
-  model's inference, never as something you said.
+  model's inference, never as something you said. Eligible inputs must be active
+  `user_stated` or `tool_observed` evidence; default `unknown` captures are not promoted.
 - **Answers with what it knows.** `morgan ask` recalls first, answers, and remembers the
   exchange.
 - **Starts from your history, not from nothing.** `morgan import` seeds memory from a ChatGPT
@@ -37,6 +38,10 @@ overwritten. Everything lives in one SQLite file on hardware you own.
 
 ## Quick start
 
+For local development, use the editable installation below. For a deployed pilot, use the
+[pinned runtime bundle](docs/decisions/pinned-runtime.md) from an exact trusted commit;
+an editable checkout is not a pinned runtime.
+
 ```bash
 uv tool install --editable .           # morgan and morgan-mcp on PATH, for every agent
 mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env
@@ -44,7 +49,7 @@ mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env
 #     embedding server if it is a separate one; read from every working directory
 morgan doctor                          # the database, the chat server, the embedding server
 cd ~/src/any-repo                      # the brain is the same from every repository
-morgan remember "prefers terse, code-first answers"
+morgan remember "I prefer terse, code-first answers" --source user_stated
 morgan recall "how do I like answers"  # needs only the embedding model
 morgan ask "what do you know about me" # needs the chat model
 morgan consolidate                      # memories nearest an empty query → dated facts
@@ -58,10 +63,33 @@ claude mcp add -s user morgan -- morgan-mcp --transport stdio   # in every proje
 morgan install-skill                   # lists what it writes, then asks
 ```
 
-The database is `~/.local/share/morgan/morgan.db` (`MORGAN_DATA_DIR`). The memory
-commands work with no model server at all under `MORGAN_EMBEDDING_BACKEND=hash`. After an
-upgrade, `morgan doctor` says whether the database waits for `morgan migrate`, which upgrades
+The database is `~/.local/share/morgan/morgan.db` (`MORGAN_DATA_DIR`). Capture and recall
+work without an embedding server under `MORGAN_EMBEDDING_BACKEND=hash`, a deterministic
+test backend with no semantic similarity. `ask` and `consolidate` still require a chat model.
+After an upgrade, `morgan doctor` says whether the database waits for `morgan migrate`, which upgrades
 it behind a snapshot; `morgan snapshot` and `morgan restore` are the backup and its undo.
+
+## Explicit workflows
+
+These optional Python entry points are implemented, but require explicit invocation and
+separate task/review journals. Remembered text never grants permission to execute them.
+
+| Workflow | Entry point and contract |
+| --- | --- |
+| Exact evidence and context inspection, without model calls | CLI `evidence`, `context inspect`; MCP `evidence`, `inspect_context`; [reader contract](docs/READER_CAPABILITY.md) |
+| Trusted task execution, batches and receipt reconciliation | `morgan_brain.tasks` SDK; [execution contract](docs/decisions/explicit-task-execution.md) |
+| Approved local notes, finite schedules, recurrence and supervision | `python -m morgan_brain.local_notes_cli`; [local notes](docs/decisions/local-approved-notes.md), [supervisor](docs/decisions/bounded-local-supervisor.md) |
+| Memory-backed plans and current revisions | `daily_brief_cli`, `guided_plan`; [daily brief](docs/decisions/memory-backed-daily-brief.md), [guided plan](docs/decisions/guided-personal-plan.md) |
+| Owner messages, exact review, completion, cancellation and reopening | `owner_input`, optional macOS `owner_ui`; [owner input](docs/decisions/local-owner-input.md), [reopening](docs/decisions/reopen-completed-task.md) |
+| Bounded local model drafting | `model_cycle`, `owner_model`, `owner_loop`; [model lifecycle](docs/decisions/bounded-model-cycle.md), [finite owner loop](docs/decisions/finite-owner-loop.md) |
+| Explicit local alert or reviewed push | `local_alert_cli`, `owner_push_cli`; [channel boundaries](docs/decisions/owner-channel-hosting.md) |
+
+No workflow installs a persistent service or renews its own authority. A push server's
+acceptance does not prove phone delivery or reading. The
+[reliability recheck](docs/measurements/2026-11-reliability-recheck.md) separates synthetic
+checks from real-provider and consumer verification. The companion
+[dependency audit](docs/measurements/2026-11-dependency-audit.md) records tested versions,
+security updates and remaining upstream findings.
 
 ## Is the recall any good?
 
@@ -101,8 +129,8 @@ two categories that do not yet work.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — what is not in the code and why, what retrieval
   measures, what is next.
 - [`docs/decisions/`](docs/decisions/) — decisions, and what the code does about each.
-- [`CLAUDE.md`](CLAUDE.md) — the invariants, for anyone (or anything) changing the code;
-  [`AGENTS.md`](AGENTS.md) carries the same text for Codex and the other agents that read it.
+- [`CLAUDE.md`](CLAUDE.md) and [`AGENTS.md`](AGENTS.md) — repository guidance and invariants
+  for coding agents; the latter also indexes the newer bounded workflows.
 - [`docs/archive/`](docs/archive/) — the designs of the archived agent kernel, whose code is
   at the git tag `legacy-v0.1.0-kernel`.
 

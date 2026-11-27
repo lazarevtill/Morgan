@@ -200,6 +200,19 @@ def test_limits_reject_unbounded_values(kwargs):
         RunLimits(**kwargs)
 
 
+@pytest.mark.parametrize("field", ["max_actions", "max_cycles"])
+@pytest.mark.parametrize("value", [True, 1.5, 2.0])
+def test_limits_require_integer_counts_before_any_dispatch(field, value):
+    with pytest.raises(ValueError, match="integer"):
+        RunLimits(**{field: value})
+
+
+@pytest.mark.parametrize("field", ["seconds", "poll_seconds"])
+def test_boolean_durations_cannot_create_unreadable_diagnostics(field):
+    with pytest.raises(ValueError, match="numeric"):
+        RunLimits(**{field: True})
+
+
 async def test_live_stop_during_poll(workspace):
     allow(workspace)
 

@@ -85,7 +85,7 @@ async def test_no_key_appears_in_the_report_or_its_rendering(tmp_path):
     keys = {
         "llm_api_key": "chat-secret-key-1",
         "embedding_api_key": "embed-secret-key-2",
-        "api_key": "inbound-secret-key-3",
+        "api_key": "inbound-secret-key-3",  # Synthetic masking fixture. gitleaks:allow
     }
     with (
         model_server() as chat,

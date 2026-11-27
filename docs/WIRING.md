@@ -356,7 +356,8 @@ made while the run holds the lock waits up to `MORGAN_DB_BUSY_TIMEOUT_MS` for it
 to `archive/chatgpt`, not to your working project, and takes no `--project`: a fifth of the
 conversations go to `archive/chatgpt-holdout` instead, reserved for evaluating the memory
 against conversations nothing has learned from. Expect it to take a while, since every turn
-costs an embedding call; progress goes to stderr. Re-running updates in place.
+costs an embedding call; progress goes to stderr. Exact replay skips existing events.
+Changed content under an existing event identity is refused; corrections need a new identity.
 
 An import runs a canary: every `MORGAN_IMPORT_CANARY_EVERY` (50) memories it actually stores
 -- never one skipped because it was already there unchanged -- it re-sends the five
@@ -384,17 +385,23 @@ whole of stdout. An embedding call is retried first, within
 600 s, for an import) when the host answered slowly, with a 5xx other than 501 or a 429, or
 dropped the connection -- a cold host loading its model looks like that -- and within
 `MORGAN_EMBEDDING_UNREACHABLE_BUDGET_SECONDS` (5 s) when no connection could be made. A
-refusal (a 4xx other than 429, a 501, a redirect) is not retried.
+refusal (a 4xx other than 429, a 501, a redirect) is not retried. Chat requests remain
+single-attempt: HTTP refusals name the endpoint/key setting, and timeouts or transient
+HTTP failures report a slow provider. Provider error excerpts are bounded and credentials
+are redacted before either surface displays them. Invalid CLI configuration uses the same
+JSON error envelope and exit 1 without creating a database.
 
 ## 6. The MCP server
 
-The same five operations for any MCP client, through the same gate, returning the same
+Seven tools (`remember`, `recall`, `facts`, `forget`, `ask_morgan`, `evidence` and
+`inspect_context`) for any MCP client, through the same gate, returning the same
 results the CLI's `--json` prints. `project` is a tool argument (the server is a daemon; its
 own working directory means nothing to a client). A call that names no project works in
 `personal`: `remember` says so with `project_defaulted: true`, and `forget` without a
-`project` erases `personal`. Every tool declares MCP's hints: `recall` and `facts` are
-read-only, `remember` and `ask_morgan` write (a turn stores the exchange), `forget` is
-destructive. Errors come back as the tool's error result, carrying the message the CLI prints: an
+`project` erases `personal`. Every tool declares MCP's hints: `recall`, `facts`,
+`evidence` and `inspect_context` are read-only. `remember` and `ask_morgan` write (a turn
+stores the exchange); `forget` is destructive. Errors come back as the tool's error result,
+carrying the message the CLI prints: an
 unreachable, slow or refusing model server, an `EmbeddingSpaceMismatch`, or a database waiting
 for `morgan migrate`, which refuses the three tools that write while `recall` and `facts`
 still answer.
@@ -428,7 +435,8 @@ morgan install-skill --mcp-server brain      # if morgan-mcp is registered under
 It writes `morgan/SKILL.md` for each agent installed here: Claude Code (`~/.claude/skills`,
 or `CLAUDE_CONFIG_DIR`), Codex (`~/.agents/skills`), OpenCode
 (`$XDG_CONFIG_HOME/opencode/skills`), Cursor (`~/.cursor/skills`). In Claude Code's
-`settings.json` it allows `mcp__morgan__recall` and `mcp__morgan__facts`, the tools that
+`settings.json` it allows `mcp__morgan__recall`, `mcp__morgan__facts`,
+`mcp__morgan__evidence` and `mcp__morgan__inspect_context`, derived from the tools that
 declare themselves read-only, so recalling does not stop for a prompt. The tools that write
 stay behind the prompt, and under `"defaultMode": "dontAsk"`, which refuses every call no
 rule allows, agents cannot `remember` until you allow `mcp__morgan__remember` yourself.

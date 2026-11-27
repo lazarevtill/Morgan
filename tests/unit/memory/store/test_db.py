@@ -8,7 +8,7 @@ from morgan_brain.memory.store.db import open_db, open_readonly, write_transacti
 def test_open_db_enables_wal_and_vec(tmp_path):
     conn = open_db(str(tmp_path / "m.db"))
     assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
-    assert conn.execute("PRAGMA busy_timeout").fetchone()[0] >= 5000
+    assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
     # sqlite-vec is loaded when vec_version() resolves
     assert conn.execute("SELECT vec_version()").fetchone()[0]
 
@@ -58,6 +58,37 @@ def test_write_transaction_holds_the_write_lock_before_the_first_statement(tmp_p
         other.execute("BEGIN IMMEDIATE")
     other.execute("BEGIN IMMEDIATE")
     other.rollback()
+
+
+def test_write_transaction_busy_refusal_is_clean_and_connection_recovers(tmp_path):
+    path = str(tmp_path / "m.db")
+    holder = open_db(path)
+    contender = open_db(path, busy_timeout_ms=25)
+    try:
+        holder.execute("CREATE TABLE t (a TEXT)")
+        holder.commit()
+        assert contender.execute("PRAGMA busy_timeout").fetchone()[0] == 25
+        with write_transaction(holder):
+            holder.execute("INSERT INTO t VALUES ('held')")
+            with (
+                pytest.raises(sqlite3.OperationalError, match="locked") as failure,
+                write_transaction(contender),
+            ):
+                contender.execute("INSERT INTO t VALUES ('must not be written')")
+            assert failure.value.sqlite_errorcode == sqlite3.SQLITE_BUSY
+            assert not contender.in_transaction
+            assert contender.execute("SELECT a FROM t").fetchall() == []
+
+        with write_transaction(contender):
+            contender.execute("INSERT INTO t VALUES ('recovered')")
+        assert [row["a"] for row in holder.execute("SELECT a FROM t ORDER BY rowid")] == [
+            "held",
+            "recovered",
+        ]
+        assert not contender.in_transaction
+    finally:
+        contender.close()
+        holder.close()
 
 
 def test_a_nested_block_is_undone_with_the_outer_one(tmp_path):

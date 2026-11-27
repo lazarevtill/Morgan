@@ -83,6 +83,23 @@ def verify(runtime, revision, *, cwd=None, env=None):
     )
 
 
+@pytest.mark.parametrize("version", ["25.0.1", "26.2", "26.3rc1", "27.0", None])
+def test_build_refuses_unsupported_host_pip_before_creating_bundle(tmp_path, monkeypatch, version):
+    module = helper()
+
+    def installer_version_only(args, **kwargs):
+        assert args == [module.sys.executable, "-I", "-m", "pip", "--version"]
+        if version is None:
+            raise subprocess.CalledProcessError(1, args)
+        return f"pip {version} from /fixture/site-packages/pip (python 3.12)".encode()
+
+    monkeypatch.setattr(module, "run", installer_version_only)
+    output = tmp_path / "bundle"
+    with pytest.raises(ValueError, match=r"requires stable pip>=26\.3,<27"):
+        module.build(tmp_path / "unused-repo", "a" * 40, output)
+    assert not output.exists()
+
+
 def test_clean_install_ignores_cwd_pythonpath_and_dirty_checkout(bundle, tmp_path):
     artifact, revision = bundle
     target = tmp_path / "runtime"
@@ -106,6 +123,59 @@ def test_clean_install_ignores_cwd_pythonpath_and_dirty_checkout(bundle, tmp_pat
     with pytest.raises(ValueError, match="revision"):
         helper().install(artifact, "0" * 40, tmp_path / "wrong")
     assert not (tmp_path / "wrong").exists()
+
+
+def test_installer_is_hash_pinned_and_upgraded_offline_before_application(
+    bundle, tmp_path, monkeypatch
+):
+    artifact, revision = bundle
+    module = helper()
+    original = module.run
+    installs = []
+
+    def observed(args, **kwargs):
+        if "install" in args:
+            assert "--no-index" in args and "--require-hashes" in args
+            installs.append(Path(args[args.index("-r") + 1]).read_text().splitlines())
+        return original(args, **kwargs)
+
+    monkeypatch.setattr(module, "run", observed)
+    runtime = tmp_path / "runtime"
+    module.install(artifact, revision, runtime)
+    assert len(installs) == 2
+    assert len(installs[0]) == 1 and installs[0][0].startswith("pip==")
+    assert installs[0][0] in installs[1]
+    version, digest = installs[0][0].removeprefix("pip==").split(" --hash=sha256:")
+    receipt = json.loads((artifact / "bundle.json").read_text())
+    assert receipt["wheels"][f"pip-{version}-py3-none-any.whl"] == digest
+    installed = command(
+        str(runtime / "bin/python"), "-I", "-c", "import pip; print(pip.__version__)"
+    ).stdout.strip()
+    assert installed == version
+    assert tuple(int(part) for part in installed.split(".")[:2]) >= (26, 3)
+
+
+def test_older_bundle_remains_installable_without_resolving_new_artifacts(bundle, tmp_path):
+    import ensurepip
+    import shutil
+
+    artifact, revision = bundle
+    older = tmp_path / "older-bundle"
+    shutil.copytree(artifact, older)
+    (next((older / "wheels").glob("pip-*.whl"))).unlink()
+    module = helper()
+    receipt = json.loads((older / "bundle.json").read_text())
+    lock = older / "requirements.txt"
+    receipt["wheels"] = module.lock_wheels(older / "wheels", lock)
+    receipt["requirements_sha256"] = module.sha(lock)
+    (older / "bundle.json").write_text(json.dumps(receipt))
+    runtime = tmp_path / "runtime"
+    module.install(older, revision, runtime)
+    installed = command(
+        str(runtime / "bin/python"), "-I", "-c", "import pip; print(pip.__version__)"
+    ).stdout.strip()
+    assert installed == ensurepip.version()
+    assert json.loads(verify(runtime, revision).stdout)["revision"] == revision
 
 
 def test_changed_package_fails_and_restore_uses_new_path(bundle, tmp_path):
@@ -146,18 +216,17 @@ def test_partial_install_does_not_publish_ready_marker(bundle, tmp_path, monkeyp
     assert not (partial / "morgan-runtime.json").exists()
 
 
-@pytest.mark.parametrize("file", ["requirements.txt", "wheel"])
+@pytest.mark.parametrize("file", ["requirements.txt", "wheel", "pip_wheel"])
 def test_changed_bundle_is_refused_before_creating_runtime(bundle, tmp_path, file):
     import shutil
 
     artifact, revision = bundle
     copied = tmp_path / "bundle"
     shutil.copytree(artifact, copied)
-    changed = (
-        copied / "requirements.txt"
-        if file == "requirements.txt"
-        else next((copied / "wheels").glob("*.whl"))
-    )
+    if file == "requirements.txt":
+        changed = copied / "requirements.txt"
+    else:
+        changed = next((copied / "wheels").glob("pip-*.whl" if file == "pip_wheel" else "*.whl"))
     changed.write_bytes(changed.read_bytes() + b"tampered")
     destination = tmp_path / "runtime"
     with pytest.raises(ValueError, match="changed"):

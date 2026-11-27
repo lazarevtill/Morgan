@@ -1,0 +1,3572 @@
+{
+  "audit_date": "2026-11-26",
+  "image_id": "sha256:74c29bff0bfc677dc539d79371059534a4d8478025caff1298af329d644db4af",
+  "image_scanner": "Trivy 0.76.2",
+  "image_database": {
+    "Version": 2,
+    "NextUpdate": "2026-11-27T19:04:08.560197215Z",
+    "UpdatedAt": "2026-11-26T19:04:08.560197506Z",
+    "DownloadedAt": "2026-11-26T22:21:36.649484Z"
+  },
+  "image_findings": [
+    {
+      "VulnerabilityID": "CVE-2011-3374",
+      "PkgName": "apt",
+      "InstalledVersion": "3.0.4",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2011-3374",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "TEMP-0841856-B18BAF",
+      "PkgName": "bash",
+      "InstalledVersion": "5.2.37-2+b10",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://security-tracker.debian.org/tracker/TEMP-0841856-B18BAF",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-76642",
+      "PkgName": "bsdutils",
+      "InstalledVersion": "1:2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-76642",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78408",
+      "PkgName": "bsdutils",
+      "InstalledVersion": "1:2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78408",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78409",
+      "PkgName": "bsdutils",
+      "InstalledVersion": "1:2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78409",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78410",
+      "PkgName": "bsdutils",
+      "InstalledVersion": "1:2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78410",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-3184",
+      "PkgName": "bsdutils",
+      "InstalledVersion": "1:2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-3184",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2022-0563",
+      "PkgName": "bsdutils",
+      "InstalledVersion": "1:2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2022-0563",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2017-18018",
+      "PkgName": "coreutils",
+      "InstalledVersion": "9.7-3",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2017-18018",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2025-5278",
+      "PkgName": "coreutils",
+      "InstalledVersion": "9.7-3",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-5278",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-56391",
+      "PkgName": "coreutils",
+      "InstalledVersion": "9.7-3",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-56391",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-56392",
+      "PkgName": "coreutils",
+      "InstalledVersion": "9.7-3",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-56392",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-102473",
+      "PkgName": "dash",
+      "InstalledVersion": "0.5.12-12",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-102473",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-102474",
+      "PkgName": "dash",
+      "InstalledVersion": "0.5.12-12",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-102474",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-53910",
+      "PkgName": "diffutils",
+      "InstalledVersion": "1:3.10-4",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-53910",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-91094",
+      "PkgName": "dpkg",
+      "InstalledVersion": "1.22.22",
+      "FixedVersion": null,
+      "Severity": "UNKNOWN",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-91094",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-102010",
+      "PkgName": "gcc-14-base",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-102010",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-114690",
+      "PkgName": "gcc-14-base",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-114690",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-114691",
+      "PkgName": "gcc-14-base",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-114691",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-115455",
+      "PkgName": "gcc-14-base",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-115455",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-125709",
+      "PkgName": "gcc-14-base",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-125709",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-95619",
+      "PkgName": "gcc-14-base",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-95619",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-115456",
+      "PkgName": "gcc-14-base",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-115456",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-54369",
+      "PkgName": "libacl1",
+      "InstalledVersion": "2.3.2-2+b1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-54369",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-54370",
+      "PkgName": "libacl1",
+      "InstalledVersion": "2.3.2-2+b1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-54370",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2011-3374",
+      "PkgName": "libapt-pkg7.0",
+      "InstalledVersion": "3.0.4",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2011-3374",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-54371",
+      "PkgName": "libattr1",
+      "InstalledVersion": "1:2.5.2-3",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-54371",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-76642",
+      "PkgName": "libblkid1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-76642",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78408",
+      "PkgName": "libblkid1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78408",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78409",
+      "PkgName": "libblkid1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78409",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78410",
+      "PkgName": "libblkid1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78410",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-3184",
+      "PkgName": "libblkid1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-3184",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2022-0563",
+      "PkgName": "libblkid1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2022-0563",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-42250",
+      "PkgName": "libbz2-1.0",
+      "InstalledVersion": "1.0.8-6",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-42250",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-115819",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-115819",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-121757",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-121757",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-84243",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-84243",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2010-4756",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2010-4756",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2018-20796",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2018-20796",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2019-1010022",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2019-1010022",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2019-1010023",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2019-1010023",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2019-1010024",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2019-1010024",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2019-1010025",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2019-1010025",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2019-9192",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2019-9192",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-100290",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-100290",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-126765",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-126765",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-121758",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "UNKNOWN",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-121758",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-124024",
+      "PkgName": "libc-bin",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "UNKNOWN",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-124024",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-115819",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-115819",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-121757",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-121757",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-84243",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-84243",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2010-4756",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2010-4756",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2018-20796",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2018-20796",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2019-1010022",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2019-1010022",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2019-1010023",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2019-1010023",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2019-1010024",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2019-1010024",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2019-1010025",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2019-1010025",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2019-9192",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2019-9192",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-100290",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-100290",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-126765",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-126765",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-121758",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "UNKNOWN",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-121758",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-124024",
+      "PkgName": "libc6",
+      "InstalledVersion": "2.41-12+deb13u5",
+      "FixedVersion": null,
+      "Severity": "UNKNOWN",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-124024",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-102010",
+      "PkgName": "libgcc-s1",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-102010",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-114690",
+      "PkgName": "libgcc-s1",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-114690",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-114691",
+      "PkgName": "libgcc-s1",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-114691",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-115455",
+      "PkgName": "libgcc-s1",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-115455",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-125709",
+      "PkgName": "libgcc-s1",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-125709",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-95619",
+      "PkgName": "libgcc-s1",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-95619",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-115456",
+      "PkgName": "libgcc-s1",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-115456",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-76642",
+      "PkgName": "liblastlog2-2",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-76642",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78408",
+      "PkgName": "liblastlog2-2",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78408",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78409",
+      "PkgName": "liblastlog2-2",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78409",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78410",
+      "PkgName": "liblastlog2-2",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78410",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-3184",
+      "PkgName": "liblastlog2-2",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-3184",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2022-0563",
+      "PkgName": "liblastlog2-2",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2022-0563",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-76642",
+      "PkgName": "libmount1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-76642",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78408",
+      "PkgName": "libmount1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78408",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78409",
+      "PkgName": "libmount1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78409",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78410",
+      "PkgName": "libmount1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78410",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-3184",
+      "PkgName": "libmount1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-3184",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2022-0563",
+      "PkgName": "libmount1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2022-0563",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2025-69720",
+      "PkgName": "libncursesw6",
+      "InstalledVersion": "6.5+20250216-2",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-69720",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2025-6141",
+      "PkgName": "libncursesw6",
+      "InstalledVersion": "6.5+20250216-2",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-6141",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-54411",
+      "PkgName": "libpam-modules",
+      "InstalledVersion": "1.7.0-5",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-54411",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-54411",
+      "PkgName": "libpam-modules-bin",
+      "InstalledVersion": "1.7.0-5",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-54411",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-54411",
+      "PkgName": "libpam-runtime",
+      "InstalledVersion": "1.7.0-5",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-54411",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-54411",
+      "PkgName": "libpam0g",
+      "InstalledVersion": "1.7.0-5",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-54411",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "TEMP-0000000-402D17",
+      "PkgName": "libseccomp2",
+      "InstalledVersion": "2.6.0-2",
+      "FixedVersion": null,
+      "Severity": "UNKNOWN",
+      "Status": "affected",
+      "PrimaryURL": "https://security-tracker.debian.org/tracker/TEMP-0000000-402D17",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "TEMP-0000000-414660",
+      "PkgName": "libseccomp2",
+      "InstalledVersion": "2.6.0-2",
+      "FixedVersion": null,
+      "Severity": "UNKNOWN",
+      "Status": "affected",
+      "PrimaryURL": "https://security-tracker.debian.org/tracker/TEMP-0000000-414660",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "TEMP-0000000-43231F",
+      "PkgName": "libseccomp2",
+      "InstalledVersion": "2.6.0-2",
+      "FixedVersion": null,
+      "Severity": "UNKNOWN",
+      "Status": "affected",
+      "PrimaryURL": "https://security-tracker.debian.org/tracker/TEMP-0000000-43231F",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "TEMP-0000000-AE2C66",
+      "PkgName": "libseccomp2",
+      "InstalledVersion": "2.6.0-2",
+      "FixedVersion": null,
+      "Severity": "UNKNOWN",
+      "Status": "affected",
+      "PrimaryURL": "https://security-tracker.debian.org/tracker/TEMP-0000000-AE2C66",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "TEMP-0000000-ED49F3",
+      "PkgName": "libseccomp2",
+      "InstalledVersion": "2.6.0-2",
+      "FixedVersion": null,
+      "Severity": "UNKNOWN",
+      "Status": "affected",
+      "PrimaryURL": "https://security-tracker.debian.org/tracker/TEMP-0000000-ED49F3",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "TEMP-0000000-F88C7E",
+      "PkgName": "libseccomp2",
+      "InstalledVersion": "2.6.0-2",
+      "FixedVersion": null,
+      "Severity": "UNKNOWN",
+      "Status": "affected",
+      "PrimaryURL": "https://security-tracker.debian.org/tracker/TEMP-0000000-F88C7E",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "TEMP-0000000-FCA4C0",
+      "PkgName": "libseccomp2",
+      "InstalledVersion": "2.6.0-2",
+      "FixedVersion": null,
+      "Severity": "UNKNOWN",
+      "Status": "affected",
+      "PrimaryURL": "https://security-tracker.debian.org/tracker/TEMP-0000000-FCA4C0",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-76642",
+      "PkgName": "libsmartcols1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-76642",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78408",
+      "PkgName": "libsmartcols1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78408",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78409",
+      "PkgName": "libsmartcols1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78409",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78410",
+      "PkgName": "libsmartcols1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78410",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-3184",
+      "PkgName": "libsmartcols1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-3184",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2022-0563",
+      "PkgName": "libsmartcols1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2022-0563",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-119373",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-119373",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-119374",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-119374",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-119379",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-119379",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-119371",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-119371",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-119372",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-119372",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-119375",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-119375",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-119376",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-119376",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-119378",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-119378",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-119591",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-119591",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-50812",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-50812",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-50813",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-50813",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2021-45346",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2021-45346",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2025-70873",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-70873",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-119377",
+      "PkgName": "libsqlite3-0",
+      "InstalledVersion": "3.46.1-7+deb13u2",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-119377",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-107494",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-107494",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-124709",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-124709",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-107496",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-107496",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-121482",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-121482",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-35190",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-35190",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-84785",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-84785",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-84786",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-84786",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-95690",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-95690",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-95691",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-95691",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-95692",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-95692",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-107493",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-107493",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-121481",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-121481",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-88822",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-88822",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-88823",
+      "PkgName": "libssl3t64",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-88823",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-102010",
+      "PkgName": "libstdc++6",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-102010",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-114690",
+      "PkgName": "libstdc++6",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-114690",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-114691",
+      "PkgName": "libstdc++6",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-114691",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-115455",
+      "PkgName": "libstdc++6",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-115455",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-125709",
+      "PkgName": "libstdc++6",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-125709",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-95619",
+      "PkgName": "libstdc++6",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-95619",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-115456",
+      "PkgName": "libstdc++6",
+      "InstalledVersion": "14.2.0-19",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-115456",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-16742",
+      "PkgName": "libsystemd0",
+      "InstalledVersion": "257.13-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-16742",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-15059",
+      "PkgName": "libsystemd0",
+      "InstalledVersion": "257.13-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-15059",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2013-4392",
+      "PkgName": "libsystemd0",
+      "InstalledVersion": "257.13-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2013-4392",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2023-31437",
+      "PkgName": "libsystemd0",
+      "InstalledVersion": "257.13-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2023-31437",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2023-31438",
+      "PkgName": "libsystemd0",
+      "InstalledVersion": "257.13-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2023-31438",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2023-31439",
+      "PkgName": "libsystemd0",
+      "InstalledVersion": "257.13-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2023-31439",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2025-69720",
+      "PkgName": "libtinfo6",
+      "InstalledVersion": "6.5+20250216-2",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-69720",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2025-6141",
+      "PkgName": "libtinfo6",
+      "InstalledVersion": "6.5+20250216-2",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-6141",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-16742",
+      "PkgName": "libudev1",
+      "InstalledVersion": "257.13-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-16742",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-15059",
+      "PkgName": "libudev1",
+      "InstalledVersion": "257.13-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-15059",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2013-4392",
+      "PkgName": "libudev1",
+      "InstalledVersion": "257.13-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2013-4392",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2023-31437",
+      "PkgName": "libudev1",
+      "InstalledVersion": "257.13-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2023-31437",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2023-31438",
+      "PkgName": "libudev1",
+      "InstalledVersion": "257.13-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2023-31438",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2023-31439",
+      "PkgName": "libudev1",
+      "InstalledVersion": "257.13-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2023-31439",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-76642",
+      "PkgName": "libuuid1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-76642",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78408",
+      "PkgName": "libuuid1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78408",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78409",
+      "PkgName": "libuuid1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78409",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78410",
+      "PkgName": "libuuid1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78410",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-3184",
+      "PkgName": "libuuid1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-3184",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2022-0563",
+      "PkgName": "libuuid1",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2022-0563",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-76642",
+      "PkgName": "login",
+      "InstalledVersion": "1:4.16.0-2+really2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-76642",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78408",
+      "PkgName": "login",
+      "InstalledVersion": "1:4.16.0-2+really2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78408",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78409",
+      "PkgName": "login",
+      "InstalledVersion": "1:4.16.0-2+really2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78409",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78410",
+      "PkgName": "login",
+      "InstalledVersion": "1:4.16.0-2+really2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78410",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-3184",
+      "PkgName": "login",
+      "InstalledVersion": "1:4.16.0-2+really2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-3184",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2022-0563",
+      "PkgName": "login",
+      "InstalledVersion": "1:4.16.0-2+really2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2022-0563",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2007-5686",
+      "PkgName": "login.defs",
+      "InstalledVersion": "1:4.17.4-2+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2007-5686",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2024-56433",
+      "PkgName": "login.defs",
+      "InstalledVersion": "1:4.17.4-2+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2024-56433",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "TEMP-0628843-DBAD28",
+      "PkgName": "login.defs",
+      "InstalledVersion": "1:4.17.4-2+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://security-tracker.debian.org/tracker/TEMP-0628843-DBAD28",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-76642",
+      "PkgName": "mount",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-76642",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78408",
+      "PkgName": "mount",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78408",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78409",
+      "PkgName": "mount",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78409",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78410",
+      "PkgName": "mount",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78410",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-3184",
+      "PkgName": "mount",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-3184",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2022-0563",
+      "PkgName": "mount",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2022-0563",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2025-69720",
+      "PkgName": "ncurses-base",
+      "InstalledVersion": "6.5+20250216-2",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-69720",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2025-6141",
+      "PkgName": "ncurses-base",
+      "InstalledVersion": "6.5+20250216-2",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-6141",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2025-69720",
+      "PkgName": "ncurses-bin",
+      "InstalledVersion": "6.5+20250216-2",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-69720",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2025-6141",
+      "PkgName": "ncurses-bin",
+      "InstalledVersion": "6.5+20250216-2",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-6141",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-107494",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-107494",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-124709",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-124709",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-107496",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-107496",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-121482",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-121482",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-35190",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-35190",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-84785",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-84785",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-84786",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-84786",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-95690",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-95690",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-95691",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-95691",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-95692",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-95692",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-107493",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-107493",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-121481",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-121481",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-88822",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-88822",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-88823",
+      "PkgName": "openssl",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-88823",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-107494",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-107494",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-124709",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-124709",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-107496",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-107496",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-121482",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-121482",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-35190",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-35190",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-84785",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-84785",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-84786",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-84786",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-95690",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-95690",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-95691",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-95691",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-95692",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-95692",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-107493",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-107493",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-121481",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-121481",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-88822",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-88822",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-88823",
+      "PkgName": "openssl-provider-legacy",
+      "InstalledVersion": "3.5.9-1~deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-88823",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2007-5686",
+      "PkgName": "passwd",
+      "InstalledVersion": "1:4.17.4-2+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2007-5686",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2024-56433",
+      "PkgName": "passwd",
+      "InstalledVersion": "1:4.17.4-2+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2024-56433",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "TEMP-0628843-DBAD28",
+      "PkgName": "passwd",
+      "InstalledVersion": "1:4.17.4-2+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://security-tracker.debian.org/tracker/TEMP-0628843-DBAD28",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-9538",
+      "PkgName": "perl-base",
+      "InstalledVersion": "5.40.1-6+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "fix_deferred",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-9538",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-15534",
+      "PkgName": "perl-base",
+      "InstalledVersion": "5.40.1-6+deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "fix_deferred",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-15534",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-82560",
+      "PkgName": "perl-base",
+      "InstalledVersion": "5.40.1-6+deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-82560",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2011-4116",
+      "PkgName": "perl-base",
+      "InstalledVersion": "5.40.1-6+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2011-4116",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-40558",
+      "PkgName": "perl-base",
+      "InstalledVersion": "5.40.1-6+deb13u1",
+      "FixedVersion": null,
+      "Severity": "UNKNOWN",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-40558",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "TEMP-0517018-A83CE6",
+      "PkgName": "sysvinit-utils",
+      "InstalledVersion": "3.14-4",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://security-tracker.debian.org/tracker/TEMP-0517018-A83CE6",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-18477",
+      "PkgName": "tar",
+      "InstalledVersion": "1.35+dfsg-3.1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-18477",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-18508",
+      "PkgName": "tar",
+      "InstalledVersion": "1.35+dfsg-3.1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-18508",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-5704",
+      "PkgName": "tar",
+      "InstalledVersion": "1.35+dfsg-3.1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-5704",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2005-2541",
+      "PkgName": "tar",
+      "InstalledVersion": "1.35+dfsg-3.1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2005-2541",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "TEMP-0290435-0B57B5",
+      "PkgName": "tar",
+      "InstalledVersion": "1.35+dfsg-3.1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://security-tracker.debian.org/tracker/TEMP-0290435-0B57B5",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-76642",
+      "PkgName": "util-linux",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-76642",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78408",
+      "PkgName": "util-linux",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78408",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78409",
+      "PkgName": "util-linux",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78409",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-78410",
+      "PkgName": "util-linux",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "HIGH",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-78410",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-3184",
+      "PkgName": "util-linux",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "MEDIUM",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-3184",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2022-0563",
+      "PkgName": "util-linux",
+      "InstalledVersion": "2.41.5-0+deb13u1",
+      "FixedVersion": null,
+      "Severity": "LOW",
+      "Status": "affected",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2022-0563",
+      "ecosystem": "debian",
+      "assessment": "Unfixed distribution package; application reachability not established"
+    },
+    {
+      "VulnerabilityID": "CVE-2025-47273",
+      "PkgName": "setuptools",
+      "InstalledVersion": "70.3.0",
+      "FixedVersion": "78.1.1",
+      "Severity": "HIGH",
+      "Status": "fixed",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-47273",
+      "ecosystem": "python-pkg",
+      "assessment": "pip SBOM setuptools entry; affected setuptools modules absent, see audit report"
+    },
+    {
+      "VulnerabilityID": "CVE-2026-59890",
+      "PkgName": "setuptools",
+      "InstalledVersion": "70.3.0",
+      "FixedVersion": "83.0.0",
+      "Severity": "MEDIUM",
+      "Status": "fixed",
+      "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-59890",
+      "ecosystem": "python-pkg",
+      "assessment": "pip SBOM setuptools entry; affected setuptools modules absent, see audit report"
+    },
+    {
+      "VulnerabilityID": "GHSA-xmj3-9gf7-h52w",
+      "PkgName": "setuptools",
+      "InstalledVersion": "70.3.0",
+      "FixedVersion": "84.1.0",
+      "Severity": "LOW",
+      "Status": "fixed",
+      "PrimaryURL": "https://github.com/advisories/GHSA-xmj3-9gf7-h52w",
+      "ecosystem": "python-pkg",
+      "assessment": "pip SBOM setuptools entry; affected setuptools modules absent, see audit report"
+    }
+  ],
+  "action_lockfile_findings": [
+    {
+      "action": "actions/checkout",
+      "kind": "npm production dependency vulnerable packages incl affected dependents",
+      "counts": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 1,
+        "critical": 0,
+        "total": 1
+      },
+      "packages": [
+        "undici"
+      ],
+      "advisories": [
+        "https://github.com/advisories/GHSA-2m5v-pch6-74hx",
+        "https://github.com/advisories/GHSA-3wwx-pv8p-q78v",
+        "https://github.com/advisories/GHSA-4qv8-2p9j-2685",
+        "https://github.com/advisories/GHSA-8xcm-r25x-g524",
+        "https://github.com/advisories/GHSA-9fm3-97px-rjf6",
+        "https://github.com/advisories/GHSA-m8rv-5g2x-5cg5",
+        "https://github.com/advisories/GHSA-qrxm-fqhp-jwvm",
+        "https://github.com/advisories/GHSA-r53p-7pc4-xj5r",
+        "https://github.com/advisories/GHSA-rfgv-xxqx-mfg5",
+        "https://github.com/advisories/GHSA-v3r7-h72x-cjcm",
+        "https://github.com/advisories/GHSA-xjj6-f33q-929c"
+      ],
+      "version": "v7.0.1",
+      "disposition": "Latest upstream release retained; lockfile findings do not establish bundled-code reachability"
+    },
+    {
+      "action": "actions/setup-python",
+      "kind": "npm production dependency vulnerable packages incl affected dependents",
+      "counts": {
+        "info": 0,
+        "low": 1,
+        "moderate": 3,
+        "high": 1,
+        "critical": 0,
+        "total": 5
+      },
+      "packages": [
+        "@actions/cache",
+        "@actions/glob",
+        "fast-xml-parser",
+        "minimatch",
+        "undici"
+      ],
+      "advisories": [
+        "https://github.com/advisories/GHSA-2m5v-pch6-74hx",
+        "https://github.com/advisories/GHSA-474x-hrwr-fgx4",
+        "https://github.com/advisories/GHSA-4qv8-2p9j-2685",
+        "https://github.com/advisories/GHSA-9fm3-97px-rjf6",
+        "https://github.com/advisories/GHSA-g3hv-75wg-m249",
+        "https://github.com/advisories/GHSA-qrxm-fqhp-jwvm",
+        "https://github.com/advisories/GHSA-xjj6-f33q-929c"
+      ],
+      "version": "v7.1.0",
+      "disposition": "Latest upstream release retained; lockfile findings do not establish bundled-code reachability"
+    },
+    {
+      "action": "docker/build-push-action",
+      "kind": "Yarn production dependency advisory rows",
+      "counts": {
+        "moderate": 10,
+        "high": 19,
+        "low": 2,
+        "critical": 2
+      },
+      "rows": 33,
+      "packages": [
+        "brace-expansion",
+        "fast-xml-parser",
+        "glob",
+        "handlebars",
+        "minimatch",
+        "undici"
+      ],
+      "advisories": [
+        "https://github.com/advisories/GHSA-23c5-xmqv-rm74",
+        "https://github.com/advisories/GHSA-2m5v-pch6-74hx",
+        "https://github.com/advisories/GHSA-3g3m-2fjr-6pw4",
+        "https://github.com/advisories/GHSA-3jxr-9vmj-r5cp",
+        "https://github.com/advisories/GHSA-3ppc-4f35-3m26",
+        "https://github.com/advisories/GHSA-3wwx-pv8p-q78v",
+        "https://github.com/advisories/GHSA-474x-hrwr-fgx4",
+        "https://github.com/advisories/GHSA-4qv8-2p9j-2685",
+        "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
+        "https://github.com/advisories/GHSA-7r86-cg39-jmmj",
+        "https://github.com/advisories/GHSA-8r5x-fm3f-whwj",
+        "https://github.com/advisories/GHSA-9fm3-97px-rjf6",
+        "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+        "https://github.com/advisories/GHSA-g3hv-75wg-m249",
+        "https://github.com/advisories/GHSA-mh99-v99m-4gvg",
+        "https://github.com/advisories/GHSA-p8wg-vrv2-v86f",
+        "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
+        "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
+        "https://github.com/advisories/GHSA-qrxm-fqhp-jwvm",
+        "https://github.com/advisories/GHSA-r53p-7pc4-xj5r",
+        "https://github.com/advisories/GHSA-rfgv-xxqx-mfg5",
+        "https://github.com/advisories/GHSA-rgw5-rvv9-x895",
+        "https://github.com/advisories/GHSA-xjj6-f33q-929c",
+        "https://github.com/advisories/GHSA-xw65-4hp5-5hc7"
+      ],
+      "version": "v7.4.0",
+      "disposition": "Latest upstream release retained; lockfile findings do not establish bundled-code reachability"
+    },
+    {
+      "action": "docker/setup-buildx-action",
+      "kind": "Yarn production dependency advisory rows",
+      "counts": {
+        "low": 3,
+        "moderate": 10,
+        "high": 23,
+        "critical": 2
+      },
+      "rows": 38,
+      "packages": [
+        "brace-expansion",
+        "fast-xml-parser",
+        "glob",
+        "handlebars",
+        "minimatch",
+        "undici"
+      ],
+      "advisories": [
+        "https://github.com/advisories/GHSA-23c5-xmqv-rm74",
+        "https://github.com/advisories/GHSA-2m5v-pch6-74hx",
+        "https://github.com/advisories/GHSA-3g3m-2fjr-6pw4",
+        "https://github.com/advisories/GHSA-3jxr-9vmj-r5cp",
+        "https://github.com/advisories/GHSA-3ppc-4f35-3m26",
+        "https://github.com/advisories/GHSA-3wwx-pv8p-q78v",
+        "https://github.com/advisories/GHSA-474x-hrwr-fgx4",
+        "https://github.com/advisories/GHSA-4qv8-2p9j-2685",
+        "https://github.com/advisories/GHSA-5j98-mcp5-4vw2",
+        "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
+        "https://github.com/advisories/GHSA-7r86-cg39-jmmj",
+        "https://github.com/advisories/GHSA-8r5x-fm3f-whwj",
+        "https://github.com/advisories/GHSA-9fm3-97px-rjf6",
+        "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+        "https://github.com/advisories/GHSA-g3hv-75wg-m249",
+        "https://github.com/advisories/GHSA-mh99-v99m-4gvg",
+        "https://github.com/advisories/GHSA-p8wg-vrv2-v86f",
+        "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
+        "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
+        "https://github.com/advisories/GHSA-qrxm-fqhp-jwvm",
+        "https://github.com/advisories/GHSA-r53p-7pc4-xj5r",
+        "https://github.com/advisories/GHSA-rfgv-xxqx-mfg5",
+        "https://github.com/advisories/GHSA-rgw5-rvv9-x895",
+        "https://github.com/advisories/GHSA-v6h2-p8h4-qcjw",
+        "https://github.com/advisories/GHSA-xjj6-f33q-929c",
+        "https://github.com/advisories/GHSA-xw65-4hp5-5hc7"
+      ],
+      "version": "v4.4.1",
+      "disposition": "Latest upstream release retained; lockfile findings do not establish bundled-code reachability"
+    },
+    {
+      "action": "gitleaks/gitleaks-action",
+      "kind": "npm production dependency vulnerable packages incl affected dependents",
+      "counts": {
+        "info": 0,
+        "low": 0,
+        "moderate": 15,
+        "high": 6,
+        "critical": 1,
+        "total": 22
+      },
+      "packages": [
+        "@actions/artifact",
+        "@actions/cache",
+        "@actions/github",
+        "@actions/http-client",
+        "@actions/tool-cache",
+        "@azure/core-http",
+        "@azure/ms-rest-js",
+        "@azure/storage-blob",
+        "@fastify/busboy",
+        "@octokit/core",
+        "@octokit/graphql",
+        "@octokit/plugin-paginate-rest",
+        "@octokit/request",
+        "@octokit/request-error",
+        "@octokit/rest",
+        "brace-expansion",
+        "form-data",
+        "glob",
+        "lodash",
+        "minimatch",
+        "undici",
+        "uuid"
+      ],
+      "advisories": [
+        "https://github.com/advisories/GHSA-23c5-xmqv-rm74",
+        "https://github.com/advisories/GHSA-2m5v-pch6-74hx",
+        "https://github.com/advisories/GHSA-2mjp-6q6p-2qxm",
+        "https://github.com/advisories/GHSA-35p6-xmwp-9g52",
+        "https://github.com/advisories/GHSA-3g3m-2fjr-6pw4",
+        "https://github.com/advisories/GHSA-3jxr-9vmj-r5cp",
+        "https://github.com/advisories/GHSA-3ppc-4f35-3m26",
+        "https://github.com/advisories/GHSA-4992-7rv2-5pvq",
+        "https://github.com/advisories/GHSA-5j98-mcp5-4vw2",
+        "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
+        "https://github.com/advisories/GHSA-7r86-cg39-jmmj",
+        "https://github.com/advisories/GHSA-8xcm-r25x-g524",
+        "https://github.com/advisories/GHSA-9fm3-97px-rjf6",
+        "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+        "https://github.com/advisories/GHSA-fjxv-7rqg-78g4",
+        "https://github.com/advisories/GHSA-g3hv-75wg-m249",
+        "https://github.com/advisories/GHSA-g8m3-5g58-fq7m",
+        "https://github.com/advisories/GHSA-g9mf-h72j-4rw9",
+        "https://github.com/advisories/GHSA-gxm5-99cw-xjw9",
+        "https://github.com/advisories/GHSA-h5c3-5r3r-rr8q",
+        "https://github.com/advisories/GHSA-hmw2-7cc7-3qxx",
+        "https://github.com/advisories/GHSA-m8rv-5g2x-5cg5",
+        "https://github.com/advisories/GHSA-mh99-v99m-4gvg",
+        "https://github.com/advisories/GHSA-p88m-4jfj-68fv",
+        "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
+        "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
+        "https://github.com/advisories/GHSA-qrxm-fqhp-jwvm",
+        "https://github.com/advisories/GHSA-r53p-7pc4-xj5r",
+        "https://github.com/advisories/GHSA-r5fr-rjxr-66jc",
+        "https://github.com/advisories/GHSA-rgw5-rvv9-x895",
+        "https://github.com/advisories/GHSA-rmvr-2pp2-xj38",
+        "https://github.com/advisories/GHSA-v3r7-h72x-cjcm",
+        "https://github.com/advisories/GHSA-v6h2-p8h4-qcjw",
+        "https://github.com/advisories/GHSA-v9p9-hfj2-hcw8",
+        "https://github.com/advisories/GHSA-vrm6-8vpv-qv8q",
+        "https://github.com/advisories/GHSA-vxpw-j846-p89q",
+        "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+        "https://github.com/advisories/GHSA-x8mw-p69m-v3mx",
+        "https://github.com/advisories/GHSA-xx4v-prfh-6cgc",
+        "https://github.com/advisories/GHSA-xxjr-mmjv-4gpg"
+      ],
+      "version": "v3.0.0",
+      "disposition": "Removed; scanner invoked directly"
+    }
+  ],
+  "gitleaks_binary_findings": {
+    "config": {
+      "protocol_version": "v1.0.0",
+      "scanner_name": "govulncheck",
+      "scanner_version": "v1.10.0",
+      "db": "https://vuln.go.dev",
+      "db_last_modified": "2026-11-24T15:56:00Z",
+      "scan_level": "symbol",
+      "scan_mode": "binary"
+    },
+    "binary": "gitleaks_8.30.1_linux_x64.tar.gz",
+    "binary_archive_sha256": "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb",
+    "compiled_go_version": "go1.24.11",
+    "finding_rows_by_level": {
+      "module": 78,
+      "package": 87,
+      "symbol": 22939
+    },
+    "unique_ids_by_level": {
+      "module": [
+        "GO-2025-3922",
+        "GO-2025-4020",
+        "GO-2025-4116",
+        "GO-2025-4134",
+        "GO-2025-4135",
+        "GO-2026-4337",
+        "GO-2026-4340",
+        "GO-2026-4341",
+        "GO-2026-4342",
+        "GO-2026-4601",
+        "GO-2026-4602",
+        "GO-2026-4603",
+        "GO-2026-4864",
+        "GO-2026-4865",
+        "GO-2026-4869",
+        "GO-2026-4870",
+        "GO-2026-4918",
+        "GO-2026-4946",
+        "GO-2026-4947",
+        "GO-2026-4970",
+        "GO-2026-4971",
+        "GO-2026-4976",
+        "GO-2026-4977",
+        "GO-2026-4980",
+        "GO-2026-4981",
+        "GO-2026-4982",
+        "GO-2026-4986",
+        "GO-2026-5005",
+        "GO-2026-5006",
+        "GO-2026-5013",
+        "GO-2026-5014",
+        "GO-2026-5015",
+        "GO-2026-5016",
+        "GO-2026-5017",
+        "GO-2026-5018",
+        "GO-2026-5019",
+        "GO-2026-5020",
+        "GO-2026-5021",
+        "GO-2026-5026",
+        "GO-2026-5033",
+        "GO-2026-5037",
+        "GO-2026-5038",
+        "GO-2026-5039",
+        "GO-2026-5841",
+        "GO-2026-5856",
+        "GO-2026-5932",
+        "GO-2026-5970",
+        "GO-2026-5972",
+        "GO-2026-6088",
+        "GO-2026-6089",
+        "GO-2026-6090",
+        "GO-2026-6091",
+        "GO-2026-6218",
+        "GO-2026-6303",
+        "GO-2026-6354",
+        "GO-2026-6355",
+        "GO-2026-6599",
+        "GO-2026-6600",
+        "GO-2026-6603",
+        "GO-2026-6605",
+        "GO-2026-6607",
+        "GO-2026-6608",
+        "GO-2026-6609",
+        "GO-2026-6610",
+        "GO-2026-6611",
+        "GO-2026-6612",
+        "GO-2026-6613",
+        "GO-2026-6617",
+        "GO-2026-6629",
+        "GO-2026-6809",
+        "GO-2026-6859",
+        "GO-2026-6865",
+        "GO-2026-6888"
+      ],
+      "package": [
+        "GO-2025-4020",
+        "GO-2025-4116",
+        "GO-2025-4134",
+        "GO-2025-4135",
+        "GO-2026-4337",
+        "GO-2026-4340",
+        "GO-2026-4341",
+        "GO-2026-4342",
+        "GO-2026-4601",
+        "GO-2026-4602",
+        "GO-2026-4603",
+        "GO-2026-4864",
+        "GO-2026-4865",
+        "GO-2026-4869",
+        "GO-2026-4870",
+        "GO-2026-4918",
+        "GO-2026-4946",
+        "GO-2026-4947",
+        "GO-2026-4970",
+        "GO-2026-4971",
+        "GO-2026-4976",
+        "GO-2026-4977",
+        "GO-2026-4980",
+        "GO-2026-4981",
+        "GO-2026-4982",
+        "GO-2026-4986",
+        "GO-2026-5005",
+        "GO-2026-5006",
+        "GO-2026-5013",
+        "GO-2026-5014",
+        "GO-2026-5015",
+        "GO-2026-5016",
+        "GO-2026-5017",
+        "GO-2026-5018",
+        "GO-2026-5019",
+        "GO-2026-5020",
+        "GO-2026-5021",
+        "GO-2026-5026",
+        "GO-2026-5033",
+        "GO-2026-5037",
+        "GO-2026-5038",
+        "GO-2026-5039",
+        "GO-2026-5841",
+        "GO-2026-5856",
+        "GO-2026-5932",
+        "GO-2026-5970",
+        "GO-2026-5972",
+        "GO-2026-6088",
+        "GO-2026-6089",
+        "GO-2026-6090",
+        "GO-2026-6091",
+        "GO-2026-6218",
+        "GO-2026-6303",
+        "GO-2026-6354",
+        "GO-2026-6355",
+        "GO-2026-6599",
+        "GO-2026-6600",
+        "GO-2026-6603",
+        "GO-2026-6605",
+        "GO-2026-6607",
+        "GO-2026-6608",
+        "GO-2026-6609",
+        "GO-2026-6610",
+        "GO-2026-6611",
+        "GO-2026-6612",
+        "GO-2026-6613",
+        "GO-2026-6617",
+        "GO-2026-6629",
+        "GO-2026-6809",
+        "GO-2026-6859",
+        "GO-2026-6865",
+        "GO-2026-6888"
+      ],
+      "symbol": [
+        "GO-2025-4020",
+        "GO-2025-4116",
+        "GO-2025-4134",
+        "GO-2025-4135",
+        "GO-2026-4337",
+        "GO-2026-4340",
+        "GO-2026-4341",
+        "GO-2026-4342",
+        "GO-2026-4601",
+        "GO-2026-4602",
+        "GO-2026-4603",
+        "GO-2026-4864",
+        "GO-2026-4865",
+        "GO-2026-4869",
+        "GO-2026-4870",
+        "GO-2026-4918",
+        "GO-2026-4946",
+        "GO-2026-4947",
+        "GO-2026-4970",
+        "GO-2026-4971",
+        "GO-2026-4976",
+        "GO-2026-4977",
+        "GO-2026-4980",
+        "GO-2026-4981",
+        "GO-2026-4982",
+        "GO-2026-4986",
+        "GO-2026-5005",
+        "GO-2026-5006",
+        "GO-2026-5013",
+        "GO-2026-5014",
+        "GO-2026-5015",
+        "GO-2026-5016",
+        "GO-2026-5017",
+        "GO-2026-5018",
+        "GO-2026-5019",
+        "GO-2026-5020",
+        "GO-2026-5021",
+        "GO-2026-5026",
+        "GO-2026-5033",
+        "GO-2026-5037",
+        "GO-2026-5038",
+        "GO-2026-5039",
+        "GO-2026-5841",
+        "GO-2026-5856",
+        "GO-2026-5932",
+        "GO-2026-5970",
+        "GO-2026-5972",
+        "GO-2026-6088",
+        "GO-2026-6089",
+        "GO-2026-6090",
+        "GO-2026-6091",
+        "GO-2026-6218",
+        "GO-2026-6303",
+        "GO-2026-6354",
+        "GO-2026-6355",
+        "GO-2026-6599",
+        "GO-2026-6600",
+        "GO-2026-6603",
+        "GO-2026-6605",
+        "GO-2026-6607",
+        "GO-2026-6608",
+        "GO-2026-6609",
+        "GO-2026-6610",
+        "GO-2026-6611",
+        "GO-2026-6612",
+        "GO-2026-6613",
+        "GO-2026-6617",
+        "GO-2026-6629",
+        "GO-2026-6809",
+        "GO-2026-6859",
+        "GO-2026-6865",
+        "GO-2026-6888"
+      ]
+    },
+    "advisories": [
+      {
+        "id": "GO-2025-3922",
+        "summary": "Memory leaks when decoding a corrupted multiple LZMA archives in github.com/ulikunitz/xz",
+        "aliases": [
+          "CVE-2025-58058",
+          "GHSA-jc7w-c686-c4v9"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2025-3922"
+      },
+      {
+        "id": "GO-2025-4020",
+        "summary": "DoS risk due to unrestricted RAR dictionary sizes in github.com/nwaples/rardecode",
+        "aliases": [
+          "CVE-2025-11579",
+          "GHSA-rwvp-r38j-9rgg"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2025-4020"
+      },
+      {
+        "id": "GO-2025-4116",
+        "summary": "Potential denial of service in golang.org/x/crypto/ssh/agent",
+        "aliases": [
+          "CVE-2025-47913"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2025-4116"
+      },
+      {
+        "id": "GO-2025-4134",
+        "summary": "Unbounded memory consumption in golang.org/x/crypto/ssh",
+        "aliases": [
+          "CVE-2025-58181",
+          "GHSA-j5w8-q4qc-rx2x"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2025-4134"
+      },
+      {
+        "id": "GO-2025-4135",
+        "summary": "Malformed constraint may cause denial of service in golang.org/x/crypto/ssh/agent",
+        "aliases": [
+          "CVE-2025-47914",
+          "GHSA-f6x5-jh6r-wrfv"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2025-4135"
+      },
+      {
+        "id": "GO-2026-4337",
+        "summary": "Unexpected session resumption in crypto/tls",
+        "aliases": [
+          "CVE-2025-68121"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4337"
+      },
+      {
+        "id": "GO-2026-4340",
+        "summary": "Handshake messages may be processed at the incorrect encryption level in crypto/tls",
+        "aliases": [
+          "CVE-2025-61730",
+          "CVE-2025-61730"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4340"
+      },
+      {
+        "id": "GO-2026-4341",
+        "summary": "Memory exhaustion in query parameter parsing in net/url",
+        "aliases": [
+          "CVE-2025-61726",
+          "CVE-2025-61726"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4341"
+      },
+      {
+        "id": "GO-2026-4342",
+        "summary": "Excessive CPU consumption when building archive index in archive/zip",
+        "aliases": [
+          "CVE-2025-61728",
+          "CVE-2025-61728"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4342"
+      },
+      {
+        "id": "GO-2026-4601",
+        "summary": "Incorrect parsing of IPv6 host literals in net/url",
+        "aliases": [
+          "CVE-2026-25679"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4601"
+      },
+      {
+        "id": "GO-2026-4602",
+        "summary": "FileInfo can escape from a Root in os",
+        "aliases": [
+          "CVE-2026-27139"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4602"
+      },
+      {
+        "id": "GO-2026-4603",
+        "summary": "URLs in meta content attribute actions are not escaped in html/template",
+        "aliases": [
+          "CVE-2026-27142"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4603"
+      },
+      {
+        "id": "GO-2026-4864",
+        "summary": "TOCTOU permits root escape on Linux via Root.Chmod in os in internal/syscall/unix",
+        "aliases": [
+          "CVE-2026-32282"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4864"
+      },
+      {
+        "id": "GO-2026-4865",
+        "summary": "JsBraceDepth Context Tracking Bugs (XSS) in html/template",
+        "aliases": [
+          "CVE-2026-32289"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4865"
+      },
+      {
+        "id": "GO-2026-4869",
+        "summary": "Unbounded allocation for old GNU sparse in archive/tar",
+        "aliases": [
+          "CVE-2026-32288"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4869"
+      },
+      {
+        "id": "GO-2026-4870",
+        "summary": "Unauthenticated TLS 1.3 KeyUpdate record can cause persistent connection retention and DoS in crypto/tls",
+        "aliases": [
+          "CVE-2026-32283"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4870"
+      },
+      {
+        "id": "GO-2026-4918",
+        "summary": "Infinite loop in HTTP/2 transport when given bad SETTINGS_MAX_FRAME_SIZE in net/http/internal/http2 in golang.org/x/net",
+        "aliases": [
+          "CVE-2026-33814"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4918"
+      },
+      {
+        "id": "GO-2026-4946",
+        "summary": "Inefficient policy validation in crypto/x509",
+        "aliases": [
+          "CVE-2026-32281"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4946"
+      },
+      {
+        "id": "GO-2026-4947",
+        "summary": "Unexpected work during chain building in crypto/x509",
+        "aliases": [
+          "CVE-2026-32280"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4947"
+      },
+      {
+        "id": "GO-2026-4970",
+        "summary": "Root escape via symlink plus trailing slash in os",
+        "aliases": [
+          "CVE-2026-39822"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4970"
+      },
+      {
+        "id": "GO-2026-4971",
+        "summary": "Panic in Dial and LookupPort when handling NUL byte on Windows in net",
+        "aliases": [
+          "CVE-2026-39836"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4971"
+      },
+      {
+        "id": "GO-2026-4976",
+        "summary": "ReverseProxy forwards queries with more than urlmaxqueryparams parameters in net/http/httputil",
+        "aliases": [
+          "CVE-2026-39825"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4976"
+      },
+      {
+        "id": "GO-2026-4977",
+        "summary": "Quadratic string concatenation in consumePhrase in net/mail",
+        "aliases": [
+          "CVE-2026-42499"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4977"
+      },
+      {
+        "id": "GO-2026-4980",
+        "summary": "Escaper bypass leads to XSS in html/template",
+        "aliases": [
+          "CVE-2026-39826"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4980"
+      },
+      {
+        "id": "GO-2026-4981",
+        "summary": "Crash when handling long CNAME response in net",
+        "aliases": [
+          "CVE-2026-33811"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4981"
+      },
+      {
+        "id": "GO-2026-4982",
+        "summary": "Bypass of meta content URL escaping causes XSS in html/template",
+        "aliases": [
+          "CVE-2026-39823"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4982"
+      },
+      {
+        "id": "GO-2026-4986",
+        "summary": "Quadratic string concatentation in consumeComment in net/mail",
+        "aliases": [
+          "CVE-2026-39820"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-4986"
+      },
+      {
+        "id": "GO-2026-5005",
+        "summary": "Invoking key constraints not enforced in golang.org/x/crypto/ssh/agent",
+        "aliases": [
+          "CVE-2026-39833",
+          "GHSA-jppx-rxg9-jmrx"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5005"
+      },
+      {
+        "id": "GO-2026-5006",
+        "summary": "Invoking agent constraints dropped when forwarding keys in golang.org/x/crypto/ssh/agent",
+        "aliases": [
+          "CVE-2026-39832",
+          "GHSA-f5wc-c3c7-36mc"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5006"
+      },
+      {
+        "id": "GO-2026-5013",
+        "summary": "Invoking byte arithmetic causes underflow and panic in golang.org/x/crypto/ssh",
+        "aliases": [
+          "CVE-2026-46597"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5013"
+      },
+      {
+        "id": "GO-2026-5014",
+        "summary": "Invoking bypass of certificate restrictions in golang.org/x/crypto/ssh",
+        "aliases": [
+          "CVE-2026-39828"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5014"
+      },
+      {
+        "id": "GO-2026-5015",
+        "summary": "Invoking server panic during CheckHostKey/Authenticate in golang.org/x/crypto/ssh",
+        "aliases": [
+          "CVE-2026-39835"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5015"
+      },
+      {
+        "id": "GO-2026-5016",
+        "summary": "Invoking memory leak when rejecting channels can lead to DoS in golang.org/x/crypto/ssh",
+        "aliases": [
+          "CVE-2026-39827"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5016"
+      },
+      {
+        "id": "GO-2026-5017",
+        "summary": "Invoking client can cause server deadlock on unexpected responses in golang.org/x/crypto/ssh",
+        "aliases": [
+          "CVE-2026-39830"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5017"
+      },
+      {
+        "id": "GO-2026-5018",
+        "summary": "Invoking pathological RSA/DSA parameters may cause DoS in golang.org/x/crypto/ssh",
+        "aliases": [
+          "CVE-2026-39829"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5018"
+      },
+      {
+        "id": "GO-2026-5019",
+        "summary": "Invoking bypass of FIDO/U2F security keys physical interaction in golang.org/x/crypto/ssh",
+        "aliases": [
+          "CVE-2026-39831"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5019"
+      },
+      {
+        "id": "GO-2026-5020",
+        "summary": "Invoking infinite loop on large channel writes in golang.org/x/crypto/ssh",
+        "aliases": [
+          "CVE-2026-39834"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5020"
+      },
+      {
+        "id": "GO-2026-5021",
+        "summary": "Invoking auth bypass via unenforced @revoked status in golang.org/x/crypto/ssh/knownhosts",
+        "aliases": [
+          "CVE-2026-42508",
+          "GHSA-5cgq-3rg8-m6cv"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5021"
+      },
+      {
+        "id": "GO-2026-5026",
+        "summary": "Invoking failure to reject ASCII-only Punycode-encoded labels in golang.org/x/net/idna",
+        "aliases": [
+          "CVE-2026-39821"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5026"
+      },
+      {
+        "id": "GO-2026-5033",
+        "summary": "Invoking pathological inputs can lead to client panic in golang.org/x/crypto/ssh/agent",
+        "aliases": [
+          "CVE-2026-46598"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5033"
+      },
+      {
+        "id": "GO-2026-5037",
+        "summary": "Inefficient candidate hostname parsing in crypto/x509",
+        "aliases": [
+          "CVE-2026-27145"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5037"
+      },
+      {
+        "id": "GO-2026-5038",
+        "summary": "Quadratic complexity in WordDecoder.DecodeHeader in mime",
+        "aliases": [
+          "CVE-2026-42504"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5038"
+      },
+      {
+        "id": "GO-2026-5039",
+        "summary": "Arbitrary inputs are included in errors without any escaping in net/textproto",
+        "aliases": [
+          "CVE-2026-42507"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5039"
+      },
+      {
+        "id": "GO-2026-5841",
+        "summary": "OOB read in github.com/klauspost/compress/s2",
+        "aliases": [
+          "GHSA-259r-337f-4rfw"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5841"
+      },
+      {
+        "id": "GO-2026-5856",
+        "summary": "Invoking Encrypted Client Hello privacy leak in crypto/tls",
+        "aliases": [
+          "CVE-2026-42505"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5856"
+      },
+      {
+        "id": "GO-2026-5932",
+        "summary": "The golang.org/x/crypto/openpgp package is unmaintained, unsafe by design, and has known security issues",
+        "aliases": null,
+        "url": "https://pkg.go.dev/vuln/GO-2026-5932"
+      },
+      {
+        "id": "GO-2026-5970",
+        "summary": "Infinite loop on invalid input in golang.org/x/text",
+        "aliases": [
+          "CVE-2026-56852"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5970"
+      },
+      {
+        "id": "GO-2026-5972",
+        "summary": "Enforce maximum recursion depth in encoding/asn1",
+        "aliases": [
+          "CVE-2026-33818"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-5972"
+      },
+      {
+        "id": "GO-2026-6088",
+        "summary": "Add recursion depth guard during decode in encoding/xml",
+        "aliases": [
+          "CVE-2026-56859"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6088"
+      },
+      {
+        "id": "GO-2026-6089",
+        "summary": "Apply ReadHeaderTimeout when doing unencrypted HTTP/2 check in net/http",
+        "aliases": [
+          "CVE-2026-56853"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6089"
+      },
+      {
+        "id": "GO-2026-6090",
+        "summary": "Limit handshake messages we are willing to accept post-handshake in crypto/tls",
+        "aliases": [
+          "CVE-2026-56862"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6090"
+      },
+      {
+        "id": "GO-2026-6091",
+        "summary": "Fix Javascript regexp context tracking in html/template",
+        "aliases": [
+          "CVE-2026-56858"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6091"
+      },
+      {
+        "id": "GO-2026-6218",
+        "summary": "Avoid quadratic complexity in resolvePath in net/url",
+        "aliases": [
+          "CVE-2026-56860"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6218"
+      },
+      {
+        "id": "GO-2026-6303",
+        "summary": "Source-address critical option not enforced for non-public-key auth callbacks in golang.org/x/crypto/ssh",
+        "aliases": [
+          "CVE-2026-56854"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6303"
+      },
+      {
+        "id": "GO-2026-6354",
+        "summary": "Prevent DoS on deadlocked undecided channel in golang.org/x/crypto/ssh",
+        "aliases": [
+          "CVE-2026-78662"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6354"
+      },
+      {
+        "id": "GO-2026-6355",
+        "summary": "Prevent DoS on deadlocked established channel in golang.org/x/crypto/ssh",
+        "aliases": [
+          "CVE-2026-56855"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6355"
+      },
+      {
+        "id": "GO-2026-6599",
+        "summary": "Reset context tracking on consecutive template expressions in html/template",
+        "aliases": [
+          "CVE-2026-94448"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6599"
+      },
+      {
+        "id": "GO-2026-6600",
+        "summary": "Recognize yield as regexp preceder keyword in html/template",
+        "aliases": [
+          "CVE-2026-97030"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6600"
+      },
+      {
+        "id": "GO-2026-6603",
+        "summary": "HTTP/2 server memory exhaustion due to Trailer headers in net/http",
+        "aliases": [
+          "CVE-2026-78659"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6603"
+      },
+      {
+        "id": "GO-2026-6605",
+        "summary": "HTTP/1 client connection desynchronization after CONNECT rejection in net/http",
+        "aliases": [
+          "CVE-2026-56866"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6605"
+      },
+      {
+        "id": "GO-2026-6607",
+        "summary": "Reject malformed ECH outer extension references in crypto/tls",
+        "aliases": [
+          "CVE-2026-97031"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6607"
+      },
+      {
+        "id": "GO-2026-6608",
+        "summary": "Memory limit bypass when parsing MIME headers in net/textproto, mime/multipart",
+        "aliases": [
+          "CVE-2026-94440"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6608"
+      },
+      {
+        "id": "GO-2026-6609",
+        "summary": "Lack of limit on size of parsed Range headers in net/http",
+        "aliases": [
+          "CVE-2026-78667"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6609"
+      },
+      {
+        "id": "GO-2026-6610",
+        "summary": "HTTP/2 transport accepts malformed framing-related headers in net/http",
+        "aliases": [
+          "CVE-2026-78660"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6610"
+      },
+      {
+        "id": "GO-2026-6611",
+        "summary": "Excessive CPU consumption from repeated initial window changes in net/http",
+        "aliases": [
+          "CVE-2026-78669"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6611"
+      },
+      {
+        "id": "GO-2026-6612",
+        "summary": "Double flow control refund on HTTP/2 server streams in net/http",
+        "aliases": [
+          "CVE-2026-78663"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6612"
+      },
+      {
+        "id": "GO-2026-6613",
+        "summary": "HTTP/1 server connection desynchronization after 2xx CONNECT response in net/http",
+        "aliases": [
+          "CVE-2026-94439"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6613"
+      },
+      {
+        "id": "GO-2026-6617",
+        "summary": "HTTP/2 server crash due to HPACK encoder race in net/http",
+        "aliases": [
+          "CVE-2026-97032"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6617"
+      },
+      {
+        "id": "GO-2026-6629",
+        "summary": "Panic parsing crafted input in x/text/secure/precis in golang.org/x/text",
+        "aliases": [
+          "CVE-2026-56851"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6629"
+      },
+      {
+        "id": "GO-2026-6809",
+        "summary": "Distrust compromised intermediate certificates in crypto/x509",
+        "aliases": [
+          "CVE-2026-111943"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6809"
+      },
+      {
+        "id": "GO-2026-6859",
+        "summary": "HTTP/1 server crash due to MaxBytesReader header race in net/http",
+        "aliases": [
+          "CVE-2026-97054"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6859"
+      },
+      {
+        "id": "GO-2026-6865",
+        "summary": "Panic on two-block frames in github.com/klauspost/compress",
+        "aliases": [
+          "CVE-2026-116591",
+          "GHSA-fpmh-frq8-7rj8"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6865"
+      },
+      {
+        "id": "GO-2026-6888",
+        "summary": "Excessive memory allocation when decompressing crafted streams in github.com/andybalholm/brotli",
+        "aliases": [
+          "CVE-2026-111497",
+          "GHSA-c9gr-gmg4-2vqv"
+        ],
+        "url": "https://pkg.go.dev/vuln/GO-2026-6888"
+      }
+    ],
+    "limitation": "Binary symbol matches do not establish reachability with the configured local git scan. In JSON mode exit0 is not a clean vulnerability result."
+  },
+  "limitations": [
+    "Scanner package counts and advisory rows have different units; do not add them together.",
+    "No exploit reachability certification or blanket vulnerability suppression.",
+    "Historical secret findings and private raw paths are deliberately omitted."
+  ]
+}

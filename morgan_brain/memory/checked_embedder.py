@@ -14,8 +14,9 @@ carries a sample of stored memories' texts, and the fingerprint is recorded only
 fresh vectors match the stored ones; a space with no stored rows records it directly, since
 there is nothing yet to be wrong about.
 
-Once per process, keyed by (endpoint, model, dims, space id) at module level: ``morgan-mcp``
-builds a context per tool call and checks once per server lifetime; the CLI once per command.
+Once per process for a recorded fingerprint and tolerance at an endpoint/model, at module
+level: ``morgan-mcp`` builds a context per tool call, while the CLI checks once per command.
+An integer space id alone cannot identify a space across independent or restored databases.
 """
 
 from __future__ import annotations
@@ -23,7 +24,10 @@ from __future__ import annotations
 import math
 import sqlite3
 from collections.abc import Callable
+from contextlib import suppress
+from dataclasses import replace
 from datetime import UTC, datetime
+from itertools import count
 
 import structlog
 
@@ -31,6 +35,7 @@ from morgan_brain.config import Settings
 from morgan_brain.memory import fingerprint
 from morgan_brain.memory.embedder import Embedder
 from morgan_brain.memory.store import spaces, vectors
+from morgan_brain.memory.store.transactions import write_transaction
 from morgan_brain.providers.wire import EmbeddingSpaceMismatch
 
 log = structlog.get_logger("embedding-space")
@@ -38,10 +43,18 @@ log = structlog.get_logger("embedding-space")
 #: ``sample(n)``: up to *n* stored memories, each as (its text, the vector stored for it).
 Sample = Callable[[int], list[tuple[str, list[float]]]]
 
-#: The spaces this process has proven, as (endpoint, model, dims, space id). A key is added
-#: only once its check passed: a refused check stays unproven, so every later call is checked
-#: and refused again rather than handed a vector from the wrong model.
-_checked: set[tuple[str, str, int, int]] = set()
+#: The spaces this process has proven, including their persisted fingerprint and tolerance.
+#: A NULL fingerprint is never cached: it still needs its own stored-row validation.
+#: A key is added only once its check passed: a refused check stays unproven, so every later
+#: call is checked and refused again rather than handed a vector from the wrong model.
+_CheckKey = tuple[str, str, int, int, bytes | None, float]
+_checked: set[_CheckKey] = set()
+
+# Revocation covers every tolerance for the same space. Stamps also fence requests that
+# started before a NULL fingerprint was recorded and only learn its final identity later.
+_ProofIdentity = tuple[str, str, int, int, bytes | None]
+_revoked_at: dict[_ProofIdentity, int] = {}
+_proof_stamps = count(1)
 
 #: The (endpoint, model) pairs this process has already reported as having no active space.
 _unregistered: set[tuple[str, str]] = set()
@@ -90,7 +103,7 @@ class CheckedEmbedder:
         if space is None:
             if (self._url, self._model) in _unregistered:
                 return await self._inner.embed_batch(texts)
-        elif (self._url, self._model, space.dims, space.id) in _checked:
+        elif self._check_key(space) in _checked:
             return await self._inner.embed_batch(texts)
         return await self._first_call(space, texts)
 
@@ -104,7 +117,7 @@ class CheckedEmbedder:
         active, or when this process has already proven it.
         """
         space = spaces.active(self._conn)
-        if space is None or (self._url, self._model, space.dims, space.id) in _checked:
+        if space is None or self._check_key(space) in _checked:
             return
         await self._first_call(space, [])
 
@@ -132,28 +145,75 @@ class CheckedEmbedder:
         if space is None:
             raise EmbeddingSpaceMismatch.no_active_space(setting=self._setting)
         if space.fingerprint is None:
+            self._revoke(space)
             raise EmbeddingSpaceMismatch.no_fingerprint(
                 space_id=space.id, model=space.model, dims=space.dims, setting=self._setting
             )
+        # A failed canary must revoke the earlier proof, including failures of the
+        # request itself. Subsequent calls must check again before using this space.
+        started = self._revoke(space)
         strings = list(fingerprint.STRINGS)
-        answered = await self._inner.embed_batch(strings)
-        if len(answered) != len(strings):
-            raise EmbeddingSpaceMismatch.wrong_count(
-                space_id=space.id,
-                model=space.model,
-                dims=space.dims,
-                setting=self._setting,
-                expected=len(strings),
-                got=len(answered),
-            )
-        self._require_answers(space, answered)
-        self._require_fingerprint(space, space.fingerprint, answered)
+        try:
+            answered = await self._inner.embed_batch(strings)
+            self._require_answers(space, answered, expected_count=len(strings))
+            self._require_fingerprint(space, space.fingerprint, answered)
+        except BaseException:
+            self._revoke(space)
+            raise
+        self._cache_proof(space, space, started)
+
+    def _proof_identity(self, space: spaces.EmbeddingSpace) -> _ProofIdentity:
+        return (
+            self._url,
+            self._model,
+            space.dims,
+            space.id,
+            space.fingerprint,
+        )
+
+    def _check_key(self, space: spaces.EmbeddingSpace) -> _CheckKey:
+        return (*self._proof_identity(space), self._tolerance)
+
+    def _revoke(self, space: spaces.EmbeddingSpace) -> int:
+        identity = self._proof_identity(space)
+        stamp = next(_proof_stamps)
+        _revoked_at[identity] = stamp
+        _checked.difference_update({key for key in _checked if key[:-1] == identity})
+        return stamp
+
+    def _cache_proof(
+        self, initial: spaces.EmbeddingSpace, verified: spaces.EmbeddingSpace, started: int
+    ) -> None:
+        if all(
+            _revoked_at.get(self._proof_identity(space), 0) <= started
+            for space in (initial, verified)
+        ):
+            _checked.add(self._check_key(verified))
 
     async def _first_call(
         self, space: spaces.EmbeddingSpace | None, texts: list[str]
     ) -> list[list[float]]:
         """Send *texts* with the five strings (and, for an unrecorded fingerprint, the stored
         sample) appended; check what came back; return the caller's own vectors."""
+        started = next(_proof_stamps)
+        try:
+            return await self._checked_first_call(space, texts, started)
+        except BaseException:
+            if space is not None:
+                self._revoke(space)
+                if space.fingerprint is None:
+                    # Another first call may have recorded this database's fingerprint
+                    # while we awaited. Revoke that proof too, without masking the failure
+                    # if the connection itself has since become unusable.
+                    with suppress(sqlite3.Error):
+                        current = spaces.active(self._conn)
+                        if current is not None and current.id == space.id:
+                            self._revoke(current)
+            raise
+
+    async def _checked_first_call(
+        self, space: spaces.EmbeddingSpace | None, texts: list[str], started: int
+    ) -> list[list[float]]:
         rows = self._sample_of(space) if space is not None and space.fingerprint is None else []
         inputs = [*texts, *(text for text, _ in rows), *fingerprint.STRINGS]
         answered = await self._inner.embed_batch(inputs)
@@ -180,11 +240,12 @@ class CheckedEmbedder:
             return own
 
         self._require_answers(space, answered)
+        initial = space
         if space.fingerprint is not None:
             self._require_fingerprint(space, space.fingerprint, fresh_strings)
         else:
-            self._record(space, fresh_strings, rows, fresh_rows)
-        _checked.add((self._url, self._model, space.dims, space.id))
+            space = self._record(space, fresh_strings, rows, fresh_rows)
+        self._cache_proof(initial, space, started)
         return own
 
     def _sample_of(self, space: spaces.EmbeddingSpace) -> list[tuple[str, list[float]]]:
@@ -194,13 +255,28 @@ class CheckedEmbedder:
             )
         return self._sample(self._sample_rows)[: self._sample_rows]
 
-    def _require_answers(self, space: spaces.EmbeddingSpace, answered: list[list[float]]) -> None:
+    def _require_answers(
+        self,
+        space: spaces.EmbeddingSpace,
+        answered: list[list[float]],
+        *,
+        expected_count: int | None = None,
+    ) -> None:
         """Every vector the model returned is the space's width and wholly finite.
 
         Checked before any cosine: a NaN component makes every cosine NaN, which no threshold
         can fail, and it would otherwise be handed to the caller or recorded as the space's
         fingerprint, after which every model would match it.
         """
+        if expected_count is not None and len(answered) != expected_count:
+            raise EmbeddingSpaceMismatch.wrong_count(
+                space_id=space.id,
+                model=space.model,
+                dims=space.dims,
+                setting=self._setting,
+                expected=expected_count,
+                got=len(answered),
+            )
         for vector in answered:
             if len(vector) != space.dims:
                 raise EmbeddingSpaceMismatch.width(
@@ -250,23 +326,18 @@ class CheckedEmbedder:
         fresh_strings: list[list[float]],
         rows: list[tuple[str, list[float]]],
         fresh_rows: list[list[float]],
-    ) -> None:
+    ) -> spaces.EmbeddingSpace:
         """Record the fingerprint, but only if the stored sample says this model wrote them.
 
         With no sample, the fingerprint is recorded only when the space stores no vector at
         all: there is then nothing to be wrong about. A space that stores vectors none of which
         could be sampled is refused by name, and nothing is recorded.
 
-        Runs after the embedding request returned: ``record_fingerprint`` takes its own short
-        write transaction, and no lock is held across the await.
+        Runs after the embedding request returned, under a short write transaction. A
+        concurrent first check may already have recorded the fingerprint while this one
+        awaited its model; compare with that winning fingerprint instead of replacing it.
+        No lock is held across the await.
         """
-        if not rows and vectors.holds_vectors(self._conn, table_name=space.table_name):
-            raise EmbeddingSpaceMismatch.unverified(
-                space_id=space.id,
-                model=space.model,
-                dims=space.dims,
-                setting=self._setting,
-            )
         cosines = [
             fingerprint.cosine(fresh, stored)
             for fresh, (_, stored) in zip(fresh_rows, rows, strict=True)
@@ -285,7 +356,26 @@ class CheckedEmbedder:
                 failed=failed,
                 compared=len(cosines),
             )
-        spaces.record_fingerprint(self._conn, space.id, fresh_strings, clock=self._clock)
+        with write_transaction(self._conn):
+            current = spaces.active(self._conn)
+            if current is None or current.id != space.id:
+                raise EmbeddingSpaceMismatch.unverified(
+                    space_id=space.id,
+                    model=space.model,
+                    dims=space.dims,
+                    setting=self._setting,
+                )
+            if current.fingerprint is not None:
+                self._require_fingerprint(current, current.fingerprint, fresh_strings)
+                return current
+            if not rows and vectors.holds_vectors(self._conn, table_name=space.table_name):
+                raise EmbeddingSpaceMismatch.unverified(
+                    space_id=space.id,
+                    model=space.model,
+                    dims=space.dims,
+                    setting=self._setting,
+                )
+            spaces.record_fingerprint(self._conn, space.id, fresh_strings, clock=self._clock)
         log.info(
             "embedding-space.fingerprint-recorded",
             space_id=space.id,
@@ -293,3 +383,4 @@ class CheckedEmbedder:
             min_cosine=min_cosine,
             sampled_rows=len(rows),
         )
+        return replace(space, fingerprint=fingerprint.pack(fresh_strings))

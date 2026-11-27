@@ -37,6 +37,18 @@ def commit(value: str) -> str:
     return value
 
 
+def require_build_installer() -> None:
+    """Refuse an unsupported host installer before resolving code from the network."""
+    message = "build requires stable pip>=26.3,<27 in its Python environment; update it explicitly"
+    try:
+        installed = run([sys.executable, "-I", "-m", "pip", "--version"]).decode()
+    except subprocess.CalledProcessError as error:
+        raise ValueError(message) from error
+    version = re.match(r"pip (\d+)\.(\d+)(?:\.\d+)? from ", installed)
+    if version is None or not (26, 3) <= tuple(map(int, version.groups())) < (27, 0):
+        raise ValueError(message)
+
+
 def lock_wheels(wheels: Path, lock: Path) -> dict[str, str]:
     """Freeze one verified wheel per distribution into a hash-enforced requirements file."""
     requirements = []
@@ -65,6 +77,7 @@ def lock_wheels(wheels: Path, lock: Path) -> dict[str, str]:
 def build(repo: Path, revision: str, output: Path) -> dict[str, object]:
     """Export only committed sources, stamp them, then freeze resolved binary dependencies."""
     commit(revision)
+    require_build_installer()
     actual = run(["git", "rev-parse", f"{revision}^{{commit}}"], cwd=repo).decode().strip()
     if actual != revision:
         raise ValueError("Git did not resolve the requested commit")
@@ -124,6 +137,7 @@ def build(repo: Path, revision: str, output: Path) -> dict[str, object]:
             "--dest",
             str(wheels),
             str(candidates[0]),
+            "pip>=26.3,<27",
         ]
     )
     lock = output / "requirements.txt"
@@ -166,6 +180,32 @@ def install(bundle: Path, revision: str, destination: Path) -> dict[str, object]
     destination.mkdir(mode=0o700)  # Leave partial installs for inspection; restore into a new path.
     run([sys.executable, "-I", "-m", "venv", str(destination)])
     python = destination / "bin/python"
+    # The host's ensurepip can seed an old installer even on a patched Python. New bundles
+    # pin pip alongside application dependencies; upgrade it offline before installing them.
+    # Keep older bundles installable from their original artifacts without resolving new ones.
+    installer = [line for line in lock.read_text().splitlines() if line.startswith("pip==")]
+    if installer:
+        with tempfile.TemporaryDirectory(prefix="morgan-installer-", dir=destination) as temporary:
+            bootstrap = Path(temporary) / "requirements.txt"
+            bootstrap.write_text("\n".join(installer) + "\n")
+            run(
+                [
+                    str(python),
+                    "-I",
+                    "-m",
+                    "pip",
+                    "--isolated",
+                    "install",
+                    "--no-index",
+                    "--only-binary=:all:",
+                    "--require-hashes",
+                    "--find-links",
+                    str(bundle / "wheels"),
+                    "-r",
+                    str(bootstrap),
+                ],
+                cwd=destination,
+            )
     run(
         [
             str(python),
