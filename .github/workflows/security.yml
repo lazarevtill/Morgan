@@ -67,12 +67,18 @@ jobs:
               exit 1
             fi
             if [[ "$base_ref" != '0000000000000000000000000000000000000000' ]]; then
-              if ! git rev-parse --verify "$base_ref^{commit}" >/dev/null 2>&1; then
+              if git rev-parse --verify "$base_ref^{commit}" >/dev/null 2>&1; then
+                scan_revision="$base_ref..$head_ref"
+                show_locations=true
+              elif [[ "$GITHUB_EVENT_NAME" == push ]]; then
+                # A force-push can leave its previous tip outside fetched history.
+                # Scan all ancestors of the validated head, keeping old locations private.
+                echo 'Push base is unavailable; scanning the complete head history.'
+                scan_revision="$head_ref"
+              else
                 echo '::error::The event base commit is unavailable'
                 exit 1
               fi
-              scan_revision="$base_ref..$head_ref"
-              show_locations=true
             else
               if [[ "$GITHUB_EVENT_NAME" != push ]]; then
                 echo '::error::A pull request must have an existing base commit'

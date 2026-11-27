@@ -170,6 +170,8 @@ migration/restore cases. Before these last PR-review corrections, GitHub's whole
 Python 3.12.16 runs passed 2199 tests with four skips (348.36s and 369.66s). Those runs
 belong to their earlier PR revisions, not the later corrected tree; final-head CI is
 recorded on the [pull request](https://github.com/lazarevtill/Morgan/pull/129).
+The corrected application tree at `71acf9b` subsequently passed **2223 tests, four skipped**
+on GitHub Python 3.12.16 in 372.58s; report-only `e72a7c5` repeated that result in 491.70s.
 
 ## End-to-end evidence
 
@@ -270,3 +272,13 @@ baseline code. The race tests now use their existing overall contention budget, 
 new unit preserves the production default and tests bounded refusal/recovery. Final native
 affected checks: 16 passed. The [dependency audit](2026-11-dependency-audit.md) preserves
 the failed runs, exact follow-ups and remaining platform/security limits.
+
+Claude Code ultrareview of `71acf9b` reported one functional issue in the new secret-scanner
+workflow: a force-push can leave the old base absent from a fresh checkout. The validated
+head-history fallback is now covered by real local force-push/clone fixtures and the full
+39-case workflow harness. Its other finding is a maintainability nit: review admission and
+writers independently construct serialized payload strings in several guided/owner paths.
+The current strings match and refusal-before-marker plus historical-replay behavior is
+regression-tested; no current serialization mismatch was demonstrated. Consolidating these
+paths into a shared write-plan representation is deferred as a separate refactor, preserving
+the existing capture/replay contracts in this defect-fix session.

@@ -129,7 +129,7 @@ silently treating that earlier run as the final tree.
 | Same native environment, unchanged baseline's three persistent nodes | Two passed; fact-writer contention reproduced in 40.97s |
 | Final native Linux serial checks after the test-contract correction | 16 passed in 40.06s: both model-cycle cases, both writer races and all 12 database units |
 | New CI dependency-job installation, isolated host environment | 63 distributions audited, zero known vulnerabilities; one unpublished Morgan skip |
-| Actionlint / YAML / pre-commit config / Hadolint | Pass; 34 final scanner range/merge/failure/metadata fixtures pass (nine earlier baseline fixtures also passed) |
+| Actionlint / YAML / pre-commit config / Hadolint | Pass; 39 final scanner range/merge/force-push/failure/metadata fixtures pass (nine earlier baseline fixtures also passed) |
 
 The pip-audit environment includes runtime, development and audit-tool dependencies.
 Its clean result applies to the resolved versions and advisory database at this date;
@@ -254,6 +254,11 @@ head is proven already reachable from a different fetched default-branch ref. Ot
 or uncertain pushes scan all ancestors of the validated head, never unrelated refs. The
 payload's commit list is not treated as complete because GitHub can truncate it. This is a
 conservative fallback, not a claim to reconstruct every initial push's exact new range.
+Claude review identified the corresponding nonzero-base case after a force-push: the old
+tip may no longer be fetched. A local force-push and fresh clone reproduced the hard stop
+before scanning. Pushes with an unavailable base now use the same validated-head ancestry
+fallback; unavailable PR bases still fail. Malformed IDs and unavailable heads never bypass
+the scan guard. All 39 scanner fixtures pass, including clean and leaking force-push cases.
 
 Scoped PR/push findings print only JSON-escaped commit/path/line/rule metadata, with no
 matched text or commit message. Full-history and initial-head scans keep historical locations
