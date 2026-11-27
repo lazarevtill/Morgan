@@ -225,8 +225,7 @@ The Compose service publishes port 8090 and mounts `./data` at `/app/data`. Crea
 and a real `MORGAN_API_KEY`. Container localhost is not the host's model server.
 
 ```bash
-docker compose build
-docker compose up -d
+docker compose build && docker compose up -d
 ```
 
 The image binds to `0.0.0.0` and refuses startup without the key. Protect the published port
@@ -256,6 +255,11 @@ them and restarting:
 
 ```bash
 docker compose run --rm --no-deps morgan-mcp morgan migrate
+```
+
+Inspect the result. Resolve any error or `fingerprint: "unverified"` before restarting:
+
+```bash
 docker compose up -d
 ```
 
