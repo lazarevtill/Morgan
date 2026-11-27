@@ -38,8 +38,11 @@ unrelated prose. Multi-hop recall measures retrieval of supporting records, not 
 of a correct answer.
 
 Earlier [September archive measurements](measurements/2026-09-phase0-baseline.md) calibrated
-a floor margin of 0.08 for this model and 0.11 for Qwen3-Embedding-0.6B. Those values depend on
-the model and corpus. The November run above had the floor disabled and does not revalidate
+a floor margin of 0.08 for this model. The preserved
+[historical retrieval summary](measurements/historical-retrieval-summary.md) records the
+Qwen3-Embedding-0.6B ablation and 0.11 floor; its raw run artifacts were not located in this
+repository. Those values depend on the model and corpus. The November run above had the floor
+disabled and does not revalidate
 either threshold. Keep dated comparisons in their original reports.
 
 ## Current limitations

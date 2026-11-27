@@ -1,6 +1,6 @@
 # Memory & Self-Evolving — Deep-Research Report (2026-06-14)
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 
 **Status:** reference (adversarially-verified research snapshot)

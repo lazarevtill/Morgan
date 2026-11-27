@@ -21,6 +21,7 @@ make those private artifacts available to a fresh clone.
 | Record | Scope and result |
 | --- | --- |
 | [September baseline](2026-09-phase0-baseline.md) | Original deterministic/live retrieval, fingerprint and archive-floor measurements. |
+| [Historical retrieval summary](historical-retrieval-summary.md) | Earlier bundled-probe table and real-archive 0.6B ablation/floor results; raw 0.6B artifacts unavailable. |
 | [September closing checks](2026-09-phase0-closing.md) | Migration, recovery, provider and configuration acceptance against that baseline. |
 | [Temporal candidate filter](temporal-read-candidate-filter.md) | Bounded SQL candidate filtering with exact Python interval checks. |
 | [Consolidation resource accounting](consolidation-basis-resource-v1.md) | Synthetic preparation timings and Python allocation measurements. |
@@ -78,4 +79,4 @@ from illustrative output and a reproduction script from evidence that it was exe
 Report missing local artifacts as unavailable to the reader. Keep private data and credentials
 out of public receipts. Hashes identify bytes; they do not authenticate a source or prove that
 the measured system is safe. For current development checks, see
-[contributing](../../CONTRIBUTING.md) .
+[contributing](../../CONTRIBUTING.md).

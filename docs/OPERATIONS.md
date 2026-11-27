@@ -29,7 +29,8 @@ claude mcp add -s user morgan -- morgan-mcp --transport stdio
 ```
 
 Registration scope controls where Claude Code sees the server. It does not select Morgan's
-memory project: each tool call must pass that project explicitly.
+memory project. Pass the intended project on each tool call; omitting it selects `personal`,
+including for `forget`, which erases that scope after taking its undo snapshot.
 
 ### Remote HTTP
 
@@ -43,6 +44,16 @@ Replace `OVERLAY_ADDRESS` with the server's interface address. Port defaults to 
 Clients use `/mcp` and `Authorization: Bearer TOKEN`, with the same token. Keep credentials
 out of checked-in client configuration. Follow the client's supported secret-storage mechanism;
 a JSON string containing a shell variable is not automatically expanded by every client.
+
+For Claude Code, with the token supplied in your shell environment:
+
+```bash
+claude mcp add -s user --transport http morgan https://YOUR_HOST/mcp \
+  --header "Authorization: Bearer ${MORGAN_API_KEY}"
+```
+
+The shell expands this variable before registration; treat the resulting client configuration
+as credential-bearing. Replace `YOUR_HOST` with the protected server address.
 
 A key is required beyond loopback. With a configured key, HTTP requests require it on loopback
 too. Without a key, loopback access relies on the local account/host boundary.
@@ -62,7 +73,8 @@ consistent backup while other processes use the database. Copying only the live 
 while WAL writes are active is not an equivalent backup.
 
 Default snapshot directory: `MORGAN_DATA_DIR/snapshots`, overridden by
-`MORGAN_SNAPSHOT_DIR`. Keep an independently stored copy if you need recovery from host loss.
+`MORGAN_SNAPSHOT_DIR`. An explicit `MORGAN_TEMPORAL_DB_URL` does not relocate snapshots.
+Keep an independently stored copy if you need recovery from host loss.
 Morgan never prunes verified snapshots. Set your own retention policy: snapshots can retain
 content later removed with `forget`.
 
@@ -72,11 +84,15 @@ content later removed with `forget`.
    the new [pinned runtime](decisions/pinned-runtime.md) without activating it.
 2. Stop every process using the database, including MCP clients that may restart a stdio server.
    Do not mix older writers with a newer schema or workflow journal.
-3. Using the intended new runtime, run `morgan doctor`, `morgan snapshot` and
-   `morgan migrate --dry-run`. Review pending steps.
-4. Run `morgan migrate` when required. It takes its own snapshot, applies pending steps in one
-   transaction and checks the result. A failed step rolls back the migration wave.
-5. Check doctor and the relevant scoped operations before restarting clients. Verify journal
+3. With the active runtime, run `morgan snapshot` and retain that pre-upgrade copy before any
+   ordinary database open by the new runtime. Keep the old runtime and its configuration for rollback.
+4. With the intended new runtime, run `morgan doctor` and `morgan migrate --dry-run`.
+   Review pending steps. Neither command changes the database.
+5. Run `morgan migrate` when required. It takes its own snapshot, applies pending steps in one
+   transaction and checks the result. A failed migration step rolls back the wave. After commit,
+   the provider backend checks embedding identity; that check contacts the embedding endpoint.
+   A failed post-commit identity check does not undo the migration. Resolve it before resuming use.
+6. Check doctor and the relevant scoped operations before restarting clients. Verify journal
    reader compatibility separately when upgrading owner/task workflows.
 
 Light migrations can run on ordinary writable open. Heavy steps block writes until explicit
@@ -86,11 +102,16 @@ To restore, keep all database users stopped:
 
 ```bash
 morgan restore /absolute/path/to/snapshot.db
+```
+
+The preview exits 2. Review the named database and snapshot before confirming:
+
+```bash
 morgan restore /absolute/path/to/snapshot.db --yes
 ```
 
-The first command previews the replacement and exits 2. The second verifies the snapshot,
-creates a before-restore snapshot and replaces the database and WAL/SHM state. Concurrent
+Confirmation verifies the snapshot, creates a before-restore snapshot and replaces the database
+and WAL/SHM state. Concurrent
 writers can lose writes against the replaced file; online restore is unsupported.
 Restore with a compatible runtime and the original embedding configuration.
 

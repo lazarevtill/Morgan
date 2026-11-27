@@ -87,7 +87,8 @@ answered. `keyword_only` is reserved for a keyword-only fallback when embeddings
 which does not exist yet; nothing emits it. The `recall.done` line also carries the
 embedding's latency and outcome and the query's language.
 
-The fact budget prevents a large fact set from consuming every slot when episodic hits exist.
+The fact budget reserves episodic slots when hits exist and `top_k` is at least two.
+At `top_k=1` the reservation rounds down to zero, so one fact can fill the only slot.
 
 ## The embedding space
 

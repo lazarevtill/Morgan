@@ -1,6 +1,6 @@
 # Decision Record — Platform Architecture (provider-agnostic, agent-hosting, privacy, future-proofing)
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 
 **Date:** 2026-06-08 · **Status:** Accepted · **Source:** Wave 0 research workflow
@@ -31,7 +31,7 @@ privacy foundation are therefore inserted as **Wave 0.5**, before Phase 2.
   adapter behind the same Protocol.
 - **Three new seams** (alongside `interfaces/reasoning.py`): `interfaces/llm.py` (`ChatClient`:
   `agenerate`, `astream`), `interfaces/embedding.py` (`Embedder`: `aembed`), `interfaces/rerank.py`
-  (`Reranker`: `arerank` ). The `Reasoner` depends only on `ChatClient` via a **role string**, never
+  (`Reranker`: `arerank`). The `Reasoner` depends only on `ChatClient` via a **role string**, never
   a
   provider SDK or model name.
 - **CapabilityDescriptor** per (provider, model): `{context_window, max_output, supports_tools,
@@ -58,7 +58,7 @@ privacy foundation are therefore inserted as **Wave 0.5**, before Phase 2.
 
 - **Manifest:** adopt the **A2A Agent Card** (JSON Schema 2020-12, `/.well-known/agent-card.json`)
   as the internal registry record, extended with a private `x-morgan` block of capability grants
-  `{tools, memory_scopes, egress_allowlist, isolation_tier}` . Compile markdown+frontmatter
+  `{tools, memory_scopes, egress_allowlist, isolation_tier}`. Compile markdown+frontmatter
   agent/skill
   defs into the Card. Keep OASF-mappable.
 - **Runtime:** small `AgentSupervisor` (defined → admitted → running → paused/awaiting-approval →

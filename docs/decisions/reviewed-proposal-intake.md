@@ -4,13 +4,13 @@
 planning fields. The November 6 extraction experiment produced 16/20 exact cases, with a
 third-party task and missed obligations among the failures. Review remains required.
 
-| Capability | Implemented boundary | Related contract |
-| --- | --- | --- |
-| Model lifecycle | Finite delay, expiry guardian, STOP and bounded resources | [Model cycle](bounded-model-cycle.md) |
-| Task state | Scoped immutable commitments and reviewed completion/cancellation/reopening | [Owner input](local-owner-input.md) |
-| Confirmation | Source-bound preview and exact acceptance; digest is not authentication | This record; [native review](native-owner-review.md) |
-| Execution | Separate local-note grants, receipts and finite worker | [Local notes](local-approved-notes.md) |
-| Extraction | Small synthetic measurements; no general quality acceptance | [Note selection](synthetic-note-selection.md) |
+| Capability | Implemented boundary | Remaining gap | Related contract |
+| --- | --- | --- | --- |
+| Model lifecycle | Finite delay, expiry guardian, STOP and bounded resources | Persistent model scheduling and OS supervision are not enabled | [Model cycle](bounded-model-cycle.md) |
+| Task state | Scoped immutable commitments and reviewed completion/cancellation/reopening | Calendar integration and broader task interaction | [Owner input](local-owner-input.md) |
+| Confirmation | Source-bound preview and exact acceptance; digest is not authentication | Independent reviewer authentication; the native UI uses the local account boundary | This record; [native review](native-owner-review.md) |
+| Execution | Separate local-note grants, receipts and finite worker | Broader adapters need their own authority and recovery contracts | [Local notes](local-approved-notes.md) |
+| Extraction | Small synthetic measurements; no general quality acceptance | Reliable real-world evaluation; human review remains required | [Note selection](synthetic-note-selection.md) |
 
 ## Preview
 

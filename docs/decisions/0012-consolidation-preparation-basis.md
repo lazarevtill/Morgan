@@ -50,7 +50,7 @@ Instructions explicitly treat record content as untrusted and require particular
 IDs. This is a prompt boundary and persisted admission check, not a model-obedience proof
 or a credential-based agent isolation claim.
 
-Preparation refuses preparation above 50 source inputs or 256 current
+Preparation refuses more than 50 source inputs or 256 current
 fact inputs, without truncation. Unresolved source forks cause abstention rather than
 inventing a winner. Global forget conservatively invalidates prepared work in another
 scope too; an empty successful forget still invalidates. A failed transactional forget

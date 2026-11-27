@@ -1,6 +1,6 @@
 # Ecosystem Research — Ground Truth as of June 2026
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 
 **Status:** reference (research snapshot, 2026-06-09; round 2 included below)
@@ -111,7 +111,7 @@ proactive; NVIDIA productized it; creator hired by OpenAI) proved the demand at 
 GRPO, 35x fewer rollouts); ACE formalizes context-as-learning playbooks; MIT SDFT for
 forgetting-free weight updates. **No consumer product ships measurable, eval-gated per-user
 learning — the gap.** ([GEPA](https://github.com/gepa-ai/gepa),
-[ACE](https://arxiv.org/abs/2510.04618) )
+[ACE](https://arxiv.org/abs/2510.04618))
 
 **Proactivity UX that stuck:** morning briefs (ChatGPT Pulse), named scheduled routines
 (Claude Code Routines, Apr 2026), event-triggered background agents, sleep-time consolidation.
@@ -129,10 +129,8 @@ Morgan sits on all four. The vision doc's bets follow directly.
 
 ---
 
-## 5. Round 2 — specialist reviews
-
-Four agents reviewed MCP implementation, 12–24-month foresight, adversarial specifications
-and strategy on the same day.
+<!-- markdownlint-disable-next-line MD013 -->
+## 5. Round 2 — deep dives (same day; four agents: MCP implementation, 12–24mo foresight, adversarial spec review, strategy red-team)
 
 ### MCP implementation ground truth
 

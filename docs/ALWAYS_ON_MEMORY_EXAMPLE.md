@@ -9,7 +9,7 @@ installs no background service.
 ## A small offline example
 
 The original measurement used commit `1b9c1559f50eee8555708301bc4d10468a6fbec1`
-(package metadata version `0.2.0` , Python 3.12+). The example runs from the checkout below. Its
+(package metadata version `0.2.0`, Python 3.12+). The example runs from the checkout below. Its
 original evidence is in the
 [context inspection report](measurements/2026-10-context-inspection.md); that dated run
 is not a claim about every later packaged release.
@@ -97,4 +97,6 @@ explicit owner policy.
 
 This example gives a usable zero-model building block for scoped continuation.
 Its lifecycle checks and scale measurements do not establish autonomous-agent answer
-quality. The separate [reader acceptance criteria](READER_CAPABILITY.md) still apply.
+quality. [PR #59](https://github.com/lazarevtill/Morgan/pull/59) failed its independent semantic
+quality gate and remains unmerged (closed, checked 2026-11-27). The separate
+[reader acceptance criteria](READER_CAPABILITY.md) still apply.

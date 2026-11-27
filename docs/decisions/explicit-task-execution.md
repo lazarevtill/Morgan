@@ -133,7 +133,8 @@ explicit and stops the worklist on uncertainty.
    remote acceptance followed by a lost response and cancellation races in an isolated sandbox.
 2. Define explicit authorization and revocation, data retention/backup, bounded call counts and
    enforceable spending limits. Add reconciliation evidence without turning it into auto-retry.
-3. For that provider, verify bounded restart, stop control and fencing against an old worker.
+3. Only after those provider-specific requirements are met, consider supervised workers, health
+   reporting and scheduling. Verify bounded restart, stop control and fencing against an old worker.
    Existing [local-note supervision](bounded-local-supervisor.md) covers its own local-file
    adapter; it is not evidence for an unrelated external provider.
 

@@ -1,6 +1,6 @@
 # Memory & Self-Evolving — Voice B: "The Predictive Self" (2026-06-14)
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 
 **Status:** EXPLORATORY — a deliberate *second voice*, written to contrast the current design.

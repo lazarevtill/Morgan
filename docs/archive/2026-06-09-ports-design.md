@@ -1,6 +1,6 @@
 # Ports Design — Morgan's Standardized Surface (2026-06-09)
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 >
 > **Superseded** by [the local-first reshape](2026-08-02-local-first-reshape-design.md)

@@ -3,7 +3,7 @@
 **Status:** erasure registry implemented; author/scope fact-key expansion remains deferred.
 Original decision: 2026-09-22. Current-state clarification: 2026-11-27.
 
-## Decision 1: the fact key includes the author and the scope
+## Decision 1: proposed author/scope fact key
 
 The proposed key is (`user_id`, `project`, `subject`, `predicate`, `author_id`, `scope`).
 The implemented key is still (`user_id`, `project`, `subject`, `predicate`), enforced by
@@ -20,6 +20,34 @@ Expanding the key requires the index and supersession rules to change together, 
 migration and cross-author/scope regression coverage. Until that change is implemented, callers
 must not rely on independent author/scope timelines. This record documents the limitation;
 it does not authorize a migration.
+
+### Original rationale (2026-09-22)
+
+The following records the original proposal. Its sole-writer and attribution assumptions are
+superseded by the current-state clarification above; it is not a description of today's writers.
+
+A fact's key becomes (`user_id`, `project`, `subject`, `predicate`, `author_id`, `scope`), and
+a key has at most one current fact: the one with `valid_to IS NULL`.
+
+**Now.** The key is (`user_id`, `project`, `subject`, `predicate`). The unique partial index
+`idx_facts_one_current` in `memory/store/temporal.py` enforces one current fact per key, and
+`SqliteTemporalStore.upsert_fact` closes the current fact of the same key before it inserts the
+new one. `facts` carries `author_id` and `scope` columns (migration step 4), and neither the
+index nor the upsert reads them.
+
+**When.** The index and the upsert change together when supersession is assembled
+deterministically.
+
+**Why not now.** Nothing writes a second author or a second scope. Consolidation is the only
+writer of facts, and every fact it writes carries `author_id` equal to the owner's `user_id`
+and `scope` `private`; step 4 gave existing facts the same values. With one owner, one author
+and one scope, the four-column key and the six-column key select the same rows. Changing the
+index is a heavy migration step, and until something writes a second author or scope it
+changes nothing.
+
+**Until then.** A writer that stores a second author's or a second scope's fact under an existing
+key closes the other one's fact instead of keeping both. The first writer that sets another
+author or scope depends on this change.
 
 ## Decision 2: `forget` reaches every project-keyed table through one registry
 

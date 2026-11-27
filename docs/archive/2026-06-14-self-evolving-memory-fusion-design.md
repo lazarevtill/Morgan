@@ -1,6 +1,6 @@
 # Self-Evolving Memory — Fusion + Curiosity (reconciliation & design) — 2026-06-14
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 
 **Status:** DESIGN (approved in brainstorm; pending owner review of this written spec).
@@ -132,7 +132,7 @@ promote/rollback → scoped-policy quality-diversity optimization (GEPA, coheren
 - `interfaces/learning` — belief consolidation via prioritized replay; policy-library optimizer;
   LoRA distiller (cold path).
 - `interfaces/personalization` — compose scoped policy + inject belief slices (extends
-  `AdaptivePersonalizer` ).
+  `AdaptivePersonalizer`).
 - `interfaces/skills`/`modules/proactivity` — curiosity (epistemic-action) generation, budgeted.
 - `eval/` — extend golden set: multi-hop **recall**, **calibration** (Brier/ECE), **cross-scope
   coherence**, **curiosity-appropriateness**, self-model-view faithfulness. Gates every promotion.
@@ -180,10 +180,9 @@ mypy strict).
 
 ## 8. What stays sacred (all voices)
 
-Hot path reads / cold path writes; one `MemoryGate` ; actor attribution + provenance v2;
+Hot path reads / cold path writes; one `MemoryGate`; actor attribution + provenance v2;
 **eval-gated,
-beats-current-or-nothing** promotion; provider SDKs isolated to adapters; everything `user_id`
--keyed;
+beats-current-or-nothing** promotion; provider SDKs isolated to adapters; everything `user_id`-keyed;
 **auditability increased, never reduced.** This design is a different shape *inside* those rails.
 
 ## 9. Open questions (carry into the plan)

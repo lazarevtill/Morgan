@@ -45,16 +45,17 @@ A future reader needs a fresh independent source-grounded blinded practical cont
 panel with frozen criteria and unchanged denominator: at least 14/16 strict useful answers, zero
 critical errors, and no worse than the equal-budget baseline. Useful fragments with failures do not
 pass. An isolated pass still requires independent implementation review, production integration,
-regressions, CI and independent review of the exact revision and another fresh production validation
+regressions, CI and Codex review of the exact revision, and another fresh production validation
 before readiness.
 Model suitability recommendations need independent primary evidence; an advertised model name or
 one easy diagnostic is insufficient. No model installation or recommendation is implied here.
 
 The historical Mac V11r and V12 evaluations failed their gates. V12's mandatory same-model
 review cost more, produced 3/16 strict useful finals versus 5/16 baseline, and lost one of three
-correct drafts. Do not reuse held-out scenarios to tune a new candidate or redefine that gate. A
-diagnostic
-using simple controls does not replace independent product evaluation. Native reader quality
+correct drafts. Do not respond by expanding memory machinery or searching for different prompts,
+models or panels to pass the gate. Do not reuse held-out scenarios to tune a new candidate or
+redefine that gate. A diagnostic using simple controls does not replace independent product
+evaluation. Native reader quality
 has not met these acceptance criteria.
 
 The [transparent control diagnostic](measurements/2026-10-reader-controls.md) separates

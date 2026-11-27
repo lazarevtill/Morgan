@@ -1,6 +1,6 @@
 # Calibration Scoring in the Eval Gate (2026-06-16)
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 
 **Status:** DRAFT — design only, pending owner review before any implementation.

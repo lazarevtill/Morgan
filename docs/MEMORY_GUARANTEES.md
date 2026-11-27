@@ -49,6 +49,29 @@ They are not promises about clients that bypass the gate, omit a basis or ignore
 No real-memory migration, deployment or experimental answer-quality admission follows from these
 boundaries.
 
+## Exact evidence contract
+
+CLI `morgan evidence ID ... --project NAME --json` and MCP `evidence(ids=[...], project=NAME)`
+return `version: "morgan.evidence.v1"`, `requested_ids`, `missing_ids` and `results` for the
+configured owner and one project. Input accepts 1–32 IDs of at most 256 characters each;
+duplicates are removed in request order. Unknown and out-of-scope IDs both appear in
+`missing_ids`. Cross-project lookup is refused: after cross-project recall, fetch each project's
+evidence separately. Recalled fact IDs retain their persisted identity.
+
+Evidence opens an existing database read-only, without initialization, migrations, model
+construction or embedding-width checks. A missing database is an error and is not created.
+Legacy rows may have unknown metadata. Fact results include confidence, validity intervals
+and `support_event_ids`; fetch those IDs in a subsequent bounded call. No support roots are
+expanded automatically. Legacy facts can have no support IDs; missing support remains uncertainty.
+Event `created_at` and `recorded_at` distinguish asserted time from ingestion time.
+
+An unknown or inferred fact cannot close a user statement selected as a predecessor, overlap
+its validity interval, or replace an unclosed user statement under the same owner/project,
+subject and predicate. This includes backdated inferences and future user intervals. Ended user
+history permits a new inference starting at or after its end. This guard does not provide general
+historical interval reconciliation or independent author/scope timelines; see
+[the fact-key decision](decisions/0001-fact-key-and-forget-reach.md).
+
 ## Historical regression evidence
 
 The following existing tests exercise real SQLite and deterministic providers, without LAN model

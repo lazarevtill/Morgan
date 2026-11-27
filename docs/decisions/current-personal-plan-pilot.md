@@ -121,7 +121,6 @@ jobs missed during sleep. This is deployment evidence, not proof of behavior on 
 verify current OS behavior before installing anything. See
 [Apple: Scheduling Timed Jobs](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/ScheduledJobs.html)
 and
-[Apple launchd manual source](https://github.com/apple-oss-distributions/launchd/blob/main/man/launchd.plist.5)
-.
+[Apple launchd manual source](https://github.com/apple-oss-distributions/launchd/blob/main/man/launchd.plist.5).
 No launch agent, cron job, notification permission, permanent secret or paid process was created.
 The earlier rejected unspecified permanent launch has not been repeated.

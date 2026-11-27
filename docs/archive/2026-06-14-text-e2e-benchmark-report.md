@@ -1,6 +1,6 @@
 # Text E2E Wiring + Benchmark Report
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 
 **Date:** 2026-06-14
@@ -165,8 +165,8 @@ production topology.
 - **MAJOR — base per-turn signal never recorded under redis.** `recorder.record_turn` is only
   invoked from the same InProcessBus-gated subscriber; the worker handler never calls it. A later
   thumb-up then inserts a stub signal with empty `query`/`reply`, poisoning the optimizer's training
-  set. Evidence: `composition.py:113-119,229` ; `learning/recorder.py:108-123` ;
-  `learning/optimizer.py:127-135` .
+  set. Evidence: `composition.py:113-119,229`; `learning/recorder.py:108-123`;
+  `learning/optimizer.py:127-135`.
 - **MAJOR — promoted champion not served until brain-api restart.** `_champion_override` is read
   exactly once at startup and cached in the route closure; a worker-promoted champion never reaches
   live traffic without an operator restart. Evidence: `apps/brain_api/app.py:44,59`;
@@ -176,11 +176,11 @@ production topology.
   of the box, the champion body stays empty forever. Evidence: `config.py:49`;
   `apps/learning_worker/__main__.py:260-272`.
 - **MAJOR — edit/thumb/retry feedback never reaches the UserModel.** `UserProfileBuilder.build`
-  derives the model exclusively from `current_facts()` ; the injected `signals` dependency is
+  derives the model exclusively from `current_facts()`; the injected `signals` dependency is
   assigned
   and never read; `preference_delta_from_edit`/`apply_edit_delta` have no production caller. The
   CIPHER learn-from-edits loop is dead code in production. Evidence:
-  `learning/profile.py:102,108-208` ;
+  `learning/profile.py:102,108-208`;
   `apps/brain_api/routes.py:74` → `recorder.py:61-76`.
 - **MAJOR — `SessionHistoryStore` is `:memory:` even on the working inproc path.** Constructed with
   no file path (unlike temporal/signals, which derive a sibling SQLite file), so all history is lost
@@ -198,7 +198,7 @@ production topology.
   per call despite a "singleton" docstring; the champion registry path is relative
   `./data/prompts.db`
   (silent footgun if the two processes run from different cwds). Evidence:
-  `core/orchestrator.py:79-81` ;
+  `core/orchestrator.py:79-81`;
   `modules/tools/executor.py:114-122`; `bus/__init__.py:9-18`; `learning_lifecycle/factory.py:48`.
 
 ### What is confirmed correctly wired (OK findings)

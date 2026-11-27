@@ -1,6 +1,6 @@
 # Morgan Brain — Design Spec
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 
 **Date:** 2026-06-07

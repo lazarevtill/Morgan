@@ -16,8 +16,7 @@ not an always-running personal agent or a reminder delivery channel.
 Use Apple's existing
 [text dialogs](https://developer.apple.com/library/archive/documentation/LanguagesUtilities/Conceptual/MacAutomationScriptingGuide/PromptforText.html)
 and
-[list selection](https://developer.apple.com/library/archive/documentation/LanguagesUtilities/Conceptual/MacAutomationScriptingGuide/ManipulateListsofItems.html)
-.
+[list selection](https://developer.apple.com/library/archive/documentation/LanguagesUtilities/Conceptual/MacAutomationScriptingGuide/ManipulateListsofItems.html).
 The fixed JXA program receives JSON data, never interpolated source or shell commands.
 The Python controller calls the same owner-input command implementation as the CLI;
 there is no second journal or task executor. Without optional model flags it performs no inference.

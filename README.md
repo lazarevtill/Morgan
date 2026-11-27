@@ -18,7 +18,8 @@ Optional planning and task workflows use separate journals and require explicit 
 | Recover | Snapshot, migrate and restore the database; erase a project with a snapshot for undo. |
 
 The CLI derives the project from the enclosing Git repository, or uses `personal` outside one.
-MCP clients must pass the project explicitly; the server cannot infer the client's repository.
+MCP cannot infer the client's repository. Pass the intended project explicitly: an omitted
+project uses `personal`, including for the destructive `forget` tool.
 `--all-projects` enables cross-project reads where supported. Two repositories with the same
 folder name share a project unless the caller chooses distinct names.
 
@@ -76,20 +77,21 @@ Configure your client to launch the installed executable. With the virtual envir
 }
 ```
 
-Replace the executable path with your installation. Pass the intended project on each call.
+Replace the executable path with your installation. Pass the intended project on each call;
+omitting it selects `personal`, including for `forget`.
 For HTTP authentication and remote access, see [operations](docs/OPERATIONS.md).
 `morgan install-skill` previews and installs usage guidance for supported local coding agents.
 
 ## Explicit workflows
 
-| Workflow | Guide |
-| --- | --- |
-| Trusted task handlers, finite batches and recovery receipts | [Task execution](docs/decisions/explicit-task-execution.md) |
-| Approved local notes, delivery windows and bounded supervision | [Local notes](docs/decisions/local-approved-notes.md) |
-| Reviewed commitments, current plans and completion | [Personal planning](docs/decisions/current-personal-plan-pilot.md) |
-| Local owner messages and macOS review | [Owner input](docs/decisions/local-owner-input.md) |
-| Finite local model drafting | [Model lifecycle](docs/decisions/bounded-model-cycle.md) |
-| Explicit local alerts and reviewed push messages | [Owner channels](docs/decisions/owner-channel-hosting.md) |
+| Workflow | Python entry point | Guide |
+| --- | --- | --- |
+| Trusted task handlers, finite batches and recovery receipts | `morgan_brain.tasks` SDK | [Task execution](docs/decisions/explicit-task-execution.md) |
+| Approved local notes, delivery windows and bounded supervision | `morgan_brain.local_notes_cli` | [Local notes](docs/decisions/local-approved-notes.md) |
+| Reviewed commitments, current plans and completion | `morgan_brain.daily_brief_cli`, `morgan_brain.guided_plan` | [Personal planning](docs/decisions/current-personal-plan-pilot.md) |
+| Local owner messages and macOS review | `morgan_brain.owner_input`, `morgan_brain.owner_ui` | [Owner input](docs/decisions/local-owner-input.md) |
+| Finite local model drafting | `morgan_brain.model_cycle` | [Model lifecycle](docs/decisions/bounded-model-cycle.md) |
+| Explicit local alerts and reviewed push messages | `morgan_brain.local_alert_cli`, `morgan_brain.owner_push_cli` | [Owner channels](docs/decisions/owner-channel-hosting.md) |
 
 These workflows do not install services or renew their authority. Memory content does not
 authorize execution. A push server accepting a message does not prove that a person received it.

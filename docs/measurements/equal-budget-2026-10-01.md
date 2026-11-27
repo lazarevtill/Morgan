@@ -54,7 +54,7 @@ freezes the generation schedule; generation_remaining_v2.py excludes every alrea
 blind-full-packet-v1.json and blind-full-review-v2.json preserve the independent review;
 root-only-full-mapping-v1.json links hidden arms after review. equal-budget-aggregate-v1.json lists
 report SHA-256 values and denominators. The fixture SHA-256
-is `7fd4e99ab70ec5af7303abd08f5204fb5d3e18e5b0ae1aa7f28f8aa3357ff2d5` . Current main-based changes
+is `7fd4e99ab70ec5af7303abd08f5204fb5d3e18e5b0ae1aa7f28f8aa3357ff2d5`. Current main-based changes
 must
 be tested separately: the live-model run exercised a frozen reviewed pure
 retrieval/packing/count/generation/parser reference, not final atomic Chat persistence.

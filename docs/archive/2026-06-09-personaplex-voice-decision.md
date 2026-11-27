@@ -1,6 +1,6 @@
 # Decision Record — PersonaPlex as the Phase 5 Voice Layer
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 
 **Date:** 2026-06-09 · **Status:** Accepted · **Trigger:** user-provided links to NVIDIA PersonaPlex
@@ -41,7 +41,7 @@ PersonaPlex is a self-contained speech↔speech dialogue model — it does **not
 
 1. **Persona bridge (built now, pure/testable):** `morgan_brain/voice/persona_bridge.py` turns
    Morgan's learned state (`UserModel` comm-prefs/traits/relationship_stage + the champion preprompt
-   - current emotional signal) into a **PersonaPlex text role prompt + a chosen voice id**. This is
+   \+ current emotional signal) into a **PersonaPlex text role prompt + a chosen voice id**. This is
    how the assistant's learned persona conditions the voice model each session.
 2. **Hybrid routing (design):**
    - **Full-duplex mode** — PersonaPlex handles casual/empathic voice turns end-to-end (its
@@ -65,7 +65,7 @@ PersonaPlex is a self-contained speech↔speech dialogue model — it does **not
 ## Scope now vs deferred
 
 - **Now (this branch, unit-tested, no GPU):** the `VoiceConversation` seam (`interfaces/voice.py`)
-  - the `persona_bridge` (UserModel/champion → PersonaPlex persona prompt + voice selection) +
+  \+ the `persona_bridge` (UserModel/champion → PersonaPlex persona prompt + voice selection) +
   a `FakeVoiceConversation` for tests. This makes the integration concrete and keeps the brain
   provider/voice-agnostic.
 - **Deferred (the GPU service):** the actual PersonaPlex/Moshi serving in `apps/perception_gpu`

@@ -1,6 +1,6 @@
 # Phase 2 (Wave 1) — Learning + Personalization — Design
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 
 **Date:** 2026-06-08 · **Status:** Approved (from decisions) · **Branch:** `feat/phase2-learning`
@@ -20,7 +20,7 @@ Built in increments, each green & shippable:
 - **A. Signal capture** — typed edit/retry/thumb records on the async post-response path.
 - **B. Consolidation worker** — bi-temporal fact consolidation (Mem0 ADD/UPDATE/DELETE/NOOP) +
   decay/forgetting, off the hot path.
-- **C. User profile + applied personalization** — compact stable/dynamic `UserModel` /`USER.md`,
+- **C. User profile + applied personalization** — compact stable/dynamic `UserModel`/`USER.md`,
   real trait *selection* injected every turn, CIPHER learn-from-edits.
 - **D. Eval harness (the gate)** — 3-layer golden eval + calibrated cross-family judge, on the
   MLflow seam. **Prereq for any self-learned promotion** — but built here so it's ready.
@@ -105,7 +105,7 @@ built on the Wave-0.5 `learning_lifecycle` seam (local backend now; MLflow `gena
 
 ## Interfaces / wiring
 
-- `Learner` (Phase-1 Protocol) gets a real implementation in `morgan_brain/learning/` ;
+- `Learner` (Phase-1 Protocol) gets a real implementation in `morgan_brain/learning/`;
   `Personalizer`
   gets a real implementation in `morgan_brain/modules/personalization/`. Orchestrator unchanged
   (depends on the Protocols). The consolidation worker subscribes to events on the bus.

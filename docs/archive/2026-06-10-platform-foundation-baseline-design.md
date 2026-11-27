@@ -1,6 +1,6 @@
 # Platform Foundation Baseline (2026-06-10)
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 
 **Status:** DRAFT — under owner review
@@ -216,7 +216,7 @@ Plus pytest invariants:
 
 - Bind `127.0.0.1` by default (`MORGAN_BIND_HOST`; current uvicorn entrypoint binds wider —
   verify and fix as part of this wave). Remote exposure = explicit host + real `MORGAN_API_KEY`
-  - reverse-proxy TLS; the documented remote path is **tailnet/VPN, never raw internet**.
+  \+ reverse-proxy TLS; the documented remote path is **tailnet/VPN, never raw internet**.
 - One sanitizer module `security/sanitize.py` (instruction-pattern stripping/neutralizing for
   `<system>`-style and role-marker payloads) applied at **store and recall** for all
   port/import-sourced content — the memory-poisoning mitigation, in exactly one place.

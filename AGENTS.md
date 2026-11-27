@@ -7,7 +7,7 @@ Guidance for Codex when working in this repository.
 A **project-scoped memory for the owner's AI tools**, consolidated into facts by a local
 model. One SQLite database under `MORGAN_DATA_DIR` holds memories, facts, vectors
 (sqlite-vec), the FTS5 index, the entity index and session history. The `morgan` CLI and
-`morgan-mcp` server are thin adapters over one `MemoryGate` . The model server is any
+`morgan-mcp` server are thin adapters over one `MemoryGate`. The model server is any
 OpenAI-compatible endpoint (llama-server by
 default). The memory core has no queue, worker or scheduler. Optional finite task and
 owner workflows are explicitly invoked and keep separate execution journals.
@@ -90,9 +90,10 @@ see `docs/decisions/reviewed-proposal-intake.md`. No execution authority is gran
 Documentation entry point: [docs/README.md](docs/README.md).
 Development and documentation checks: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
-`docs/ROADMAP.md` (what is not in the code and why, what retrieval measures, what is next),
-`docs/decisions/` (decisions, and what the code does about each). The archived agent kernel is
+Read first: `docs/ARCHITECTURE.md` (components, data flow and storage boundaries),
+`docs/WIRING.md` (configuration and commands), `docs/ROADMAP.md` (dated measurements,
+current limits and priorities), and `docs/decisions/README.md` (implementation contracts). The
+archived agent kernel is
 at the tag `legacy-v0.1.0-kernel`, its designs under `docs/archive/`.
 
 ## Package map (`morgan_brain/`)
@@ -216,8 +217,9 @@ come in" are answered by the directory names.
   supersession is assembled deterministically
   (`docs/decisions/0001-fact-key-and-forget-reach.md`). Author/scope metadata does not yet
   partition fact timelines; source-protection checks are a separate safeguard.
-- **Facts are surfaced alongside episodics, never instead of them.** Recall budgets the
-  fact block so a matching memory cannot be pushed out of the window by fact volume.
+- **Facts share the recall budget with episodics.** At `top_k >= 2`, recall reserves slots
+  for matching episodics. At `top_k=1`, integer rounding leaves no episodic reservation and a
+  fact can fill the only slot.
 - **Actor attribution.** Every memory records its `MemorySource`. The reply to `ask` is
   stored as `agent_inferred`; never treat an inference as a user statement.
 - **One embedding space is active, and it is fingerprinted.** `embedding_spaces` records
@@ -329,8 +331,8 @@ task journals remain outside it. See `docs/decisions/credential-admission.md`.
   (`qwen3-embedding:8b`). These probes supply no explicit revision edges. Fusion is rank-only
   and carries no recency term; implemented revision filtering handles explicit corrections only.
 - Multi-hop questions are not answered. Recall ranks memories and has no mechanism to
-  compose two of them; measured recall@8 is 0.62 against 0.90 for single-hop
-  (`qwen3-embedding:8b`).
+  compose two of them. The November 26 run measured recall@8 of 0.62 against 0.95 for
+  single-hop (`qwen3-embedding:8b`); see `docs/ROADMAP.md` for configuration and dated evidence.
 
 ## Pinned local deployment
 

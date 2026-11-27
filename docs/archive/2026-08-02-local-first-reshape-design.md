@@ -1,6 +1,6 @@
 # Morgan reshape — local-first, durable, reusable across projects
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 
 **Status:** milestones 0 and 1 delivered; milestone 2 specified (§7.1), not started

@@ -1,6 +1,6 @@
 # Phase 3 (Wave 2) — Skills + Tools + MCP + GEPA Optimizer — Design
 
-> Historical design for a retired version. See the [archive index](README.md)
+> Historical document for a retired version. See the [archive index](README.md)
 > and [current documentation](../README.md) before using any instructions below.
 
 **Date:** 2026-06-08 · **Status:** Approved (from decisions) · **Branch:**
@@ -19,7 +19,7 @@ Increments, each green & shippable:
 
 - **A. Tools** — `BaseTool` registry + capability-token `PermissionGate` + built-in tools.
 - **B. Skills** — markdown+frontmatter skills, trigger match, injected into context; versioned via
-  the `PromptRegistry` .
+  the `PromptRegistry`.
 - **C. MCP host/client (hardened)** — fill the empty `modules/mcp/` stub; OAuth2.1+PKCE+RFC8707,
   server pinning, tool-description sanitization, per-server isolation.
 - **D. GEPA optimizer loop** — `Optimizer` impl that proposes champion-preprompt candidates from

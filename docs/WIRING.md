@@ -124,6 +124,18 @@ Without `--project`, the CLI uses the enclosing repository name, including linke
 or `personal` outside one. Same-named repositories share a project. Repository-derived writes
 also record project classification; explicit project names do not imply a filesystem location.
 
+### JSON scope and recall status
+
+`remember` reports `project_defaulted: true` when no project was supplied and no repository was
+found, so the write landed in `personal`. A named project is not an authenticated identity.
+
+`recall` includes `abstained` and `reason`. An empty result is `empty` when the scope has no
+eligible results, or `declined` when the configured relevance floor rejects the matches.
+Returned matches have `too_few_to_judge` or `no_floor` when that floor did not judge them,
+and `null` when they passed it. `keyword_only` is reserved for an unimplemented fallback;
+no current path emits it. See [exact evidence and fact protection](MEMORY_GUARANTEES.md#exact-evidence-contract)
+for ID lookup fields and source-protection rules.
+
 ### Snapshots, restore and migrate
 
 These commands act on the whole database:
@@ -200,7 +212,9 @@ scripted installation. It writes the packaged usage skill for detected Claude Co
 OpenCode and Cursor installations, and supports OpenResearch's upload store.
 
 Claude Code settings permit the four read-only tools. Write tools retain their existing
-permission boundary. An unrecognized skill or unparseable settings file is left alone.
+permission boundary. Under Claude Code `dontAsk`, tools such as `remember` remain blocked
+unless the owner explicitly permits them. An unrecognized skill or unparseable settings file is left
+alone.
 Run the installer again after an upgrade. For OpenResearch with a custom data directory,
 set `ORX_DATA_DIR`; its sessions need `morgan` on PATH for the CLI fallback.
 

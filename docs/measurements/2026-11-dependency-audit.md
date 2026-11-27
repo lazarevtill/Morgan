@@ -73,8 +73,7 @@ remain rolling upstream inputs; the CLI pin does not make the whole builder immu
 - **MCP 1.30.0** includes fixes for
   [HTTP session exhaustion](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-84m7-p3x7-pcfv)
   and
-  [unbounded HTTP request bodies](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-fmmv-w9g8-j3gc)
-  .
+  [unbounded HTTP request bodies](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-fmmv-w9g8-j3gc).
   The server paths matter to Morgan's HTTP surface. It also excludes versions affected by
   [OAuth credential handling](https://github.com/advisories/GHSA-qx49-fqc8-xw99) and
   [cross-origin redirect forwarding](https://github.com/advisories/GHSA-5h93-6whr-6q8j);
@@ -83,8 +82,7 @@ remain rolling upstream inputs; the CLI pin does not make the whole builder immu
 - **Pydantic 2.14.2** closes
   [extra-key JSON validation bypass](https://github.com/pydantic/pydantic/security/advisories/GHSA-qpmf-fgh3-ff25)
   and
-  [aliased TypedDict/dataclass validation bypass](https://github.com/pydantic/pydantic/security/advisories/GHSA-3r8g-cqwr-jr29)
-  .
+  [aliased TypedDict/dataclass validation bypass](https://github.com/pydantic/pydantic/security/advisories/GHSA-3r8g-cqwr-jr29).
   These are dependency protections, not demonstrated Morgan exploits. The
   [maintainer policy](https://github.com/pydantic/pydantic/security) supports the latest V2
   minor for security fixes.
@@ -238,12 +236,12 @@ These are **not applicable to the inspected image**: no setuptools distribution 
 vendored setuptools directory is installed, and the affected `package_index.py`,
 `egg_info.py` and `setuptools/wheel.py` modules are absent. Only `pkg_resources` is retained,
 consistent with
-[pip's vendoring rules](https://raw.githubusercontent.com/pypa/pip/26.3/pyproject.toml) .
+[pip's vendoring rules](https://raw.githubusercontent.com/pypa/pip/26.3/pyproject.toml).
 The relevant setuptools advisories are
 [GHSA-5rjg-fvgr-3xxf](https://github.com/pypa/setuptools/security/advisories/GHSA-5rjg-fvgr-3xxf),
 [GHSA-h35f-9h28-mq5c](https://github.com/pypa/setuptools/security/advisories/GHSA-h35f-9h28-mq5c)
 and
-[GHSA-xmj3-9gf7-h52w](https://github.com/pypa/setuptools/security/advisories/GHSA-xmj3-9gf7-h52w) .
+[GHSA-xmj3-9gf7-h52w](https://github.com/pypa/setuptools/security/advisories/GHSA-xmj3-9gf7-h52w).
 Raw matches remain in the [sanitized findings inventory](2026-11-dependency-findings.json).
 
 ### CI tooling findings
