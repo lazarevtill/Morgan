@@ -45,7 +45,7 @@ Clients use `/mcp` and `Authorization: Bearer TOKEN`, with the same token. Keep 
 out of checked-in client configuration. Follow the client's supported secret-storage mechanism;
 a JSON string containing a shell variable is not automatically expanded by every client.
 
-For Claude Code behind a TLS proxy on port 443, with the token supplied in your shell environment:
+With Morgan behind a TLS proxy on port 443, register Claude Code using the token in your shell:
 
 ```bash
 claude mcp add -s user --transport http morgan https://YOUR_HOST/mcp \
@@ -93,8 +93,11 @@ content later removed with `forget`.
    migrations, but its writable SQLite open can switch a restored file to WAL journal mode.
 5. Run `morgan migrate` when required. It takes its own snapshot, applies pending steps in one
    transaction and checks the result. A failed migration step rolls back the wave. After commit,
-   when `MORGAN_EMBEDDING_BACKEND=provider`, migrate checks identity at the embedding endpoint.
-   A failed post-commit identity check does not undo the migration. Resolve it before resuming use.
+   when `MORGAN_EMBEDDING_BACKEND=provider`, migrate registers the configured space if needed
+   and contacts the embedding endpoint to check or record its fingerprint. An unreachable/refusing
+   endpoint returns a successful command with `fingerprint: "unverified"` and a reason; other
+   errors can raise after commit. Neither outcome undoes the migration. Resolve errors or
+   unverified identity before resuming use.
 6. Check doctor and the relevant scoped operations before restarting clients. Verify journal
    reader compatibility separately when upgrading owner/task workflows.
 

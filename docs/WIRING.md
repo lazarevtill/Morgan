@@ -231,9 +231,14 @@ docker compose up -d
 
 The image binds to `0.0.0.0` and refuses startup without the key. Protect the published port
 with your network policy. For an upgrade, follow [the recovery procedure](OPERATIONS.md#upgrade-and-recover).
-Stop other database users, then snapshot using the existing image before building its replacement:
+Stop other database users. Keep the current image under a unique tag, then snapshot with
+that image before building its replacement. Record the tag printed below and retain the matching
+Compose/configuration files privately for rollback:
 
 ```bash
+morgan_previous_image="morgan-mcp:pre-upgrade-$(date -u +%Y%m%dT%H%M%SZ)"
+docker tag "$(docker compose images -q morgan-mcp)" "$morgan_previous_image"
+printf '%s\n' "$morgan_previous_image"
 docker compose stop morgan-mcp
 docker compose run --rm --no-deps morgan-mcp morgan snapshot
 docker compose build
@@ -247,7 +252,28 @@ docker compose run --rm --no-deps morgan-mcp morgan migrate
 docker compose up -d
 ```
 
-Snapshots remain in `./data/snapshots` unless you override the configured directory.
+Snapshots remain in `./data/snapshots` unless you override the configured directory. Any override
+must point to a mounted volume; files in a one-off container disappear when `--rm` removes it.
+
+For rollback, keep all database users stopped and follow the
+[restore preview and confirmation procedure](OPERATIONS.md#upgrade-and-recover) with a runtime
+compatible with both the current database and the saved snapshot. Restore the pre-upgrade
+snapshot before starting the old image; an older runtime refuses a newer schema. Use a local
+`rollback.compose.yml` selecting the exact saved image tag:
+
+```yaml
+services:
+  morgan-mcp:
+    image: morgan-mcp:pre-upgrade-REPLACE_WITH_SAVED_TIMESTAMP
+```
+
+With the matching prior configuration and restored database:
+
+```bash
+docker compose -f docker-compose.yml -f rollback.compose.yml up --no-build -d
+```
+
+Do not prune the saved image or snapshot until rollback is no longer needed.
 The [dependency audit](measurements/2026-11-dependency-audit.md) records the image's known
 unresolved findings; a pinned base image is not a claim of zero vulnerabilities.
 
