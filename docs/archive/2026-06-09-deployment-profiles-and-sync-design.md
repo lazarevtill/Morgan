@@ -1,5 +1,8 @@
 # Deployment Profiles & Device Sync (2026-06-09)
 
+> Historical design for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+>
 > **Superseded** by [the local-first reshape](2026-08-02-local-first-reshape-design.md)
 > (2026-08-02). Device sync, the memory replica, the phone client, deployment profiles, and the
 > `/v1` facade are out of scope.
@@ -80,7 +83,7 @@ existing seams, promoted to a documented, tested profile:
 - `MORGAN_ROLE_BINDINGS` routes e.g. `reflection`/`judge` (and optionally `strong`) to a remote
   provider; everything else stays local.
 - The **egress policy** decides per-request what may burst: data classification (privacy module)
-  + `MORGAN_REDACT_EGRESS` PII redaction on anything leaving the box; memory content classified
+  - `MORGAN_REDACT_EGRESS` PII redaction on anything leaving the box; memory content classified
   sensitive never appears in remote prompts.
 - New: a per-role `burst` flag in settings + an audit-log entry for every remote call (provider,
   role, redaction applied) so "what left the box" is always answerable.

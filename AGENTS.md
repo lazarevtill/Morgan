@@ -6,8 +6,9 @@ Guidance for Codex when working in this repository.
 
 A **project-scoped memory for the owner's AI tools**, consolidated into facts by a local
 model. One SQLite database under `MORGAN_DATA_DIR` holds memories, facts, vectors
-(sqlite-vec), the FTS5 index, the entity index and session history. Two surfaces, the `morgan` CLI and the `morgan-mcp` server, are thin adapters over
-one `MemoryGate`. The model server is any OpenAI-compatible endpoint (llama-server by
+(sqlite-vec), the FTS5 index, the entity index and session history. The `morgan` CLI and
+`morgan-mcp` server are thin adapters over one `MemoryGate` . The model server is any
+OpenAI-compatible endpoint (llama-server by
 default). The memory core has no queue, worker or scheduler. Optional finite task and
 owner workflows are explicitly invoked and keep separate execution journals.
 
@@ -85,6 +86,9 @@ private Unix socket and the existing workspace locks/STOP. No service is install
 `morgan review-proposal` previews full source context and binds explicit acceptance to the
 exact claim and destination before reusing memory capture. The digest is not authentication;
 see `docs/decisions/reviewed-proposal-intake.md`. No execution authority is granted.
+
+Documentation entry point: [docs/README.md](docs/README.md).
+Development and documentation checks: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
 `docs/ROADMAP.md` (what is not in the code and why, what retrieval measures, what is next),
@@ -192,7 +196,8 @@ come in" are answered by the directory names.
   joins it as a savepoint. Nothing awaits while the lock is held -- the embedding happens
   before it is taken -- and no store method commits on its own.
 - **Recall ranks the whole scope.** Vector and keyword search each rank every memory in the
-  project (or every project, with `all_projects`), fused by rank. Nothing narrows the
+  project (or every project, with `all_projects`), fused by rank. Explicit revision and
+  effective-time eligibility apply before ranking limits. No entity-based pool narrows the
   candidates first: on a real archive a narrowing pool cut answers out and found none. The
   entity index is the relevance floor's evidence, not a third ranking.
 - **Light steps run on open; heavy steps run only under `morgan migrate`, behind a snapshot.**
@@ -209,7 +214,8 @@ come in" are answered by the directory names.
   key has at most one current fact, and a unique index on `facts` enforces it. The key is
   (`user_id`, `project`, `subject`, `predicate`); it gains `author_id` and `scope` once
   supersession is assembled deterministically
-  (`docs/decisions/0001-fact-key-and-forget-reach.md`).
+  (`docs/decisions/0001-fact-key-and-forget-reach.md`). Author/scope metadata does not yet
+  partition fact timelines; source-protection checks are a separate safeguard.
 - **Facts are surfaced alongside episodics, never instead of them.** Recall budgets the
   fact block so a matching memory cannot be pushed out of the window by fact volume.
 - **Actor attribution.** Every memory records its `MemorySource`. The reply to `ask` is
@@ -320,8 +326,8 @@ task journals remain outside it. See `docs/decisions/credential-admission.md`.
   name that only ever opens sentences in a memory is not indexed. Code in a memory still
   yields words like `true` and `error`.
 - A superseded memory outranks the current one in 7 of the 10 knowledge-update probes
-  (`qwen3-embedding:8b`). Fusion is rank-only and carries no recency term. Supersession lives
-  on facts; the probes store episodics, which carry none.
+  (`qwen3-embedding:8b`). These probes supply no explicit revision edges. Fusion is rank-only
+  and carries no recency term; implemented revision filtering handles explicit corrections only.
 - Multi-hop questions are not answered. Recall ranks memories and has no mechanism to
   compose two of them; measured recall@8 is 0.62 against 0.90 for single-hop
   (`qwen3-embedding:8b`).

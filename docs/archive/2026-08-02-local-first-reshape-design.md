@@ -1,9 +1,13 @@
 # Morgan reshape — local-first, durable, reusable across projects
 
+> Historical design for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+
 **Status:** milestones 0 and 1 delivered; milestone 2 specified (§7.1), not started
 **Date:** 2026-08-02
 **Supersedes:** the Personal Agent OS horizon plan
-([vision](../archive/2026-06-09-personal-agent-os-vision.md), [horizons](../archive/2026-06-09-horizons-roadmap.md),
+([vision](../archive/2026-06-09-personal-agent-os-vision.md),
+[horizons](../archive/2026-06-09-horizons-roadmap.md),
 [ports](../archive/2026-06-09-ports-design.md),
 [profiles & sync](../archive/2026-06-09-deployment-profiles-and-sync-design.md)) — see §10.
 
@@ -16,7 +20,7 @@ data on a real machine.
 Evidence, verified against the working tree on 2026-08-02:
 
 | Claim | Evidence |
-|---|---|
+| --- | --- |
 | Two of three retrieval signals die on restart | `modules/memory/store.py:40-42,65-67` — the BM25 index, `_by_id`, and the entity map are process-local dicts, written only in `store()`, never rehydrated. Vector payloads carry enough to reconstruct a `Memory` (`store.py:50-63`), so under Qdrant the vector signal survives and the other two do not. |
 | The keyword index cannot read non-Latin scripts | `modules/memory/retrieval/bm25.py:9` tokenises on `[a-z0-9]+`. Everything outside ASCII is dropped entirely, so keyword recall returns nothing for such text — a substantial part of the intended corpus. |
 | The default vector backend is ephemeral | `config.py:42` defaults `vector_backend="memory"`. Combined with the above, a fresh process recalls nothing at all. |
@@ -61,7 +65,7 @@ project-scoped memory reachable from anywhere — and re-arms the rest on real d
 
 One deployment, one data directory, four surfaces over one core.
 
-```
+```text
                  ┌───────── surfaces ─────────┐
    CLI  ·  MCP server  ·  Python library  ·  HTTP /api
                  └─────────────┬──────────────┘
@@ -78,7 +82,7 @@ One deployment, one data directory, four surfaces over one core.
 ```
 
 | Surface | Consumer | State |
-|---|---|---|
+| --- | --- | --- |
 | CLI `morgan …` with `--json` | the owner's shell, scripts, any repo | new, thin |
 | MCP server | Claude Code, Cursor, any MCP client | new, 5 tools |
 | Python library `Brain` | the owner's other projects | new, thin facade |
@@ -126,6 +130,7 @@ escape hatch** if corpus growth ever outpaces brute force — a decision to be t
 latency, not anticipation.
 
 Contract changes required (contract-first, per repo rule):
+
 - `VectorIndex` gains `delete(ids)`.
 - Real erasure requires explicit `VACUUM` after bulk deletes; `sqlite-vec` row deletes are not
   space-reclaiming on their own.
@@ -156,7 +161,6 @@ difference is only the endpoint URL plus what a network hop demands:
 - **`morgan doctor` reports the endpoint and whether it answers** — the first question anyone asks
   when this breaks is which server they are actually talking to.
 
-
 Remove the hardcoded `"ollama"` from `config.py:106-117` and `providers/factory.py:29-30,83-85`, and
 replace the direct `OllamaEmbedder` construction at `composition.py:341` with a routed embedder.
 Default the provider to `llama-server`'s OpenAI-compatible endpoint, and **bind the `judge` and
@@ -178,6 +182,7 @@ consolidation is handed the gate rather than the raw store. `SessionHistoryStore
 move behind the gate for the same reason.
 
 **How "current project" is determined**, per surface:
+
 - **CLI** — the git repository root of the working directory, by name; `--project` overrides,
   `--all-projects` crosses.
 - **MCP server** — the client's declared workspace root, falling back to the server's configured
@@ -210,7 +215,9 @@ The guarantee is therefore "atomic within the database, compensated and reported
 "atomic everywhere", which a two-engine deployment cannot honestly promise.
 
 Two consequences are named rather than ignored:
-- A **promoted champion preprompt may embed text mined from now-forgotten conversations.** `forget()`
+
+- A **promoted champion preprompt may embed text mined from now-forgotten conversations.**
+  `forget()`
   flags affected champion versions for review; it cannot un-learn them. The registry keeps versions,
   so rollback is available.
 - `workspace_path` contents are **out of scope** for `forget()` and documented as such.
@@ -257,10 +264,13 @@ top-level `clients/` package, which squats a generic name in `site-packages` ·
 `docs/ARCHITECTURE_V2.md`, which specifies ten microservices contradicting the shipped design.
 
 Three of these are **not** clean removals and require edits to kept code:
-- **`proactivity/` is flag-gated production wiring, not dead code.** `apps/learning_worker/__main__.py:47,156-173,274-277`
+
+- **`proactivity/` is flag-gated production wiring, not dead code.**
+  `apps/learning_worker/__main__.py:47,156-173,274-277`
   builds a `ProactivityEngine` and subscribes to `HEARTBEAT` behind `enable_proactivity`. That
   wiring must be excised with it.
-- **Cutting `scheduling/heartbeat.py` breaks the kept `scheduling` package** — `scheduling/__init__.py:14,19`
+- **Cutting `scheduling/heartbeat.py` breaks the kept `scheduling` package** —
+  `scheduling/__init__.py:14,19`
   imports and re-exports `HeartbeatManager`. That import and `__all__` entry must be edited.
 - **Cutting `interfaces/embedding.py`** also requires removing `providers/factory.py:14,77-88`
   (`build_embedder`, itself uncalled).
@@ -272,7 +282,8 @@ would not have covered vectors anyway. At-rest protection is therefore **volume-
 the homelab host**, which covers the entire database including vectors and signals, costs no code,
 and is documented in the operations guide. Transport protection is a bearer token over the
 **NetBird** overlay network (self-hostable WireGuard, already in use across the deployment)
-or TLS at a reverse proxy. Shipping an advertised but unreachable security control is worse than shipping none.
+or TLS at a reverse proxy. Shipping an advertised but unreachable security control is worse than
+shipping none.
 
 A docs truth pass lands in the same commits: the six dead settings, the false test and mypy counts,
 the two already-fixed "latent bugs", and the word "bi-temporal" — the schema carries valid time only
@@ -281,7 +292,7 @@ the two already-fixed "latent bugs", and the word "bi-temporal" — the schema c
 ## 7. Sequence
 
 | # | Deliverable | Acceptance | Size |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 0 | `.gitattributes` to end the CRLF churn; tag `legacy-v0.0.4-full`; delete §6 including its tests and the three dependent edits; docs truth pass; fix the wheel data-file exclusion | Wheel installs into a clean venv and starts; suite green; `mypy` reports 0 errors | ~1 day |
 | 1 | One-database store: SQLite + FTS5 + `sqlite-vec` + WAL; project scoping through an extended `MemoryGate`; `forget()`; cold-path task queue; llama.cpp defaults + `judge`/`reflection` roles + the promotion flag defaulting off; `morgan remember\|recall\|facts\|forget\|ask\|doctor` | Store a fact in one repo, reboot, recall it from a different repo with `--all-projects`, with a real embedder, on disk — all three retrieval signals returning, including for non-Latin text | 4–5 days |
 | 2 | ChatGPT import with import-time holdout; MCP server (stdio local, streamable-HTTP + bearer token to the homelab) + `SKILL.md` | An external MCP client writes an episodic that survives consolidation into a fact | 3 days |
@@ -301,7 +312,8 @@ the horse memory, and the tag structure should reorganise itself as relationship
 path, `strong` role, local GPU) extracts concepts per memory; a hand-editable concepts file pins
 the relationships the owner cares about — `Harbor → registry → infrastructure` — and wins over the
 model's guess. This was chosen over a lexical resource, which is English-only and would fail on a
-corpus that is substantially non-English, and over embeddings-alone, which offers no inspectable tags
+corpus that is substantially non-English, and over embeddings-alone, which offers no inspectable
+tags
 and nothing to correct when a match is wrong.
 
 Shape, consistent with the existing invariants:

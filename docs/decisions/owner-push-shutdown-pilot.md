@@ -55,7 +55,9 @@ recovery or operating-system scheduling. Those remain separate deployment accept
 The prepared `launch_agent_plan` still targets the finite local-note worker, not owner push.
 It is disabled, has no token, does not renew an approval and does not install itself. The
 [hosting decision](owner-channel-hosting.md) documents calendar behavior and the exact paths
-and controls to review. As [Apple documents](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html),
+and controls to review. As
+[Apple documents](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html)
+,
 a user agent runs for a logged-in user; it is not an always-available service before login.
 
 Minimal next deployment sequence:

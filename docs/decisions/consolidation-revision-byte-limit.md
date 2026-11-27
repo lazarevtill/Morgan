@@ -39,7 +39,7 @@ embed and persist an initial embedding-space fingerprint. The guard does not bou
 that preceding embedding work, database metadata writes or their cost. A later re-ask rejection does
 not undo or conceal earlier generation.
 Invalid limits refuse explicitly. These exceptions propagate to the SDK caller; no new CLI/MCP
-error rendering contract is introduced by this slice.
+error rendering contract is introduced by this API.
 
 This is a canonical input JSON byte ceiling. It does not measure HTTP headers, internal SDK
 serialization changes, provider-added fields, custom backend transformations, chat templates,

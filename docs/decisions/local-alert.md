@@ -24,7 +24,8 @@ Apple references, checked 2026-11-06:
 
 - [Displaying notifications](https://developer.apple.com/library/archive/documentation/LanguagesUtilities/Conceptual/MacAutomationScriptingGuide/DisplayNotifications.html)
 - [AppleScript commands and dialog results](https://developer.apple.com/library/archive/documentation/AppleScript/Conceptual/AppleScriptLangGuide/reference/ASLR_cmds.html)
-- [Notifications still in Notification Center](https://developer.apple.com/documentation/usernotifications/unusernotificationcenter/getdeliverednotifications(completionhandler:))
+- [Notifications still in Notification Center](https://developer.apple.com/documentation/usernotifications/unusernotificationcenter/getdeliverednotifications(completionhandler:)
+  )
 
 ## One explicit invocation
 

@@ -2,7 +2,7 @@
 
 A mistaken completion previously left an owner correction pending: renewal selected only open
 tasks. Creating a replacement task produced two unrelated families and ambiguous title lookup.
-The owner can now select **Вернуть выполненную задачу в работу**, choose one completed task,
+The owner can select **Вернуть выполненную задачу в работу**, choose one completed task,
 review a due date and explicitly confirm. The confirmation shows the old task/source and says
 that its history is retained. Candidate labels identify completed tasks as completed.
 

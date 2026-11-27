@@ -15,7 +15,7 @@ or permission to run a tool.
 
 ## Decision
 
-Add `morgan_brain.tasks`, an opt-in SDK for explicitly running one task with one attempt.
+`morgan_brain.tasks` is an opt-in SDK for explicitly running one task with one attempt.
 The caller supplies an isolated journal path, owner/project/task ID, a named action and bounded
 text input. `run_task` requires an explicit mapping of action names to trusted async handlers
 and a cooperative timeout of at most one hour. There is no dynamic import, shell command,
@@ -67,9 +67,10 @@ can leave an unresolved running record without a handler invocation. Conservativ
 uncertainty is preferable to silently repeating a possibly completed action.
 
 `succeeded` means that the trusted handler returned and the local result committed. It does
-not independently verify a remote effect. This stage intentionally has no API to declare a
-remote operation definitely failed or to reconcile an unknown result; the next integration
-must define provider receipt lookup and idempotency semantics first.
+not independently verify a remote effect. The separate
+[receipt reconciliation extension](task-receipt-reconciliation.md) can resolve an unknown
+result from a matching trusted receipt. It does not introduce replay or establish a real
+provider's receipt lookup/idempotency guarantees.
 
 ## Options considered
 
@@ -122,7 +123,7 @@ in 86.42 seconds. After adding explicit rejection of ephemeral journal paths, al
 tests passed**. They use isolated data and synthetic handlers. Ruff lint/format, strict mypy
 and Bandit passed. Repeating the example returned the identical persisted attempt and result.
 
-## Next stages
+## Real-provider integration requirements
 
 The [bounded batch extension](bounded-task-batches.md) adds atomic worklist submission and
 exact, expiring, revocable in-process permits. It keeps scheduling and provider integration
@@ -132,7 +133,8 @@ explicit and stops the worklist on uncertainty.
    remote acceptance followed by a lost response and cancellation races in an isolated sandbox.
 2. Define explicit authorization and revocation, data retention/backup, bounded call counts and
    enforceable spending limits. Add reconciliation evidence without turning it into auto-retry.
-3. Only then consider a supervised worker, health reporting and scheduling. Require bounded
-   restart attempts, a stop control and tests proving an old worker cannot duplicate effects.
+3. For that provider, verify bounded restart, stop control and fencing against an old worker.
+   Existing [local-note supervision](bounded-local-supervisor.md) covers its own local-file
+   adapter; it is not evidence for an unrelated external provider.
 
 These are future integration criteria, not services enabled by this change.

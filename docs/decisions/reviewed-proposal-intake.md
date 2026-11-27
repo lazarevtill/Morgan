@@ -1,17 +1,16 @@
 # Review a proposal before it becomes a commitment
 
-The next functional bottleneck is user confirmation. Model extraction reached only 16/20 exact
-cases, including a third-party task and missed obligations. A recurring timer would repeat those
-mistakes more frequently. This change therefore connects the existing proposals to a meaningful
-review step before expanding scheduling.
+`morgan review-proposal` binds explicit acceptance to a source-backed proposal and its
+planning fields. The November 6 extraction experiment produced 16/20 exact cases, with a
+third-party task and missed obligations among the failures. Review remains required.
 
-| Capability | Current boundary | Remaining gap |
+| Capability | Implemented boundary | Related contract |
 | --- | --- | --- |
-| Model lifecycle | Finite delay, expiry guardian, STOP and bounded resources | Persistent schedule and OS supervision |
-| Task management | Scoped immutable commitments, completion revisions and daily plans | Calendar integration and richer task UX |
-| Confirmation | Source-bound preview and explicit acceptance added here | Trusted interactive UI and reviewer authentication |
-| Execution | Explicit local-note grants, receipts and finite worker | Broader adapters with their own authority boundaries |
-| Extraction | 16/20 exact on a small synthetic set | Reliable real-world evaluation; human review remains required |
+| Model lifecycle | Finite delay, expiry guardian, STOP and bounded resources | [Model cycle](bounded-model-cycle.md) |
+| Task state | Scoped immutable commitments and reviewed completion/cancellation/reopening | [Owner input](local-owner-input.md) |
+| Confirmation | Source-bound preview and exact acceptance; digest is not authentication | This record; [native review](native-owner-review.md) |
+| Execution | Separate local-note grants, receipts and finite worker | [Local notes](local-approved-notes.md) |
+| Extraction | Small synthetic measurements; no general quality acceptance | [Note selection](synthetic-note-selection.md) |
 
 ## Preview
 

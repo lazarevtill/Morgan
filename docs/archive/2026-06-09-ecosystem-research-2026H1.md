@@ -1,5 +1,8 @@
 # Ecosystem Research — Ground Truth as of June 2026
 
+> Historical design for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+
 **Status:** reference (research snapshot, 2026-06-09; round 2 included below)
 **Parent:** [Personal Agent OS vision](2026-06-09-personal-agent-os-vision.md)
 **Method:** three parallel web-research agents (interop standards, on-device AI, platform
@@ -45,7 +48,8 @@ OpenAI file_search, Google Memory Bank); Mem0 the de facto OSS layer.
 → *The vacuum the Memory Passport fills.*
 
 **OTel GenAI semconv** still experimental, incl. agent/MCP spans; MCP 2026-07-28 bakes in trace
-context. ([spec](https://opentelemetry.io/docs/specs/semconv/gen-ai/)) → *Adopt names, expect churn.*
+context. ([spec](https://opentelemetry.io/docs/specs/semconv/gen-ai/)) → *Adopt names, expect
+churn.*
 
 ## 2. On-device / local AI
 
@@ -77,7 +81,8 @@ PersonaPlex-7B (Jan 2026, Moshi-based) is open SOTA** — Morgan's seam validate
 
 **Hardware:** unified-memory mini-PCs are the home-brain category — Mac Studio M4 Max
 ($1,999, 410–546 GB/s, best value), Ryzen AI Max/Framework Desktop ($2,348, 128 GB), DGX Spark
-($4,699, bandwidth-limited). ([review](https://www.tomshardware.com/pc-components/gpus/nvidia-dgx-spark-review/3))
+($4,699, bandwidth-limited).
+([review](https://www.tomshardware.com/pc-components/gpus/nvidia-dgx-spark-review/3))
 
 ## 3. Platform & memory landscape
 
@@ -91,7 +96,8 @@ Zep 63.8% vs Mem0 49% on LongMemEval; BEAM deliberately unsaturated.
 **Big labs deepen lock-in:** OpenAI "Dreaming V3" memory (Jun 4 2026: background synthesis,
 self-rewriting memories, Gmail context, **reduced audit trail**, non-exportable); Claude memory
 for all users (Mar 2026, transparency-forward); Google Personal Intelligence + 24/7 "Gemini
-Spark". ([Dreaming](https://dataconomy.com/2026/06/05/chatgpt-memory-dreaming-architecture-upgrade/),
+Spark".
+([Dreaming](https://dataconomy.com/2026/06/05/chatgpt-memory-dreaming-architecture-upgrade/),
 [Google](https://blog.google/innovation-and-ai/products/gemini-app/personal-intelligence/))
 
 **Agent-OS attempts:** **OpenClaw** (~347K stars by Apr 2026; self-hosted, channel-native,
@@ -104,7 +110,8 @@ proactive; NVIDIA productized it; creator hired by OpenAI) proved the demand at 
 **Self-improvement:** GEPA (ICLR 2026) is the production-standard reflective optimizer (+20% over
 GRPO, 35x fewer rollouts); ACE formalizes context-as-learning playbooks; MIT SDFT for
 forgetting-free weight updates. **No consumer product ships measurable, eval-gated per-user
-learning — the gap.** ([GEPA](https://github.com/gepa-ai/gepa), [ACE](https://arxiv.org/abs/2510.04618))
+learning — the gap.** ([GEPA](https://github.com/gepa-ai/gepa),
+[ACE](https://arxiv.org/abs/2510.04618) )
 
 **Proactivity UX that stuck:** morning briefs (ChatGPT Pulse), named scheduled routines
 (Claude Code Routines, Apr 2026), event-triggered background agents, sleep-time consolidation.
@@ -122,9 +129,13 @@ Morgan sits on all four. The vision doc's bets follow directly.
 
 ---
 
-## 5. Round 2 — deep dives (same day; four agents: MCP implementation, 12–24mo foresight, adversarial spec review, strategy red-team)
+## 5. Round 2 — specialist reviews
+
+Four agents reviewed MCP implementation, 12–24-month foresight, adversarial specifications
+and strategy on the same day.
 
 ### MCP implementation ground truth
+
 2026-07-28 RC: stateless core (SEP-2567 removes `Mcp-Session-Id` + handshake; `server/discover`
 replaces it), `Mcp-Method`/`Mcp-Name` routing headers, extensions framework, Tasks → extension.
 Python SDK: v1.27.2 stable supports `FastMCP(stateless_http=True)` today; **SDK V2 has no alpha
@@ -142,6 +153,7 @@ MCP Apps production-ready since Jan 2026 (Claude, VS Code, Goose render it).
 [OWASP MCP cheat sheet](https://cheatsheetseries.owasp.org/cheatsheets/MCP_Security_Cheat_Sheet.html))
 
 ### 12–24 month foresight
+
 Context-as-learning-substrate won: ACE playbooks + GEPA (both ICLR 2026) + Letta Skill Learning;
 2027 shape = playbook deltas + learned skills + nightly consolidation with principled forgetting
 (FOREVER/FSFM Ebbinghaus-style replay) + *optional* TTT/SDFT weight tier (consumer-practical
@@ -159,6 +171,7 @@ MCP risk low; skills-as-learning-unit strongly validated.
 [FOREVER](https://arxiv.org/abs/2601.03938), [EU timeline](https://www.legiscope.com/blog/eu-ai-act-timeline-deadlines.html))
 
 ### Strategy red-team (applied to the spec set)
+
 No moat — every component copyable; defensible: data gravity, category authorship, rigor.
 Passport deliberately trades gravity for sovereignty (now stated in vision §2). "Network
 effect" → **single-user flywheel**; the indispensable loop is cross-surface recall.
@@ -168,6 +181,7 @@ to the roadmap. Biggest risk: optimizing for an ecosystem audience that doesn't 
 single-maintainer project while deferring the daily value that feeds the signal pipeline.
 
 ### Adversarial spec-vs-code review (10 findings, all folded into the specs)
+
 Verdict: the layering maps honestly onto the code and the kernel invariants survive — but the
 draft shipped two false feasibility assumptions, both fixed: (1) /v1 client tool passthrough is
 unimplementable on current seams (descoped to H2 with a named mechanism); (2) the single

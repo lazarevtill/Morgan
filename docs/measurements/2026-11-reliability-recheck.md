@@ -5,6 +5,26 @@ Synthetic fixtures are not evidence of semantic quality, delivery to a person, o
 consumer acceptance. No private memory, external recipient, deployment or persistent
 service is used. Historical measurements elsewhere retain their original dates.
 
+## Published revision and final verification
+
+PR [#129](https://github.com/lazarevtill/Morgan/pull/129) merged as
+`fa999b65fd60039fa1400eb198d2360d72737f0a` on 2026-11-27. Its tree is identical to the final
+PR head `9e4e60baf48360818ec456b28d50ad5026532d52`.
+
+- [Final PR tests](https://github.com/lazarevtill/Morgan/actions/runs/45914643423):
+  **2223 passed, 4 skipped**, 343.54 seconds.
+- [Merged-main tests](https://github.com/lazarevtill/Morgan/actions/runs/45915382978):
+  **2223 passed, 4 skipped**, 446.12 seconds on Python 3.12.16.
+- Main lint/type checks, security scanning and CodeQL completed successfully.
+- Claude review found a missing-base force-push case in secret scanning. The final correction
+  passed 39 workflow fixtures; a focused Claude follow-up found no blocker. The follow-up
+  inspected the supplied diff and evidence rather than independently rerunning those fixtures.
+- Claude's serialization-duplication nit remains a separate refactor. Upstream findings and
+  unverified scenarios listed below remain open; no runtime or service was activated.
+
+The staged results below retain their original revisions and environments. Intermediate
+failures are not replaced by the final passing total.
+
 ## Starting point and scope
 
 - Clean `main` at `3eb3ec4253214e930c2edc09046add60a7d99f6b`.

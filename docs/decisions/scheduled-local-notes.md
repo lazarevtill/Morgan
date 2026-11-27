@@ -50,7 +50,7 @@ STOP persists across invocations. `resume` removes it only while worker and supe
 are free; it does not start a process or extend the grant. Invoke `run` again explicitly.
 `revoke` removes authority while preserving receipts, notes and STOP. To reschedule, explicitly
 replace approval with the same exact request and a new window. A completed task ID still means
-completed: a genuinely new delivery needs a new task ID. Changing a pending task's payload
+completed: a separate delivery needs a new task ID. Changing a pending task's payload
 under its old ID remains a conflict.
 
 A crash while waiting loses no schedule. A crash around publication follows existing receipt

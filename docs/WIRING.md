@@ -1,468 +1,222 @@
 # Wiring and running
 
-For immutable source corrections, retry IDs and effective-time lookups, see
-[the revision client contract](REVISION_CLIENT.md).
+This guide covers the memory CLI and MCP server. Optional task and owner workflows have
+separate contracts in the [decision index](decisions/README.md).
 
 ## 1. Install
 
-Python 3.12 or later. From the repository root:
+For development, follow [the virtual-environment setup](../CONTRIBUTING.md). To make the
+commands available on your user PATH, an alternative is:
 
 ```bash
-uv tool install --editable .   # morgan and morgan-mcp, on your PATH in every directory
-pip install -e ".[dev]"        # in a virtualenv, to work on Morgan: plus pytest, ruff, mypy
+uv tool install --editable .
 ```
 
-A tool install gets its own environment and puts both commands on your user `PATH`, which is
-where MCP clients, agents' shells and OpenResearch sessions look for them. A virtualenv's
-commands are on `PATH` only while it is active. The install is editable, so a `git pull` in
-this checkout upgrades it.
+That installation uses its own environment. It does not install dependencies into your
+system Python, and a checkout change changes what it runs. Use a
+[pinned, verified runtime](decisions/pinned-runtime.md) for deployment.
 
 ## 2. The model server
 
-Any OpenAI-compatible endpoint. The default and documented one is
-[`llama-server`](https://github.com/ggml-org/llama.cpp), which serves one model per process,
-so run a chat model and an embedding model:
+Morgan uses OpenAI-compatible chat and embedding endpoints. Compatibility depends on the
+server's supported request modes, model IDs and embedding dimensions; test them with
+`morgan doctor` before capture. Strict native answers additionally need the
+[counted llama.cpp backend](decisions/strict-native-context.md).
+
+A typical llama.cpp setup uses separate processes for chat and embeddings:
 
 ```bash
-llama-server -m qwen2.5-7b-instruct.gguf --port 8081                 # chat
-llama-server -m mxbai-embed-large.gguf --embedding --port 8082       # embeddings
+llama-server -m /path/to/chat-model.gguf --port 8081
+llama-server -m /path/to/embedding-model.gguf --embedding --port 8082
 ```
 
-Run them on the machine with the GPU and reach them over your overlay network, or on
-`localhost` for offline work; only the endpoint URL differs. Ollama's `/v1` and vLLM speak the
-same protocol.
+Use the model IDs advertised by those servers. Ollama exposes compatible endpoints under
+`/v1`; a server that serves both models can use one endpoint. A remote server receives the
+text sent for embedding or generation. Choose endpoints you trust.
 
 ## 3. Configure
 
-Copy `.env.example` to **`~/.config/morgan/.env`** (`$XDG_CONFIG_HOME/morgan/.env`). That
-file is read from every working directory, which is what the CLI needs: it is meant to run
-from inside whichever repository you are working in. The CLI reads a `./.env` in the current
-directory after it, which overrides it; real environment variables override both.
-`morgan-mcp` reads the user file and the environment only: a client starts it in whatever
-folder it has open, and a `./.env` there is that project's, not Morgan's.
+The user file is `${XDG_CONFIG_HOME:-~/.config}/morgan/.env`.
+The CLI reads that file, then `./.env`, then environment variables. Later values win.
+Morgan's MCP settings read the user file and environment only.
+
+Create the user file without overwriting an existing configuration:
 
 ```bash
-MORGAN_LLM_ENDPOINT=http://localhost:8081/v1   # the chat model
-MORGAN_LLM_MODEL=qwen2.5-7b-instruct
-MORGAN_EMBEDDING_MODEL=mxbai-embed-large      # the embedding model
-MORGAN_EMBEDDING_DIM=1024                     # must match the embedding model
-# MORGAN_EMBEDDING_ENDPOINT=http://localhost:8082/v1   # only if it is a separate server
-# MORGAN_LLM_API_KEY=                         # only if the chat server enforces --api-key
-# MORGAN_EMBEDDING_API_KEY=                   # only if a separate embedding server enforces one
-# MORGAN_LLM_JSON_MODE=json_schema            # how consolidation asks for JSON
-# MORGAN_DATA_DIR=~/.local/share/morgan       # the one database
-# MORGAN_API_KEY=                             # required before morgan-mcp binds beyond loopback
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/morgan"
+mkdir -p "$config_dir"
+test -e "$config_dir/.env" || cp .env.example "$config_dir/.env"
 ```
 
-Three keys, and the direction and host each goes to matter: `MORGAN_LLM_API_KEY` is what Morgan
-presents *to* the chat server; `MORGAN_EMBEDDING_API_KEY` is what it presents *to* the embedding
-server, only when `MORGAN_EMBEDDING_ENDPOINT` addresses a separate one -- without one, embeddings
-go to the chat host and carry `MORGAN_LLM_API_KEY`, since there is no second host to give a key
-to. Neither ever reaches the other server: the chat credential does not appear in the embedding
-host's logs, and vice versa. `MORGAN_API_KEY` is unrelated to both -- what MCP clients present
-*to* Morgan over HTTP.
+Edit it to match your servers. This example assumes separate endpoints and 1,024-dimensional
+embeddings; replace the model IDs and dimension with the actual served values:
 
-When one server answers both, leave `MORGAN_EMBEDDING_ENDPOINT` empty and everything goes to
-`MORGAN_LLM_ENDPOINT`. Set it when they are separate, which is the common case:
-`llama-server` loads one model per process, and a chat server started without `--embedding`
-answers `/embeddings` with a 501.
+```dotenv
+MORGAN_OWNER_USER_ID=owner
+MORGAN_LLM_ENDPOINT=http://localhost:8081/v1
+MORGAN_LLM_MODEL=your-chat-model
+MORGAN_EMBEDDING_ENDPOINT=http://localhost:8082/v1
+MORGAN_EMBEDDING_MODEL=your-embedding-model
+MORGAN_EMBEDDING_DIM=1024
+```
+
+| Setting | Purpose |
+| --- | --- |
+| `MORGAN_LLM_API_KEY` | Outbound authentication to the chat endpoint. |
+| `MORGAN_EMBEDDING_API_KEY` | Outbound authentication when a separate embedding endpoint is set. |
+| `MORGAN_API_KEY` | Inbound bearer token for Morgan's HTTP MCP listener. |
+| `MORGAN_LLM_JSON_MODE` | Structured output mode: `json_schema`, `json_object` or `prompted`. |
+| `MORGAN_DATA_DIR` | Memory directory; defaults to `~/.local/share/morgan`. |
+| `MORGAN_TEMPORAL_DB_URL` | Explicit SQLite URL; otherwise derived from the data directory. |
+| `MORGAN_SNAPSHOT_DIR` | Snapshot directory; otherwise `snapshots/` under the data directory. |
+| `MORGAN_RECALL_FLOOR_MARGIN` | Optional model-specific relevance threshold. |
+| `MORGAN_EMBEDDING_BACKEND` | `provider` for semantic embeddings; `hash` for offline plumbing checks. |
+
+Without a separate embedding endpoint, embeddings go to the chat endpoint and use its key.
+With a separate endpoint, its key is used instead. The inbound MCP key is independent.
+
+See [.env.example](../.env.example) for retry, timeout, fingerprint and project-classification
+settings. Do not change the embedding model or dimension for an existing database: its stored
+vectors belong to one fingerprinted space. Use a new data directory for a different model,
+and also change any explicit database URL. A snapshot retains the original model's vectors.
+
+FastMCP itself still attempts to decode a `./.env` in the client's startup directory.
+An invalid UTF-8 file there can stop MCP startup even though Morgan's settings ignore it.
+This known SDK limitation is distinct from CLI configuration errors.
 
 ## 4. Check: `morgan doctor`
 
-```
-database: ~/.local/share/morgan/morgan.db
-env_file: ~/.config/morgan/.env (present)
-env_file: ~/code/my-repo/.env (absent)
-project: my-repo
-all_projects: False
-embedding_backend: provider
-embedding_dim: 1024
-embedding_endpoint: http://gpu-box:8082/v1
-llm_endpoint: http://gpu-box:8081/v1
-llm_model: qwen2.5-7b-instruct
-data_flow: gpu-box (MORGAN_LLM_ENDPOINT) receives ask: the question, the memories recalled for it and the recent history; consolidate: up to 50 memories per project, with the project's current facts
-data_flow: gpu-box (MORGAN_EMBEDDING_ENDPOINT) receives remember: the memory's text; recall: the query; import: every imported message; doctor --vectors: a sample of stored memories; a process's first embedding call: up to 5 stored memories, while the embedding space's fingerprint is unrecorded
-sqlite_vec: v0.1.9
-fts5: True
-provider: reachable (0.3 s)
-embedding_provider: slow (41.8 s; MORGAN_DOCTOR_SLOW_AFTER_SECONDS=2.0)
-embedding_space: 1 (mxbai-embed-large, 1024 dims): fingerprint matches (min cosine 0.9993); strings sha256 82b4fe781cb3d981d562c08cb1de3ce802abc22ea5d2e956e11672f66b340f6f
-migration: user_version 7 of 7, nothing pending
-snapshots: 1 in ~/.local/share/morgan/snapshots, newest morgan-20260921T101500Z-migrate.db, 1843200 bytes in all
-memories: 12 in project 'my-repo' (128 across all projects)
-fts: 12 in project 'my-repo' (128 across all projects)
-vectors: 12 in project 'my-repo' (128 across all projects)
-rows_by_project: {'my-repo': 12, 'personal': 116}
-rows_missing_provenance: 0
-rows_missing_provenance_reason: None
-project 'my-repo': personal, capture on, consolidate on
-project 'personal': unclassified, capture on, consolidate on
-code_root: ~/code
-code_root: ~/work (not a directory)
-vector_audit: none (not requested; pass --vectors)
+```bash
+morgan doctor --project demo --json
 ```
 
-Paths print in full; `~` stands for your home folder here.
-
-`doctor` only reads. It opens the database read-only and changes nothing in it -- no table
-is created, no migration step runs, the journal mode is left as it is -- so it is safe to run
-on a database another install still writes to, on one waiting for `morgan migrate`, or on one
-`morgan restore` just put back. On a fresh install the first line reads `(no database yet)`
-and the counts are `None`: the first command that stores a memory creates the file. A file
-that cannot be read that way is named on the same line, with the reason.
-
-Every probe is independent, so one failure does not hide the rest. The first lines answer
-"why is my brain empty?": a database somewhere other than where you expect, or a `.env` file
-read, or missing, where you did not expect it. Each `env_file` line is a file the CLI read, in
-order, and whether it was there.
-
-The `data_flow` lines say which host receives which of your text, one line per endpoint, by
-host name alone; when one server answers both, it is one line.
-
-The two model servers are probed separately, each with one request. `provider` is the chat
-endpoint, which only `ask` and `consolidate` need. `embedding_provider` is the endpoint every
-`remember` and `recall` embeds with, probed by embedding the five fixed strings the embedding
-space is fingerprinted with, so a chat server that serves no embeddings shows as refused here;
-under the hash backend it reads `not used`. Each reads one of four:
-
-- `reachable`: it answered, within `MORGAN_DOCTOR_SLOW_AFTER_SECONDS` (2 s).
-- `slow`: it answered after that, or answered a 429 or a 5xx other than 501, which a retry may
-  mend. An embedding host that unloads its model when idle takes tens of seconds over its
-  first answer: that is `slow`, and it works.
-- `refused`: it answered, and refused the request. A 401 or 403 names the key setting the
-  request carried (`MORGAN_EMBEDDING_API_KEY` when embeddings have their own endpoint, else
-  `MORGAN_LLM_API_KEY`); any other 4xx, a redirect, a 501, or a 200 that is not an
-  embeddings response (a proxy's web page) names the endpoint setting.
-- `unreachable`: no answer came within `MORGAN_DOCTOR_PROBE_TIMEOUT_SECONDS` (60 s), which
-  names that setting, or no connection was made, which names the endpoint setting. A host that
-  answered is never unreachable. When this machine cannot build an HTTP client at all, the
-  line says so and names neither.
-
-Each line says why: how long the answer took, the timeout it missed, the HTTP status, the
-setting to check. `--json` gives each probe's `seconds`, `timeout_seconds`,
-`slow_after_seconds` and `error` under `provider_probe` and `embedding_probe`.
-
-`embedding_space` compares the five strings' fresh vectors with the fingerprint the database
-recorded for its active space: `matches`, `MISMATCH` (a different model is answering: stored
-vectors would be searched with the wrong one), or `unrecorded` (a process's first embedding
-call records it, once a sample of stored memories shows the model answering wrote them).
-`doctor` never records one. A `MORGAN_EMBEDDING_DIM` other than the space's width, which every
-memory command refuses, is named on the `embedding_dim` line with both widths and the fix, in
-the refusal's own words; `--json` carries them under `embedding_dim_error`, `null` when the two
-agree. `migration` lists the steps `morgan migrate`
-would run, heavy or light; `doctor` runs none. `snapshots` counts the files in
-`MORGAN_SNAPSHOT_DIR` that `snapshot`, `migrate`, `forget` and `restore` left there, which
-Morgan never deletes.
-
-A database keeps the embedding model its vectors were written with. Once its space is
-fingerprinted -- a process's first embedding call records it -- a different model, of the same
-width or not, is refused on every path that stores or searches, and nothing retires a space or
-re-embeds what it holds. To change the model on purpose, point `MORGAN_DATA_DIR` at a new
-database, with `MORGAN_EMBEDDING_DIM` set to the new model's width; the old database keeps
-working with its own model. Restoring a snapshot does not change this: a snapshot holds the
-same model's vectors as the database it was taken from.
-
-The `memories`/`fts`/`vectors` lines are scoped to `project`, with the total across every
-project beside them, so a zero from the wrong directory does not read as an empty database.
-`rows_by_project` gives every project's own count, and `rows_missing_provenance` counts rows
-that an older Morgan, still running somewhere, wrote after `morgan migrate` (an empty
-`author_id`, or a NULL `vec_items` status); it reads `None` with a reason on a database that
-has not been through `morgan migrate` yet, where the columns it counts do not exist. Each
-`project` line is a row of the `projects` table: its classification and whether capture and
-consolidation are on. Every project-keyed write -- a memory, a fact, a turn of session history
--- registers its project's row in the same transaction, so every project Morgan has written to
-has one; migration step 7 seeded one, `unclassified`, for each project a database already held,
-and a project with no row at all is consolidated like any other.
-
-A CLI write run inside a git repository records what that repository is: `remember`, `ask` and
-`consolidate`, with no `--project` (a name may belong anywhere) and no `--all-projects` (the
-write is not that one project's). The label comes from the repository's `origin` remote, or its
-sole remote when it has exactly one, and `MORGAN_WORK_REMOTE_GLOBS`: `work` when a glob matches
-the remote's host or URL, `personal` when none does, `unclassified` with no remote. It is
-recomputed on every such write, because the remote and the globs both change without Morgan
-hearing about it. The remote and the root are stored beside it and never printed here: a remote
-URL can carry a token, and this report is the kind of thing that gets pasted into an issue.
-`forget` deletes the whole row with the project's data.
-
-Nothing is recorded in three cases, and none of them changes what is already there. A config
-Morgan cannot read, decode or parse is not the same fact as a repository with no remote, so the
-row is left alone rather than relabelled `unclassified`. `consolidate` records only where the
-project already has a row, which means it has been written to: run as the first command ever in
-a repository it proposes no facts, registers nothing and so records nothing. And a recording
-that fails -- a lost race for the write lock, say -- warns on stderr naming the project, and
-leaves the command it followed successful: the write is the command's contract, the recording
-is bookkeeping about a repository.
-
-The remote is read from the repository's own config file: `url.<base>.insteadOf` rewriting is
-not applied and `include`/`includeIf` files are not followed, so a remote reached through a
-rewrite is classified by the URL as written, and one declared in an included file is not seen at
-all. `morgan-mcp` records nothing: the server may run on another machine than the client, so it
-never sees the repository a call came from. A project written only through MCP has a row and
-stays `unclassified` until a CLI write from inside its checkout. Because `projects` is keyed by
-the project's name, two checkouts with the same folder name share one row and each write
-rewrites the other's classification, remote and root. A `MORGAN_CODE_ROOTS` entry that is not a
-directory is marked so; nothing walks the roots yet.
-
-The plain embedding probe above already sends the five fingerprint strings to the embedding
-host on every `doctor` run, to say whether it answers at all. `morgan doctor --vectors` sends
-more: a sample of up to `MORGAN_VECTOR_AUDIT_SAMPLE_ROWS` (180) stored vectors in `project`
-(every project with `--all-projects`), spread evenly across the active embedding space's
-table, re-embedded and compared against what is stored, at
-`MORGAN_EMBEDDING_FINGERPRINT_TOLERANCE`. A line to stderr says so first -- the host itself is
-in `data_flow`, above -- because stdout still carries `--json`. `--clients N` runs the same
-sample through N independent, concurrent embedders instead of one, and reports each client's
-own numbers beside any id whose fresh vectors disagreed between clients -- catching a server
-that only sometimes answers a request wrong, which one client alone cannot see. The audit is
-skipped, with a reason naming the probe's own verdict, when that plain probe already found the
-embedding host unreachable or refused -- otherwise every client would wait out the full import
-retry budget (`MORGAN_EMBEDDING_IMPORT_RETRY_BUDGET_SECONDS`, 600 s by default) only to report
-what the probe already knows:
-
-```
-vector_audit: 180 sampled, min 0.9982, median 0.9998, 0 below tolerance
-  client-1: min 0.9985, median 1.0000, 0 below tolerance, 173.786 s
-  client-2: min 0.9982, median 0.9996, 0 below tolerance, 173.537 s
-  wall_seconds includes this process's own per-request client setup, which grows with
-  --clients on its own; Ollama specifically may also serialise concurrent clients rather than
-  answer them in parallel. A slower wall time with --clients than without it can be either, or
-  both -- not evidence on its own that the host serialised anything.
-```
-
-`--json` gives the same numbers under `vector_audit`: `sampled`, `min`, `median`,
-`below_tolerance` (the ids, pooled across every client), `per_client` (each client's own `min`,
-`median`, `below_tolerance` and `wall_seconds`, or an `error` if that client could not be
-reached at all) and `disagreements` (the ids clients answered differently for). `vector_audit`
-and `vector_audit_reason` are always both present, like `embedding_space` and its own reason,
-so a `--json` consumer reading one never gets a `KeyError` depending on whether `--vectors` was
-passed: without it, or on the hash backend, or before an embedding space is registered, or when
-the embedding host is unreachable or refused, `vector_audit` reads `None` and
-`vector_audit_reason` says why -- nothing runs a model unasked.
+Doctor reads database state without migrations or writes and explicitly probes the model
+endpoints. It reports configuration sources, provider status, embedding identity, pending
+migrations and scoped counts. See [diagnostics](DIAGNOSTICS.md) for interpretation and
+`doctor --vectors` sampling.
 
 ## 5. The CLI
 
-`morgan evidence <id> ... --project <context> --json` and MCP
-`evidence(ids=["<id>"], project="<context>")` fetch exact durable IDs without embedding
-or chat calls. `version: "morgan.evidence.v1"` defines the result contract:
-`requested_ids`, `missing_ids`, and `results` in one named project for the configured
-owner. IDs are deduplicated in request order, with 1..32 input IDs of at most 256
-characters each. Unknown and inaccessible IDs both appear in `missing_ids`.
-`--all-projects` is refused; after cross-project recall, fetch each project's evidence
-separately. Recalled fact IDs preserve the persisted fact identity. Evidence opens an
-existing database read-only, without initialization, migrations, model construction, or
-embedding-width checks. It reads legacy rows with unknown new metadata. A missing
-database reports an error and is never created by evidence lookup.
-
-Fact results carry confidence, validity intervals, and `support_event_ids`. Fetch support
-IDs in a subsequent bounded call; no roots are expanded automatically. Legacy facts can
-have no support IDs, and missing support remains uncertainty. Event `created_at` and
-`recorded_at` distinguish asserted time from ingestion time. Existing clients can ignore
-these additive recall fields. Reported source and author do not grant access or authenticate
-a caller. Stored evidence is untrusted input.
-
-An unattributed or inferred fact cannot close a user statement selected as a predecessor,
-overlap a user statement's validity interval, or replace an unclosed user statement for
-the same owner, context, subject and predicate. This guard
-also applies to backdated inference writes and future user intervals. Ended user history
-does not block a new inference that starts at or after its end. It does not provide
-general historical interval reconciliation.
-
-`remember` and `ask` accept optional `--source` (`unknown`, `user_stated`, `tool_observed`,
-`agent_inferred`) and `--author-id`. MCP `remember` and `ask_morgan` accept the same optional fields
-as `source` and `author_id`. Omitting them stores `unknown` and an empty author; old
-commands still work. Existing stored attribution is preserved. Use `user_stated` only
-when recording an actual user statement; tool results and agent proposals must be
-labelled accordingly. These labels report provenance; they do not authenticate a
-caller or change the configured owner's access. Results include the recorded labels.
-`ask` replies are always `agent_inferred`, with
-`model:<configured model>` as the reported author; the chat wire role does not establish
-who authored the input.
-
-ChatGPT imports keep stable source event IDs. An edited export that reuses a source
-message ID with changed text, source role, explicit event time or project is refused
-with an event identity conflict before
-embedding or overwriting that event. Until explicit import revisions are supported,
-corrections require a new source event identity; Morgan does not generate fork IDs.
-An import is resumable per event, rather than atomic across the whole export.
-New assistant imports report `chatgpt:assistant` as author. Exact replay preserves
-legacy owner-labelled assistant imports only when import origin, CLI client, owner
-author and agent-inferred source all match; content, project and explicit event time
-must still match. Import resumption may run from a different working directory.
-
-For example: `morgan remember "I prefer short answers" --project personal
---source user_stated --author-id owner`.
-
-Every command takes `--json`. `remember`, `recall`, `facts`, `forget`, `ask`, `consolidate`
-and `doctor` also take `--project` (default: the current git repository's name; a linked
-worktree counts as the repository it came from; outside a repository, `personal`) and, where
-it makes sense, `--all-projects`.
+Use `morgan --help` and `morgan COMMAND --help` for current arguments. The examples below use
+an explicit project so their scope does not depend on the working directory.
 
 ```bash
-morgan remember "the Harbor mirror blocked the deploy"   # embedding model only
-morgan recall "what blocked the deploy"                   # vector + FTS5, fused
-morgan facts                                              # currently-valid facts
-morgan ask "what do you know about the deploy"            # chat model: recall, answer, remember
-morgan consolidate                                        # chat model: memories → facts
-morgan forget                                             # everything under this project
-morgan import ~/Downloads/conversations.json              # seed from a ChatGPT export
-morgan doctor                                             # see section 4
-morgan snapshot                                           # a verified copy of the database
-morgan restore <snapshot> --yes                           # put a snapshot back
-morgan migrate                                            # upgrade the database, behind a snapshot
-morgan install-skill                                      # see section 7
+morgan remember "The deployment uses PostgreSQL" --project demo --source user_stated
+morgan recall "Which database does deployment use?" --project demo --json
+morgan facts --project demo --json
+morgan evidence SOURCE_ID --project demo --json
+morgan context inspect SOURCE_ID --project demo --json
+morgan ask "Which database does deployment use?" --project demo
+morgan consolidate --project demo
 ```
 
-`remember` with no `--project` outside a repository stores in `personal`, and its `--json`
-result says so with `project_defaulted: true`. Run inside a repository, `remember`, `ask` and
-`consolidate` also record that repository's classification, remote and root against the project
-(see section 4). `recall`'s `--json` result carries `abstained`
-and `reason`: an empty result is `empty` (nothing stored in scope) or `declined` (with
-`MORGAN_RECALL_FLOOR_MARGIN` set, nothing stood out above the background); results carry
-`too_few_to_judge` or `no_floor` when the floor did not judge them, and `null` when it did.
-`forget` takes a snapshot first and prints its path: `morgan restore` with that path is the
-undo.
+Replace `SOURCE_ID` with an actual stored ID. `evidence` accepts up to 32 IDs;
+`context inspect` accepts up to 16. Both read an existing database without embedding or
+chat calls and refuse cross-project lookup. See the [revision](REVISION_CLIENT.md) and
+[inspection](CONTINUATION_CONTEXT.md) contracts for effective time and exact selections.
+
+Capture actual user statements as `user_stated`, tool observations as `tool_observed`,
+and agent conclusions as `agent_inferred`. Omitted source is `unknown`. Optional
+`--author-id` reports attribution, not authentication. Consolidation uses eligible active
+user/tool evidence; unknown captures are not promoted. Replies to `ask` are agent inferences.
+
+Without `--project`, the CLI uses the enclosing repository name, including linked worktrees,
+or `personal` outside one. Same-named repositories share a project. Repository-derived writes
+also record project classification; explicit project names do not imply a filesystem location.
 
 ### Snapshots, restore and migrate
 
-`snapshot`, `restore` and `migrate` act on the whole database file and take no `--project`.
+These commands act on the whole database:
 
-`morgan snapshot [--reason <word>]` writes a `VACUUM INTO` copy of the database into
-`MORGAN_SNAPSHOT_DIR` (default `snapshots/` beside the database), named by UTC time and
-reason, and checks it with `PRAGMA quick_check` before reporting it; `--list` lists them. The
-copy is consistent while other processes hold the file open. Morgan never deletes a snapshot
-that passed its check.
+```bash
+morgan snapshot
+morgan snapshot --list
+morgan migrate --dry-run
+```
 
-`morgan restore <file>` alone only prints what it would replace, and exits 2. With `--yes` it
-checks the snapshot, refuses one written by a newer Morgan, takes a `before-restore` snapshot
-of the database as it is, and swaps the file in. Close every running `morgan-mcp` first, on
-every platform: on Linux or macOS a write another process makes meanwhile is lost with the
-replaced file, and on Windows a file another process holds open cannot be replaced.
+A heavy migration requires `morgan migrate` and takes a snapshot first. Restore replaces the
+database and requires all users of that file to stop. Follow the
+[upgrade and recovery procedure](OPERATIONS.md#upgrade-and-recover) before either operation.
+`morgan forget --project NAME` erases that scope and keeps an undo snapshot; retained snapshots
+still contain forgotten data.
 
-After an upgrade of Morgan, `morgan doctor`'s `migration` line says whether the database waits
-for `morgan migrate`. Light steps run by themselves when the database is opened. A heavy step
-(one that rewrites, moves or deletes rows) waits for `morgan migrate`, and until it runs every
-write -- `remember`, `ask`, `consolidate`, `forget`, `import`, and the MCP tools that write --
-fails with an error containing "writes are blocked until `morgan migrate` runs" and naming the
-pending steps; `recall` and `facts` still answer. `morgan migrate --dry-run` lists the pending
-steps. `morgan migrate` takes a `migrate` snapshot, runs every pending step in one
-transaction, checks the result, prints the row counts before and after, and then checks the
-embedding space against the embedding server. A step that fails rolls the whole run back, and
-the error names the snapshot. Close every running `morgan-mcp` before you migrate: a tool call
-made while the run holds the lock waits up to `MORGAN_DB_BUSY_TIMEOUT_MS` for it (an older
-`morgan-mcp`, which does not read that setting, waits 5 seconds) and then fails with
-"database is locked", and an older `morgan-mcp` writing afterwards is what
-`rows_missing_provenance` counts.
+### Import
 
-`import` seeds memory from a ChatGPT export so a fresh brain is not an empty box. It writes
-to `archive/chatgpt`, not to your working project, and takes no `--project`: a fifth of the
-conversations go to `archive/chatgpt-holdout` instead, reserved for evaluating the memory
-against conversations nothing has learned from. Expect it to take a while, since every turn
-costs an embedding call; progress goes to stderr. Exact replay skips existing events.
-Changed content under an existing event identity is refused; corrections need a new identity.
+```bash
+morgan import /path/to/conversations.json
+```
 
-An import runs a canary: every `MORGAN_IMPORT_CANARY_EVERY` (50) memories it actually stores
--- never one skipped because it was already there unchanged -- it re-sends the five
-fingerprint strings alone and compares them against the embedding space's recorded
-fingerprint, and once more at the end for whatever was stored since the last good check. This
-bounds how many memories a model that is *still* answering wrong when a check runs can reach
-before it is named; it does not catch a vector that was wrong only in between two checks and
-has since recovered -- `morgan doctor --vectors`'s full re-embed sample is the check for that.
-A mismatch raises `ImportStopped`, printed on stderr (and under `suspect_ids` in the `--json`
-error object), naming the suspect range, the suspect memory ids and the setting that
-addresses the model, and pointing at `morgan doctor --vectors`. **The suspects are not
-repaired.** They are already stored, in every index, with whatever vectors they were given --
-the canary runs after the stretch is stored, not before -- and re-running the import skips
-every id already there unchanged, suspects included, rather than re-embedding them. Nothing
-re-embeds named memory ids, and nothing holds a stretch back until its own canary passes.
+Import accepts an explicitly selected ChatGPT export. It writes to `archive/chatgpt` and
+reserves one fifth of conversations in `archive/chatgpt-holdout`; it takes no `--project`.
+Import resumes per event. Exact replay skips stored events; changed content under an existing
+identity is refused. See [conversation export](decisions/explicit-conversation-export.md).
 
-`MORGAN_EMBEDDING_BACKEND=hash` replaces the embedding call with a deterministic stub, so the
-memory commands run with no model server at all (keyword and entity search still work; vector
-similarity does not mean anything).
+The import canary checks embedding identity periodically and at completion. A mismatch stops
+the run and reports suspect IDs already stored. It does not repair their vectors; replay skips
+them. A transient wrong vector between successful checks can escape detection.
+`doctor --vectors` samples stored vectors; it is not a complete repair operation.
 
-When a model server is down, too slow or refuses the request, every command that needs it
-says which endpoint and which setting to check, and exits 1; under `--json` the error is the
-whole of stdout. An embedding call is retried first, within
-`MORGAN_EMBEDDING_RETRY_BUDGET_SECONDS` (60 s; `MORGAN_EMBEDDING_IMPORT_RETRY_BUDGET_SECONDS`,
-600 s, for an import) when the host answered slowly, with a 5xx other than 501 or a 429, or
-dropped the connection -- a cold host loading its model looks like that -- and within
-`MORGAN_EMBEDDING_UNREACHABLE_BUDGET_SECONDS` (5 s) when no connection could be made. A
-refusal (a 4xx other than 429, a 501, a redirect) is not retried. Chat requests remain
-single-attempt: HTTP refusals name the endpoint/key setting, and timeouts or transient
-HTTP failures report a slow provider. Provider error excerpts are bounded and credentials
-are redacted before either surface displays them. Invalid CLI configuration uses the same
-JSON error envelope and exit 1 without creating a database.
+### Errors and retries
+
+Under `--json`, failures use the JSON error envelope on stdout; diagnostics go to stderr.
+Invalid configuration exits 1 without creating a database. Provider failures name the endpoint
+and relevant setting, with bounded, credential-redacted excerpts.
+
+Embedding calls retry transient failures within configured budgets: 60 seconds interactively,
+600 seconds for import, and five seconds when no connection can be made. Refusals such as
+401, 403, redirects and 501 are not retried. Chat calls are single-attempt; partial streaming
+output is not replayed after failure.
 
 ## 6. The MCP server
 
-Seven tools (`remember`, `recall`, `facts`, `forget`, `ask_morgan`, `evidence` and
-`inspect_context`) for any MCP client, through the same gate, returning the same
-results the CLI's `--json` prints. `project` is a tool argument (the server is a daemon; its
-own working directory means nothing to a client). A call that names no project works in
-`personal`: `remember` says so with `project_defaulted: true`, and `forget` without a
-`project` erases `personal`. Every tool declares MCP's hints: `recall`, `facts`,
-`evidence` and `inspect_context` are read-only. `remember` and `ask_morgan` write (a turn
-stores the exchange); `forget` is destructive. Errors come back as the tool's error result,
-carrying the message the CLI prints: an
-unreachable, slow or refusing model server, an `EmbeddingSpaceMismatch`, or a database waiting
-for `morgan migrate`, which refuses the three tools that write while `recall` and `facts`
-still answer.
+The seven tools are `remember`, `recall`, `facts`, `forget`, `ask_morgan`, `evidence`
+and `inspect_context`. Pass `project` explicitly. Omitting it uses `personal`, including
+for `forget`. The configured owner applies to all tool calls.
+
+| Tool behavior | Tools |
+| --- | --- |
+| Read-only | `recall`, `facts`, `evidence`, `inspect_context` |
+| Writes | `remember`, `ask_morgan` |
+| Destructive, with snapshot | `forget` |
 
 ```bash
-claude mcp add -s user morgan -- morgan-mcp --transport stdio   # Claude Code, every project
-morgan-mcp --transport http                                 # loopback, MORGAN_MCP_HOST/PORT
-MORGAN_API_KEY=… morgan-mcp --transport http --host <overlay-address>   # other machines
+morgan-mcp --transport stdio
+morgan-mcp --transport http
 ```
 
-`-s user` matters: Claude Code's default scope registers a server only for the project the
-command ran in, and a memory meant for every repository would be missing from all the others.
-`claude mcp get morgan` starts the server and reports whether it connected.
-
-The HTTP transport enforces `MORGAN_API_KEY` as a bearer token. With no key set it serves
-loopback only, and refuses to start on any other host: these tools include `forget`. See
-[`OPERATIONS.md`](OPERATIONS.md) for client configuration.
+HTTP defaults to loopback on port 8090. A non-loopback bind requires a real `MORGAN_API_KEY`.
+For client configuration, transport protection and explicit remote binding, see
+[operations](OPERATIONS.md#mcp-clients). No service is installed by these commands.
 
 ## 7. Teach your agents: `morgan install-skill`
 
-The tools say what Morgan can do; the skill says when. It tells an agent to recall before a
-task or a design decision, to remember decisions, corrections, conventions and measured
-conclusions with their evidence, never to store secrets, and which project to name.
-
 ```bash
-morgan install-skill                         # lists every path, then asks
-morgan install-skill --yes --json            # for scripts
-morgan install-skill --mcp-server brain      # if morgan-mcp is registered under another name
+morgan install-skill
+morgan install-skill --mcp-server brain
 ```
 
-It writes `morgan/SKILL.md` for each agent installed here: Claude Code (`~/.claude/skills`,
-or `CLAUDE_CONFIG_DIR`), Codex (`~/.agents/skills`), OpenCode
-(`$XDG_CONFIG_HOME/opencode/skills`), Cursor (`~/.cursor/skills`). In Claude Code's
-`settings.json` it allows `mcp__morgan__recall`, `mcp__morgan__facts`,
-`mcp__morgan__evidence` and `mcp__morgan__inspect_context`, derived from the tools that
-declare themselves read-only, so recalling does not stop for a prompt. The tools that write
-stay behind the prompt, and under `"defaultMode": "dontAsk"`, which refuses every call no
-rule allows, agents cannot `remember` until you allow `mcp__morgan__remember` yourself.
-A `morgan` skill it did not write is left alone, and so is a settings file it cannot parse; both
-are checked again as each file is written. Run it again after upgrading Morgan.
+The installer previews its changes and asks before writing. `--yes --json` supports explicit
+scripted installation. It writes the packaged usage skill for detected Claude Code, Codex,
+OpenCode and Cursor installations, and supports OpenResearch's upload store.
 
-**OpenResearch.** Its agent sessions run with their own configuration and load neither the
-skills above nor your MCP servers. The installer puts the skill in OpenResearch's upload
-store (`user-skills/global/morgan/SKILL.md` under `ORX_DATA_DIR`, or
-`~/.local/share/openresearch`), which every session receives, and the skill falls back to the
-`morgan` command when the tools are absent -- so `morgan` must be on the session's `PATH`. A
-session runs in its own git worktree; the command still files memories under the
-repository's project, so a conclusion recorded in one experiment session is recalled in the
-next, and `--all-projects` finds it from another research project. If you moved
-OpenResearch's data folder in its settings, set `ORX_DATA_DIR` before installing.
+Claude Code settings permit the four read-only tools. Write tools retain their existing
+permission boundary. An unrecognized skill or unparseable settings file is left alone.
+Run the installer again after an upgrade. For OpenResearch with a custom data directory,
+set `ORX_DATA_DIR`; its sessions need `morgan` on PATH for the CLI fallback.
 
 ## 8. Docker
 
-`docker compose up -d` builds the image and runs `morgan-mcp --transport http` on port 8090
-with `./data` mounted as the database directory. Put `MORGAN_LLM_ENDPOINT` and a real
-`MORGAN_API_KEY` in `.env` next to the compose file; the published port is not loopback, so
-the server refuses to start without the key.
+The Compose service publishes port 8090 and mounts `./data` at `/app/data`. Create a local
+`.env` beside the Compose file with reachable model endpoints, matching model IDs/dimension
+and a real `MORGAN_API_KEY`. Container localhost is not the host's model server.
 
-After an upgrade that leaves a heavy migration step pending, the server refuses every write
-until `morgan migrate` has run against `/app/data`. Run it in a one-off container of the same
-service, which gets the same `.env` and the same `./data` mount, with the old server stopped:
+```bash
+docker compose build
+docker compose up -d
+```
+
+The image binds to `0.0.0.0` and refuses startup without the key. Protect the published port
+with your network policy. To upgrade with a migration:
 
 ```bash
 docker compose build
@@ -471,13 +225,13 @@ docker compose run --rm morgan-mcp morgan migrate
 docker compose up -d
 ```
 
-The snapshot `migrate` takes lands in `./data/snapshots`.
+Stop other processes using the same database as well. Snapshots remain in `./data/snapshots`.
+The [dependency audit](measurements/2026-11-dependency-audit.md) records the image's known
+unresolved findings; a pinned base image is not a claim of zero vulnerabilities.
 
 ## 9. Consolidation on a schedule
 
-Nothing in Morgan runs a model unasked. If you want nightly consolidation, that is one cron
-line on the machine that holds the database:
-
-```
-0 3 * * * morgan consolidate --all-projects --json >> ~/.local/share/morgan/consolidate.log
-```
+Morgan does not schedule consolidation. An owner-managed scheduler can invoke
+`morgan consolidate --all-projects --json` with an absolute executable path and explicit
+configuration. That command sends eligible memory text to the configured model endpoint.
+Account for logs, failures and the per-project consolidation switch in the surrounding job.

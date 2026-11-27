@@ -6,7 +6,7 @@ installing a service or asserting 24/7 availability.
 ## Problem and behavior
 
 The owner previously ran `model_cycle` separately, found its proposal file, then returned
-to owner-input review. `owner_ui --server ABSOLUTE_BINARY --model ABSOLUTE_GGUF` now offers
+to owner-input review. `owner_ui --server ABSOLUTE_BINARY --model ABSOLUTE_GGUF` offers
 **Предложение локальной модели** for a saved message in the same review flow. No model
 starts just because the interface opens or receives text. The owner explicitly confirms
 starting a local operation; its progress menu offers refresh or **STOP: остановить модель
@@ -75,7 +75,8 @@ One shared stop command is sufficient:
 Readiness remains limited to the logged-in foreground desktop. There is no persistent
 credential, installed LaunchAgent, phone delivery or incoming-message service.
 
-Measured real-model and synthetic lifecycle evidence: [pilot measurement](../measurements/2026-11-06-integrated-owner-model.md).
+Measured real-model and synthetic lifecycle evidence:
+[pilot measurement](../measurements/2026-11-06-integrated-owner-model.md) .
 
 The owner menu reports pending review and saved, unapproved draft counts. The
 pending-message list distinguishes a ready draft, a failure, an interrupted attempt,

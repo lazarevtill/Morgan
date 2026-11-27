@@ -1,5 +1,8 @@
 # Memory & Self-Evolving — Voice B: "The Predictive Self" (2026-06-14)
 
+> Historical design for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+
 **Status:** EXPLORATORY — a deliberate *second voice*, written to contrast the current design.
 Not a decision, not yet reconciled with the in-flight deep-research (that reconciliation is §9).
 **Purpose:** give the owner a genuinely different architecture to weigh against the built one, so
@@ -149,6 +152,7 @@ The deep-research workflow has returned (adversarially verified). Verdict on Voi
 mechanisms:
 
 **Independently confirmed (3-0 verified evidence) — Voice B was right where it counts:**
+
 - **§3 surprise / prediction-error-gated writes** — directly neuro-grounded (human hippocampus
   fMRI, Nature Comms 2022: encode the surprising, predict the stable). This is Voice B's central
   inversion, and it is the single best-evidenced new technique in the whole report.
@@ -161,11 +165,13 @@ mechanisms:
   vaguer "library of fragments." Adopt ACE's delta mechanism as the *how* for §6.
 
 **Tempered / kept speculative (no direct 2026 evidence):**
+
 - The full **calibrated-belief substrate** (§4) and **active-inference proactivity** (§7) are
   coherent and attractive but unproven in the literature. They stay in the "diverge and let the
   gate decide" experiment (§10 path 3), not the near-term roadmap.
 
 **What the research added that neither voice emphasized:**
+
 - The **hoarding-vs-amnesia open problem**: consolidation/forgetting is *unsolved*, and rare
   high-importance facts vanish under naive compression. Both voices need an explicit
   **importance-weighted retention + pinned-facts + reversible-only forgetting** guard. This is

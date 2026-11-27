@@ -12,8 +12,7 @@ description: >-
 
 Morgan keeps personal and project memories and recalls them by meaning and keyword. Use its MCP
 tools (`recall`, `evidence`, `inspect_context`, `facts`, `remember`) when this session has them;
-otherwise use the `morgan`
-command in a shell. Both reach the same memory.
+otherwise use the `morgan` command in a shell. Both reach the same memory.
 
 ## Choose a memory context
 
@@ -34,7 +33,8 @@ Outside a repository the project is `personal`, and so is an MCP call that names
 - At the start of a task, recall what the task is about:
   `morgan recall "<topic>" --json` or `recall(query, project)`.
 - Before a design decision, and before working out something that may already be known.
-- `morgan facts --json` or `facts(project)` lists what is currently true for the project.
+- `morgan facts --json` or `facts(project)` lists currently valid stored facts; inspect their source
+  and support labels.
 - For general preferences, people, relationships or goals, recall `personal` explicitly:
   `morgan recall "<topic>" --project personal --json` or `recall(query, project="personal")`.
 - Search across projects when the question needs their shared context:

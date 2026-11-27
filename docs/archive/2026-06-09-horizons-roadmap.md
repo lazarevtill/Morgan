@@ -1,5 +1,8 @@
 # Horizons Roadmap — Personal Agent OS (2026-06-09)
 
+> Historical design for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+>
 > **Superseded** by [the local-first reshape](2026-08-02-local-first-reshape-design.md)
 > (2026-08-02). Device sync, the memory replica, the phone client, deployment profiles, and the
 > `/v1` facade are out of scope.
@@ -19,7 +22,7 @@ the learning loop eats usage signals — if daily value waits, the signal pipeli
 "provably gets smarter" is unfalsifiable. Everything here is host-side software.
 
 | # | Deliverable | Spec | Why this order |
-|---|-------------|------|----------------|
+| --- | ------------- | ------ | ---------------- |
 | 0 | **Kernel prerequisites** (review-mandated): structured provenance on `Memory`/`TemporalFact` + store migration; `system_override` threaded through `stream_turn` (streaming currently drops the champion); persistent `SessionHistoryStore` + redis-bus append path | Ports §1/§2 | Everything below builds on these; two are latent bugs today |
 | 1 | **Port audit log** + `GET /api/audit` | Ports cross-cutting | Needed by every port that follows — lands first, not last |
 | 2 | **/v1 OpenAI-compatible facade** (client tool passthrough descoped → H2) | Ports §2 | Instantly makes every self-hosted UI a Morgan shell |
@@ -43,7 +46,7 @@ brief has run for 2+ weeks without being disabled.
 Goal: multi-device presence and the proactive/voice experience.
 
 | # | Deliverable | Spec |
-|---|-------------|------|
+| --- | ------------- | ------ |
 | 1 | **Memory Replica v0** (`/api/replica` + ETag snapshots + nightly regen) | Profiles sync |
 | 2 | **Device uplink** (`/api/replica/uplink`, device provenance, consolidation integration) | Profiles sync |
 | 3 | **Reference phone-thin-client contract** + minimal reference client in `clients/` | Profiles §3 |
@@ -88,7 +91,7 @@ spec when its horizon opens — listed here for direction, not commitment.
 ## Standards bets summary (what we adopt, watch, ignore)
 
 | Bet | Action | Timing |
-|-----|--------|--------|
+| ----- | -------- | -------- |
 | MCP (stateless 2026-07-28) | **Adopt hard** — server port + client already in tree | H1, bump at SDK V2 |
 | OpenAI-compat /v1 | **Adopt** — facade | H1 |
 | Memory Passport | **Define for ourselves** — internal format + lab importers; publish only on pull | H1 build |
@@ -102,7 +105,7 @@ spec when its horizon opens — listed here for direction, not commitment.
 ## Kill criteria (from the strategy red-team — every bet gets a failure signal)
 
 | Bet | Failure signal (cheap, early) | Fallback |
-|-----|-------------------------------|----------|
+| ----- | ------------------------------- | ---------- |
 | MCP port | After ~6 weeks of real use: external-agent writes surviving consolidation ≈ 0, or owner disables it for memory pollution | Keep read-only `memory_search`/`profile_get`; drop the write path |
 | Morning brief / routines | Owner disables or stops opening within a month | Rework trigger curation before adding any new proactive surface |
 | Passport importers | Imported history measurably doesn't improve recall quality (harness) | Keep export-as-backup only; stop investing in importers |

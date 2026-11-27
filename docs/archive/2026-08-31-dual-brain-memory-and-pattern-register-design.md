@@ -1,9 +1,13 @@
 # Dual-brain memory + the pattern register — design
 
+> Historical design for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+
 **Status:** design; implementation lands in four commits behind this document
 **Date:** 2026-08-31
 **Builds on:** [local-first reshape](2026-08-02-local-first-reshape-design.md)
 **Sources:**
+
 - Xie, Lang, An, Zhao, Yang, Li, Ma, Lin, Miao, Yan.
   *VoiceMem: Streaming Dual-Brain Memory for Real-Time Interaction.*
   arXiv:2608.26005v1 [eess.AS], 26 Aug 2026.
@@ -20,7 +24,7 @@ design. What transfers is the part that is not about audio at all, and the paper
 ablation says it is the part that carries the result:
 
 | Mechanism removed | Accuracy lost (LoCoMo / ES-MemEval / ChatMem / Memora) |
-|---|---|
+| --- | --- |
 | Upper-layer index | **−9.9 / −5.3 / −6.7 / −4.4** |
 | Right brain (persona) | −6.3 / −4.3 / −5.4 / −4.4 |
 | Emergent clustering | −5.5 / −2.0 / −3.4 / −0.2 |
@@ -78,7 +82,7 @@ scripts reproduces the bug one layer up.
 A two-level index *above* the store, exactly as the paper specifies: schemas for coarse
 semantic routing, entities for locating concrete people, events and concepts.
 
-```
+```text
 G_L = (S, V, E)
   s = (description, N_macro, V_s)   schema: a coarse slot, holding entities
   v = (description, N_micro, I_v)   entity: belongs to exactly ONE schema; I_v indexes memories
@@ -137,7 +141,7 @@ The left brain records *what happened*; the right brain records *who the user is
 already has the second idea as a flat `UserModel.traits` list scored by token overlap. The
 paper's contribution is the distinction that list cannot express:
 
-```
+```text
 G_R = (V_I, V_C)
   v_I = (description, I)              intrinsic: an enduring disposition
   v_C = (description, I, ρ_{v,e})     cross-entity: an attitude, anchored to a left-brain entity
@@ -160,7 +164,7 @@ applied to affect — the situational reading is kept situational until evidence
 **Two horizons, mapped onto the existing path split:**
 
 | Paper | Morgan | Where |
-|---|---|---|
+| --- | --- | --- |
 | Short-horizon attribution (in-turn) | after the reply is sent | cold path of each turn, beside the signal recorder |
 | Long-horizon attribution (post-session) | consolidate recurrent evidence into intrinsic nodes | nightly job |
 
@@ -182,7 +186,7 @@ actually retrieved together.
 
 For a connected entity subset `H` and the queries `Q` seen in a window:
 
-```
+```text
 ρ(H) = (1/|Q|) · Σ_{q∈Q} |A_q ∩ H| / |A_q ∪ H|
 ```
 

@@ -2,7 +2,7 @@
 
 Status: implemented as an explicitly invoked POSIX command, 2026-11-06.
 
-## Concrete purpose
+## Purpose
 
 The local-note worker already reconciles interrupted tasks but previously required an operator
 to start the next process. `supervise` now owns a fixed worker child, detects selected signal

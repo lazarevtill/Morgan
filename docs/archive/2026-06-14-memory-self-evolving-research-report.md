@@ -1,5 +1,8 @@
 # Memory & Self-Evolving — Deep-Research Report (2026-06-14)
 
+> Historical design for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+
 **Status:** reference (adversarially-verified research snapshot)
 **Method:** deep-research workflow — 5 search angles → 20 sources fetched → 87 claims →
 25 verified by 3-vote adversarial panels (21 confirmed, 4 killed) → 10 synthesized findings.
@@ -32,7 +35,7 @@ evolution, not rewrite.** Two convergent signals dominate:
 ## 2. Adopt (high-confidence, high-fit upgrades)
 
 | # | Upgrade | Why / evidence | Fit |
-|---|---------|----------------|-----|
+| --- | --------- | ---------------- | ----- |
 | A | **ACE-style delta-updated playbook** — replace monolithic champion *rewrites* with structured incremental delta updates (append-then-curate) | ACE diagnoses **brevity bias** (dropping domain insight for concise summaries) and **context collapse** (iterative rewriting eroding detail). Morgan's monolithic champion is exactly the artifact that suffers this. Keeps the zero-inference-time-cost property. (3-0) | drop-in upgrade to the GEPA optimizer's output format |
 | B | **Sleep-time compute** — cold-path jobs that pre-derive likely-needed facts/answers for the owner's recurring contexts *before* queries arrive | ~5× test-time / ~2.5× cost amortization (directional; constructed benchmarks). The learning-worker already owns the cold path — this **extends** the hot-reads/cold-writes invariant, doesn't break it. (3-0, [arXiv:2504.13171](https://arxiv.org/abs/2504.13171)) | new worker job class |
 | C | **Surprise / prediction-error-gated writes** — gate episodic-write strength and consolidation *priority* on novelty; lower write weight for inputs already predicted by stable facts | Neuro-grounded: human hippocampus fMRI (Nature Comms 2022, N=24×2) shows it preferentially encodes *surprising* stimuli while learning, then switches to *predicted* representation once stable. (3-0, [Nature s41467-022-31040-w](https://www.nature.com/articles/s41467-022-31040-w)) | prioritizer in front of consolidation |
@@ -80,7 +83,7 @@ not). Validate retention-of-rare-facts as an explicit eval-gate scenario.
 
 Keep the spine; graft four things; defer the rest:
 
-```
+```text
 KEEP   bi-temporal store · episodic→semantic consolidation · eval gate · hot/cold · GEPA
 GRAFT  (A) champion → ACE delta-updated, scope-aware playbook   [evolves the self-model]
        (B) sleep-time cold-path jobs (pre-derive recurring-context answers)
@@ -94,8 +97,10 @@ This is **Voice A+**: the conservative architecture, upgraded exactly where the 
 strong, with the privacy/auditability constraints doing the deferral filtering.
 
 ### Shipped status (2026-06-14)
+
 Four of the five GRAFT/GUARD items are implemented, tested, and on `main`; the fifth is
 evidence-deferred:
+
 - ✅ **GUARD — anti-amnesia** (`ca96183`): user-stated facts protected from inferred DELETE +
   decay floor (importance = source). + `test_anti_amnesia`.
 - ✅ **C — surprise/prediction-error gate** (`ca96183`): deterministic novelty pre-filter before
@@ -126,7 +131,8 @@ evidence-deferred:
 
 ## 8. Primary sources
 
-GEPA [2507.19457](https://arxiv.org/pdf/2507.19457) · ACE [2510.04618](https://arxiv.org/abs/2510.04618)
+GEPA [2507.19457](https://arxiv.org/pdf/2507.19457) · ACE
+[2510.04618](https://arxiv.org/abs/2510.04618)
 · Storage→Experience survey [2605.06716](https://arxiv.org/html/2605.06716v1) · Sleep-time compute
 [2504.13171](https://arxiv.org/abs/2504.13171) · Hippocampus prediction-error
 [Nature 2022](https://www.nature.com/articles/s41467-022-31040-w) · Memory-for-Agents survey

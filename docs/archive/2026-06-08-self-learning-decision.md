@@ -1,12 +1,17 @@
 # Decision Record — Self-Learning Mechanism
 
-**Date:** 2026-06-08 · **Status:** Accepted · **Source:** Wave 0 research workflow `morgan-brain-research-wave0` (8 agents, web-researched, 2025–2026 sources)
+> Historical design for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+
+**Date:** 2026-06-08 · **Status:** Accepted · **Source:** Wave 0 research workflow
+`morgan-brain-research-wave0` (8 agents, web-researched, 2025–2026 sources)
 
 ## Context
 
 Morgan must "learn from the owner" over time on **frozen, local, OpenAI-compatible models** (Ollama
 is one example backend), single-owner, privacy-first, modest local GPU. The question: *how* should
-learning change behavior — weights (LoRA), prompt (auto-optimized preprompt), memory (RAG), or hybrid?
+learning change behavior — weights (LoRA), prompt (auto-optimized preprompt), memory (RAG), or
+hybrid?
 
 ## Decision
 
@@ -14,6 +19,7 @@ learning change behavior — weights (LoRA), prompt (auto-optimized preprompt), 
 LoRA is a rare, eval-gated escalation, not the primary mechanism.
 
 ### Why (evidence)
+
 - **RAG dominates LoRA for personalization.** LaMP/ICTIR 2025 (arXiv:2409.09510): RAG **+14.92%**,
   PEFT/LoRA **+1.07%**, hybrid **+15.98%** over baseline — LoRA adds only ~0.44pp on top of RAG.
 - **Data scarcity.** LoRA needs ~500–10,000 clean instruction pairs; one user accrues these over
@@ -38,6 +44,7 @@ LoRA is a rare, eval-gated escalation, not the primary mechanism.
 3. **QLoRA (conditional escalation only).** See test below.
 
 ## LoRA escalation test (ALL FOUR must hold)
+
 1. 500–1,000+ deduplicated, instruction-shaped, owner-curated pairs in a **stable** domain.
 2. A **golden-eval-proven** persistent style/voice/format gap that prompt+RAG cannot close after a
    champion-preprompt cycle.
@@ -53,6 +60,7 @@ dataset, never online. If preference-tuning weights ever needed, use **KTO/ORPO,
 pairs for one user).
 
 ## Training-signal collection (instrument NOW, before any optimizer consumes it)
+
 Typed records on the post-response async path: `(context, query, original_reply, user_edit, retry?,
 thumb)`. Value order: **edits** (free ground-truth correction pairs, CIPHER-style → distill a NL
 preference delta) > retries / "no, I meant…" > thumbs (**down** reliable; **up least reliable** —
@@ -61,7 +69,9 @@ mining (~20–50 examples + per-example NL feedback). **Eval/golden items are fi
 the assistant may consolidate, else the metric measures leakage.
 
 ## Validation gate — "beats-current-or-nothing"
+
 3-layer offline pytest harness on local models → JSON scorecard (also CI regression protection):
+
 - **L1 (every commit, no judge):** retrieval recall@k / F1 over vector+BM25+entity+RRF, LongMemEval
   taxonomy (+ optional LoCoMo).
 - **L2 (the "did it learn ME" signal):** hand-authored 20–50 item per-user golden set tagged by
@@ -79,6 +89,7 @@ the assistant may consolidate, else the metric measures leakage.
   ship behind a flag; A/B 24–48 h; auto-rollback on regression; keep N versioned champions/tags.
 
 ## Key risks (mitigations in the gate)
+
 Sycophancy/over-personalization (downweight up-votes, OP-Bench negatives, keep correctness
 independent of the user model) · optimizer regression (full-valset gate + flagged A/B + auto-
 rollback) · uncalibrated local judge (cross-family + κ calibration) · eval leakage (firewall) ·
@@ -86,6 +97,7 @@ memory bloat / context decay (bounded forgetting + compact injected profile) · 
 budget) · premature LoRA (the 4-condition test) · local-LLM date hallucination (pin timestamps).
 
 ## Consequences for the roadmap
+
 - **Pull forward** the memory learning-substrate + **eval harness** to the front of Phase 2 (they
   deliver +14.92% with no GPU). GEPA optimizer = second half of Phase 2 / start of Phase 3, gated on
   the eval harness existing.
@@ -113,7 +125,8 @@ runtime.
   at inference.
 - **Validation gate = `mlflow.genai.evaluate`** with custom `@scorer`s (L1 recall@k, L2 preference
   probes) + **Evaluation Datasets** (the golden set) + **`make_judge`** (3.4+) for the calibrated
-  cross-family judge (measures judge accuracy → our Cohen's κ requirement). "Beats-current-or-nothing"
+  cross-family judge (measures judge accuracy → our Cohen's κ requirement).
+  "Beats-current-or-nothing"
   = compare candidate vs `@champion` scores before re-pointing the alias.
 - **LoRA (if escalated) = Model Registry** aliases for versioned `morgan:vN` + rollback (defer until
   the escalation test fires).
@@ -129,6 +142,7 @@ MLflow gives free). MLflow wins for *this* use case because it unifies GEPA + ev
 registry + tracking locally.
 
 ## Key citations
+
 LaMP RAG-vs-PEFT arXiv:2409.09510 · GEPA arXiv:2507.19457 + dspy.ai/api/optimizers/GEPA +
 github.com/gepa-ai/gepa · SkillOpt (design only) arXiv:2605.23904 · PrefEval arXiv:2502.09597 ·
 MAPLE arXiv:2602.13258 · PersonaMem arXiv:2504.14225 · CIPHER/implicit-feedback arXiv:2507.23158,

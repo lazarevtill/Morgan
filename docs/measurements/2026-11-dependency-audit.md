@@ -6,6 +6,15 @@ tools, Docker runtime, offline runtime installer and repository-controlled CI pi
 It does not certify every dependency version allowed by a range, installed owner runtimes,
 the external Ollama host, or GitHub's hosted runner software.
 
+## Publication and evidence
+
+This audit accompanies merged PR [#129](https://github.com/lazarevtill/Morgan/pull/129),
+commit `fa999b65fd60039fa1400eb198d2360d72737f0a`. The
+[reliability record](2026-11-reliability-recheck.md#published-revision-and-final-verification)
+links the final PR and merged-main CI results, both **2223 passed, 4 skipped**.
+Scan results below retain their original databases, package graphs and artifact revisions.
+They are not a fresh scan of every installed owner runtime.
+
 ## Decisions and versions
 
 The checkout had no repository dependency lockfile. It uses pip/PEP 517 and generates
@@ -44,7 +53,8 @@ safe parsing is already the hook's default, so the argument was removed.
 HTTPX2 was already present in both checked OpenAI graphs. It is now a direct dependency
 because malformed HTTP error-body reads can escape the SDK as public HTTPX2 transport
 exceptions. Catching those explicitly avoids a broad exception handler or reliance on SDK
-internals. The selected [HTTPX2 2.16.2 release](https://github.com/pydantic/httpx2/blob/main/src/httpx2/CHANGELOG.md)
+internals. The selected
+[HTTPX2 2.16.2 release](https://github.com/pydantic/httpx2/blob/main/src/httpx2/CHANGELOG.md)
 restores runtime type aliases and includes 2.16.1's invalid-redirect-header correction;
 this does not migrate Morgan's separate HTTPX-based embedding/MCP adapters.
 
@@ -53,7 +63,8 @@ closes that gap. All four repository workflows explicitly limit `GITHUB_TOKEN` t
 `contents: read`; none of their jobs requires repository write permissions. Buildx 0.39.1
 was exercised from temporary plugin/config/state directories
 against the existing engine, without replacing the owner's plugin. The Dockerfile frontend
-retains Docker's [recommended stable `docker/dockerfile:1` channel](https://docs.docker.com/build/buildkit/frontend/)
+retains Docker's
+[recommended stable `docker/dockerfile:1` channel](https://docs.docker.com/build/buildkit/frontend/)
 for bug/security updates. That frontend and the action's default BuildKit daemon image
 remain rolling upstream inputs; the CLI pin does not make the whole builder immutable.
 
@@ -61,7 +72,9 @@ remain rolling upstream inputs; the CLI pin does not make the whole builder immu
 
 - **MCP 1.30.0** includes fixes for
   [HTTP session exhaustion](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-84m7-p3x7-pcfv)
-  and [unbounded HTTP request bodies](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-fmmv-w9g8-j3gc).
+  and
+  [unbounded HTTP request bodies](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-fmmv-w9g8-j3gc)
+  .
   The server paths matter to Morgan's HTTP surface. It also excludes versions affected by
   [OAuth credential handling](https://github.com/advisories/GHSA-qx49-fqc8-xw99) and
   [cross-origin redirect forwarding](https://github.com/advisories/GHSA-5h93-6whr-6q8j);
@@ -69,7 +82,9 @@ remain rolling upstream inputs; the CLI pin does not make the whole builder immu
   was reproduced and fixed in application code, as recorded in the reliability report.
 - **Pydantic 2.14.2** closes
   [extra-key JSON validation bypass](https://github.com/pydantic/pydantic/security/advisories/GHSA-qpmf-fgh3-ff25)
-  and [aliased TypedDict/dataclass validation bypass](https://github.com/pydantic/pydantic/security/advisories/GHSA-3r8g-cqwr-jr29).
+  and
+  [aliased TypedDict/dataclass validation bypass](https://github.com/pydantic/pydantic/security/advisories/GHSA-3r8g-cqwr-jr29)
+  .
   These are dependency protections, not demonstrated Morgan exploits. The
   [maintainer policy](https://github.com/pydantic/pydantic/security) supports the latest V2
   minor for security fixes.
@@ -97,7 +112,8 @@ remain rolling upstream inputs; the CLI pin does not make the whole builder immu
   New offline bundles include pip in the same verified wheel manifest and install it
   without network resolution before installing Morgan. The builder also refuses an older,
   missing, prerelease or unsupported-major host pip before creating the bundle or resolving
-  network dependencies; it does not upgrade the host automatically. Existing bundles keep their exact
+  network dependencies; it does not upgrade the host automatically. Existing bundles keep their
+  exact
   original artifacts and must be rebuilt to acquire the fix; no installed runtime is upgraded.
 
 ## Verification and outstanding findings
@@ -190,7 +206,8 @@ resolves the observed affected checks; hosted CI supplies the subsequent whole-t
 
 Trivy 0.76.2 used its database updated at `2026-11-26T19:04:08Z`, without ignoring
 unfixed vulnerabilities. The initial patched-Python image still had pip 25.0.1 and
-225 Debian package/advisory matches (101 distinct advisory IDs). Updating pip and the three available
+225 Debian package/advisory matches (101 distinct advisory IDs). Updating pip and the three
+available
 Debian packages removes all six pip findings and the libzstd1 / passwd / login.defs
 findings (CVE-2026-124851 and CVE-2026-135901).
 
@@ -220,11 +237,13 @@ Trivy additionally reports three setuptools 70.3.0 matches from pip's vendor SBO
 These are **not applicable to the inspected image**: no setuptools distribution or
 vendored setuptools directory is installed, and the affected `package_index.py`,
 `egg_info.py` and `setuptools/wheel.py` modules are absent. Only `pkg_resources` is retained,
-consistent with [pip's vendoring rules](https://raw.githubusercontent.com/pypa/pip/26.3/pyproject.toml).
+consistent with
+[pip's vendoring rules](https://raw.githubusercontent.com/pypa/pip/26.3/pyproject.toml) .
 The relevant setuptools advisories are
 [GHSA-5rjg-fvgr-3xxf](https://github.com/pypa/setuptools/security/advisories/GHSA-5rjg-fvgr-3xxf),
 [GHSA-h35f-9h28-mq5c](https://github.com/pypa/setuptools/security/advisories/GHSA-h35f-9h28-mq5c)
-and [GHSA-xmj3-9gf7-h52w](https://github.com/pypa/setuptools/security/advisories/GHSA-xmj3-9gf7-h52w).
+and
+[GHSA-xmj3-9gf7-h52w](https://github.com/pypa/setuptools/security/advisories/GHSA-xmj3-9gf7-h52w) .
 Raw matches remain in the [sanitized findings inventory](2026-11-dependency-findings.json).
 
 ### CI tooling findings

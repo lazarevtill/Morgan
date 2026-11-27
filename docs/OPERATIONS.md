@@ -1,97 +1,113 @@
 # Operations
 
-## At-rest protection
+This runbook covers the memory database and MCP server. Optional task and owner workflows
+keep separate journals; backing up or forgetting memory does not manage those journals.
+Use each workflow's [decision record](decisions/README.md) for STOP and receipt recovery.
 
-Everything is in one SQLite database under `MORGAN_DATA_DIR` (default
-`~/.local/share/morgan/`): memories, facts, vectors, the keyword and entity indexes, session
-history. Snapshots are whole copies of it, in `MORGAN_SNAPSHOT_DIR`. There is no field-level
-encryption: it cannot coexist with the FTS5 index and would not cover vectors. At-rest
-protection is a property of the host: encrypt the volumes that hold the database and the
-snapshots (LUKS or the equivalent).
+## Protect stored data
 
-## Transport protection
+The SQLite database contains source text, facts, vectors, search indexes and session history.
+Snapshots are complete copies. Morgan provides no field-level encryption; protect the volumes
+holding the database and snapshots with host encryption and account access controls.
 
-`morgan-mcp --transport http` requires `Authorization: Bearer $MORGAN_API_KEY`. Reach it over
-your overlay network or terminate TLS at a reverse proxy. It will not start on a non-loopback
-address without a real key.
-
-## Backups
-
-```bash
-morgan snapshot                     # a VACUUM INTO copy in MORGAN_SNAPSHOT_DIR, quick_check'ed
-morgan snapshot --list
-```
-
-`morgan snapshot` is safe while the server runs: `VACUUM INTO` writes a consistent copy while
-other processes hold the database open, which a filesystem copy of a WAL-mode database
-mid-write is not. `--list` only reads. `morgan migrate` and `morgan forget` take a snapshot of
-their own before they change anything.
-
-```bash
-morgan restore <snapshot> --yes     # takes a before-restore snapshot first
-```
-
-`morgan restore` is not safe while the server runs. Close every running `morgan-mcp` first,
-and run no other `morgan` command meanwhile: the restore deletes the database's `-wal` and
-`-shm` files and swaps the file in place, so on Linux or macOS a write another process makes
-meanwhile lands in the file being replaced and is lost, and on Windows the swap fails while
-another process holds the file open.
-
-Morgan never deletes a snapshot that passed its check, so
-`MORGAN_SNAPSHOT_DIR` (default `~/.local/share/morgan/snapshots`) only grows: prune it
-yourself. The snapshots sit beside the database unless you point them elsewhere, so a copy
-kept off the machine is yours to make. One file is the whole backup, and the whole exposure:
-each snapshot holds everything the database held when it was taken, including what `forget`
-erased afterwards.
+New memory admission rejects a narrow set of explicit credential shapes. It does not scan
+all metadata, historical data, backups or separate task journals. See
+[credential admission](decisions/credential-admission.md).
 
 ## MCP clients
 
-### On the same machine — stdio
+### Local stdio
+
+Configure the client with the absolute path to the installed `morgan-mcp` executable and
+arguments `["--transport", "stdio"]`. This avoids depending on a desktop application's PATH.
+The [README](../README.md#connect-an-mcp-client) has a configuration example.
+
+With Claude Code and an executable already on PATH:
 
 ```bash
 claude mcp add -s user morgan -- morgan-mcp --transport stdio
 ```
 
-`-s user` makes it available in every project; Claude Code's default scope is the one project
-the command ran in.
+Registration scope controls where Claude Code sees the server. It does not select Morgan's
+memory project: each tool call must pass that project explicitly.
 
-```json
-{ "mcpServers": { "morgan": { "command": "morgan-mcp", "args": ["--transport", "stdio"] } } }
-```
+### Remote HTTP
 
-### On another machine — streamable-HTTP
-
-Run `morgan-mcp --transport http --host <overlay address>` (or set `MORGAN_MCP_HOST`; the port
-is `MORGAN_MCP_PORT`, default 8090) with `MORGAN_API_KEY` set.
+Set a real `MORGAN_API_KEY` in the server environment, then bind explicitly:
 
 ```bash
-claude mcp add -s user --transport http morgan http://<host>:8090/mcp \
-  --header "Authorization: Bearer $MORGAN_API_KEY"
+morgan-mcp --transport http --host OVERLAY_ADDRESS
 ```
 
-```json
-{
-  "mcpServers": {
-    "morgan": {
-      "url": "http://<host>:8090/mcp",
-      "headers": { "Authorization": "Bearer $MORGAN_API_KEY" }
-    }
-  }
-}
+Replace `OVERLAY_ADDRESS` with the server's interface address. Port defaults to 8090.
+Clients use `/mcp` and `Authorization: Bearer TOKEN`, with the same token. Keep credentials
+out of checked-in client configuration. Follow the client's supported secret-storage mechanism;
+a JSON string containing a shell variable is not automatically expanded by every client.
+
+A key is required beyond loopback. With a configured key, HTTP requests require it on loopback
+too. Without a key, loopback access relies on the local account/host boundary.
+Morgan does not terminate TLS: use an encrypted overlay or a TLS reverse proxy and restrict
+network access. A bearer token authenticates access to the configured owner; a supplied
+`author_id` is only provenance.
+
+## Backups
+
+```bash
+morgan snapshot
+morgan snapshot --list
 ```
 
-## The stack
+Snapshot uses `VACUUM INTO` and verifies the copy with `PRAGMA quick_check`. It produces a
+consistent backup while other processes use the database. Copying only the live database file
+while WAL writes are active is not an equivalent backup.
 
-All open source and self-hostable, which is the point: a memory that only works while someone
-else's service is up is not yours.
+Default snapshot directory: `MORGAN_DATA_DIR/snapshots`, overridden by
+`MORGAN_SNAPSHOT_DIR`. Keep an independently stored copy if you need recovery from host loss.
+Morgan never prunes verified snapshots. Set your own retention policy: snapshots can retain
+content later removed with `forget`.
 
-- **[llama.cpp](https://github.com/ggml-org/llama.cpp)** (MIT). `llama-server` serves chat,
-  `/v1/embeddings` and native JSON-schema constrained output from one binary on one GPU.
-- **[SQLite](https://sqlite.org) + FTS5** (public domain). One file holds everything, which is
-  what makes `forget()` one transaction, backup one command, and encryption one volume. FTS5's
-  `unicode61` tokenizer indexes non-Latin scripts correctly.
-- **[sqlite-vec](https://github.com/asg017/sqlite-vec)** (MIT / Apache-2.0). Vectors in the same
-  file, filtered *inside* the nearest-neighbour search via vec0 metadata columns; filtering
-  afterwards silently drops results that should have been returned.
-- **[NetBird](https://netbird.io)** (BSD-3-Clause), or any overlay network you run yourself, to
-  reach the machine that holds the database without opening a public port.
+## Upgrade and recover
+
+1. Record the active runtime revision, configuration and database location. Build and verify
+   the new [pinned runtime](decisions/pinned-runtime.md) without activating it.
+2. Stop every process using the database, including MCP clients that may restart a stdio server.
+   Do not mix older writers with a newer schema or workflow journal.
+3. Using the intended new runtime, run `morgan doctor`, `morgan snapshot` and
+   `morgan migrate --dry-run`. Review pending steps.
+4. Run `morgan migrate` when required. It takes its own snapshot, applies pending steps in one
+   transaction and checks the result. A failed step rolls back the migration wave.
+5. Check doctor and the relevant scoped operations before restarting clients. Verify journal
+   reader compatibility separately when upgrading owner/task workflows.
+
+Light migrations can run on ordinary writable open. Heavy steps block writes until explicit
+migration. Read-only evidence and doctor do not migrate. Newer-than-supported schemas are refused.
+
+To restore, keep all database users stopped:
+
+```bash
+morgan restore /absolute/path/to/snapshot.db
+morgan restore /absolute/path/to/snapshot.db --yes
+```
+
+The first command previews the replacement and exits 2. The second verifies the snapshot,
+creates a before-restore snapshot and replaces the database and WAL/SHM state. Concurrent
+writers can lose writes against the replaced file; online restore is unsupported.
+Restore with a compatible runtime and the original embedding configuration.
+
+Memory restore does not roll back separate task receipts or external effects. Follow the
+workflow's recovery contract before resuming any execution.
+
+## Erasure and retained copies
+
+`morgan forget --project NAME` snapshots first, then erases registered data for that owner/project.
+After commit it vacuums the database and requests WAL truncation. Another reader can block the
+checkpoint; Morgan reports the warning and a later checkpoint is needed. This is functional
+database erasure, not certified removal from storage media, exports or backups.
+
+## Security and verification records
+
+The [dependency audit](measurements/2026-11-dependency-audit.md) lists unresolved container,
+upstream tooling and host findings. The
+[reliability report](measurements/2026-11-reliability-recheck.md)
+states which transports, recovery paths and model calls were tested. Neither report means an
+installed pilot has been upgraded or a physical device has received a notification.

@@ -105,7 +105,7 @@ python -m morgan_brain.local_notes_cli /private/delivery run
 The source records must already exist; this command does not initialize or rewrite a real memory
 store with the demo hash embedder. The standard remember/gate write path remains the only writer.
 
-## Validation and next useful capability
+## Validation and limits
 
 Tests use persistent SQLite memory and actual managed note delivery. They cover priority/budget
 selection, explicit approval, repeat suppression, owner/project isolation, missing/inferred/

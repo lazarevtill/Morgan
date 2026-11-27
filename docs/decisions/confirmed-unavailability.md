@@ -98,6 +98,6 @@ partial-day deferral, source and owner isolation, missing/untrusted evidence, co
 cancellation, conflicts, database reopen and the actual CLI. Examples and fixtures are synthetic;
 no personal chat data is committed. Existing task selection remains unchanged without constraints.
 
-This is a useful day-level restriction, not a calendar scheduler. The guided intake now carries
+This restriction operates at day granularity. The guided intake carries
 its reviewed intervals into every session plan. Slot scheduling, automatic timezone/date inference,
 notifications and persistent service operation are not claimed by this change.
