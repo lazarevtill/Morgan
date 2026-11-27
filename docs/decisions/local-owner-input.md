@@ -1,6 +1,6 @@
 # Local owner input: one-shot commands, explicit decisions
 
-The guided planner required a foreground stdin conversation. A local caller can now submit
+The guided planner required a foreground stdin conversation. A local caller can submit
 one ordinary message and receive a persistent JSON review receipt without answering prompts:
 `python -m morgan_brain.owner_input WORKSPACE COMMAND`. There is no listener, watcher, model,
 provider request, notification, scheduler or installed service. This is a usable local input

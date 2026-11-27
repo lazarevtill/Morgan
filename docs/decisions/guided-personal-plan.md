@@ -3,7 +3,8 @@
 The previous validation pilot required 14 CLI invocations, including delivery and STOP/replay
 checks. Its comparable review/plan/completion core required seven invocations.
 `python -m morgan_brain.guided_plan`
-now exposes its useful core in one foreground conversation: select your tasks, review their
+provides that review/plan/completion flow in one foreground conversation: select your tasks, review
+their
 planning fields, confirm, view a plan, report completion and see the updated plan. It reuses
 the bounded local-model runner, normal MemoryGate capture and current-revision daily brief.
 It adds no scheduler, daemon, provider credentials or notification adapter.
@@ -135,7 +136,6 @@ Before real data, choose the exact input file, private destination, owner/projec
 policy. One note is capped at 4 KiB/32 lines; at most eight tasks can be selected. The model file
 limit is 8 GB, not a hard RSS quota. Real data and each task/completion remain the user's choice.
 No permanent access, paid process or background service is installed by this command.
-
 
 A note without open tasks can be reviewed with `none` / `нет задач`, then `CONFIRM` /
 `ПОДТВЕРЖДАЮ`. The availability menu remains usable without inventing a commitment.

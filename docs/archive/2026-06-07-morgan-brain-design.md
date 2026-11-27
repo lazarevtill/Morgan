@@ -1,5 +1,8 @@
 # Morgan Brain — Design Spec
 
+> Historical document for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+
 **Date:** 2026-06-07
 **Status:** Approved (conversation), pending written review
 **Supersedes:** `docs/ARCHITECTURE_V2.md` (deleted 2026-08-02; see
@@ -14,7 +17,8 @@ A self-hosted, privacy-first **personal assistant that knows and learns from its
 where every interaction measurably improves how well it knows you, and that knowledge
 visibly changes the next response. "Knows me" is defined concretely as:
 
-> **stable traits + evolving facts + learned procedures + emotional baseline**, all keyed to one user.
+> **stable traits + evolving facts + learned procedures + emotional baseline**, all keyed to one
+> user.
 
 Quality over speed (5–10 s thoughtful responses acceptable). All processing local.
 
@@ -32,7 +36,7 @@ Quality over speed (5–10 s thoughtful responses acceptable). All processing lo
 ## 3. Locked decisions
 
 | Decision | Choice |
-|----------|--------|
+| ---------- | -------- |
 | **Topology** | 3 services: `brain-api` (request path), `learning-worker` (async), `perception-gpu` (deferred, interface only) |
 | **Tenancy** | Single-owner now, **everything keyed by `user_id`**, multi-tenant by config flip later |
 | **Modalities** | Text-first; audio/vision plug into the `Perception` seam later |
@@ -58,14 +62,15 @@ Quality over speed (5–10 s thoughtful responses acceptable). All processing lo
   SkillOpt training, consolidation, pattern mining. Communicates only via store + event stream.
   Can be down without breaking chat.
 - **`perception-gpu`** — interface defined now, **not built**. Text analysis runs inline in
-  brain-api; voice/vision later implement the same `Perception` protocol with zero downstream change.
+  brain-api; voice/vision later implement the same `Perception` protocol with zero downstream
+  change.
 
 The in-process and Redis-Streams event buses share one interface, so promoting a module from
 in-proc to its own service is a deployment change, not a code change.
 
 ## 6. Cognitive loop (one turn)
 
-```
+```text
 1. Gateway      resolve session + user_id, load SessionContext
 2. Perception   text → FusedPerception{intent, entities, emotion, sentiment, sarcasm?, modalities}
 3. Personalize  UserModel → select traits relevant to THIS turn → PersonalizedContext (≤~15% ctx)
@@ -86,7 +91,7 @@ the response. Reads in the hot path, writes in the cold path.
 Four memory types:
 
 | Type | Answers | Store |
-|------|---------|-------|
+| ------ | --------- | ------- |
 | Working | "what's in play now?" | context window + Redis |
 | Episodic | "what happened, when?" | temporal log (SQLite→PG) + Qdrant |
 | Semantic | "what's true about user/world?" | Qdrant + temporal facts |
@@ -111,29 +116,35 @@ Four memory types:
 
 Runs off the request path (session-end + periodic batch + event-triggered). Three levels:
 
-1. **Extraction** — LLM emits `{facts, preferences, behaviors}` w/ confidence from completed sessions.
+1. **Extraction** — LLM emits `{facts, preferences, behaviors}` w/ confidence from completed
+   sessions.
 2. **User-model maintenance** — maintains the stable `UserModel`:
-   ```
+
+   ```text
    UserModel(user_id): traits[], comm_prefs, topics_of_interest[], behavioral_patterns[],
                        emotional_baseline, relationship_stage, confidence
    ```
+
 3. **Procedural learning (SkillOpt)** — collects trajectories (msg→response→satisfaction),
    runs the optimizer loop offline (rollout→reflect→propose bounded edit→**validate held-out**→
    accept only if it beats current), deploys `best_skill.md`.
 
-Plus **consolidation** (MEMORY.md curation, dedup, decay) and **pattern mining** (feeds proactivity).
+Plus **consolidation** (MEMORY.md curation, dedup, decay) and **pattern mining** (feeds
+proactivity).
 `relationship_stage` is the trust lever gating proactivity.
 
 ## 9. Personalization (request path)
 
 Thin and stateless — reads UserModel + FusedPerception, writes nothing.
+
 - **Selector** picks only traits relevant to this query (budget-aware, ~15% of context).
 - **Injector** composes them into the system prompt as signals.
 - **Adapters** tune tone, complexity, proactive-suggestion thresholds.
 
 ## 10. Skills, Tools & MCP (the platform dimension)
 
-- **Skills** — markdown + YAML frontmatter (`name, triggers, tools, model`); bundled + user-authored;
+- **Skills** — markdown + YAML frontmatter (`name, triggers, tools, model`); bundled +
+  user-authored;
   versioned, trainable (§8).
 - **Tools** — `BaseTool` registry, **one** `PermissionMode` enum + `PermissionGate`.
 - **MCP Hub** — calendar/email/search are external MCP servers; add a server to config → new
@@ -173,7 +184,7 @@ Thin and stateless — reads UserModel + FusedPerception, writes nothing.
 ## 14. Phasing (greenfield, always-shippable)
 
 | Phase | Ships | Port from `legacy-v0.0.3-monolith` |
-|-------|-------|-----|
+| ------- | ------- | ----- |
 | 0 Foundation | skeleton: config, events, protocols, MemoryGate, data model, gateway, CLI | config patterns |
 | 1 Memory + reasoning | working text assistant w/ recall (vector+BM25+entity, temporal facts) | `services/llm`, `services/embeddings`, `vector_db`, `search/reranker` |
 | 2 Learning + Personalization | assistant that measurably adapts | `intelligence` emotion logic |

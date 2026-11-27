@@ -1,115 +1,78 @@
-# Roadmap
+# Status and roadmap
 
-## Where this is
+Morgan provides project-scoped source storage, ranked retrieval, exact evidence inspection and
+on-demand consolidation. The CLI and seven MCP tools share one memory gate. Optional finite
+task, note, model and owner workflows are implemented separately; they keep execution journals
+and do not install services. See the [workflow map](../README.md#explicit-workflows).
 
-Morgan is a project-scoped memory for the owner's AI tools: one SQLite database, a CLI and an
-MCP server over one gate, recall that fuses vector and keyword search, and on-demand
-consolidation of memories into valid-time facts by a local model. About 11,200 lines, one
-process, no services beyond a model server.
+## Verified baseline
 
-Its core:
+The [November reliability recheck](measurements/2026-11-reliability-recheck.md) records the
+tested revision, full-suite results, live Ollama checks and remaining gaps.
+[Dependency findings](measurements/2026-11-dependency-audit.md) are tracked separately.
 
-- The one-database, one-gate, project-scoped memory with cascading `forget()`.
-- Bi-temporal facts with actor attribution, and the consolidation that produces them.
-- The reachability contract: a model server that is down, slow or refusing is reported by
-  name on every surface.
+Storage correctness, model answer quality and deployment readiness are different claims.
+Synthetic providers can verify transactions, scope and recovery; they cannot establish
+semantic retrieval, truthful model answers or delivery to a person.
 
-An opt-in [single-attempt task SDK](decisions/explicit-task-execution.md) now supports explicit
-trusted-handler invocation with an isolated journal. It is not connected to the memory surfaces
-and does not provide an autonomous assistant, scheduling or external-action reconciliation.
+## Retrieval measurements
 
-## What is not in the code, and why
+The November 26 run used 86 synthetic memories, 60 labelled probes, `qwen3-embedding:8b`
+at 4,096 dimensions, k=8 and no relevance floor. Its
+[full configuration and results](measurements/2026-11-reliability-recheck.md#end-to-end-evidence)
+are preserved in the report.
 
-- **No learning loop.** Nothing tunes prompts, promotes a champion or learns from signals. A
-  loop that changes behaviour needs an evaluation gate sound enough to trust, with enough items
-  and a real statistical test, and there is none yet.
-- **No assistant.** No cognitive loop, persona graph, skills, tools, streaming or REST
-  gateway. The owner's AI tools are the assistant; Morgan is their memory, and its surfaces are
-  a CLI and an MCP server.
-- **No installed services.** The memory core has no event bus, scheduler, Redis, Qdrant or
-  MLflow; its state is in one SQLite file and consolidation runs when asked. Explicit
-  bounded workers, supervision, local notes, planning and owner review are implemented
-  separately, with their own journals and finite authority. Rendered login-agent plans are
-  disabled and uninstalled. See the [supported workflow map](../README.md#explicit-workflows).
+| Probe kind | Count | recall@8 | MRR | Stale first | Abstain |
+| --- | --- | --- | --- | --- | --- |
+| Overall | 60 | 0.89 | 0.51 | 0.70 | 0.00 |
+| Single hop | 20 | 0.95 | 0.59 | — | — |
+| Temporal | 8 | 1.00 | 0.66 | — | — |
+| Knowledge update | 10 | 0.90 | 0.51 | 0.70 | — |
+| Multi-hop | 8 | 0.62 | 0.16 | — | — |
+| Unanswerable | 14 | — | — | — | 0.00 |
 
-The archived agent kernel that has all of the above is at the git tag
-**`legacy-v0.1.0-kernel`**, its designs and decision records under [`archive/`](archive/);
-`legacy-v0.0.4-full` and `legacy-v0.0.3-monolith` are older builds.
+Stale-first measures whether an older answer outranks the intended current answer in the
+knowledge-update subset. Those probes do not supply explicit revision edges. Implemented
+revision filtering removes explicitly superseded events; it does not infer corrections from
+unrelated prose. Multi-hop recall measures retrieval of supporting records, not composition
+of a correct answer.
 
-## What retrieval actually measures
+Earlier [September archive measurements](measurements/2026-09-phase0-baseline.md) calibrated
+a floor margin of 0.08 for this model. The preserved
+[historical retrieval summary](measurements/historical-retrieval-summary.md) records the
+Qwen3-Embedding-0.6B ablation and 0.11 floor; its raw run artifacts were not located in this
+repository. Those values depend on the model and corpus. The November run above had the floor
+disabled and does not revalidate
+either threshold. Keep dated comparisons in their original reports.
 
-`tests/memory_quality/` holds 60 labelled probes over an 86-memory corpus, half of it
-Russian, with every query written to share few or no words with its target so the keyword
-signal cannot carry it. `pytest --live` runs them against a real embedding endpoint. With
-`qwen3-embedding:8b` at 4,096 dimensions and no floor
-([`measurements/2026-09-phase0-baseline.md`](measurements/2026-09-phase0-baseline.md)):
+## Current limitations
 
-| | recall@8 | MRR | stale-first | abstain |
-|---|---|---|---|---|
-| overall | 0.89 | 0.51 | 0.70 | 0.00 |
-| single-hop | 0.90 | 0.58 | — | — |
-| temporal | 1.00 | 0.66 | — | — |
-| knowledge-update | 1.00 | 0.50 | 0.70 | — |
-| multi-hop | 0.62 | 0.16 | — | — |
-| unanswerable | — | — | — | 0.00 |
+| Area | Limit and practical consequence |
+| --- | --- |
+| Ranking | Fusion has no recency term; implicit corrections can leave stale answers ranked first. |
+| Multi-hop | Recall returns records; it does not combine them into a supported answer. |
+| Consolidation | Selects through an empty-query recall, up to 50 results, rather than recent events. Facts consume part of that window; a floor can decline the query. |
+| Native answers | Citation and schema checks do not prove entailment. Strict mode is experimental and disabled by default. |
+| Embedding changes | A database retains its fingerprinted model/width. No automatic space retirement or re-embedding exists. |
+| Import canary | Periodic checks can miss a transient wrong vector; replay does not repair suspect stored vectors. |
+| Project identity | Same folder names share a project. MCP cannot infer the caller's repository. |
+| Repository metadata | Git config includes and URL rewriting are not followed; configured code roots are not scanned. |
+| MCP startup | FastMCP can fail while decoding an unrelated non-UTF-8 cwd `.env`. |
+| Entities | Deterministic cased-script extraction misses uncased scripts and some names at sentence starts. |
+| Owner workflows | Model drafts require review; automatic task identity matching remains rejected by its frozen evaluation. |
+| Deployment | Independent consumer acceptance, physical GUI/push delivery and production recovery require separate checks. |
 
-Stale-first measures order, not presence: the same memory is forbidden by "where do I live
-now" and expected by "where did I live before", so a metric counting presence could only be
-satisfied by suppressing it, which breaks the question that asks for it.
+## Priorities
 
-Semantic retrieval works: a query and its answer sharing no token find each other, in both
-languages. Two categories do not, and both are open work rather than regressions.
+1. Measure retrieval improvements against frozen probes and relevant real-corpus questions,
+   retaining both historical and current-answer tests.
+2. Establish useful reader quality under the [reader contract](READER_CAPABILITY.md) before
+   expanding autonomous interpretation or action.
+3. Validate independent consumer integration and bounded owner workflows on explicitly selected
+   data before treating synthetic or model-only checks as operational acceptance.
+4. Address compatible upstream security fixes as they become available. Broader MCP/Python
+   migrations remain separate work, as documented in the dependency audit.
 
-The bundled probes are built so the keyword signal cannot carry them, so they cannot show
-what keyword search or stored names add. A real archive does.
-
-### On a real archive
-
-~2,000 imported conversation turns and three sets of questions: 90 a chat model wrote from
-sampled turns, each labelled with its source; 60 lookups, each naming a term the keyword index
-finds in at most three memories; and 38 authored questions the keyword index confirms the
-archive never mentions. Qwen3-Embedding-0.6B.
-
-| recall signals | paraphrase recall@8 | MRR | lookup recall@8 | MRR |
-|---|---|---|---|---|
-| vector only | 0.92 | 0.77 | 0.88 | 0.65 |
-| **vector + keyword (recall as it is)** | **0.90** | **0.72** | **1.00** | **0.88** |
-| + the entity ranking fused | 0.83 | 0.59 | 1.00 | 0.94 |
-| + the entity ranking, narrowed by a semantic index | 0.76 | 0.53 | 0.97 | 0.91 |
-
-Lookups were chosen by what the keyword index finds, so keyword search finding all of them is
-partly by construction; what they show is that an embedding alone misses one name in eight.
-A stored name is in the memory's text, so fusing the entity ranking counts the keyword match
-twice: it ranks lookups a little higher and paraphrases much lower. Narrowing the search to
-the memories that share a name with the question (VoiceMem's semantic index) cut the answer
-out of questions and put none in.
-
-The relevance floor separates the two kinds of question: a random answerable question has
-the wider margin 97% of the time. At 0.11, on the half of the questions held out of the fit,
-it kept 24 of 25 answers and silenced 12 of 13 unanswerable questions; over all of them, 141
-of 150 answers and 34 of 38 silences.
-
-With `qwen3-embedding:8b`, over 3,010 imported memories and 128 labelled questions, the floor
-is 0.08. On the 38 questions sealed from the fit, recall@8 is 0.84 against 0.88 with no floor,
-and 85% of the unanswerable questions among them are silenced; on the 90 fitted ones, 0.88
-against 0.89, and 84%. A higher margin silences no more of the sealed questions and costs
-recall ([`measurements/2026-09-phase0-baseline.md`](measurements/2026-09-phase0-baseline.md)).
-
-## Next
-
-- **A superseded memory outranks the current one** in 7 of the 10 knowledge-update probes:
-  the old answer comes back above the current one. Fusion is rank-only and carries no
-  recency term, so nothing orders new above old. The probes store episodics, which have no
-  validity interval at all -- supersession lives on facts, and nothing has consolidated
-  these.
-- **Multi-hop composition does not happen.** Recall ranks memories; it has no mechanism to
-  combine two of them into one answer, and the numbers say so.
-- **Model-backed entity extraction** for scripts without letter case.
-- **Learning, only against a sound gate.** Nothing from the archived kernel is built on this
-  core until an evaluation with enough items and a real statistical test can gate it.
-
-## Working agreement
-
-Keep `main` green: `pytest`, `ruff check`, `ruff format --check`, `mypy --strict`, `bandit`.
-Every memory read and write goes through `MemoryGate`, and is user- and project-scoped.
-Root-cause fixes only.
+A self-tuning learning loop, general autonomous assistant and permanent scheduling service
+are not implemented by the memory core. Retired kernel designs live in the
+[archive](archive/README.md); they are not an implementation backlog or current API reference.

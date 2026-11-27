@@ -4,7 +4,7 @@ The local model missed a renewed request in the previous note-selection pilot. A
 candidate-aware experiment correctly interpreted concrete updates but selected arbitrary
 identities for ambiguous, third-party and quoted messages. Exact quotes did not fix that.
 
-Morgan now offers a narrow explicit path in the existing guided dialogue:
+Morgan provides an explicit path in the existing guided dialogue:
 
 ```text
 renew 1 / повторить 1

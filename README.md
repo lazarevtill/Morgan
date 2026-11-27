@@ -1,138 +1,121 @@
 # Morgan
 
-A **project-scoped memory for your AI tools**, consolidated into facts by a local model.
+Project-scoped memory for AI tools, with a CLI and an MCP server.
 
-You tell Morgan things from any repository, on any of your machines. Claude Code, Claude
-Desktop or any other MCP client recalls them, scoped to the repository it is working in. A
-local model turns what was said into durable, dated facts that evolve instead of being
-overwritten. Everything lives in one SQLite file on hardware you own.
+Morgan stores source records, retrieves them by meaning and keyword, and uses an explicitly
+invoked model to derive dated facts. The memory core keeps its data in one SQLite database.
+Optional planning and task workflows use separate journals and require explicit review or approval.
 
-## What it does
+## Capabilities
 
-- **Remembers per project.** Every memory belongs to a project, which the CLI takes from the
-  current git repository's name, worktrees included. Recall is scoped to it;
-  `--all-projects` is the explicit escape hatch.
-- **Recalls by meaning and by keyword.** Vector search (sqlite-vec) and full-text search
-  (FTS5, Cyrillic-aware) over every memory in the project, fused by reciprocal rank. With a
-  relevance floor set, recall can decline a question the project cannot answer.
-- **Consolidates into facts.** `morgan consolidate` asks your model to turn up to 50 of a
-  project's memories, the ones nearest an empty query rather than the most recent, into
-  subject-predicate-object facts with validity intervals. An update closes the old interval
-  and opens a new one; nothing is overwritten, and closed intervals stay in the database.
-  Every fact records who asserted it; the facts consolidation writes are marked as the
-  model's inference, never as something you said. Eligible inputs must be active
-  `user_stated` or `tool_observed` evidence; default `unknown` captures are not promoted.
-- **Answers with what it knows.** `morgan ask` recalls first, answers, and remembers the
-  exchange.
-- **Starts from your history, not from nothing.** `morgan import` seeds memory from a ChatGPT
-  export. A fifth of the conversations are held back in a separate project, so the memory can
-  later be evaluated against conversations nothing has learned from.
-- **Forgets a project.** `morgan forget` erases it from every table in one transaction,
-  including vectors and the entity index, and reports exactly what it touched. The snapshot
-  it takes first is the undo, and keeps a full copy until you delete it.
-- **Talks to any model server.** Any OpenAI-compatible endpoint: llama-server by default,
-  Ollama's `/v1`, vLLM. The model server is the only thing Morgan needs that it does not ship.
-- **Two surfaces, one gate.** The `morgan` CLI and the `morgan-mcp` server (stdio, or HTTP
-  with a bearer token for other machines) call the same handlers through the same
-  `MemoryGate`. No memory logic is duplicated.
+| Operation | Behavior |
+| --- | --- |
+| Capture | Store attributed source text with stable IDs and immutable corrections. |
+| Retrieve | Combine sqlite-vec and FTS5 rankings within an owner and project. |
+| Inspect | Read exact source IDs, provenance and revision state without a model call. |
+| Answer | Recall context, call the configured chat model and store the exchange. |
+| Consolidate | Derive facts from eligible evidence; retain prior validity intervals. |
+| Recover | Snapshot, migrate and restore the database; erase a project with a snapshot for undo. |
 
-## Quick start
+The CLI derives the project from the enclosing Git repository, or uses `personal` outside one.
+MCP cannot infer the client's repository. Pass the intended project explicitly: an omitted
+project uses `personal`, including for the destructive `forget` tool.
+`--all-projects` enables cross-project reads where supported. Two repositories with the same
+folder name share a project unless the caller chooses distinct names.
 
-For local development, use the editable installation below. For a deployed pilot, use the
-[pinned runtime bundle](docs/decisions/pinned-runtime.md) from an exact trusted commit;
-an editable checkout is not a pinned runtime.
+## Local development quick start
+
+Requires Python 3.12+ and a compatible chat/embedding endpoint. CI and the Docker image use
+Python 3.12.16. Run these commands from the checkout:
 
 ```bash
-uv tool install --editable .           # morgan and morgan-mcp on PATH, for every agent
-mkdir -p ~/.config/morgan && cp .env.example ~/.config/morgan/.env
-#   ↑ point MORGAN_LLM_ENDPOINT at your model server, and MORGAN_EMBEDDING_ENDPOINT at the
-#     embedding server if it is a separate one; read from every working directory
-morgan doctor                          # the database, the chat server, the embedding server
-cd ~/src/any-repo                      # the brain is the same from every repository
-morgan remember "I prefer terse, code-first answers" --source user_stated
-morgan recall "how do I like answers"  # needs only the embedding model
-morgan ask "what do you know about me" # needs the chat model
-morgan consolidate                      # memories nearest an empty query → dated facts
-morgan import ~/Downloads/conversations.json   # optional: seed from a ChatGPT export
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/morgan"
+mkdir -p "$config_dir"
+test -e "$config_dir/.env" || cp .env.example "$config_dir/.env"
 ```
 
-Give Claude Code the same memory, and teach every coding agent here when to use it:
+Edit that file before running Morgan. Set the endpoint URLs, served model IDs and embedding
+dimension to match your server. Separate chat and embedding servers require
+`MORGAN_EMBEDDING_ENDPOINT`. See [configuration and model setup](docs/WIRING.md).
 
 ```bash
-claude mcp add -s user morgan -- morgan-mcp --transport stdio   # in every project
-morgan install-skill                   # lists what it writes, then asks
+morgan doctor
+morgan remember "The demo uses PostgreSQL" --project demo --source user_stated
+morgan recall "Which database does the demo use?" --project demo
+morgan evidence SOURCE_ID --project demo --json
 ```
 
-The database is `~/.local/share/morgan/morgan.db` (`MORGAN_DATA_DIR`). Capture and recall
-work without an embedding server under `MORGAN_EMBEDDING_BACKEND=hash`, a deterministic
-test backend with no semantic similarity. `ask` and `consolidate` still require a chat model.
-After an upgrade, `morgan doctor` says whether the database waits for `morgan migrate`, which upgrades
-it behind a snapshot; `morgan snapshot` and `morgan restore` are the backup and its undo.
+Replace `SOURCE_ID` with the ID returned by `remember`. Capture and recall call the embedding
+endpoint. `evidence` reads an existing database without model calls. The deterministic
+`MORGAN_EMBEDDING_BACKEND=hash` backend supports offline checks in a separate scratch database;
+its vectors do not provide semantic similarity.
+
+The default database is `~/.local/share/morgan/morgan.db`. An editable installation follows
+checkout changes. For a deployed pilot, build a [pinned runtime](docs/decisions/pinned-runtime.md)
+from an exact trusted commit and verify it before use.
+
+## Connect an MCP client
+
+Morgan exposes seven tools over stdio or streamable HTTP: `remember`, `recall`, `facts`,
+`forget`, `ask_morgan`, `evidence` and `inspect_context`. Four are read-only: `recall`, `facts`,
+`evidence` and `inspect_context`. `ask_morgan` stores the exchange.
+
+Configure your client to launch the installed executable. With the virtual environment above:
+
+```json
+{
+  "mcpServers": {
+    "morgan": {
+      "command": "/absolute/path/to/Morgan/.venv/bin/morgan-mcp",
+      "args": ["--transport", "stdio"]
+    }
+  }
+}
+```
+
+Replace the executable path with your installation. Pass the intended project on each call;
+omitting it selects `personal`, including for `forget`.
+For HTTP authentication and remote access, see [operations](docs/OPERATIONS.md).
+`morgan install-skill` previews and installs usage guidance for supported local coding agents.
 
 ## Explicit workflows
 
-These optional Python entry points are implemented, but require explicit invocation and
-separate task/review journals. Remembered text never grants permission to execute them.
+| Workflow | Entry point | Guide |
+| --- | --- | --- |
+| Trusted task handlers, finite batches and recovery receipts | `morgan_brain.tasks` SDK | [Task execution](docs/decisions/explicit-task-execution.md) |
+| Approved local notes, delivery windows and bounded supervision | `morgan_brain.local_notes_cli` | [Local notes](docs/decisions/local-approved-notes.md) |
+| Reviewed commitments, current plans and completion | `morgan_brain.daily_brief_cli`, `morgan_brain.guided_plan` | [Personal planning](docs/decisions/current-personal-plan-pilot.md) |
+| Local owner messages and macOS review | `morgan_brain.owner_input`, `morgan_brain.owner_ui` | [Owner input](docs/decisions/local-owner-input.md) |
+| Finite local model drafting | `morgan_brain.model_cycle` | [Model lifecycle](docs/decisions/bounded-model-cycle.md) |
+| Explicit local alerts and reviewed push messages | `morgan_brain.local_alert_cli`, `morgan_brain.owner_push_cli` | [Owner channels](docs/decisions/owner-channel-hosting.md) |
 
-| Workflow | Entry point and contract |
-| --- | --- |
-| Exact evidence and context inspection, without model calls | CLI `evidence`, `context inspect`; MCP `evidence`, `inspect_context`; [reader contract](docs/READER_CAPABILITY.md) |
-| Trusted task execution, batches and receipt reconciliation | `morgan_brain.tasks` SDK; [execution contract](docs/decisions/explicit-task-execution.md) |
-| Approved local notes, finite schedules, recurrence and supervision | `python -m morgan_brain.local_notes_cli`; [local notes](docs/decisions/local-approved-notes.md), [supervisor](docs/decisions/bounded-local-supervisor.md) |
-| Memory-backed plans and current revisions | `daily_brief_cli`, `guided_plan`; [daily brief](docs/decisions/memory-backed-daily-brief.md), [guided plan](docs/decisions/guided-personal-plan.md) |
-| Owner messages, exact review, completion, cancellation and reopening | `owner_input`, optional macOS `owner_ui`; [owner input](docs/decisions/local-owner-input.md), [reopening](docs/decisions/reopen-completed-task.md) |
-| Bounded local model drafting | `model_cycle`, `owner_model`, `owner_loop`; [model lifecycle](docs/decisions/bounded-model-cycle.md), [finite owner loop](docs/decisions/finite-owner-loop.md) |
-| Explicit local alert or reviewed push | `local_alert_cli`, `owner_push_cli`; [channel boundaries](docs/decisions/owner-channel-hosting.md) |
+Run the listed modules with `python -m MODULE`; `morgan_brain.tasks` is an imported SDK.
+These workflows do not install services or renew their authority. Memory content does not
+authorize execution. A push server accepting a message does not prove that a person received it.
 
-No workflow installs a persistent service or renews its own authority. A push server's
-acceptance does not prove phone delivery or reading. The
-[reliability recheck](docs/measurements/2026-11-reliability-recheck.md) separates synthetic
-checks from real-provider and consumer verification. The companion
-[dependency audit](docs/measurements/2026-11-dependency-audit.md) records tested versions,
-security updates and remaining upstream findings.
+## Verification and limits
 
-## Is the recall any good?
+The [November reliability audit](docs/measurements/2026-11-reliability-recheck.md) records
+2,223 passing tests and four skips on its final PR revision, plus live Ollama checks.
+The [dependency audit](docs/measurements/2026-11-dependency-audit.md) lists verified versions,
+security fixes and unresolved upstream findings. These are dated results, not a certification
+of every deployment or dependency version.
 
-Measured, not assumed. `tests/memory_quality/` holds labelled probes — half of them Russian,
-every query written to share few or no words with its answer — and `pytest --live` scores them
-against a real embedding endpoint: recall@k, where in the ranking the answer landed, whether a
-superseded memory came back with it, and whether an unanswerable question was correctly met
-with silence. [`docs/ROADMAP.md`](docs/ROADMAP.md) carries the current numbers, including the
-two categories that do not yet work.
+Retrieval still has measured limits in stale-answer ranking and multi-hop questions. Explicit
+revision links filter superseded sources, but Morgan does not infer those links from prose.
+Native model answers remain unverified; valid citations do not establish truth or permission.
+See [current limitations](docs/ROADMAP.md) and the [evidence index](docs/measurements/README.md).
 
 ## Documentation
 
-- [Explicit conversation exports](docs/decisions/explicit-conversation-export.md) — user text and
-  final answers only, stable provenance, replay safety, and offline validation limits.
-- [Explicit task execution SDK](docs/decisions/explicit-task-execution.md) — opt-in single-attempt
-  tasks with an isolated journal and tested crash recovery; no deployed worker or scheduler.
-- [Bounded task batches](docs/decisions/bounded-task-batches.md) — atomic submission, exact
-  expiring permits and explicit stops for uncertain outcomes.
-- [Receipt reconciliation](docs/decisions/task-receipt-reconciliation.md) — matched completion
-  evidence and a synthetic idempotent provider; uncertain effects are never replayed.
-
-- [Personal agent 24/7 research](docs/research/2026-11-06-personal-agent-memory/REPORT.md) —
-  the owner's product direction, memory/runtime comparison and staged validation plan;
-  research, not a deployed always-on agent. See the [main comparison](docs/research/2026-11-06-personal-agent-memory/COMPARISON.md)
-  for the checked source revision and existing opt-in controls.
-
-- [`docs/ALWAYS_ON_MEMORY_EXAMPLE.md`](docs/ALWAYS_ON_MEMORY_EXAMPLE.md) — zero-model
-  scoped continuation with explicit source IDs and uncertainty.
-- [`docs/measurements/2026-10-memory-scale.md`](docs/measurements/2026-10-memory-scale.md) —
-  bounded synthetic scale, latency, storage, restart and functional forget measurements.
-
-- [`docs/WIRING.md`](docs/WIRING.md) — configuration, the model server, the CLI (snapshot,
-  restore and migrate included), the MCP server, Docker.
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the package, recall, the embedding space,
-  migrations and snapshots, consolidation, erasure.
-- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — at-rest and transport protection, backups, the stack.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — what is not in the code and why, what retrieval
-  measures, what is next.
-- [`docs/decisions/`](docs/decisions/) — decisions, and what the code does about each.
-- [`CLAUDE.md`](CLAUDE.md) and [`AGENTS.md`](AGENTS.md) — repository guidance and invariants
-  for coding agents; the latter also indexes the newer bounded workflows.
-- [`docs/archive/`](docs/archive/) — the designs of the archived agent kernel, whose code is
-  at the git tag `legacy-v0.1.0-kernel`.
+- [Documentation index](docs/README.md): installation, operation, integration and design records.
+- [Architecture](docs/ARCHITECTURE.md): storage, retrieval and write boundaries.
+- [Development](CONTRIBUTING.md): setup, checks and documentation conventions.
+- [Agent guidance](AGENTS.md): repository invariants and implementation constraints.
 
 ## License
 

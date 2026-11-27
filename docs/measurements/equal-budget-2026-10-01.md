@@ -10,8 +10,9 @@ production whole-record packer: actual Qwen recall, simple lexical retrieval, fu
 and a faithful source-file log with a processing checkpoint. The file baseline is not a manually
 maintained personal profile. No real personal conversations were used.
 
-Every arm received the same model, question, response schema, temperature zero, seed42, thinking
-disabled, total budget2048, output reserve128 and safety32. All twenty nonempty-gold question views
+Every arm received the same model, question, response schema, temperature zero, seed 42, thinking
+disabled, total budget 2048, output reserve 128 and safety 32. All twenty nonempty-gold question
+views
 had candidate-source coverage before packing in every arm. No more elaborate packer survived the
 earlier equal-budget coverage screen with a demonstrated gain.
 
@@ -22,7 +23,7 @@ earlier equal-budget coverage screen with a demonstrated gain.
 | Full scoped history | 24 | 22 | 8 | 4 | 1 |
 | Source-file checkpoint | 24 | 21 | 5 | 2 | 1 |
 
-Across96 unique observations,87 completed, eight cross-scope requests were explicitly unsupported
+Across 96 unique observations, 87 completed, eight cross-scope requests were explicitly unsupported
 and one counting request failed. The failed observation remains in the denominator; it was not
 retried. Six untouched observations were completed under a separately frozen amendment. The counting
 failure's cause was not recovered.
@@ -35,13 +36,15 @@ packing. Citation identity and support-chain validation do not prove semantic en
 fixture policy requiring predecessor citations reduces positive provenance success from fifteen to
 twelve; both results are preserved.
 
-All87 completed generations matched counted prompt tokens to reported actual prompt usage. Median
-final inputs were approximately1148-1156tokens: the simple halving packer often leaves available
-space unused. The five generation reports total554 HTTP RPCs and389.67seconds, excluding separate
+All 87 completed generations matched counted prompt tokens to reported actual prompt usage. Median
+final inputs were approximately 1,148–1,156 tokens: the simple halving packer often leaves available
+space unused. The five generation reports total 554 HTTP RPCs and 389.67 seconds, excluding separate
 embedding capture, calibration and health requests. These stage totals are not isolated model
 latency or host-memory measurements.
 
-Reproduction evidence is local under token-pack-experiment/native-evaluation. Preserve
+Raw reproduction evidence was retained locally under `token-pack-experiment/native-evaluation`;
+it is not included in this checkout. The description below identifies that historical evidence.
+A public clone alone cannot reproduce its integrity check. Preserve
 PROTOCOL_V1.md, PROTOCOL_AMENDMENT_V2.md, REMAINING_AMENDMENT_V2.md, all original failures and
 source snapshots. Run python verify_equal_budget_evidence.py against the native-evaluation directory
 for standard-library offline hash, schedule, denominator and token-accounting verification. This
@@ -51,7 +54,8 @@ freezes the generation schedule; generation_remaining_v2.py excludes every alrea
 blind-full-packet-v1.json and blind-full-review-v2.json preserve the independent review;
 root-only-full-mapping-v1.json links hidden arms after review. equal-budget-aggregate-v1.json lists
 report SHA-256 values and denominators. The fixture SHA-256
-is7fd4e99ab70ec5af7303abd08f5204fb5d3e18e5b0ae1aa7f28f8aa3357ff2d5. Current main-based changes must
+is `7fd4e99ab70ec5af7303abd08f5204fb5d3e18e5b0ae1aa7f28f8aa3357ff2d5`. Current main-based changes
+must
 be tested separately: the live-model run exercised a frozen reviewed pure
 retrieval/packing/count/generation/parser reference, not final atomic Chat persistence.
 

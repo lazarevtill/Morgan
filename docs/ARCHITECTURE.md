@@ -8,53 +8,70 @@ See [memory guarantees and reader boundaries](MEMORY_GUARANTEES.md) and the
 [reader capability contract](READER_CAPABILITY.md) for the limits of scoped evidence,
 current state, provenance, persistence and model-backed claims.
 
-```text
-morgan CLI ──┐                          ┌─ episodic rows
-             ├─▶ MemoryGate ─▶ MemoryModule ─┼─ sqlite-vec vectors
-morgan-mcp ──┘        │                 ├─ FTS5 keyword index      one morgan.db
-                      │                 └─ entity index
-   Chat (ask) ────────┤
-   Consolidator ──────┘   ──▶ valid-time facts
-         │
-         └──▶ model server (any OpenAI-compatible endpoint)
+```mermaid
+flowchart LR
+    CLI[morgan CLI] --> Commands[Command handlers]
+    MCP[morgan-mcp] --> Commands
+    Commands --> Gate[MemoryGate]
+    Commands --> Chat[Chat and consolidation]
+    Chat --> Gate
+    Chat --> Models[Model endpoints]
+    Gate --> Core[MemoryModule]
+    Core --> DB[(SQLite)]
+    Core --> Embedder[Checked embedder]
+    Embedder --> Models
 ```
 
-## The package (`morgan_brain/`)
+## Components
 
-| Module | Responsibility |
+| Area | Responsibility |
 | --- | --- |
-| `config.py` | The single `MORGAN_`-prefixed settings source, `settings_for(surface)`. The CLI reads `~/.config/morgan/.env`, then `./.env`, then the environment; `morgan-mcp` reads the user file and the environment only, because its working directory is the client's. `doctor` lists the files read. The database defaults to `~/.local/share/morgan/`, its snapshots to `snapshots/` beside it. Chat and embeddings are addressed separately when one server does not serve both. |
-| `models.py` | `Memory`, `TemporalFact`, `MemoryQuery`, `Message`. Everything that persists is `user_id`- and `project`-keyed; a write that names no project lands in `personal`. A `Memory` carries its provenance: origin, client, session, working directory, author and scope. |
-| `logging_setup.py` | Process output: stdout is UTF-8 because the protocols on it are; every log line goes to stderr. |
-| `composition.py` | Opens the database and wires everything. `build_memory_context` for the memory commands: it stamps a database it creates at the last migration step, runs the pending light steps, opens the gate read-only while a heavy step waits, and on a writable database with no embedding space registers the settings' model and width (the hash backend registers none). It sends no request. `build_app_context` adds the chat client. |
-| `memory/gate.py` | `MemoryGate`: the only door to memory. Refuses an empty user or project, and every write with `DatabaseNeedsMigration` while a heavy step waits. `RecallOutcome`, `ForgetReport`. |
-| `memory/module.py` | `MemoryModule`: the one write path (every index in one transaction, entities extracted if absent, the project registered in `projects`) and the fused recall, which logs one `recall.done` line per call. `forget()` in one transaction. |
-| `memory/embedder.py` | The `Embedder` protocol and the deterministic hash stub that stands in for a model server. |
-| `memory/fingerprint.py` | The five fixed strings that identify an embedding space, and the arithmetic over their vectors (`cosine`, `compare`, `pack`/`unpack`). No I/O. |
-| `memory/checked_embedder.py` | Wraps the live embedder. A process's first request also carries the five strings, and, while the active space has no fingerprint, up to `MORGAN_EMBEDDING_FINGERPRINT_SAMPLE_ROWS` stored memories: the fingerprint is recorded only when their fresh vectors match the stored ones, and compared once it is. Answers below `MORGAN_EMBEDDING_FINGERPRINT_TOLERANCE` raise `EmbeddingSpaceMismatch`. `check()` re-sends the strings on demand, for the import canary. |
-| `memory/migrations.py` | Numbered steps, counted in `user_version`. A light step only adds a table or a defaulted column and runs when the database is opened; a heavy step rewrites, moves or deletes rows and runs only under `morgan migrate`. Steps run strictly in order, so a light step behind a heavy one waits with it. Steps 1 and 2 rewrite and drop, yet stay light: they predate the split. See [Migrations and snapshots](#migrations-and-snapshots). |
-| `memory/snapshot.py` | `VACUUM INTO` copies of the whole database, each `quick_check`ed before it is returned, and `restore`, which puts one back behind a snapshot of its own. |
-| `memory/store/` | Persistence, one file per table family, all over the one connection: `db`, `episodic`, `temporal`, `vectors`, `fts`, `entities`, `history`, `spaces` (`embedding_spaces`, with a partial unique index that keeps one space active), `projects` (one row per project: classification, remote, root, and the capture and consolidate switches; every project-keyed write registers its row, a CLI write from inside a repository records what that repository is, and neither ever touches the owner's switches) and `tables` (the registry of project-keyed tables that `forget` and `distinct_projects` read). Every write goes through `db.write_transaction`, which holds the write lock from the first statement and nests as a savepoint, so a store method is atomic alone and inside a larger write. A fact key has at most one current fact, enforced by a unique index; opening a database that a race left with two keeps the newest and closes the rest. Vectors are scoped *inside* the KNN via vec0 metadata columns, not filtered afterwards. |
-| `memory/recall/` | `fusion` merges the vector and keyword rankings by reciprocal rank. Rank-only, so the relevance threshold, `floor`, judges the vector scores before fusion. `language` names a query's language by script alone, for the log line. |
-| `memory/knowledge/` | `extract` (the one entity extractor: words the text capitalises away from a sentence start, acronyms, CamelCase; Latin and Cyrillic), `surprise` (drops episodics the facts already predict), `fact_ops` (the operation schema the model is constrained to), `consolidation` (applies them: supersede, never overwrite). |
-| `providers/` | `openai_compat.py` (chat over the `openai` SDK), `embeddings.py` (`/embeddings` over httpx, retried within a budget), `structured.py` (JSON-schema, JSON-object or prompted, validated, re-asked), `factory.py` (settings → adapters; the one place that decides where embeddings are sent, and so which setting an unreachable server's error names; wraps the embedder in `CheckedEmbedder`; picks the interactive or the import retry budget), `wire.py` (`ChatClient`, `ProviderUnreachable`, `ProviderRefused`, `EmbeddingSpaceMismatch`, and `is_refusal`, the one rule for which HTTP statuses refuse a request). Nothing above imports a model SDK. |
-| `eval/retrieval.py` | Labelled probes, and the recall@k / MRR / leak-rate scorecard they produce, printed beside a `RunConfig`: embedding model and width, k, floor, probe file and its digest, corpus size, database upgrade step, commit. Never the endpoint. The measurement that turns retrieval quality from an assumption into a number. |
-| `app/chatgpt_import.py` | Seeds memory from a ChatGPT export. Splits a turn too long for the embedding context, routes a fifth of conversations to a holdout project the optimizer can never mine, and runs the import canary. |
-| `app/chat.py` | One turn: recall → prompt → answer → remember both halves, attributed. The one use-case both surfaces share. |
-| `surfaces/cli/` | `morgan`: `__main__` parses and dispatches, `commands` answers, `maintenance` answers `snapshot`, `restore` and `migrate`, `payloads` shapes the result, `render` prints it, `doctor` diagnoses the install by reading only -- the file opened read-only, no store built, no table created, no migration step run -- and probes the chat and embedding servers separately, telling reachable, slow, refused and unreachable apart, `project` names the project and reads its repository's remote, `install_skill` teaches the coding agents installed here when to use Morgan. Project = the enclosing git repository's name; a linked worktree counts as the repository it came from; outside a repository it is `personal`. One resolution answers both the name and the repository, and the remote comes from parsing that repository's git config -- `origin`, else the sole remote, else none -- never from spawning `git`. The answer is three-valued: a remote, no remote, or a config that could not be read, which records nothing rather than relabelling the project. `project.classify` labels it against `MORGAN_WORK_REMOTE_GLOBS`, and `remember`, `ask` and `consolidate` record that label, the remote and the root when the project was named by the repository they ran in. |
-| `surfaces/mcp_server.py` | `morgan-mcp`: seven tools: `remember`, `recall`, `facts`, `forget`, `ask_morgan`, `evidence`, `inspect_context` over stdio or streamable-HTTP with a bearer token. Calls the CLI's command handlers; `project` is a tool argument, and a call without one works in `personal` (`remember` says so, with `project_defaulted`). Every tool declares MCP's read-only, destructive, idempotent and open-world hints; `recall`, `facts`, `evidence` and `inspect_context` claim read-only. Exact evidence and context inspection use an existing database read-only without model calls or migrations. |
-| `surfaces/network.py` | The bind guard: no listener beyond loopback without a real key. |
+| `config.py`, `composition.py` | Resolve surface-specific settings, open the database and construct adapters. Opening does not call a model. |
+| `models.py` | Source attribution, project scope, event identity and fact validity models. |
+| `memory/gate.py` | Public memory API, scope validation, evidence/inspection and write admission. |
+| `memory/module.py` | Atomic capture, fused recall and registered-table erasure. |
+| `memory/store/` | SQLite persistence for events, facts, vectors, FTS, entities, history, spaces and projects. |
+| `memory/revisions.py`, `memory/evidence.py` | Explicit event lifecycle and scoped source projection. |
+| `memory/recall/` | Reciprocal-rank fusion, relevance floor and query-language logging. |
+| `memory/checked_embedder.py` | Validate the active embedding fingerprint, fence cache revocation and concurrent initialization. |
+| `memory/knowledge/` | Entity extraction, consolidation proposal preparation and guarded fact application. |
+| `memory/migrations.py`, `memory/snapshot.py` | Ordered schema changes, verified backups and offline restore. |
+| `providers/` | Chat/embedding transport, counted context, structured output and bounded error redaction. |
+| `app/chat.py`, `app/chatgpt_import.py` | Atomic chat turns and resumable explicit export import. |
+| `surfaces/cli/`, `surfaces/mcp_server.py` | CLI and seven MCP tools over shared command handlers. |
+| `tasks.py`, `local_notes*.py`, owner/planning modules | Explicit finite workflows with journals separate from memory. |
+| `eval/` | Labelled retrieval and synthetic workflow/model evaluations. |
+
+The detailed implementation constraints are in [AGENTS.md](../AGENTS.md). Public callers
+use the gate; model SDK imports stay inside provider adapters. stdout carries CLI JSON or
+MCP protocol traffic, and logs go to stderr.
+
+## Capture and source lifecycle
+
+Embedding happens before the write lock. A capture then writes the event, vector, FTS row,
+entity index and project registration in one transaction. `BEGIN IMMEDIATE` acquires the lock
+before reads; nested writes use savepoints. No model await occurs under that lock.
+
+Stable event IDs make exact replay idempotent. Different content under an existing ID is
+refused. Explicit corrections append events with named parents; they do not overwrite source
+text. Effective-time eligibility and unresolved forks are shared by retrieval and evidence.
+See the [revision contract](REVISION_CLIENT.md) for scope, attribution and compatibility.
+
+Exact evidence and context inspection open an existing database read-only, without migrations
+or models. Ranked recall has a different purpose: it finds candidates and does not establish
+that an answer is true or that all relevant evidence was retrieved.
 
 ## Recall
 
-1. The query is embedded, and vector search returns its top 2k over the whole project, or
-   every project with `all_projects`.
+1. The query is embedded. Vector search returns its top 2k over eligible records in the
+   project, or every project with `all_projects`. Explicit revision/effective-time eligibility
+   applies inside ranked SQL before candidate limits; no entity-based pool narrows the scope.
 2. With `MORGAN_RECALL_FLOOR_MARGIN` set, the floor judges the vector hits alone
    (`recall/floor.py`), before anything else is gathered: recall declines unless the best one
    stands that far above the background the same query pulled up, or an exact entity match
    lands on a memory the vector search ranked in its top k. A decline returns nothing, facts
    included. Fewer than five vector hits are no background to judge against, so they go on
-   unjudged. Unset, a non-empty project always answers.
+   unjudged. Without a floor, eligible results are returned without that relevance check.
 3. FTS5 search returns its top 2k over the same scope, and reciprocal rank fusion merges the
    two rankings. The entity index is not a third: a stored name is in the memory's text,
    which the keyword search already matches.
@@ -70,9 +87,8 @@ answered. `keyword_only` is reserved for a keyword-only fallback when embeddings
 which does not exist yet; nothing emits it. The `recall.done` line also carries the
 embedding's latency and outcome and the query's language.
 
-Facts never suppress episodics: prepended in full and then truncated, a project holding
-`top_k` facts could return no memory however exactly it matched, and the fact count only
-grows as consolidation runs.
+The fact budget reserves episodic slots when hits exist and `top_k` is at least two.
+At `top_k=1` the reservation rounds down to zero, so one fact can fill the only slot.
 
 ## The embedding space
 
@@ -105,8 +121,13 @@ A database written by an older Morgan is upgraded by numbered steps:
 | 5 | heavy | rename the project `default` to `personal` in every project-keyed table |
 | 6 | heavy | rebuild `vec_items` and `fts_memories` with `status`, `scope` and `author_id` |
 | 7 | light | seed `projects` with one row per project already named (every write after this registers its own) |
+| 8 | light | add event ingestion time without inventing legacy timestamps |
+| 9 | light | add fact ingestion time and source-support IDs |
+| 10 | light | add the erasure generation used to reject stale prepared writes |
+| 11 | light | add explicit event revision parents, roots and the family index |
 
-Opening the database runs the pending light steps up to the first heavy one. While a heavy
+Steps 1 and 2 are historical exceptions to the light/heavy definition: they predate the split.
+Ordinary writable opening runs pending light steps up to the first heavy one. While a heavy
 step waits, the gate refuses every write with `DatabaseNeedsMigration`, whose message names the
 pending steps and `morgan migrate`; reads work on the schema the database already has.
 `morgan migrate` takes a `migrate` snapshot, runs every pending step in one write transaction,
@@ -118,9 +139,15 @@ time and reason, and `quick_check`ed before it is returned; one that fails the c
 deleted, and Morgan deletes none for any other reason. `morgan snapshot` takes one on demand,
 `morgan migrate` and `morgan forget` take one before they change anything, and `morgan restore`
 takes a `before-restore` one before it puts a snapshot back. A snapshot newer than this code's
-steps is refused.
+steps is refused. Schema 11 is the current supported version; older writers must not run
+against it. Restore requires all processes using the database to stop.
 
 ## Consolidation (`morgan consolidate`)
+
+Only eligible active `user_stated` or `tool_observed` sources can support new derived facts.
+Preparation records the source/fact basis; application revalidates it under the write lock.
+A correction, conflicting update or forget invalidates stale proposals. See the
+[preparation-basis contract](decisions/0012-consolidation-preparation-basis.md).
 
 Episodics read through recall, minus those current facts already cover → the model proposes
 fact operations as JSON validated against `FactOpBatch` → applied through the gate, in one

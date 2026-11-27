@@ -1,6 +1,6 @@
 # Read a guided session without changing it
 
-The owner or an already authorized local assistant can now ask what remains in a specific
+The owner or an already authorized local assistant can ask what remains in a specific
 session without entering the interactive dialogue, running a model, or creating another plan:
 
 ```sh
@@ -50,7 +50,7 @@ pending operations or forward private records to another recipient/provider. Cha
 in the reviewed interactive dialogue; status never runs commands from remembered text.
 
 No daemon, secret access, notification, listener, recipient or background polling is configured.
-A genuinely proactive personal agent still needs a chosen event source, a user-visible delivery
+A proactive personal agent still needs a chosen event source, a user-visible delivery
 channel with acknowledgement, and explicit lifecycle/stop behavior. This query makes reliable
 on-demand answers possible without pretending those missing pieces are implemented.
 

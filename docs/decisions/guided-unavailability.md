@@ -1,6 +1,6 @@
 # Reviewed unavailability in the guided conversation
 
-`guided_plan` now carries the reviewed intervals from
+`guided_plan` carries the reviewed intervals from
 [confirmed unavailability](confirmed-unavailability.md) into every subsequent plan in its session.
 No separate memory ID selection or JSON authoring is needed for these intervals.
 

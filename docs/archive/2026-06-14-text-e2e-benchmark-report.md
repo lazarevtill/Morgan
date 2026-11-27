@@ -1,5 +1,8 @@
 # Text E2E Wiring + Benchmark Report
 
+> Historical document for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+
 **Date:** 2026-06-14
 **Branch:** `bench/text-e2e` (HEAD `5dc37cb`)
 **Scope:** The TEXT request path only — `/api/chat` and `/api/chat/stream`, perceive → personalize →
@@ -20,10 +23,11 @@ recall → skills → reason (+ bounded tool loop) → store/signal. Voice/visio
 in-process-bus, blocking (`POST /api/chat`) configuration. The two configurations the docs present
 as first-class — the **SSE streaming endpoint** and the **`MORGAN_EVENT_BUS=redis` two-process
 production topology** — each have a real break that silently degrades the core promise. The entire
-existing test suite exercises only the inproc + `handle_turn` happy path, so both breaks are green in CI.
+existing test suite exercises only the inproc + `handle_turn` happy path, so both breaks are green
+in CI.
 
 | Subsystem | inproc + `/api/chat` | `/api/chat/stream` (SSE) | `MORGAN_EVENT_BUS=redis` (2-process) |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Orchestrator cognitive loop (7 steps) | **YES** | PARTIAL — champion dropped | PARTIAL |
 | Perception → Personalization → Reasoning injection | **YES** | **YES** (traits reach prompt) | YES (per turn) |
 | Champion preprompt (`system_override`) threading | **YES** | **NO** — silently dropped | YES (but stale until restart) |
@@ -61,7 +65,7 @@ caller-side exactly as the blocking route does, deliberately avoiding the stream
 - pytest entrypoint (`pytest -q tests/e2e`): **8 passed in 0.42s** (7 scenarios + aggregate smoke)
 
 | scenario | category | status | detail |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | single_hop_recall | single-hop | PASS | 'Rust' present in turn-2 prompt |
 | multi_hop_recall | multi-hop | PASS | both hops (acme & berlin) in final prompt |
 | temporal_knowledge_update | temporal | PASS | current `lives_in={'Munich'}`; Berlin superseded |
@@ -79,7 +83,8 @@ Live-service probe (run from this host on 2026-06-14):
   768-dim vector).
 - **Qdrant `http://localhost:6333`** — **NOT reachable** (connection refused). Did not block live
   mode: bench used `MORGAN_VECTOR_BACKEND=memory`.
-- **Redis `localhost:6379`** — **NOT reachable**. Not exercised by the bench (in-proc bus throughout).
+- **Redis `localhost:6379`** — **NOT reachable**. Not exercised by the bench (in-proc bus
+  throughout).
 
 > Config note: shipped defaults (`llm_model=qwen2.5:7b`, `embedding_model=qwen3-embedding:4b`) are
 > not pulled on this host; the live run was pointed at models that exist (`llama3.2:latest`,
@@ -131,7 +136,8 @@ entire visible output of the self-learning loop) is invisible on `/api/chat/stre
 
 ### GAP-2 (BLOCKER) — Under `MORGAN_EVENT_BUS=redis`, session history is read but never written
 
-brain-api builds `SessionHistoryStore()` and reads it on every turn (`history_store.recent`), but the
+brain-api builds `SessionHistoryStore()` and reads it on every turn (`history_store.recent`), but
+the
 only writer (`_store_turn` inside `_register_turn_storage`) is registered **only when**
 `isinstance(resolved_bus, InProcessBus)`. With redis, `get_event_bus()` returns `RedisStreamsBus`,
 the guard is false, and the append subscriber is never wired in brain-api. The learning-worker — the
@@ -149,7 +155,8 @@ production topology.
 ### Related confirmed gaps (context for the two blockers)
 
 - **MAJOR — cross-process episodic recall is dead under redis.** `MemoryModule` keeps the
-  authoritative episodic record set in process-local dicts (`_by_id`/`_bm25`/`_entities`); `recall()`
+  authoritative episodic record set in process-local dicts (`_by_id`/`_bm25`/`_entities`);
+  `recall()`
   filters out any id not in *this* process's `_by_id` and never reconstructs a `Memory` from the
   Qdrant payload. Episodics the worker stores are invisible to brain-api recall regardless of
   `MORGAN_VECTOR_BACKEND=qdrant`. Only consolidated bi-temporal facts survive cross-process — and
@@ -158,7 +165,8 @@ production topology.
 - **MAJOR — base per-turn signal never recorded under redis.** `recorder.record_turn` is only
   invoked from the same InProcessBus-gated subscriber; the worker handler never calls it. A later
   thumb-up then inserts a stub signal with empty `query`/`reply`, poisoning the optimizer's training
-  set. Evidence: `composition.py:113-119,229`; `learning/recorder.py:108-123`; `learning/optimizer.py:127-135`.
+  set. Evidence: `composition.py:113-119,229`; `learning/recorder.py:108-123`;
+  `learning/optimizer.py:127-135`.
 - **MAJOR — promoted champion not served until brain-api restart.** `_champion_override` is read
   exactly once at startup and cached in the route closure; a worker-promoted champion never reaches
   live traffic without an operator restart. Evidence: `apps/brain_api/app.py:44,59`;
@@ -168,13 +176,16 @@ production topology.
   of the box, the champion body stays empty forever. Evidence: `config.py:49`;
   `apps/learning_worker/__main__.py:260-272`.
 - **MAJOR — edit/thumb/retry feedback never reaches the UserModel.** `UserProfileBuilder.build`
-  derives the model exclusively from `current_facts()`; the injected `signals` dependency is assigned
+  derives the model exclusively from `current_facts()`; the injected `signals` dependency is
+  assigned
   and never read; `preference_delta_from_edit`/`apply_edit_delta` have no production caller. The
-  CIPHER learn-from-edits loop is dead code in production. Evidence: `learning/profile.py:102,108-208`;
+  CIPHER learn-from-edits loop is dead code in production. Evidence:
+  `learning/profile.py:102,108-208`;
   `apps/brain_api/routes.py:74` → `recorder.py:61-76`.
 - **MAJOR — `SessionHistoryStore` is `:memory:` even on the working inproc path.** Constructed with
   no file path (unlike temporal/signals, which derive a sibling SQLite file), so all history is lost
-  on every brain-api restart and can never be shared across processes. No `MORGAN_` setting points it
+  on every brain-api restart and can never be shared across processes. No `MORGAN_` setting points
+  it
   at a durable file. Evidence: `composition.py:311`; `learning/history.py:50-60`; contrast
   `composition.py:300-304`.
 - **MINOR — streaming is effectively non-streaming.** Three AUTO-granted builtin tools mean
@@ -184,8 +195,10 @@ production topology.
   `core/orchestrator.py:49-63,227`; `composition.py:147-165`.
 - **MINOR — published-never-consumed events.** `PERCEPTION_COMPLETE` (3 publish sites) and
   `TOOL_INVOKED` (audit) have zero subscribers anywhere; `get_event_bus()` returns a fresh instance
-  per call despite a "singleton" docstring; the champion registry path is relative `./data/prompts.db`
-  (silent footgun if the two processes run from different cwds). Evidence: `core/orchestrator.py:79-81`;
+  per call despite a "singleton" docstring; the champion registry path is relative
+  `./data/prompts.db`
+  (silent footgun if the two processes run from different cwds). Evidence:
+  `core/orchestrator.py:79-81`;
   `modules/tools/executor.py:114-122`; `bus/__init__.py:9-18`; `learning_lifecycle/factory.py:48`.
 
 ### What is confirmed correctly wired (OK findings)
@@ -207,7 +220,9 @@ The live run above is "live LLM, single process, in-proc bus." A *fully* live be
 the documented production topology end-to-end — requires both infrastructure and source fixes:
 
 **Infrastructure (operational, available today):**
-1. Start **Qdrant** (`docker compose up -d qdrant`) and set `MORGAN_VECTOR_BACKEND=qdrant` for durable
+
+1. Start **Qdrant** (`docker compose up -d qdrant`) and set `MORGAN_VECTOR_BACKEND=qdrant` for
+   durable
    vectors.
 2. Start **Redis** (`docker compose up -d redis`) and set `MORGAN_EVENT_BUS=redis`.
 3. Run **two processes**: `brain_api` and `learning_worker` (the latter with
@@ -215,18 +230,22 @@ the documented production topology end-to-end — requires both infrastructure a
 4. Pull the actual default models (or override to pulled ones) so config defaults match reality.
 
 **Source fixes required before a 2-process live bench would actually pass (currently OPEN):**
+
 1. **GAP-1:** add `system_override` to `stream_turn` and pass `_champion_override` from
    `chat_stream` — otherwise streamed turns fail any champion assertion.
 2. **GAP-2:** register the history-append writer independent of bus type (e.g. always register
-   `_store_turn` for the local-persistence concern, or give the worker a `SessionHistoryStore` and an
+   `_store_turn` for the local-persistence concern, or give the worker a `SessionHistoryStore` and
+   an
    append step) — otherwise every redis-mode turn is single-turn.
 3. **Cross-process episodic recall:** have `recall()` reconstruct `Memory` objects from the Qdrant
-   payload (or share the side metadata) — otherwise multi-turn episodic recall fails across processes.
+   payload (or share the side metadata) — otherwise multi-turn episodic recall fails across
+   processes.
 4. **Base-signal write under redis** and **champion live-reload** (poll/refresh the registry, or
    subscribe to a promotion event) — otherwise the self-learning loop does not close at runtime.
 5. Give `SessionHistoryStore` a durable file path from settings — otherwise restart wipes history.
 
-**Then the bench would need a redis/streaming-aware mode** (currently it deliberately drives only the
+**Then the bench would need a redis/streaming-aware mode** (currently it deliberately drives only
+the
 working inproc blocking seam). That mode does not exist yet; adding it without the fixes above would
 turn today's green bench red — which is the point.
 
@@ -235,6 +254,7 @@ turn today's green bench red — which is the point.
 ## 5. Honest bottom line — proven vs unproven
 
 **Proven (by this benchmark):**
+
 - The **cognitive loop is correctly wired and computes the right thing** on the in-process blocking
   path: perception, personalization injection, multi-signal recall, temporal fact supersession,
   skill/tool selection, and the bounded tool loop all behave correctly — **DETERMINISTIC: 7/7 pass,
@@ -247,6 +267,7 @@ turn today's green bench red — which is the point.
   thoughtful" budget.
 
 **Unproven / known-broken (NOT covered by any passing test):**
+
 - **Streaming with the learned champion** — `/api/chat/stream` drops it (GAP-1). The streamed
   assistant is *not* the learned one. **OPEN.**
 - **The documented production topology (`redis`, two processes)** — session history is never written
@@ -257,9 +278,11 @@ turn today's green bench red — which is the point.
   `MORGAN_ENABLE_SCHEDULING=true` + the worker; edit/thumb feedback never reaches the UserModel.
   **OPEN.**
 
-**Net:** Morgan's headline — "self-learning, multi-turn, runs in production" — is **demonstrated only
+**Net:** Morgan's headline — "self-learning, multi-turn, runs in production" — is **demonstrated
+only
 in single-process inproc dev mode, on the blocking endpoint, with scheduling enabled, and only via
-fact consolidation.** The bench is honest about this: it drives the one path that works, passes it in
+fact consolidation.** The bench is honest about this: it drives the one path that works, passes it
+in
 both deterministic and live modes, and leaves the two production breaks visible and untouched (no
 source was modified — `git diff --stat` against source is empty). The fixes are small and localized;
 the report exists to keep them visible until they land.

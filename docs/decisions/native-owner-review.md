@@ -13,8 +13,10 @@ not an always-running personal agent or a reminder delivery channel.
 | Browser form | Better multiline layout | Adds local server lifecycle, request authentication and CSRF protection |
 | Tk / SwiftUI application | Richer native forms | Additional UI packaging and maintenance for this small pilot |
 
-Use Apple's existing [text dialogs](https://developer.apple.com/library/archive/documentation/LanguagesUtilities/Conceptual/MacAutomationScriptingGuide/PromptforText.html)
-and [list selection](https://developer.apple.com/library/archive/documentation/LanguagesUtilities/Conceptual/MacAutomationScriptingGuide/ManipulateListsofItems.html).
+Use Apple's existing
+[text dialogs](https://developer.apple.com/library/archive/documentation/LanguagesUtilities/Conceptual/MacAutomationScriptingGuide/PromptforText.html)
+and
+[list selection](https://developer.apple.com/library/archive/documentation/LanguagesUtilities/Conceptual/MacAutomationScriptingGuide/ManipulateListsofItems.html).
 The fixed JXA program receives JSON data, never interpolated source or shell commands.
 The Python controller calls the same owner-input command implementation as the CLI;
 there is no second journal or task executor. Without optional model flags it performs no inference.
@@ -36,7 +38,8 @@ Initialization creates a new private pilot dated today in the chosen timezone wi
 30-minute planning budget. Omit all three init flags to reopen the same pilot. Existing
 pilots are never reset by initialization. Do not use a stale editable installation.
 
-Choose **Новое сообщение**, enter a short message, explicitly choose new task, renewal or completion,
+Choose **Новое сообщение**, enter a short message, explicitly choose new task, renewal or
+completion,
 review fields and press **Подтвердить** on the complete source/owner/project/action preview.
 Renewal requires selection of an exact open task. Ambiguous text does not choose a task.
 **Проверить сообщения** resumes saved messages and exact unfinished reviews.
@@ -85,7 +88,8 @@ reviews; after using this feature, do not downgrade the runtime against that jou
 
 The existing pilot limits remain: seven days, fourteen messages and eight task families.
 The planning day is fixed, not a rolling scheduler. This UI does not extract fields with an
-LLM by default, infer ownership, deliver reminders, install launchd jobs or demonstrate 24/7 availability.
+LLM by default, infer ownership, deliver reminders, install launchd jobs or demonstrate 24/7
+availability.
 
 ## Evidence
 

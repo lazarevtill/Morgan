@@ -2,16 +2,16 @@
 
 Status: implemented as an opt-in, bounded POSIX workflow on 2026-11-06.
 
-## Concrete scenario
+## Behavior
 
 The owner approves an exact Markdown note, for example today's priorities. Morgan delivers it
 into a private local folder. If the process dies after delivery, the next invocation reads that
 actual file and reconciles the journal without writing it again. This exercises real authority,
 execution, restart and stop controls without credentials, a model, or an external service.
 
-This is a useful execution stage toward a personal agent. It is not yet an always-on assistant:
-there is no planner, launchd service, untrusted inbox ingestion, notification delivery, or paid
-provider. Existing memory CLI/MCP behavior is unchanged.
+This delivery adapter does not plan tasks, install a launchd service, ingest an untrusted
+inbox or send notifications. Planning is a separate explicit workflow; see the
+[memory-backed daily brief](memory-backed-daily-brief.md).
 
 ## Trust and authority
 

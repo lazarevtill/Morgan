@@ -1,5 +1,8 @@
 # Morgan as a Personal Agent OS — Vision & Reframing (2026-06-09)
 
+> Historical document for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+>
 > **Superseded** by [the local-first reshape](2026-08-02-local-first-reshape-design.md)
 > (2026-08-02). Device sync, the memory replica, the phone client, deployment profiles, and the
 > `/v1` facade are out of scope.
@@ -8,6 +11,7 @@
 **Decides:** what Morgan *is* for the next 6–12 months, and the architecture frame every
 subsequent design plugs into.
 **Companion specs (this set):**
+
 - [Ports design](2026-06-09-ports-design.md) — the standardized surface (MCP server, /v1 facade,
   SKILL.md, Memory Passport, A2A card)
 - [Deployment profiles & device sync](2026-06-09-deployment-profiles-and-sync-design.md) —
@@ -68,7 +72,7 @@ over lock-in — and this platform makes it knowingly.
 
 ## 3. The layered architecture
 
-```
+```text
 ┌─ APPS ────────────────────────────────────────────────────────┐
 │  Morgan Assistant (chat/voice)  ·  external agents (Claude,   │
 │  IDE agents, future agents)  ·  routines & proactive agents   │
@@ -94,12 +98,12 @@ over lock-in — and this platform makes it knowingly.
 Vocabulary mapping (docs adopt these role names; package names do not churn):
 
 | OS term | What it is in `morgan_brain/` today |
-|---------|--------------------------------------|
-| Kernel  | `core/`, `security/`, `privacy/`, `models/`, `modules/memory`, `learning/`, `modules/personalization`, `providers/` |
+| --------- | -------------------------------------- |
+| Kernel | `core/`, `security/`, `privacy/`, `models/`, `modules/memory`, `learning/`, `modules/personalization`, `providers/` |
 | Drivers | `providers/adapters/`, vector/temporal stores, `bus/` backends, `modules/mcp` (client), `voice/` |
-| Ports   | new `ports/` surface: MCP server, `/v1` facade, passport, SKILL.md I/O (A2A card static) |
-| Shells  | `clients/cli`, `channels/`, any OpenAI-compatible UI via Port 2 |
-| Apps    | the orchestrated assistant; external MCP clients; `proactivity/` routines |
+| Ports | new `ports/` surface: MCP server, `/v1` facade, passport, SKILL.md I/O (A2A card static) |
+| Shells | `clients/cli`, `channels/`, any OpenAI-compatible UI via Port 2 |
+| Apps | the orchestrated assistant; external MCP clients; `proactivity/` routines |
 
 ## 4. The key inversion: agents as apps (Port 1)
 
@@ -113,6 +117,7 @@ recall**: Claude Code knows what you told Morgan on Telegram last night, and wha
 learns shows up in tomorrow's chat.
 
 Guardrails (non-negotiable):
+
 - All port access goes through `MemoryGate` + `PermissionGate`. No port exposes a store.
 - Every external client gets a **scoped client identity**; everything it writes is stamped
   `MemorySource` = `tool_observed` with the client id in provenance. An external agent can never
@@ -141,6 +146,7 @@ happens only on pull — regulation trends (vision §2.6) suggest the pull may c
 ## 6. What stays sacred (kernel discipline)
 
 Every existing invariant survives the reframe unchanged:
+
 - Hot path reads, cold path writes (now extended across ports and devices).
 - One `MemoryGate`; one permission model; one config; one bus interface; one logger.
 - Facts evolve, they don't overwrite (bi-temporal supersession).
@@ -150,8 +156,10 @@ Every existing invariant survives the reframe unchanged:
 - Everything persisted is `user_id`-keyed; single-owner stays a config choice, not a code path.
 
 New invariants introduced by the OS frame:
+
 - **Ports never bypass the kernel.** A port is a translation layer; policy and gating live below it.
-- **Every port action is auditable.** Client id + scope + what was read/written, queryable by the owner.
+- **Every port action is auditable.** Client id + scope + what was read/written, queryable by the
+  owner.
 - **The phone/desktop replica is read-only.** Devices contribute signals/episodics upward; only
   the brain writes durable facts (single-writer; no CRDT until federation v1 justifies it).
 

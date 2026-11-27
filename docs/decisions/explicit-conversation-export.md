@@ -37,8 +37,13 @@ Unchanged reimports add no memories and do not re-embed. Reusing a message ident
 changed content, actor, or known conversation provenance fails closed. Legacy records with
 empty session IDs are not retroactively attributed. Previously owner-attributed user records
 now raise an identity conflict on replay; they are not silently accepted or rewritten.
-Existing assistant compatibility is unchanged. Old records
-that a previous importer wrongly accepted are not silently deleted or reclassified.
+Exact replay can preserve a legacy owner-labelled assistant record only when its source is
+`agent_inferred`, origin is `import`, author equals the importing owner, and client is `cli`
+(or empty on a legacy row without `recorded_at`). Content, episodic kind, project and any
+explicit event time must still match; the stored session is empty or matches the conversation.
+A resumed import may run from a different working directory. This exception does not apply to
+unrelated events and does not rewrite historical attribution. Old records that a previous
+importer wrongly accepted are not silently deleted or reclassified.
 An interrupted import may have committed earlier messages; replay safely resumes them.
 
 The existing archive/holdout project split remains: roughly 20% of conversations are in

@@ -1,8 +1,8 @@
 # Memory guarantees and reader boundaries
 
 Morgan can serve scoped, attributed source records to an external agent independently of its native
-model-backed answers. This document describes the existing core on `main`, not experimental working
-context from PR #59. The [reader capability contract](READER_CAPABILITY.md) describes the additional
+model-backed answers. This document describes the implemented memory core. The
+[reader capability contract](READER_CAPABILITY.md) describes the additional
 semantic requirements. Passing storage tests or a tokenizer calibration does not establish them.
 
 - **Owner and project.** Exact `evidence` reads require a named owner/project and bound IDs to that
@@ -30,7 +30,7 @@ semantic requirements. Passing storage tests or a tokenizer calibration does not
 
 - **Turn atomicity.** Two matching events and history entries commit under one write lock. Supplied
   evidence basis is re-read and compared before commit. Basis completeness is the caller's
-  responsibility. Main appends to sessions; it has no occupied-session freshness guard.
+  responsibility. Chat appends to sessions; it has no occupied-session freshness guard.
 
 - **Forget.** Registered project stores are erased atomically; erasure generation invalidates
   prepared work. File cleanup reports blocked checkpoint conditions. CLI snapshots preserve an undo
@@ -49,12 +49,39 @@ They are not promises about clients that bypass the gate, omit a basis or ignore
 No real-memory migration, deployment or experimental answer-quality admission follows from these
 boundaries.
 
-## Existing regression evidence
+## Exact evidence contract
+
+CLI `morgan evidence ID ... --project NAME --json` and MCP `evidence(ids=[...], project=NAME)`
+return `version: "morgan.evidence.v1"`, `requested_ids`, `missing_ids` and `results` for the
+configured owner and one project. Input accepts 1–32 IDs of at most 256 characters each;
+duplicates are removed in request order. Unknown and out-of-scope IDs both appear in
+`missing_ids`. Cross-project lookup is refused: after cross-project recall, fetch each project's
+evidence separately. Recalled fact IDs retain their persisted identity.
+
+Evidence opens an existing database read-only, without initialization, migrations, model
+construction or embedding-width checks. A missing database is an error and is not created.
+Legacy rows may have unknown metadata. Fact results include confidence, validity intervals
+and `support_event_ids`; fetch those IDs in a subsequent bounded call. No support roots are
+expanded automatically. Legacy facts can have no support IDs; missing support remains uncertainty.
+Event `created_at` and `recorded_at` distinguish asserted time from ingestion time.
+
+### Fact source protection
+
+An unknown or inferred fact cannot close a user statement selected as a predecessor, overlap
+its validity interval, or replace an unclosed user statement under the same owner/project,
+subject and predicate. This includes backdated inferences and future user intervals. Ended user
+history permits a new inference starting at or after its end. This guard does not provide general
+historical interval reconciliation or independent author/scope timelines; see
+[the fact-key decision](decisions/0001-fact-key-and-forget-reach.md).
+
+## Historical regression evidence
 
 The following existing tests exercise real SQLite and deterministic providers, without LAN model
 calls. On main base `4f6a0cf`, the eight selected files passed **158 tests** on Python 3.14.6 /
 macOS arm64. The complete correctly isolated main suite also passed **1185 tests, 4 skipped**.
-Run from a main checkout with its declared development dependencies:
+These are historical totals, not the current suite count. See the
+[November reliability audit](measurements/2026-11-reliability-recheck.md) for later verification.
+To run the selected contract checks from a checkout with development dependencies:
 
 ```sh
 python -m pytest -q \
@@ -72,16 +99,10 @@ The suite includes exact temporal boundaries, scope refusal, immutable source re
 revision forks and snapshot reads, forgetting every registered table without deleting another scope,
 rollback after partial failure, prepared-write invalidation, invalid-citation refusal, correction or
 fact expiration during generation, and atomic turn persistence. These are behavioral regression
-proofs of bounded code contracts, not formal security proofs or tests of semantic reader quality.
-
-PR #59's optional fresh-session guard and working-context show/list cutoff fix are branch-only.
-The cutoff repair cannot be cherry-picked independently: its show/list services and schemas are
-absent from main. Importing their dependencies would import experimental behavior. Keep that repair
-with its feature; do not rename a release gate to admit it. No independently reproduced main bug
-currently warrants a new memory API or an extra persisted mechanism for these boundaries.
+checks of bounded code contracts, not formal security proofs or tests of semantic reader quality.
 
 Safe current use is an authenticated client's scoped source storage and evidence inspection, with
 visible provenance/current-state labels and review of consequential conclusions. Autonomous native
 continuation, interpretation of permissions, completeness of life/project outputs and
-external-action
-claims remain reader-dependent and must meet the separate capability contract.
+claims about external actions remain reader-dependent and must meet the separate capability
+contract.

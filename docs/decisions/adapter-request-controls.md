@@ -13,7 +13,8 @@ not a guarantee of a usable final answer. The thinking flag becomes the request'
 `chat_template_kwargs.enable_thinking` through the OpenAI SDK's `extra_body`.
 It requires a compatible endpoint and template; no model name is detected and no
 server configuration is changed. Explicit `True` is also supported.
-The installed llama.cpp b11330 [server API](https://github.com/ggml-org/llama.cpp/blob/b11330/tools/server/README.md)
+The installed llama.cpp b11330
+[server API](https://github.com/ggml-org/llama.cpp/blob/b11330/tools/server/README.md)
 documents this extension; the actual loaded Ornith template has an explicit
 boolean-false branch. This is request compatibility, not a memory quality result.
 

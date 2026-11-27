@@ -68,7 +68,8 @@ All 20,000 store durations are retained, including offline hash embedding: lower
 Stage correction sample p95 ranges from 1.96 to 8.77 ms; fact upsert sample p95 from
 0.63 to 0.73 ms. The frozen p50 uses sorted index `(n-1)//2`: the lower middle
 order statistic, not the arithmetic median. The p95/p99 use sorted index
-`floor(n*p)` capped at the last sample. Three CLI/MCP samples and ten updates per stage are descriptive
+`floor(n*p)` capped at the last sample. Three CLI/MCP samples and ten updates per stage are
+descriptive
 small samples, not stable population-tail estimates. CLI timing includes process
 startup and the denial/capture receipt harness; MCP includes server construction,
 initialization and actual in-memory tool dispatch, without stdio/HTTP transport.

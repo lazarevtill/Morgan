@@ -1,5 +1,8 @@
 # Platform Foundation Baseline (2026-06-10)
 
+> Historical document for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+
 **Status:** DRAFT — under owner review
 **Parent:** [Personal Agent OS vision](2026-06-09-personal-agent-os-vision.md) ·
 [Horizons roadmap](2026-06-09-horizons-roadmap.md) (this spec *is* H1 item 0, expanded)
@@ -36,6 +39,7 @@ class Memory(UserScoped):
 `MemorySource` stays the **trust class** (drives consolidation weighting and recall badging);
 `Provenance` is the **accountability detail**. Rules binding them (enforced in `MemoryGate`,
 tested in the invariant suite §9):
+
 - `source=user_stated` requires `provenance.via in (None, "chat", "device")` — and `"device"`
   only when the client's identity class is `owner-device` (§2).
 - Port writes (`via="port"`) are always `tool_observed`.
@@ -49,6 +53,7 @@ to today. No backfill needed.
 
 The temporal DB has no schema versioning today; provenance v2 is the first real migration, so
 the machinery lands with it (mechanism per the 2026 foresight review — the no-ORM consensus):
+
 - **`PRAGMA user_version`** as the version store (SQLite-native, zero extra tables); numbered,
   forward-only migration steps (`0001_provenance.sql`-style, with a Python escape hatch for
   data backfills), each wrapped in a transaction so the version bumps only on success.
@@ -103,7 +108,7 @@ One append-only store, written by the kernel, readable by the owner. New
 `security/audit.py`. Envelope uses **OCSF-inspired field names** (small fixed schema now, an
 export mapping later if ever needed — full OCSF is enterprise overkill):
 
-```
+```text
 audit_event(id, ts, actor, surface, action, resource, outcome, summary,
             turn_id NULL, prev_hash, hash)
 ```
@@ -127,12 +132,13 @@ audit_event(id, ts, actor, surface, action, resource, outcome, summary,
 ## 5. Settings profiles (presets, not forks)
 
 `MORGAN_PROFILE: Literal["homelab", "desktop", "dev"] | None = None` in `Settings`.
+
 - Applied in a `model_validator` *before* `_fill_provider_defaults`: a profile assigns defaults
   **only to fields still at their class default** — any explicit `MORGAN_*` env var always
   wins. (Phone is not a profile; it's a client of a brain running one of these.)
 
 | Field | `homelab` | `desktop` | `dev` (today's defaults) |
-|-------|-----------|-----------|--------------------------|
+| ------- | ----------- | ----------- | -------------------------- |
 | event_bus | redis | inproc | inproc |
 | vector_backend | qdrant | qdrant-local *(new literal, §6)* | memory |
 | enable_scheduling | true (worker) | true (in-proc) | false |
@@ -152,6 +158,7 @@ desktop profile (H2) but lands now because it is two dozen lines riding this bas
 ## 7. `ports/` package conventions
 
 `morgan_brain/ports/` (new top-level package) — rules every port follows:
+
 - A port is a **translation layer**: wire format ↔ kernel interfaces. It imports from
   `interfaces/`, `security/`, `models/` — never from `modules/` concretions or stores.
   (Enforced mechanically, §9.)
@@ -184,6 +191,7 @@ desktop profile (H2) but lands now because it is two dozen lines riding this bas
 
 `tests/invariants/` — the OS contract, executable. Mechanical checks via
 [import-linter](https://import-linter.readthedocs.io) contracts (added to CI beside ruff/mypy):
+
 1. Provider SDKs (`openai`, …) importable only under `providers/adapters/`.
 2. `ports/*` may not import `modules/*` concretions or store classes.
 3. Nothing outside `modules/memory` + `security` imports a `MemoryStore` implementation
@@ -208,7 +216,7 @@ Plus pytest invariants:
 
 - Bind `127.0.0.1` by default (`MORGAN_BIND_HOST`; current uvicorn entrypoint binds wider —
   verify and fix as part of this wave). Remote exposure = explicit host + real `MORGAN_API_KEY`
-  + reverse-proxy TLS; the documented remote path is **tailnet/VPN, never raw internet**.
+  \+ reverse-proxy TLS; the documented remote path is **tailnet/VPN, never raw internet**.
 - One sanitizer module `security/sanitize.py` (instruction-pattern stripping/neutralizing for
   `<system>`-style and role-marker payloads) applied at **store and recall** for all
   port/import-sourced content — the memory-poisoning mitigation, in exactly one place.

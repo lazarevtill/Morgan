@@ -1,18 +1,18 @@
-# Using the bounded inspection core in an always-on application
+# Offline context-inspection example
 
-Morgan's merged inspection core is a durable, scoped source store and exact context
+Morgan's inspection core is a durable, scoped source store and exact context
 inspector. A caller can use it without a chat model. It is not a complete personal
 agent: source capture, relevant-ID selection, scheduling, interpretation, permissions
-and action execution remain the caller's responsibility. Keeping a Mac powered on
-makes these APIs available to your application; this example installs no background
-service and does not import anyone's memory.
+and action execution remain the caller's responsibility. The example uses a scratch database and
+installs no background service.
 
 ## A small offline example
 
-The measured core is pinned to commit `1b9c1559f50eee8555708301bc4d10468a6fbec1`
-(package metadata version `0.2.0`, Python 3.12+). The integration example accompanies
-PR62; use its merged public main revision rather than assuming a packaged release
-contains this example. This is a tested source revision, not a new version/tag release.
+The original measurement used commit `1b9c1559f50eee8555708301bc4d10468a6fbec1`
+(package metadata version `0.2.0`, Python 3.12+). The example runs from the checkout below. Its
+original evidence is in the
+[context inspection report](measurements/2026-10-context-inspection.md); that dated run
+is not a claim about every later packaged release.
 
 From a Morgan checkout with its existing dependencies, run:
 
@@ -97,4 +97,6 @@ explicit owner policy.
 
 This example gives a usable zero-model building block for scoped continuation.
 Its lifecycle checks and scale measurements do not establish autonomous-agent answer
-quality. PR59's independent semantic quality gate remains failed and unmerged.
+quality. [PR #59](https://github.com/lazarevtill/Morgan/pull/59) failed its independent semantic
+quality gate and remains unmerged (closed, checked 2026-11-27). The separate
+[reader acceptance criteria](READER_CAPABILITY.md) still apply.

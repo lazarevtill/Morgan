@@ -3,7 +3,7 @@
 Keep the existing ChatClient and ordinary ask compatible. Strict ask requires an injected
 backend capability that counts the complete templated request and generates with the same
 model/template/options and an output limit. No counter or an unverifiable counter fails
-before recall/generation. This slice provides the contract and deterministic fake-backend
+before recall/generation. The implementation provides the contract and deterministic fake-backend
 unit tests. Installed-backend calibration is recorded separately; it does not establish
 answer quality or entailment. No model download or service.
 
@@ -27,7 +27,7 @@ one branch as the current value. Budget pressure can drop complete nonconflictin
 Structured answers have answer, evidence_ids and abstained. Validate unique supplied IDs,
 scoped current source availability and complete supplied trusted roots for a cited inference.
 Citation identity checks do not prove semantic entailment. Any unresolved retrieved family
-conservatively abstains in the first slice. A valid abstention may persist atomically;
+conservatively abstains under this contract. A valid abstention may persist atomically;
 invalid citations do not persist a positive reply.
 
 A quoted instruction has produced a false task-completion answer with a valid citation in a
@@ -90,7 +90,7 @@ and availability, not entailment. `Chat.ask()` retains its string result; SDK ca
 use `Chat.ask_evidence(TurnRequest(user_id=..., project=..., text=...))` for the detailed
 contract, returned only after atomic commit. `TurnRequest` is an immutable per-call input.
 Results are per-call values; no shared last-response state. Assistant raw evidence remains
-plain answer text in this slice; the citation envelope is not persisted as source lineage.
+plain answer text in this implementation; the citation envelope is not persisted as source lineage.
 
 The adapter classifies its count/generation deadlines at 10/60 seconds; the application
 watchdogs remain bounded at 11/61 seconds, allowing those endpoint diagnostics to arrive.

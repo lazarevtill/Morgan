@@ -1,9 +1,30 @@
 # 0001: The fact key, and how far `forget` reaches
 
-**Status:** accepted, 2026-09-22. Decision 1 is built when supersession is assembled
-deterministically; decision 2 holds now.
+**Status:** erasure registry implemented; author/scope fact-key expansion remains deferred.
+Original decision: 2026-09-22. Current-state clarification: 2026-11-27.
 
-## Decision 1: the fact key includes the author and the scope
+## Decision 1: proposed author/scope fact key
+
+The proposed key is (`user_id`, `project`, `subject`, `predicate`, `author_id`, `scope`).
+The implemented key is still (`user_id`, `project`, `subject`, `predicate`), enforced by
+`idx_facts_one_current` in `memory/store/temporal.py`. `author_id` and `scope` persist as
+provenance but do not partition current facts.
+
+The original rationale assumed consolidation was the sole writer and used owner attribution.
+That assumption no longer holds: SDK callers can write facts and consolidation records model
+inferences. Source-protection checks prevent unknown/inferred facts from replacing user
+statements, but they do not create independent timelines for different authors or scopes.
+A permitted write can still close another author's fact under the shared four-column key.
+
+Expanding the key requires the index and supersession rules to change together, with a heavy
+migration and cross-author/scope regression coverage. Until that change is implemented, callers
+must not rely on independent author/scope timelines. This record documents the limitation;
+it does not authorize a migration.
+
+### Original rationale (2026-09-22)
+
+The following records the original proposal. Its sole-writer and attribution assumptions are
+superseded by the current-state clarification above; it is not a description of today's writers.
 
 A fact's key becomes (`user_id`, `project`, `subject`, `predicate`, `author_id`, `scope`), and
 a key has at most one current fact: the one with `valid_to IS NULL`.

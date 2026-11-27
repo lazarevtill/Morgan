@@ -1,5 +1,8 @@
 # Ports Design — Morgan's Standardized Surface (2026-06-09)
 
+> Historical document for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+>
 > **Superseded** by [the local-first reshape](2026-08-02-local-first-reshape-design.md)
 > (2026-08-02). Device sync, the memory replica, the phone client, deployment profiles, and the
 > `/v1` facade are out of scope.
@@ -34,7 +37,7 @@ deprecated feature (Roots/Sampling/Logging).
 **Tools (initial set):**
 
 | Tool | Maps to | Notes |
-|------|---------|-------|
+| ------ | --------- | ------- |
 | `memory_search(query, kind?, limit?)` | `MemoryGate.recall` | read scope; returns facts/episodics with provenance + validity interval |
 | `memory_store(content, kind, context?)` | episodic ingest → cold-path consolidator | write scope; stamped `tool_observed` + client id; never a synchronous durable-fact write |
 | `memory_forget(memory_id)` | supersession via `invalid_at` | write scope; single item only, confirm-gated; **no bulk-delete tool exists** (mem0's `delete_all_memories` footgun) |
@@ -88,6 +91,7 @@ champion optimization (only the owner's own conversations train the champion). D
 
 **Security model (a write-capable memory server is a target — Zep patched a Cypher injection
 reachable via prompt injection):**
+
 - **Memory poisoning is the #1 attack class**: stored text replayed as trusted context later.
   Sanitize instruction-like patterns (`<system>`, `<IMPORTANT>`, role markers) at **store and
   recall**; recalled port-written content is rendered as quoted data, never as instructions.
@@ -113,6 +117,7 @@ reachable via prompt injection):**
 brain-api beside the native API.
 
 **Semantics:** the facade presents Morgan as *a model that happens to have memory and learning*:
+
 - `messages` → a turn: last user message is the input; prior messages are client-provided
   history. Conversation id comes from an `x-conversation-id` header when present, else a content
   hash of the first client message (adversarial review: key+`user` alone collapses every UI chat
@@ -132,6 +137,7 @@ brain-api beside the native API.
   remains the channel for edit/retry/thumb signals. (Facade turns still record base signals.)
 
 **Prerequisite fixes surfaced by the code review (must land before/with the facade):**
+
 1. `stream_turn` has no `system_override` parameter and `/api/chat/stream` never passes the
    champion — **the streaming path silently loses the learned champion today**
    (`core/orchestrator.py:184-191`, `apps/brain_api/app.py:77-82`). Thread it through.
@@ -174,7 +180,7 @@ in the implementation plan, not polish.
 encrypted with the existing crypto module — AES-256-GCM with Argon2id key derivation,
 `privacy/crypto.py`):
 
-```
+```text
 passport/
   manifest.json        # schema_version, exported_at, user_id, source build, content hashes
   facts.jsonl          # TemporalFacts: full bi-temporal fields + MemorySource provenance
@@ -189,6 +195,7 @@ passport/
 **Operations:** `morgan passport export|import|diff|inspect` (CLI) + owner-only
 `POST /api/passport/export`. Two distinct import paths (review finding — consolidation is
 LLM-based, O(N) calls, non-deterministic; wrong tool for a restore):
+
 - **Restore path (passport → same/new Morgan):** direct bi-temporal merge — facts land verbatim
   with original provenance and intervals; deterministic, no LLM. `--replace` wipes first.
 - **Foreign-import path (lab exports, below):** conversations land as episodics and go through
@@ -241,6 +248,7 @@ instead of a custom frontend.
   (OpenAI chunk shapes; MCP tool-call envelopes).
 - Port 1: a real `mcp` Python client in tests exercises list/call against the mounted server.
 - Port 2: run an unmodified `openai` client against brain-api in tests (SDK already a dep).
-- Port 4: round-trip property tests (hypothesis) on fact supersession chains; harness tolerance test.
+- Port 4: round-trip property tests (hypothesis) on fact supersession chains; harness tolerance
+  test.
 - Invariants: tests asserting a port write can never produce `user_stated` provenance and never
   touches a store without `MemoryGate`.

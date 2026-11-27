@@ -1,6 +1,6 @@
 # A finite, scheduled local model cycle
 
-The personal-note workflow can now own a local model for one explicitly requested operation.
+The personal-note workflow can own a local model for one explicitly requested operation.
 It does not install a daemon, recurring timer or background queue. One bounded delay allows
 scheduling within the invocation; stopping or crashing the caller never creates a later retry.
 

@@ -1,9 +1,9 @@
 # Read-only continuation inspection contract
 
-This contract is reviewed before implementation. It assembles bounded exact sources using
+This implemented interface assembles bounded exact sources using
 `MemoryGate.evidence`; it does not retrieve by relevance, generate an answer, decode a checkpoint,
 read history, write a summary or authorize an action. Existing checkpoints and their semantic
-reports remain separate; experimental PR #59 organizer/resume behavior is not imported.
+reports remain separate; the inspection API does not implement an autonomous continuation loop.
 
 SDK: `MemoryGate.inspect_context(user_id, project, evidence_ids, selections=[], effective_at=None)`.
 CLI: `morgan context inspect ID ... --selections FILE --effective-at ISO --project NAME --json`.
@@ -96,6 +96,9 @@ Activation includes the exact microsecond boundary. `Z`, `+00:00`, and other off
 same instant compare equally; canonical ISO serialization need not retain input spelling.
 
 ## Validation and release boundary
+
+The [structural validation report](measurements/2026-10-context-inspection.md) records the
+original implementation checks. The requirements below define what those checks must cover.
 
 Integration must exercise actual SDK, CLI JSON and MCP public tools over synthetic SQLite,
 including read-only/no-migration/no-provider behavior, owner/project isolation, explicit historical

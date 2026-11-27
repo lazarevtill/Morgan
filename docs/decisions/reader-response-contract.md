@@ -1,7 +1,7 @@
 # Explicit reader status contract
 
-This local candidate depends on the unpublished adapter request-controls changes and
-`adapter-request-controls.md`; it must be reviewed with that scope, separately from PR69.
+The implemented SDK example uses the optional
+[adapter request controls](adapter-request-controls.md). It changes no CLI/MCP defaults.
 
 A caller using `MemoryGate.recall` and `inspect_context` must define what its answer
 fields mean. Source inspection preserves attribution, revisions and scope; it does
@@ -45,10 +45,13 @@ client = OpenAICompatAdapter(
 )
 # messages: caller-validated scoped evidence plus definitions;
 # ReaderAnswer: caller-owned strict Pydantic schema with the definitions above.
-answer = await generate_structured(
-    client, messages, model=configured_model, schema=ReaderAnswer,
-    json_mode="json_schema", max_reask=0, request_byte_limit=8192,
-)
+try:
+    answer = await generate_structured(
+        client, messages, model=configured_model, schema=ReaderAnswer,
+        json_mode="json_schema", max_reask=0, request_byte_limit=8192,
+    )
+finally:
+    await client.aclose()
 ```
 
 The snippet is an SDK integration outline, not a standalone executable or a new
@@ -85,9 +88,9 @@ Use a caller-owned new raw receipt path. The receipt stores `ChatResult.text`, u
 and finish reason; it is not the complete provider JSON or hidden reasoning.
 Malformed schema, unsupported verification and incomplete output preserve the raw
 receipt and fail closed. Invalid scope or proof designation is refused before HTTP.
-This integration imports the unpublished `ChatRequestOptions` dependency; it does
+This integration uses the public `ChatRequestOptions` type; it does
 not enable a provider or change any CLI/MCP default. Tests use the real SDK with
-`httpx.MockTransport`, and demonstrate no real model or network call.
+a mock HTTP transport, and demonstrate no real model or network call.
 
 Receipt storage is exclusively reserved before dispatch: an invalid path consumes
 no adapter call. If writing, flushing or closing fails after a response,

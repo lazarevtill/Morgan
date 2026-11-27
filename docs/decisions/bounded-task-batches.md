@@ -6,10 +6,10 @@
 ## Context and decision
 
 The [single-attempt task SDK](explicit-task-execution.md) prevents automatic replay of started
-tasks. The next useful step is atomic submission of a small worklist and explicit permission
-checks before dispatch. It must not silently continue after an uncertain earlier action.
+tasks. Batch execution adds atomic submission of a small worklist and explicit permission
+checks before dispatch. It stops after an uncertain earlier action.
 
-Add `TaskJournal.create_many` and `task_batches.run_batch`. Both accept 1 to 16 distinct task
+`TaskJournal.create_many` and `task_batches.run_batch` accept 1 to 16 distinct task
 keys in one owner/project scope. Submission is one SQLite transaction: an invalid request or
 a conflict with an existing task specification rolls back every newly inserted row. Exact
 submission replay returns existing records without resetting their attempt state.

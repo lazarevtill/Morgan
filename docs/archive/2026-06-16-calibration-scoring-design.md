@@ -1,9 +1,14 @@
 # Calibration Scoring in the Eval Gate (2026-06-16)
 
+> Historical document for a retired version. See the [archive index](README.md)
+> and [current documentation](../README.md) before using any instructions below.
+
 **Status:** DRAFT — design only, pending owner review before any implementation.
 **Motivation sources:** [Inbrain](https://github.com/inbrainfun/inbrain)'s Brier-score calibration
 tracking (it scores how well its prediction confidences match outcomes) + this repo's Voice B
-"calibrated belief" idea ([2026-06-14-memory-self-evolving-voice-b-design.md](../archive/2026-06-14-memory-self-evolving-voice-b-design.md) §4),
+"calibrated belief" idea
+([2026-06-14-memory-self-evolving-voice-b-design.md](../archive/2026-06-14-memory-self-evolving-voice-b-design.md)
+§4),
 which the deep-research report left as *speculative*. Inbrain is working evidence that
 calibration tracking is practical; this spec makes it concrete and cheap for Morgan.
 **Parent:** the eval gate (`morgan_brain/eval/harness.py`) + the self-learning ADR
@@ -65,7 +70,7 @@ stays decoupled from where confidence originates (and v2/v3 are drop-in).
 
 ## 4. Data flow (firewall preserved)
 
-```
+```text
 golden item ─▶ predict_fn ─▶ (answer, confidence p_i)        # runner; scratch-gate firewalled
                    │
                    ├─▶ judge.judge(answer, expected) ─▶ verdict.passed = y_i
@@ -80,14 +85,17 @@ any store (`harness.py:138-139`). Confidence is read-only metadata about the ans
 ## 5. Scorecard + gate changes
 
 **Scorecard** (`harness.py:56`): add
+
 ```python
 layer3: dict[str, float] = Field(default_factory=dict)   # {"brier": .., "ece": ..}
 reliability: list[dict[str, float]] = Field(default_factory=list)  # per-bin rows
 ```
+
 `layer3`/`reliability` default empty, so existing scorecards and stored champion metrics remain
 valid (back-compat).
 
 **Gate** (`beats_current`, `harness.py:78`): introduce a `CalibrationMode`:
+
 - **`report` (default, phase 1):** compute + store calibration; **do not gate on it.** This is the
   conservative, eval-gated way to introduce a new gate dimension — observe the metric on real
   promotions before letting it block anything (no unvalidated metric vetoes a more-accurate

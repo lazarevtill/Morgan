@@ -6,8 +6,9 @@ Guidance for Codex when working in this repository.
 
 A **project-scoped memory for the owner's AI tools**, consolidated into facts by a local
 model. One SQLite database under `MORGAN_DATA_DIR` holds memories, facts, vectors
-(sqlite-vec), the FTS5 index, the entity index and session history. Two surfaces, the `morgan` CLI and the `morgan-mcp` server, are thin adapters over
-one `MemoryGate`. The model server is any OpenAI-compatible endpoint (llama-server by
+(sqlite-vec), the FTS5 index, the entity index and session history. The `morgan` CLI and
+`morgan-mcp` server are thin adapters over one `MemoryGate`. The model server is any
+OpenAI-compatible endpoint (llama-server by
 default). The memory core has no queue, worker or scheduler. Optional finite task and
 owner workflows are explicitly invoked and keep separate execution journals.
 
@@ -86,9 +87,13 @@ private Unix socket and the existing workspace locks/STOP. No service is install
 exact claim and destination before reusing memory capture. The digest is not authentication;
 see `docs/decisions/reviewed-proposal-intake.md`. No execution authority is granted.
 
-Read first: `docs/ARCHITECTURE.md` (the package), `docs/WIRING.md` (running it),
-`docs/ROADMAP.md` (what is not in the code and why, what retrieval measures, what is next),
-`docs/decisions/` (decisions, and what the code does about each). The archived agent kernel is
+Documentation entry point: [docs/README.md](docs/README.md).
+Development and documentation checks: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Read first: `docs/ARCHITECTURE.md` (components, data flow and storage boundaries),
+`docs/WIRING.md` (configuration and commands), `docs/ROADMAP.md` (dated measurements,
+current limits and priorities), and `docs/decisions/README.md` (implementation contracts). The
+archived agent kernel is
 at the tag `legacy-v0.1.0-kernel`, its designs under `docs/archive/`.
 
 ## Package map (`morgan_brain/`)
@@ -192,7 +197,8 @@ come in" are answered by the directory names.
   joins it as a savepoint. Nothing awaits while the lock is held -- the embedding happens
   before it is taken -- and no store method commits on its own.
 - **Recall ranks the whole scope.** Vector and keyword search each rank every memory in the
-  project (or every project, with `all_projects`), fused by rank. Nothing narrows the
+  project (or every project, with `all_projects`), fused by rank. Explicit revision and
+  effective-time eligibility apply before ranking limits. No entity-based pool narrows the
   candidates first: on a real archive a narrowing pool cut answers out and found none. The
   entity index is the relevance floor's evidence, not a third ranking.
 - **Light steps run on open; heavy steps run only under `morgan migrate`, behind a snapshot.**
@@ -209,9 +215,11 @@ come in" are answered by the directory names.
   key has at most one current fact, and a unique index on `facts` enforces it. The key is
   (`user_id`, `project`, `subject`, `predicate`); it gains `author_id` and `scope` once
   supersession is assembled deterministically
-  (`docs/decisions/0001-fact-key-and-forget-reach.md`).
-- **Facts are surfaced alongside episodics, never instead of them.** Recall budgets the
-  fact block so a matching memory cannot be pushed out of the window by fact volume.
+  (`docs/decisions/0001-fact-key-and-forget-reach.md`). Author/scope metadata does not yet
+  partition fact timelines; source-protection checks are a separate safeguard.
+- **Facts share the recall budget with episodics.** At `top_k >= 2`, recall reserves slots
+  for matching episodics. At `top_k=1`, integer rounding leaves no episodic reservation and a
+  fact can fill the only slot.
 - **Actor attribution.** Every memory records its `MemorySource`. The reply to `ask` is
   stored as `agent_inferred`; never treat an inference as a user statement.
 - **One embedding space is active, and it is fingerprinted.** `embedding_spaces` records
@@ -280,8 +288,9 @@ task journals remain outside it. See `docs/decisions/credential-admission.md`.
 - `recall` declines to answer only when `MORGAN_RECALL_FLOOR_MARGIN` is set. The value belongs
   to the embedding model: 0.08 for `qwen3-embedding:8b`, measured on a 3,010-memory archive
   with 128 labelled questions (`docs/measurements/2026-09-phase0-baseline.md`); 0.11 for
-  Qwen3-Embedding-0.6B, measured on the bundled probes and on a real archive. Other models are
-  unmeasured.
+  Qwen3-Embedding-0.6B is recorded in the real-archive fit preserved in
+  `docs/measurements/historical-retrieval-summary.md`. Its raw run artifacts were not located
+  in this repository. Other models are unmeasured.
 - `consolidate` reads a project's episodics with `recall(text="", top_k=50)`: the memories
   nearest an empty query's embedding, not the most recent, and fewer than 50 when the project
   holds facts, which take up to half of those places. With `MORGAN_RECALL_FLOOR_MARGIN` set,
@@ -319,12 +328,13 @@ task journals remain outside it. See `docs/decisions/credential-admission.md`.
   a name only where the text capitalises it away from a sentence, clause or line start, so a
   name that only ever opens sentences in a memory is not indexed. Code in a memory still
   yields words like `true` and `error`.
-- A superseded memory outranks the current one in 7 of the 10 knowledge-update probes
-  (`qwen3-embedding:8b`). Fusion is rank-only and carries no recency term. Supersession lives
-  on facts; the probes store episodics, which carry none.
+- In the November 26 run, a superseded memory outranks the current one in 7 of the 10
+  knowledge-update probes (`qwen3-embedding:8b`). These probes supply no explicit revision edges.
+  Fusion is rank-only
+  and carries no recency term; implemented revision filtering handles explicit corrections only.
 - Multi-hop questions are not answered. Recall ranks memories and has no mechanism to
-  compose two of them; measured recall@8 is 0.62 against 0.90 for single-hop
-  (`qwen3-embedding:8b`).
+  compose two of them. The November 26 run measured recall@8 of 0.62 against 0.95 for
+  single-hop (`qwen3-embedding:8b`); see `docs/ROADMAP.md` for configuration and dated evidence.
 
 ## Pinned local deployment
 
